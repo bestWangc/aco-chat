@@ -673,7 +673,7 @@ class _DexNavIcon extends StatelessWidget {
     height: 58,
     child: Center(
       child: Transform.translate(
-        offset: const Offset(0, -22),
+        offset: const Offset(0, -17),
         child: SvgPicture.asset(
           active
               ? 'assets/icons/source_dex_active.svg'
