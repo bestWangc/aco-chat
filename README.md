@@ -2,7 +2,7 @@
 
 Flutter client for the Aco project.
 
-The project targets Android and iOS only.
+Android and iOS are the primary targets. Web is enabled for local UI preview.
 
 ## Run
 
