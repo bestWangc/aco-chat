@@ -598,7 +598,7 @@ class BottomNav extends StatelessWidget {
     return SizedBox(
       height: 97,
       child: Padding(
-        padding: const EdgeInsets.only(top: 23),
+        padding: const EdgeInsets.only(top: 39),
         child: Row(
           children: List.generate(
             _navLabels.length,
