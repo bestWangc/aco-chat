@@ -1,5 +1,4 @@
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show CircleAvatar, Colors;
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 
@@ -7,6 +6,8 @@ const _lime = Color(0xFFA1FF00);
 const _surface = Color(0xFF151515);
 const _surfaceRaised = Color(0xFF1D1D1D);
 const _white = Color(0xFFF5F5F5);
+const _black = Color(0xFF000000);
+const _transparent = Color(0x00000000);
 const _muted = Color(0xFF888888);
 const _navInactive = Color(0xFFC4C4C4);
 const _navLabels = ['钱包', '探索', 'DEX', '广场', '社交'];
@@ -51,7 +52,7 @@ class _SquarePageState extends State<SquarePage> {
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: _black,
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -84,20 +85,20 @@ class SquareHome extends StatelessWidget {
         children: [
           Transform.translate(
             offset: const Offset(0, -1),
-            child: const CircleAvatar(
-              radius: 20,
-              backgroundImage: AssetImage('assets/images/avatar_design.png'),
+            child: ClipOval(
+              child: Image(
+                image: AssetImage('assets/images/avatar_design.png'),
+                width: 40,
+                height: 40,
+                fit: BoxFit.cover,
+              ),
             ),
           ),
           const SizedBox(width: 15),
           Expanded(
             child: AcoInput(
               hint: '搜索帖文或消息',
-              trailing: const Icon(
-                CupertinoIcons.add,
-                color: Colors.black,
-                size: 21,
-              ),
+              trailing: const Icon(CupertinoIcons.add, color: _black, size: 21),
               onTrailingTap: () => _showComposer(context),
             ),
           ),
@@ -119,7 +120,7 @@ class LivePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
-    backgroundColor: Colors.black,
+    backgroundColor: _black,
     child: SafeArea(
       child: Column(
         children: [
@@ -781,20 +782,20 @@ class AcoButton extends StatelessWidget {
       child: shad.ShadButton(
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        backgroundColor: outlined ? Colors.transparent : _lime,
-        foregroundColor: outlined ? _lime : Colors.black,
+        backgroundColor: outlined ? _transparent : _lime,
+        foregroundColor: outlined ? _lime : _black,
         onPressed: onPressed,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 16, color: outlined ? _lime : Colors.black),
+              Icon(icon, size: 16, color: outlined ? _lime : _black),
               const SizedBox(width: 6),
             ],
             Text(
               label,
               style: TextStyle(
-                color: outlined ? _lime : Colors.black,
+                color: outlined ? _lime : _black,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -903,10 +904,7 @@ class _CountBadge extends StatelessWidget {
         color: _lime,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Text(
-        '77',
-        style: TextStyle(color: Colors.black, fontSize: 10),
-      ),
+      child: const Text('77', style: TextStyle(color: _black, fontSize: 10)),
     ),
   );
 }
@@ -1292,7 +1290,7 @@ class _ChatRow extends StatelessWidget {
                 child: Text(
                   unread!,
                   style: const TextStyle(
-                    color: Colors.black,
+                    color: _black,
                     fontSize: 10,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1375,13 +1373,13 @@ class _SegmentedTabs extends StatelessWidget {
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: selected == i ? _lime : Colors.transparent,
+                color: selected == i ? _lime : _transparent,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Text(
                 labels[i],
                 style: TextStyle(
-                  color: selected == i ? Colors.black : _muted,
+                  color: selected == i ? _black : _muted,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                 ),
