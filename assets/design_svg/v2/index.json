@@ -1,0 +1,510 @@
+{
+  "source": "assets/design_svg/source/aco_v2.svg",
+  "sourceHash": "90e4de2d6a20b15a183dc668fa7b83375802f715c9b69e5161c15753e1bf0636",
+  "pages": [
+    {
+      "feature": "wallet",
+      "screen": "chain-list",
+      "theme": "light",
+      "board": 1,
+      "asset": "assets/design_svg/v2/wallet/light/chain-list.svg",
+      "sourceRect": {
+        "x": 4344.3,
+        "y": 0.4399999999998272,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 20"
+    },
+    {
+      "feature": "dex",
+      "screen": "token-overview",
+      "theme": "light",
+      "board": 2,
+      "asset": "assets/design_svg/v2/dex/light/token-overview.svg",
+      "sourceRect": {
+        "x": 5695.73,
+        "y": 0.4399999999998272,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 19"
+    },
+    {
+      "feature": "wallet",
+      "screen": "add-token-v1",
+      "theme": "light",
+      "board": 3,
+      "asset": "assets/design_svg/v2/wallet/light/add-token-v1.svg",
+      "sourceRect": {
+        "x": 6383.01,
+        "y": 0.4399999999998272,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 20"
+    },
+    {
+      "feature": "browser",
+      "screen": "discover",
+      "theme": "light",
+      "board": 4,
+      "asset": "assets/design_svg/v2/browser/light/discover.svg",
+      "sourceRect": {
+        "x": 7176.06,
+        "y": 0.4399999999998272,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 4"
+    },
+    {
+      "feature": "social",
+      "screen": "live-stream",
+      "theme": "dark",
+      "board": 5,
+      "asset": "assets/design_svg/v2/social/dark/live-stream.svg",
+      "sourceRect": {
+        "x": 7869.56,
+        "y": 0.4399999999998272,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 10"
+    },
+    {
+      "feature": "social",
+      "screen": "live-stream",
+      "theme": "light",
+      "board": 6,
+      "asset": "assets/design_svg/v2/social/light/live-stream.svg",
+      "sourceRect": {
+        "x": 7869.56,
+        "y": 1333.78,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 33"
+    },
+    {
+      "feature": "message",
+      "screen": "chat-list",
+      "theme": "dark",
+      "board": 7,
+      "asset": "assets/design_svg/v2/message/dark/chat-list.svg",
+      "sourceRect": {
+        "x": 8557.73,
+        "y": 0.4399999999998272,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 11"
+    },
+    {
+      "feature": "message",
+      "screen": "chat-list",
+      "theme": "light",
+      "board": 8,
+      "asset": "assets/design_svg/v2/message/light/chat-list.svg",
+      "sourceRect": {
+        "x": 8557.73,
+        "y": 1333.78,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 12"
+    },
+    {
+      "feature": "dex",
+      "screen": "swap",
+      "theme": "light",
+      "board": 9,
+      "asset": "assets/design_svg/v2/dex/light/swap.svg",
+      "sourceRect": {
+        "x": 9286.78,
+        "y": 1336.32,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 15"
+    },
+    {
+      "feature": "dex",
+      "screen": "swap",
+      "theme": "dark",
+      "board": 10,
+      "asset": "assets/design_svg/v2/dex/dark/swap.svg",
+      "sourceRect": {
+        "x": 9286.78,
+        "y": 0.4399999999998272,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 30"
+    },
+    {
+      "feature": "browser",
+      "screen": "discover",
+      "theme": "dark",
+      "board": 11,
+      "asset": "assets/design_svg/v2/browser/dark/discover.svg",
+      "sourceRect": {
+        "x": 7176.06,
+        "y": 1336.32,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 35"
+    },
+    {
+      "feature": "wallet",
+      "screen": "asset-detail",
+      "theme": "light",
+      "board": 12,
+      "asset": "assets/design_svg/v2/wallet/light/asset-detail.svg",
+      "sourceRect": {
+        "x": 5964.69,
+        "y": 3198.2199999999993,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 21"
+    },
+    {
+      "feature": "wallet",
+      "screen": "asset-detail",
+      "theme": "dark",
+      "board": 13,
+      "asset": "assets/design_svg/v2/wallet/dark/asset-detail.svg",
+      "sourceRect": {
+        "x": 5964.69,
+        "y": 4567.11,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 27"
+    },
+    {
+      "feature": "wallet",
+      "screen": "receive",
+      "theme": "light",
+      "board": 14,
+      "asset": "assets/design_svg/v2/wallet/light/receive.svg",
+      "sourceRect": {
+        "x": 6825.3,
+        "y": 3198.2199999999993,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 18"
+    },
+    {
+      "feature": "wallet",
+      "screen": "receive",
+      "theme": "dark",
+      "board": 15,
+      "asset": "assets/design_svg/v2/wallet/dark/receive.svg",
+      "sourceRect": {
+        "x": 6825.3,
+        "y": 4567.11,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 26"
+    },
+    {
+      "feature": "wallet",
+      "screen": "add-token-v2",
+      "theme": "light",
+      "board": 16,
+      "asset": "assets/design_svg/v2/wallet/light/add-token-v2.svg",
+      "sourceRect": {
+        "x": 8521.63,
+        "y": 3198.2199999999993,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 20"
+    },
+    {
+      "feature": "wallet",
+      "screen": "add-token-v2",
+      "theme": "dark",
+      "board": 17,
+      "asset": "assets/design_svg/v2/wallet/dark/add-token-v2.svg",
+      "sourceRect": {
+        "x": 8521.63,
+        "y": 4567.11,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 24"
+    },
+    {
+      "feature": "account",
+      "screen": "profile-overview",
+      "theme": "light",
+      "board": 18,
+      "asset": "assets/design_svg/v2/account/light/profile-overview.svg",
+      "sourceRect": {
+        "x": 2580.46,
+        "y": 0.4399999999998272,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 16"
+    },
+    {
+      "feature": "account",
+      "screen": "profile-overview",
+      "theme": "dark",
+      "board": 19,
+      "asset": "assets/design_svg/v2/account/dark/profile-overview.svg",
+      "sourceRect": {
+        "x": 2580.46,
+        "y": 1333.78,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 17"
+    },
+    {
+      "feature": "message",
+      "screen": "conversation-v1",
+      "theme": "light",
+      "board": 20,
+      "asset": "assets/design_svg/v2/message/light/conversation-v1.svg",
+      "sourceRect": {
+        "x": 9340.28,
+        "y": 3198.2199999999993,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 32"
+    },
+    {
+      "feature": "message",
+      "screen": "conversation-v1",
+      "theme": "dark",
+      "board": 21,
+      "asset": "assets/design_svg/v2/message/dark/conversation-v1.svg",
+      "sourceRect": {
+        "x": 9340.28,
+        "y": 4567.11,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 14"
+    },
+    {
+      "feature": "message",
+      "screen": "conversation-v2",
+      "theme": "dark",
+      "board": 22,
+      "asset": "assets/design_svg/v2/message/dark/conversation-v2.svg",
+      "sourceRect": {
+        "x": 10211.56,
+        "y": 4567.11,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 13"
+    },
+    {
+      "feature": "message",
+      "screen": "conversation-v2",
+      "theme": "light",
+      "board": 23,
+      "asset": "assets/design_svg/v2/message/light/conversation-v2.svg",
+      "sourceRect": {
+        "x": 10211.56,
+        "y": 3198.2199999999993,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 31"
+    },
+    {
+      "feature": "mining",
+      "screen": "mining-overview",
+      "theme": "light",
+      "board": 24,
+      "asset": "assets/design_svg/v2/mining/light/mining-overview.svg",
+      "sourceRect": {
+        "x": 2580.46,
+        "y": 3198.2199999999993,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 23"
+    },
+    {
+      "feature": "mining",
+      "screen": "mining-overview",
+      "theme": "dark",
+      "board": 25,
+      "asset": "assets/design_svg/v2/mining/dark/mining-overview.svg",
+      "sourceRect": {
+        "x": 2580.46,
+        "y": 4567.11,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 29"
+    },
+    {
+      "feature": "wallet",
+      "screen": "chain-list",
+      "theme": "dark",
+      "board": 26,
+      "asset": "assets/design_svg/v2/wallet/dark/chain-list.svg",
+      "sourceRect": {
+        "x": 4344.3,
+        "y": 1336.32,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 36"
+    },
+    {
+      "feature": "dex",
+      "screen": "token-overview",
+      "theme": "dark",
+      "board": 27,
+      "asset": "assets/design_svg/v2/dex/dark/token-overview.svg",
+      "sourceRect": {
+        "x": 5695.73,
+        "y": 1336.32,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 25"
+    },
+    {
+      "feature": "wallet",
+      "screen": "add-token-v1",
+      "theme": "dark",
+      "board": 28,
+      "asset": "assets/design_svg/v2/wallet/dark/add-token-v1.svg",
+      "sourceRect": {
+        "x": 6383.01,
+        "y": 1336.32,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 24"
+    },
+    {
+      "feature": "wallet",
+      "screen": "home",
+      "theme": "dark",
+      "board": 29,
+      "asset": "assets/design_svg/v2/wallet/dark/home.svg",
+      "sourceRect": {
+        "x": 10083.39,
+        "y": 0.4399999999998272,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 6"
+    },
+    {
+      "feature": "wallet",
+      "screen": "home",
+      "theme": "light",
+      "board": 30,
+      "asset": "assets/design_svg/v2/wallet/light/home.svg",
+      "sourceRect": {
+        "x": 10083.39,
+        "y": 1336.32,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 5"
+    },
+    {
+      "feature": "market",
+      "screen": "overview",
+      "theme": "dark",
+      "board": 31,
+      "asset": "assets/design_svg/v2/market/dark/overview.svg",
+      "sourceRect": {
+        "x": 803.56,
+        "y": 4567.11,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 35"
+    },
+    {
+      "feature": "square",
+      "screen": "feed",
+      "theme": "light",
+      "board": 32,
+      "asset": "assets/design_svg/v2/square/light/feed.svg",
+      "sourceRect": {
+        "x": 1596.44,
+        "y": 3198.2199999999993,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 34"
+    },
+    {
+      "feature": "square",
+      "screen": "feed",
+      "theme": "dark",
+      "board": 33,
+      "asset": "assets/design_svg/v2/square/dark/feed.svg",
+      "sourceRect": {
+        "x": 1596.44,
+        "y": 4567.11,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 36"
+    },
+    {
+      "feature": "market",
+      "screen": "overview",
+      "theme": "light",
+      "board": 34,
+      "asset": "assets/design_svg/v2/market/light/overview.svg",
+      "sourceRect": {
+        "x": 803.56,
+        "y": 3198.2199999999993,
+        "width": 595.27,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 37"
+    },
+    {
+      "feature": "social",
+      "screen": "voice-room",
+      "theme": "light",
+      "board": 35,
+      "asset": "assets/design_svg/v2/social/light/voice-room.svg",
+      "sourceRect": {
+        "x": 0,
+        "y": 3198.2199999999993,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 38"
+    },
+    {
+      "feature": "social",
+      "screen": "voice-room",
+      "theme": "dark",
+      "board": 36,
+      "asset": "assets/design_svg/v2/social/dark/voice-room.svg",
+      "sourceRect": {
+        "x": 0,
+        "y": 4567.11,
+        "width": 595.28,
+        "height": 1290.89
+      },
+      "sourceName": "画板 1 副本 39"
+    }
+  ]
+}

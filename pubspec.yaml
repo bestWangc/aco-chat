@@ -59,6 +59,7 @@ flutter:
     - assets/icons/
     - assets/icons/light/
     - assets/icons/lucide/
+    - assets/design_svg/source/images/
 
   fonts:
     - family: PingFang

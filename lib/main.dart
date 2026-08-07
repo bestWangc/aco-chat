@@ -1,4 +1,4 @@
-import 'package:aco_chat/features/square/presentation/square_page.dart';
+import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 
@@ -28,7 +28,7 @@ class AcoApp extends StatelessWidget {
             textStyle: TextStyle(fontFamily: 'PingFang'),
           ),
         ),
-        home: const SquarePage(),
+        home: const AcoDesignShell(),
       ),
     );
   }
