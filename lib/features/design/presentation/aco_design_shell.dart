@@ -1,3 +1,4 @@
+import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -206,59 +207,10 @@ class _AcoViewport extends StatelessWidget {
   const _AcoViewport({required this.child});
   final Widget child;
 
-  static const _designWidth = 595.0;
-  static const _designHeight = 1290.89;
-  static const _mobileWidth = 430.0;
-  static const _mobileHeight = 932.0;
-  static const _textScale = 1.42;
-
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final horizontalScale = constraints.maxWidth / _mobileWidth;
-      final verticalScale = constraints.maxHeight / _mobileHeight;
-      final mobileScale = horizontalScale < verticalScale
-          ? horizontalScale
-          : verticalScale;
-      final scale = mobileScale * _mobileWidth / _designWidth;
-      final textScale = mobileScale >= 1 ? _textScale : 1.0;
-
-      return Align(
-        alignment: Alignment.topCenter,
-        child: SizedBox(
-          width: _mobileWidth * mobileScale,
-          height: _mobileHeight * mobileScale,
-          child: ClipRect(
-            child: OverflowBox(
-              alignment: Alignment.topLeft,
-              minWidth: _designWidth,
-              maxWidth: _designWidth,
-              minHeight: _designHeight,
-              maxHeight: _designHeight,
-              child: Transform.scale(
-                alignment: Alignment.topLeft,
-                scale: scale,
-                child: SizedBox(
-                  width: _designWidth,
-                  height: _designHeight,
-                  child: MediaQuery(
-                    data: MediaQuery.of(
-                      context,
-                    ).copyWith(textScaler: TextScaler.linear(textScale)),
-                    child: ScrollConfiguration(
-                      behavior: ScrollConfiguration.of(
-                        context,
-                      ).copyWith(scrollbars: false),
-                      child: child,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    },
+  Widget build(BuildContext context) => ScrollConfiguration(
+    behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+    child: child,
   );
 }
 
@@ -277,14 +229,14 @@ class AcoBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AcoPalette(dark);
-    return Transform.translate(
-      offset: const Offset(0, -37),
-      child: SizedBox(
-        // The item content is 72px high. Keep it inside the row so text
-        // scaling cannot produce a RenderFlex overflow at the bottom.
-        height: 106,
+    return SizedBox(
+      // Keep the navigation footprint stable while positioning its visible
+      // controls close to the bottom edge.
+      height: 106,
+      child: Transform.translate(
+        offset: const Offset(0, 15),
         child: Padding(
-          padding: const EdgeInsets.only(top: 24, bottom: 10),
+          padding: const EdgeInsets.only(top: 22, bottom: 8),
           child: Row(
             children: List.generate(
               _navLabels.length,
@@ -328,29 +280,35 @@ class _NavItem extends StatelessWidget {
     final color = active ? _lime : palette.navInactive;
     if (index == 2) {
       return SizedBox(
-        width: 76,
-        height: 72,
-        child: Transform.translate(
-          offset: const Offset(0, -16),
-          child: SvgPicture.asset(
-            active
-                ? 'assets/icons/source_dex_active.svg'
-                : 'assets/icons/source_dex_inactive.svg',
-            width: 76,
-            height: 72,
-            fit: BoxFit.contain,
-          ),
+        width: 48,
+        height: 76,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              top: -8,
+              left: -4,
+              width: 55,
+              height: 52,
+              child: SvgPicture.asset(
+                active
+                    ? 'assets/icons/source_dex_active.svg'
+                    : 'assets/icons/source_dex_inactive.svg',
+                fit: BoxFit.contain,
+              ),
+            ),
+          ],
         ),
       );
     }
     return SizedBox(
       width: 48,
-      height: 72,
+      height: 76,
       child: Column(
         children: [
           SizedBox(
-            width: 44,
-            height: 44,
+            width: 32,
+            height: 32,
             child: SvgPicture.asset(
               _navAssets[index],
               fit: BoxFit.contain,
@@ -359,14 +317,11 @@ class _NavItem extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           SizedBox(
-            height: 22,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                _navLabels[index],
-                maxLines: 1,
-                style: TextStyle(color: color, fontSize: 14),
-              ),
+            height: 26,
+            child: Text(
+              _navLabels[index],
+              maxLines: 1,
+              style: TextStyle(color: color, fontSize: AcoTypography.bodySmall),
             ),
           ),
         ],
@@ -409,7 +364,7 @@ class AcoPageHeader extends StatelessWidget {
             title!,
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: 18,
+              fontSize: AcoTypography.bodyEmphasis,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -463,7 +418,7 @@ class AcoTopActions extends StatelessWidget {
         label: '扫描二维码',
         onPressed: () => _showNotice(context, '扫码功能', '将打开二维码扫描器。'),
       ),
-      const SizedBox(width: 4),
+      const SizedBox(width: 12),
       _AcoDesignActionButton(
         asset: 'assets/icons/source_person.svg',
         palette: palette,
@@ -497,8 +452,8 @@ class _AcoDesignActionButton extends StatelessWidget {
       onPressed: onPressed,
       child: SvgPicture.asset(
         asset,
-        width: 40,
-        height: 40,
+        width: 24,
+        height: 24,
         colorFilter: ColorFilter.mode(
           palette.dark ? const Color(0xFF737373) : palette.primaryText,
           BlendMode.srcIn,
@@ -550,7 +505,7 @@ class AcoRootHeader extends StatelessWidget {
             title!,
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: 19,
+              fontSize: AcoTypography.title,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -673,7 +628,10 @@ class AcoLimeButton extends StatelessWidget {
           ],
           Text(
             label,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            style: const TextStyle(
+              fontSize: AcoTypography.bodySmall,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -705,6 +663,7 @@ class AcoSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSquareComposer = variant == AcoSearchVariant.squareComposer;
+    final submitWidth = isSquareComposer ? 52.0 : height;
     final borderColor = palette.dark ? const Color(0xFFC1C1C1) : palette.border;
     final iconColor = palette.dark
         ? (isSquareComposer ? const Color(0xFF191919) : const Color(0xFFF7F7F7))
@@ -712,40 +671,55 @@ class AcoSearch extends StatelessWidget {
     final hintColor = palette.dark
         ? (isSquareComposer ? const Color(0xFFF2F2F2) : const Color(0xFF888888))
         : palette.mutedText;
+    final submitChild = submitIcon == CupertinoIcons.add
+        ? Center(
+            child: SizedBox(
+              width: isSquareComposer ? 20 : 32,
+              height: isSquareComposer ? 20 : 32,
+              child: Image.asset(
+                'assets/icons/design_plus_dark.png',
+                filterQuality: FilterQuality.high,
+              ),
+            ),
+          )
+        : Icon(submitIcon, color: _black, size: height > 48 ? 30 : 24);
 
     return Container(
       height: height,
       decoration: BoxDecoration(
         color: palette.background,
         border: Border.all(color: borderColor),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(height / 2),
       ),
       child: Row(
         children: [
           const SizedBox(width: 14),
-          Icon(CupertinoIcons.search, color: iconColor, size: 20),
+          Icon(
+            CupertinoIcons.search,
+            color: iconColor,
+            size: isSquareComposer ? 16 : 20,
+          ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(hint, style: TextStyle(color: hintColor, fontSize: 14)),
+            child: Text(
+              hint,
+              style: TextStyle(color: hintColor, fontSize: AcoTypography.body),
+            ),
           ),
           ?action,
           if (onSubmit != null)
             CupertinoButton(
               padding: EdgeInsets.zero,
-              minimumSize: Size(height, height),
+              minimumSize: Size(submitWidth, height),
               onPressed: onSubmit,
               child: Container(
-                width: height,
+                width: submitWidth,
                 height: height,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: _lime,
-                  shape: BoxShape.circle,
+                  borderRadius: BorderRadius.circular(height / 2),
                 ),
-                child: Icon(
-                  submitIcon,
-                  color: _black,
-                  size: height > 48 ? 30 : 24,
-                ),
+                child: submitChild,
               ),
             ),
         ],
@@ -810,7 +784,10 @@ class _WalletHome extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             'Wallet1',
-            style: TextStyle(color: palette.mutedText, fontSize: 17),
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.bodyEmphasis,
+            ),
           ),
           const Icon(CupertinoIcons.chevron_down, color: _lime, size: 15),
           const SizedBox(width: 22),
@@ -825,7 +802,10 @@ class _WalletHome extends StatelessWidget {
           const SizedBox(width: 8),
           Text(
             'Sepolia',
-            style: TextStyle(color: palette.mutedText, fontSize: 17),
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.bodyEmphasis,
+            ),
           ),
         ],
       ),
@@ -833,13 +813,19 @@ class _WalletHome extends StatelessWidget {
       Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text('USD', style: TextStyle(color: palette.mutedText, fontSize: 18)),
+          Text(
+            'USD',
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.bodyEmphasis,
+            ),
+          ),
           const SizedBox(width: 12),
           Text(
             '39800.00',
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: 52,
+              fontSize: AcoTypography.balance,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -950,7 +936,10 @@ class _WalletChains extends StatelessWidget {
             const SizedBox(width: 18),
             Text(
               '币安智能链',
-              style: TextStyle(color: palette.primaryText, fontSize: 23),
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.headline,
+              ),
             ),
             const Spacer(),
             const Icon(CupertinoIcons.add_circled, color: _lime),
@@ -985,7 +974,7 @@ class _WalletChains extends StatelessWidget {
                           style: TextStyle(
                             color: palette.primaryText,
                             fontWeight: FontWeight.w700,
-                            fontSize: 21,
+                            fontSize: AcoTypography.titleLarge,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -993,7 +982,7 @@ class _WalletChains extends StatelessWidget {
                           'TASDFSk...FAGSGS2324t',
                           style: TextStyle(
                             color: palette.mutedText,
-                            fontSize: 12,
+                            fontSize: AcoTypography.caption,
                           ),
                         ),
                         const SizedBox(height: 8),
@@ -1002,7 +991,7 @@ class _WalletChains extends StatelessWidget {
                           style: TextStyle(
                             color: palette.primaryText,
                             fontWeight: FontWeight.w700,
-                            fontSize: 17,
+                            fontSize: AcoTypography.bodyEmphasis,
                           ),
                         ),
                       ],
@@ -1051,7 +1040,10 @@ class _AssetDetail extends StatelessWidget {
                   const SizedBox(width: 24),
                   Text(
                     'GRANDVEAGS',
-                    style: TextStyle(color: palette.primaryText, fontSize: 27),
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.displaySmall,
+                    ),
                   ),
                   const Spacer(),
                   Icon(CupertinoIcons.pencil, color: palette.mutedText),
@@ -1070,7 +1062,10 @@ class _AssetDetail extends StatelessWidget {
                   children: [
                     Text(
                       '钱包地址',
-                      style: TextStyle(color: palette.mutedText, fontSize: 14),
+                      style: TextStyle(
+                        color: palette.mutedText,
+                        fontSize: AcoTypography.bodySmall,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -1081,7 +1076,7 @@ class _AssetDetail extends StatelessWidget {
                             style: TextStyle(
                               color: palette.primaryText,
                               fontWeight: FontWeight.w600,
-                              fontSize: 16,
+                              fontSize: AcoTypography.body,
                             ),
                           ),
                         ),
@@ -1109,7 +1104,7 @@ class _AssetDetail extends StatelessWidget {
                 style: TextStyle(
                   color: palette.primaryText,
                   fontWeight: FontWeight.w700,
-                  fontSize: 17,
+                  fontSize: AcoTypography.bodyEmphasis,
                 ),
               ),
               const SizedBox(height: 24),
@@ -1152,7 +1147,10 @@ class _ReceivePage extends StatelessWidget {
         const SizedBox(height: 116),
         Text(
           '仅向该地址转入BSC/BEP20相关资产',
-          style: TextStyle(color: palette.mutedText, fontSize: 12),
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
         ),
         const SizedBox(height: 76),
         CustomPaint(size: const Size(404, 404), painter: _QrPainter(palette)),
@@ -1160,7 +1158,10 @@ class _ReceivePage extends StatelessWidget {
         Text(
           'TASDSADSFsdadsads..1232421212gdgd',
           textAlign: TextAlign.center,
-          style: TextStyle(color: palette.primaryText, fontSize: 14),
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodySmall,
+          ),
         ),
         const SizedBox(height: 16),
         AcoLimeButton(
@@ -1199,7 +1200,7 @@ class _AddTokenPage extends StatelessWidget {
                   entry,
                   style: TextStyle(
                     color: palette.primaryText,
-                    fontSize: 23,
+                    fontSize: AcoTypography.headline,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1246,7 +1247,7 @@ class _DexTokenPage extends StatelessWidget {
             'ETH',
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: 19,
+              fontSize: AcoTypography.title,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1257,24 +1258,30 @@ class _DexTokenPage extends StatelessWidget {
           const _NetworkGlyph(color: _lime),
         ],
       ),
-      const SizedBox(height: 6),
+      const SizedBox(height: 10),
       Text(
         '023sdS2..324d   4个月',
-        style: TextStyle(color: palette.mutedText, fontSize: 11),
+        style: TextStyle(
+          color: palette.mutedText,
+          fontSize: AcoTypography.caption,
+        ),
       ),
       const SizedBox(height: 72),
       Row(
         children: [
           Text(
             'Today',
-            style: TextStyle(color: palette.mutedText, fontSize: 15),
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.body,
+            ),
           ),
           const SizedBox(width: 20),
           const Text(
             '+2.34%',
             style: TextStyle(
               color: _lime,
-              fontSize: 16,
+              fontSize: AcoTypography.body,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -1289,7 +1296,10 @@ class _DexTokenPage extends StatelessWidget {
               children: [
                 Text(
                   'USD',
-                  style: TextStyle(color: palette.mutedText, fontSize: 18),
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: AcoTypography.bodyEmphasis,
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Flexible(
@@ -1300,7 +1310,7 @@ class _DexTokenPage extends StatelessWidget {
                       '39800.00',
                       style: TextStyle(
                         color: palette.primaryText,
-                        fontSize: 52,
+                        fontSize: AcoTypography.balance,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -1315,17 +1325,26 @@ class _DexTokenPage extends StatelessWidget {
             children: [
               Text(
                 '市值   \$4M',
-                style: TextStyle(color: palette.primaryText, fontSize: 14),
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
                 '流动性   1.6M USDT',
-                style: TextStyle(color: palette.mutedText, fontSize: 14),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
               ),
               const SizedBox(height: 10),
               Text(
                 '24h交易额   \$11.6M',
-                style: TextStyle(color: palette.mutedText, fontSize: 14),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
               ),
             ],
           ),
@@ -1375,7 +1394,10 @@ class _DexSwapPageState extends State<_DexSwapPage> {
               ),
               Text(
                 '••',
-                style: TextStyle(color: palette.primaryText, fontSize: 18),
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.bodyEmphasis,
+                ),
               ),
               const Icon(CupertinoIcons.sparkles, color: _lime, size: 16),
             ],
@@ -1422,7 +1444,7 @@ class _DexSwapPageState extends State<_DexSwapPage> {
           style: TextStyle(
             color: palette.primaryText,
             fontWeight: FontWeight.w700,
-            fontSize: 16,
+            fontSize: AcoTypography.body,
           ),
         ),
         const SizedBox(height: 10),
@@ -1462,7 +1484,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
           ],
         ),
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 18),
       AcoSurface(
         palette: palette,
         padding: EdgeInsets.zero,
@@ -1491,7 +1513,13 @@ class _BrowserDiscoverPage extends StatelessWidget {
               selected: 0,
             ),
           ),
-          Text('更多', style: TextStyle(color: palette.mutedText, fontSize: 15)),
+          Text(
+            '更多',
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.body,
+            ),
+          ),
           Icon(
             CupertinoIcons.chevron_right,
             color: palette.mutedText,
@@ -1558,7 +1586,7 @@ class _MarketOverviewPage extends StatelessWidget {
           '查看更多  ›',
           style: TextStyle(
             color: palette.primaryText,
-            fontSize: 15,
+            fontSize: AcoTypography.body,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -1567,87 +1595,143 @@ class _MarketOverviewPage extends StatelessWidget {
   );
 }
 
-class _SquareFeedPage extends StatelessWidget {
+class _SquareFeedPage extends StatefulWidget {
   const _SquareFeedPage({required this.palette, required this.onOpen});
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(35, 43, 35, 24),
-    children: [
-      Align(
-        alignment: Alignment.centerRight,
-        child: Padding(
-          padding: const EdgeInsets.only(right: 54),
-          child: AcoTopActions(palette: palette, onOpen: onOpen),
-        ),
-      ),
-      const SizedBox(height: 34),
-      Row(
-        children: [
-          const AcoAvatar(size: 64),
-          const SizedBox(width: 20),
-          Expanded(
-            child: AcoSearch(
-              palette: palette,
-              hint: '搜索帖文或消息',
-              height: 60,
-              variant: AcoSearchVariant.squareComposer,
-              submitIcon: CupertinoIcons.add,
-              onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
-            ),
-          ),
-        ],
-      ),
+  State<_SquareFeedPage> createState() => _SquareFeedPageState();
+}
+
+class _LiveSession {
+  const _LiveSession({required this.title, required this.host});
+
+  final String title;
+  final String host;
+}
+
+const _defaultLiveSession = _LiveSession(
+  title: '美股凭什么依然能打？3节课带你从小白上手美股交易！',
+  host: 'OKX中文',
+);
+
+class _SquareFeedPageState extends State<_SquareFeedPage> {
+  bool _showLive = false;
+  static const List<_LiveSession> _liveSessions = [
+    _defaultLiveSession,
+    _LiveSession(title: 'BTC 强势突破后，接下来应该关注哪些关键位置？', host: '链上观察员'),
+    _LiveSession(title: 'AI Agent 热潮持续，哪些项目值得长期跟踪？', host: 'Web3 研究社'),
+    _LiveSession(title: '从零搭建交易策略：风险控制与仓位管理实战', host: '交易员阿峰'),
+  ];
+
+  List<Widget> _buildLiveContent(AcoPalette palette) => [
+    const SizedBox(height: 24),
+    for (final session in _liveSessions) ...[
+      _LiveCard(palette: palette, session: session),
       const SizedBox(height: 24),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          Text(
-            '推荐',
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          Row(
-            children: [
-              Text(
-                '好友',
-                style: TextStyle(color: palette.mutedText, fontSize: 19),
-              ),
-              const _GreenBadge(label: '77'),
-            ],
-          ),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            onPressed: () => onOpen(AcoScreen.liveStream),
-            child: Text(
-              '直播',
-              style: TextStyle(color: palette.mutedText, fontSize: 19),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 27),
-      Container(height: 1, color: palette.border),
-      const SizedBox(height: 26),
-      Row(
-        children: [
-          Expanded(
-            child: _TopicChip(palette: palette, label: '买买买!!'),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _TopicChip(palette: palette, label: 'ALD! V587!'),
-          ),
-        ],
-      ),
-      const SizedBox(height: 44),
-      _PostCard(palette: palette),
     ],
-  );
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+    final onOpen = widget.onOpen;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(35, 16, 35, 24),
+      children: [
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: AcoTopActions(palette: palette, onOpen: onOpen),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const AcoAvatar(size: 42),
+            const SizedBox(width: 16),
+            Expanded(
+              child: AcoSearch(
+                palette: palette,
+                hint: '搜索帖文或消息',
+                height: 44,
+                variant: AcoSearchVariant.squareComposer,
+                submitIcon: CupertinoIcons.add,
+                onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '推荐',
+              style: TextStyle(
+                color: _showLive ? palette.mutedText : palette.primaryText,
+                fontSize: AcoTypography.bodyEmphasis,
+                fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 40),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Text(
+                  '好友',
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: AcoTypography.bodyEmphasis,
+                  ),
+                ),
+                const Positioned(
+                  top: -10,
+                  right: -24,
+                  child: _GreenBadge(label: '77'),
+                ),
+              ],
+            ),
+            const SizedBox(width: 40),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: () => setState(() => _showLive = true),
+              child: Text(
+                '直播',
+                style: TextStyle(
+                  color: _showLive ? palette.primaryText : palette.mutedText,
+                  fontSize: AcoTypography.bodyEmphasis,
+                  fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(height: 1, color: palette.border),
+        if (_showLive)
+          ..._buildLiveContent(palette)
+        else ...[
+          const SizedBox(height: 32),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _TopicChip(palette: palette, label: '买买买!!', width: 164),
+                const SizedBox(width: 10),
+                _TopicChip(palette: palette, label: 'ALD! V587!', width: 184),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+          _PostCard(palette: palette),
+        ],
+      ],
+    );
+  }
 }
 
 class _SocialMessagesPage extends StatelessWidget {
@@ -1731,7 +1815,10 @@ class _ChatPage extends StatelessWidget {
                 ),
                 child: Text(
                   'A',
-                  style: TextStyle(color: palette.primaryText, fontSize: 28),
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.displaySmall,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -1803,12 +1890,18 @@ class _VoiceRoomPage extends StatelessWidget {
           'Jason',
           style: TextStyle(
             color: palette.primaryText,
-            fontSize: 16,
+            fontSize: AcoTypography.body,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
-        Text('主持人', style: TextStyle(color: palette.mutedText, fontSize: 12)),
+        Text(
+          '主持人',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
         const SizedBox(height: 82),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1858,7 +1951,10 @@ class _MiningPage extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
           child: Text(
             '质押仅支持Donmi Chain，请在钱包中手动切换后继续。',
-            style: TextStyle(color: palette.mutedText, fontSize: 16),
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.body,
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -1931,13 +2027,16 @@ class _ProfilePage extends StatelessWidget {
                   'Marry',
                   style: TextStyle(
                     color: palette.primaryText,
-                    fontSize: 38,
+                    fontSize: AcoTypography.metric,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 Text(
                   'UID:213214214321',
-                  style: TextStyle(color: palette.primaryText, fontSize: 13),
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.bodySmall,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 const Row(
@@ -1970,7 +2069,7 @@ class _ProfilePage extends StatelessWidget {
               '个人主页',
               style: TextStyle(
                 color: palette.primaryText,
-                fontSize: 28,
+                fontSize: AcoTypography.displaySmall,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -2061,7 +2160,7 @@ class _OutlineButton extends StatelessWidget {
                 label,
                 style: TextStyle(
                   color: palette.primaryText,
-                  fontSize: 13,
+                  fontSize: AcoTypography.bodySmall,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -2113,7 +2212,7 @@ class _SectionTabs extends StatelessWidget {
                       fontWeight: i == selected
                           ? FontWeight.w700
                           : FontWeight.w400,
-                      fontSize: 15,
+                      fontSize: AcoTypography.body,
                     ),
                   ),
                 ),
@@ -2155,7 +2254,7 @@ class _TimeRangeSelector extends StatelessWidget {
             range,
             style: TextStyle(
               color: range == '1D' ? palette.primaryText : palette.mutedText,
-              fontSize: 12,
+              fontSize: AcoTypography.caption,
             ),
           ),
         ),
@@ -2211,13 +2310,16 @@ class _WalletAssetRow extends StatelessWidget {
                 style: TextStyle(
                   color: palette.primaryText,
                   fontWeight: FontWeight.w600,
-                  fontSize: 15,
+                  fontSize: AcoTypography.body,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 amount,
-                style: TextStyle(color: palette.mutedText, fontSize: 12),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.caption,
+                ),
               ),
             ],
           ),
@@ -2229,12 +2331,15 @@ class _WalletAssetRow extends StatelessWidget {
               value,
               style: TextStyle(
                 color: palette.primaryText,
-                fontSize: 14,
+                fontSize: AcoTypography.bodySmall,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 3),
-            const Text('+2.34%', style: TextStyle(color: _lime, fontSize: 12)),
+            const Text(
+              '+2.34%',
+              style: TextStyle(color: _lime, fontSize: AcoTypography.caption),
+            ),
           ],
         ),
       ],
@@ -2313,7 +2418,7 @@ class _CountPill extends StatelessWidget {
       label,
       style: const TextStyle(
         color: _black,
-        fontSize: 10,
+        fontSize: AcoTypography.caption,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -2337,7 +2442,13 @@ class _SwapField extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: palette.mutedText, fontSize: 12)),
+        Text(
+          label,
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
         const SizedBox(height: 10),
         Row(
           children: [
@@ -2346,7 +2457,7 @@ class _SwapField extends StatelessWidget {
               style: TextStyle(
                 color: palette.primaryText,
                 fontWeight: FontWeight.w700,
-                fontSize: 25,
+                fontSize: AcoTypography.headline,
               ),
             ),
             const Spacer(),
@@ -2366,13 +2477,16 @@ class _SwapField extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 36),
         Row(
           children: [
             const Spacer(),
             Text(
               '余额: 0.00',
-              style: TextStyle(color: palette.mutedText, fontSize: 13),
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.bodySmall,
+              ),
             ),
             const SizedBox(width: 10),
             Container(
@@ -2383,7 +2497,10 @@ class _SwapField extends StatelessWidget {
               ),
               child: Text(
                 'Max',
-                style: TextStyle(color: palette.mutedText, fontSize: 12),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.caption,
+                ),
               ),
             ),
           ],
@@ -2406,9 +2523,21 @@ class _InfoLine extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: 6),
     child: Row(
       children: [
-        Text(label, style: TextStyle(color: palette.mutedText, fontSize: 13)),
+        Text(
+          label,
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.bodySmall,
+          ),
+        ),
         const Spacer(),
-        Text(value, style: TextStyle(color: palette.primaryText, fontSize: 13)),
+        Text(
+          value,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodySmall,
+          ),
+        ),
       ],
     ),
   );
@@ -2461,7 +2590,10 @@ class _DiscoverShortcut extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: palette.primaryText, fontSize: 11),
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.caption,
+              ),
             ),
           ],
         ),
@@ -2509,7 +2641,7 @@ class _MarketTabs extends StatelessWidget {
           '自选 ▼',
           style: TextStyle(
             color: _lime,
-            fontSize: 15,
+            fontSize: AcoTypography.body,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -2520,7 +2652,10 @@ class _MarketTabs extends StatelessWidget {
           padding: const EdgeInsets.only(right: 30),
           child: Text(
             label,
-            style: TextStyle(color: palette.mutedText, fontSize: 16),
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.body,
+            ),
           ),
         ),
       const Spacer(),
@@ -2557,7 +2692,10 @@ class _MarketRow extends StatelessWidget {
               children: [
                 Text(
                   name,
-                  style: TextStyle(color: palette.primaryText, fontSize: 16),
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.body,
+                  ),
                 ),
                 const SizedBox(width: 5),
                 Container(
@@ -2565,14 +2703,20 @@ class _MarketRow extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
                     tag,
-                    style: const TextStyle(color: _black, fontSize: 10),
+                    style: const TextStyle(
+                      color: _black,
+                      fontSize: AcoTypography.caption,
+                    ),
                   ),
                 ),
               ],
             ),
             Text(
               '\$29.73万',
-              style: TextStyle(color: palette.mutedText, fontSize: 11),
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.caption,
+              ),
             ),
           ],
         ),
@@ -2582,13 +2726,16 @@ class _MarketRow extends StatelessWidget {
           children: [
             Text(
               price,
-              style: TextStyle(color: palette.primaryText, fontSize: 15),
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.body,
+              ),
             ),
             Text(
               change,
               style: TextStyle(
                 color: change.startsWith('-') ? _danger : _lime,
-                fontSize: 14,
+                fontSize: AcoTypography.bodySmall,
               ),
             ),
           ],
@@ -2610,7 +2757,7 @@ class _GreenBadge extends StatelessWidget {
       label,
       style: const TextStyle(
         color: _black,
-        fontSize: 10,
+        fontSize: AcoTypography.caption,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -2618,59 +2765,68 @@ class _GreenBadge extends StatelessWidget {
 }
 
 class _TopicChip extends StatelessWidget {
-  const _TopicChip({required this.palette, required this.label});
+  const _TopicChip({
+    required this.palette,
+    required this.label,
+    required this.width,
+  });
   final AcoPalette palette;
   final String label;
+  final double width;
   @override
   Widget build(BuildContext context) {
     final isAldTopic = label == 'ALD! V587!';
     return Container(
-      height: 72,
+      width: width,
+      height: 44,
       decoration: BoxDecoration(
         color: palette.surface,
-        border: Border.all(color: palette.border),
-        borderRadius: BorderRadius.circular(23),
+        border: Border.all(
+          color: palette.dark ? const Color(0xFF4A4A4A) : palette.border,
+        ),
+        borderRadius: BorderRadius.circular(22),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (isAldTopic)
             ClipOval(
               child: Image.asset(
                 'assets/design_svg/source/images/img5.jpg',
-                width: 60,
-                height: 60,
+                width: 42,
+                height: 42,
                 fit: BoxFit.cover,
               ),
             )
           else
             Container(
-              width: 60,
-              height: 60,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
-                border: Border.all(color: palette.border),
+                border: Border.all(color: const Color(0xFF4A4A4A)),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
                 CupertinoIcons.play_rectangle,
                 color: _lime,
-                size: 30,
+                size: 22,
               ),
             ),
-          const SizedBox(width: 12),
-          Flexible(
+          const SizedBox(width: 8),
+          Expanded(
             child: Text(
               label,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: palette.primaryText,
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
+                color: _lime,
+                fontSize: AcoTypography.body,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          const _SignalGlyph(),
+          const Padding(
+            padding: EdgeInsets.only(left: 4, right: 10),
+            child: _SignalGlyph(),
+          ),
         ],
       ),
     );
@@ -2710,8 +2866,8 @@ class _PostCard extends StatelessWidget {
           ClipOval(
             child: Image.asset(
               'assets/design_svg/source/images/img3.jpg',
-              width: 64,
-              height: 64,
+              width: 48,
+              height: 48,
               fit: BoxFit.cover,
             ),
           ),
@@ -2725,7 +2881,7 @@ class _PostCard extends StatelessWidget {
                     '素素姐',
                     style: TextStyle(
                       color: palette.primaryText,
-                      fontSize: 17,
+                      fontSize: AcoTypography.bodyEmphasis,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -2733,99 +2889,95 @@ class _PostCard extends StatelessWidget {
                   const Icon(
                     CupertinoIcons.check_mark_circled_solid,
                     color: _lime,
-                    size: 16,
+                    size: 14,
                   ),
                   const SizedBox(width: 10),
                   Text(
                     '7小时前',
-                    style: TextStyle(color: palette.mutedText, fontSize: 15),
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
                 '365天盈利榜第1名',
-                style: TextStyle(color: palette.mutedText, fontSize: 15),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
               ),
             ],
           ),
           const Spacer(),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(CupertinoIcons.ellipsis, color: palette.primaryText),
-              const SizedBox(width: 3),
-              const Icon(CupertinoIcons.sparkles, color: _lime, size: 12),
-            ],
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _PostOptionDot(color: palette.primaryText),
+                const SizedBox(width: 6),
+                _PostOptionDot(color: palette.primaryText),
+                const SizedBox(width: 8),
+                const _PostOptionStar(),
+              ],
+            ),
           ),
         ],
       ),
       const SizedBox(height: 18),
-      Padding(
-        padding: const EdgeInsets.only(left: 60),
-        child: Text(
-          '是非成败转头空，青山依旧在，惯看秋月春风。\n'
-          '一壶浊酒喜相逢，古今多少事，滚滚长江东逝\n'
-          '水，浪花淘尽英雄。几度夕阳红。白发渔樵江渚\n'
-          '上，都付笑谈中。\n'
-          '滚滚长江东逝水，浪花淘尽英雄。是非成败转头\n'
-          '空，青山依旧在，几度夕阳红。白发渔樵江渚\n'
-          '上，惯看秋月春风。一壶浊酒喜相逢，古今多少\n'
-          '事，都付笑谈中。',
-          style: TextStyle(
-            color: palette.primaryText,
-            height: 1.5,
-            fontSize: 16,
+      Text(
+        '是非成败转头空，青山依旧在，惯看秋月春风。\n'
+        '一壶浊酒喜相逢，古今多少事，滚滚长江东逝\n'
+        '水，浪花淘尽英雄。几度夕阳红。白发渔樵江渚\n'
+        '上，都付笑谈中。\n'
+        '滚滚长江东逝水，浪花淘尽英雄。是非成败转头\n'
+        '空，青山依旧在，几度夕阳红。白发渔樵江渚\n'
+        '上，惯看秋月春风。一壶浊酒喜相逢，古今多少\n'
+        '事，都付笑谈中。',
+        style: TextStyle(
+          color: palette.primaryText,
+          height: 1.5,
+          fontSize: AcoTypography.bodySmall,
+        ),
+      ),
+      const SizedBox(height: 24),
+      Container(
+        height: 273,
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(32),
+        ),
+      ),
+      const SizedBox(height: 24),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          _PostAction(
+            icon: CupertinoIcons.chat_bubble,
+            label: '63',
+            palette: palette,
           ),
-        ),
-      ),
-      const SizedBox(height: 58),
-      Padding(
-        padding: const EdgeInsets.only(left: 60),
-        child: Container(
-          height: 273,
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(32),
+          _PostAction(
+            icon: CupertinoIcons.arrow_2_squarepath,
+            label: '1',
+            palette: palette,
           ),
-        ),
+          _PostAction(
+            icon: CupertinoIcons.heart,
+            label: '88',
+            palette: palette,
+          ),
+          _PostAction(
+            icon: CupertinoIcons.chart_bar,
+            label: '12.64k',
+            palette: palette,
+          ),
+          _PostAction(icon: CupertinoIcons.share, label: '', palette: palette),
+        ],
       ),
-      const SizedBox(height: 51),
-      Padding(
-        padding: const EdgeInsets.only(left: 60),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _PostAction(
-              icon: CupertinoIcons.chat_bubble,
-              label: '63',
-              palette: palette,
-            ),
-            _PostAction(
-              icon: CupertinoIcons.arrow_2_squarepath,
-              label: '1',
-              palette: palette,
-            ),
-            _PostAction(
-              icon: CupertinoIcons.heart,
-              label: '88',
-              palette: palette,
-            ),
-            _PostAction(
-              icon: CupertinoIcons.chart_bar,
-              label: '12.64k',
-              palette: palette,
-            ),
-            _PostAction(
-              icon: CupertinoIcons.share,
-              label: '',
-              palette: palette,
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 38),
-      _SquareFeedTabs(palette: palette),
     ],
   );
 }
@@ -2846,50 +2998,36 @@ class _PostAction extends StatelessWidget {
       Icon(icon, color: palette.primaryText, size: 22),
       if (label.isNotEmpty) ...[
         const SizedBox(width: 6),
-        Text(label, style: TextStyle(color: palette.primaryText, fontSize: 15)),
+        Text(
+          label,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodyEmphasis,
+          ),
+        ),
       ],
     ],
   );
 }
 
-class _SquareFeedTabs extends StatelessWidget {
-  const _SquareFeedTabs({required this.palette});
-  final AcoPalette palette;
+class _PostOptionDot extends StatelessWidget {
+  const _PostOptionDot({required this.color});
+  final Color color;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-            decoration: BoxDecoration(
-              color: _lime,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Text(
-              '热门',
-              style: TextStyle(
-                color: _black,
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Container(width: 28, height: 4, color: _lime),
-        ],
-      ),
-      const SizedBox(width: 55),
-      Text('探索', style: TextStyle(color: palette.mutedText, fontSize: 18)),
-      const SizedBox(width: 55),
-      Text('我的', style: TextStyle(color: palette.mutedText, fontSize: 18)),
-      const Spacer(),
-      Text('更多', style: TextStyle(color: palette.mutedText, fontSize: 17)),
-      const SizedBox(width: 8),
-      Icon(CupertinoIcons.chevron_right, color: palette.mutedText, size: 19),
-    ],
+  Widget build(BuildContext context) => Container(
+    width: 5,
+    height: 5,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
+}
+
+class _PostOptionStar extends StatelessWidget {
+  const _PostOptionStar();
+
+  @override
+  Widget build(BuildContext context) =>
+      const Icon(CupertinoIcons.sparkles, color: _lime, size: 10);
 }
 
 class _MessageRow extends StatelessWidget {
@@ -2921,14 +3059,17 @@ class _MessageRow extends StatelessWidget {
                 name,
                 style: TextStyle(
                   color: palette.primaryText,
-                  fontSize: 16,
+                  fontSize: AcoTypography.body,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 '你好，股票账户已就位',
-                style: TextStyle(color: palette.mutedText, fontSize: 12),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.caption,
+                ),
               ),
             ],
           ),
@@ -2940,7 +3081,10 @@ class _MessageRow extends StatelessWidget {
             const SizedBox(height: 5),
             Text(
               '2026-08-05',
-              style: TextStyle(color: palette.mutedText, fontSize: 10),
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.caption,
+              ),
             ),
           ],
         ),
@@ -2971,62 +3115,67 @@ class _Bubble extends StatelessWidget {
       style: TextStyle(
         color: mine ? _black : palette.primaryText,
         height: 1.4,
-        fontSize: 18,
+        fontSize: AcoTypography.bodyEmphasis,
       ),
     ),
   );
 }
 
 class _LiveCard extends StatelessWidget {
-  const _LiveCard({required this.palette});
+  const _LiveCard({required this.palette, this.session = _defaultLiveSession});
   final AcoPalette palette;
+  final _LiveSession session;
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Image.asset(
             palette.dark
                 ? 'assets/icons/live_brand_dark.png'
                 : 'assets/icons/live_brand_light.png',
-            width: 72,
-            height: 72,
+            width: 52,
+            height: 52,
             fit: BoxFit.contain,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '美股凭什么依然能打？3节课带你从小白上手美股交易！',
+                  session.title,
                   style: TextStyle(
                     color: palette.primaryText,
-                    fontSize: 20,
+                    fontSize: AcoTypography.body,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'OKX中文',
-                  style: TextStyle(color: palette.mutedText, fontSize: 15),
+                  session.host,
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: AcoTypography.bodySmall,
+                  ),
                 ),
               ],
             ),
           ),
         ],
       ),
-      const SizedBox(height: 13),
+      const SizedBox(height: 10),
       AcoSurface(
         palette: palette,
-        radius: 28,
+        radius: 22,
         padding: EdgeInsets.zero,
         child: Container(
-          height: 304,
+          height: 220,
           decoration: BoxDecoration(
             color: palette.surface,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(22),
           ),
         ),
       ),
@@ -3075,7 +3224,10 @@ class _MicSeat extends StatelessWidget {
       const SizedBox(height: 6),
       Text(
         active ? 'Jason' : '等待上麦',
-        style: TextStyle(color: palette.mutedText, fontSize: 10),
+        style: TextStyle(
+          color: palette.mutedText,
+          fontSize: AcoTypography.caption,
+        ),
       ),
     ],
   );
@@ -3106,7 +3258,10 @@ class _MiningTile extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               label,
-              style: TextStyle(color: palette.primaryText, fontSize: 18),
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.bodyEmphasis,
+              ),
             ),
           ],
         ),
@@ -3116,7 +3271,7 @@ class _MiningTile extends StatelessWidget {
             value,
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: 25,
+              fontSize: AcoTypography.headline,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -3173,9 +3328,21 @@ class _ProfileMetric extends StatelessWidget {
         size: 27,
       ),
       const SizedBox(height: 10),
-      Text(value, style: TextStyle(color: palette.primaryText, fontSize: 15)),
+      Text(
+        value,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: AcoTypography.body,
+        ),
+      ),
       const SizedBox(height: 3),
-      Text(label, style: TextStyle(color: palette.primaryText, fontSize: 12)),
+      Text(
+        label,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: AcoTypography.caption,
+        ),
+      ),
     ],
   );
 }

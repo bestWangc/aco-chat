@@ -6,7 +6,7 @@ import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
 
 void main() {
-  testWidgets('opens the live page from the square tab', (
+  testWidgets('shows live content inline from the square tab', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -15,8 +15,8 @@ void main() {
     await tester.tap(find.text('直播'));
     await tester.pumpAndSettle();
 
-    expect(find.text('正在直播'), findsOneWidget);
-    expect(find.textContaining('美股凭什么依然能打'), findsNWidgets(2));
+    expect(find.text('正在直播'), findsNothing);
+    expect(find.textContaining('美股凭什么依然能打'), findsOneWidget);
   });
 
   testWidgets('builds every current design screen without exceptions', (

@@ -1,3 +1,4 @@
+import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -25,7 +26,10 @@ class AcoApp extends StatelessWidget {
           primaryColor: accent,
           scaffoldBackgroundColor: Color(0xFF050505),
           textTheme: CupertinoTextThemeData(
-            textStyle: TextStyle(fontFamily: 'PingFang'),
+            textStyle: TextStyle(
+              fontFamily: 'PingFang',
+              fontSize: AcoTypography.body,
+            ),
           ),
         ),
         home: const AcoDesignShell(),
