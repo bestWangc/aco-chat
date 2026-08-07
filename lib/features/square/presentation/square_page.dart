@@ -1,3 +1,4 @@
+import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -144,7 +145,7 @@ class LivePage extends StatelessWidget {
                     '正在直播',
                     style: TextStyle(
                       color: _white,
-                      fontSize: 21,
+                      fontSize: AcoTypography.titleLarge,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -193,7 +194,7 @@ class _WalletPageState extends State<WalletPage> {
             '我的钱包',
             style: TextStyle(
               color: _white,
-              fontSize: 21,
+              fontSize: AcoTypography.titleLarge,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -211,14 +212,17 @@ class _WalletPageState extends State<WalletPage> {
           children: [
             const Text(
               '总资产 (USD)',
-              style: TextStyle(color: _muted, fontSize: 14),
+              style: TextStyle(
+                color: _muted,
+                fontSize: AcoTypography.bodySmall,
+              ),
             ),
             const SizedBox(height: 6),
             Text(
               _hidden ? '••••••' : '\$12,854.30',
               style: const TextStyle(
                 color: _white,
-                fontSize: 30,
+                fontSize: AcoTypography.display,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -286,7 +290,7 @@ class ExplorePage extends StatelessWidget {
         '探索',
         style: TextStyle(
           color: _white,
-          fontSize: 25,
+          fontSize: AcoTypography.headline,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -300,7 +304,7 @@ class ExplorePage extends StatelessWidget {
         '热门应用',
         style: TextStyle(
           color: _white,
-          fontSize: 17,
+          fontSize: AcoTypography.bodyEmphasis,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -344,7 +348,7 @@ class ExplorePage extends StatelessWidget {
         '推荐内容',
         style: TextStyle(
           color: _white,
-          fontSize: 16,
+          fontSize: AcoTypography.body,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -391,7 +395,7 @@ class _DexPageState extends State<DexPage> {
             'DEX',
             style: TextStyle(
               color: _white,
-              fontSize: 25,
+              fontSize: AcoTypography.headline,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -441,7 +445,7 @@ class _DexPageState extends State<DexPage> {
         '热门交易对',
         style: TextStyle(
           color: _white,
-          fontSize: 16,
+          fontSize: AcoTypography.body,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -478,7 +482,7 @@ class _SocialPageState extends State<SocialPage> {
             '社交',
             style: TextStyle(
               color: _white,
-              fontSize: 25,
+              fontSize: AcoTypography.headline,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -654,7 +658,7 @@ class _BottomNavItem extends StatelessWidget {
               _navLabels[index],
               style: TextStyle(
                 color: active ? _lime : _navInactive,
-                fontSize: 11,
+                fontSize: AcoTypography.caption,
               ),
             ),
           ],
@@ -721,7 +725,10 @@ class AcoInput extends StatelessWidget {
         Expanded(
           child: Text(
             hint,
-            style: const TextStyle(color: Color(0xFFD5D5D5), fontSize: 15),
+            style: const TextStyle(
+              color: Color(0xFFD5D5D5),
+              fontSize: AcoTypography.body,
+            ),
           ),
         ),
         if (trailing != null)
@@ -796,7 +803,7 @@ class AcoButton extends StatelessWidget {
               label,
               style: TextStyle(
                 color: outlined ? _lime : _black,
-                fontSize: 13,
+                fontSize: AcoTypography.bodySmall,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -820,7 +827,13 @@ class AcoBadge extends StatelessWidget {
     child: Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: const TextStyle(color: _white, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: _white,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
         if (icon != null) ...[
           const SizedBox(width: 4),
           Icon(icon, color: _muted, size: 13),
@@ -859,7 +872,7 @@ class _SquareTabs extends StatelessWidget {
               '推荐',
               style: TextStyle(
                 color: _white,
-                fontSize: 16,
+                fontSize: AcoTypography.body,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -874,7 +887,10 @@ class _SquareTabs extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('好友', style: TextStyle(color: _muted, fontSize: 16)),
+            Text(
+              '好友',
+              style: TextStyle(color: _muted, fontSize: AcoTypography.body),
+            ),
             SizedBox(width: 4),
             _CountBadge(),
           ],
@@ -886,7 +902,10 @@ class _SquareTabs extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         child: const SizedBox(
           width: 34,
-          child: Text('直播', style: TextStyle(color: _muted, fontSize: 16)),
+          child: Text(
+            '直播',
+            style: TextStyle(color: _muted, fontSize: AcoTypography.body),
+          ),
         ),
       ),
     ],
@@ -904,7 +923,10 @@ class _CountBadge extends StatelessWidget {
         color: _lime,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Text('77', style: TextStyle(color: _black, fontSize: 10)),
+      child: const Text(
+        '77',
+        style: TextStyle(color: _black, fontSize: AcoTypography.caption),
+      ),
     ),
   );
 }
@@ -953,7 +975,7 @@ class _LiveItem extends StatelessWidget {
                   '美股凭什么依然能打？3节课带你从小白\n上手美股交易！',
                   style: TextStyle(
                     color: _white,
-                    fontSize: 14,
+                    fontSize: AcoTypography.bodySmall,
                     height: 1.2,
                     fontWeight: FontWeight.w600,
                   ),
@@ -963,7 +985,10 @@ class _LiveItem extends StatelessWidget {
                   children: [
                     Text(
                       'OKX中文',
-                      style: TextStyle(color: _muted, fontSize: 13),
+                      style: TextStyle(
+                        color: _muted,
+                        fontSize: AcoTypography.bodySmall,
+                      ),
                     ),
                     SizedBox(width: 6),
                     Icon(
@@ -1016,7 +1041,7 @@ class _AssetRow extends StatelessWidget {
             symbol.substring(0, 1),
             style: const TextStyle(
               color: _lime,
-              fontSize: 14,
+              fontSize: AcoTypography.bodySmall,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -1030,12 +1055,18 @@ class _AssetRow extends StatelessWidget {
                 name,
                 style: const TextStyle(
                   color: _white,
-                  fontSize: 13,
+                  fontSize: AcoTypography.bodySmall,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 3),
-              Text(amount, style: const TextStyle(color: _muted, fontSize: 11)),
+              Text(
+                amount,
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: AcoTypography.caption,
+                ),
+              ),
             ],
           ),
         ),
@@ -1046,12 +1077,18 @@ class _AssetRow extends StatelessWidget {
               value,
               style: const TextStyle(
                 color: _white,
-                fontSize: 13,
+                fontSize: AcoTypography.bodySmall,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 3),
-            Text(change, style: const TextStyle(color: _lime, fontSize: 11)),
+            Text(
+              change,
+              style: const TextStyle(
+                color: _lime,
+                fontSize: AcoTypography.caption,
+              ),
+            ),
           ],
         ),
       ],
@@ -1084,12 +1121,18 @@ class _ExploreCard extends StatelessWidget {
             title,
             style: const TextStyle(
               color: _white,
-              fontSize: 13,
+              fontSize: AcoTypography.bodySmall,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(height: 2),
-          Text(subtitle, style: const TextStyle(color: _muted, fontSize: 11)),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: _muted,
+              fontSize: AcoTypography.caption,
+            ),
+          ),
         ],
       ),
     ),
@@ -1121,14 +1164,17 @@ class _FeatureRow extends StatelessWidget {
                 title,
                 style: const TextStyle(
                   color: _white,
-                  fontSize: 13,
+                  fontSize: AcoTypography.bodySmall,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 subtitle,
-                style: const TextStyle(color: _muted, fontSize: 11),
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: AcoTypography.caption,
+                ),
               ),
             ],
           ),
@@ -1156,7 +1202,13 @@ class _TokenInput extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: _muted, fontSize: 10)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: _muted,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
         const SizedBox(height: 6),
         Row(
           children: [
@@ -1166,7 +1218,7 @@ class _TokenInput extends StatelessWidget {
                       '0.0',
                       style: TextStyle(
                         color: _white,
-                        fontSize: 22,
+                        fontSize: AcoTypography.titleLarge,
                         fontWeight: FontWeight.w600,
                       ),
                     )
@@ -1178,11 +1230,11 @@ class _TokenInput extends StatelessWidget {
                       placeholder: '0.0',
                       placeholderStyle: const TextStyle(
                         color: _white,
-                        fontSize: 22,
+                        fontSize: AcoTypography.titleLarge,
                       ),
                       style: const TextStyle(
                         color: _white,
-                        fontSize: 22,
+                        fontSize: AcoTypography.titleLarge,
                         fontWeight: FontWeight.w600,
                       ),
                       decoration: null,
@@ -1213,18 +1265,24 @@ class _PairRow extends StatelessWidget {
             pair,
             style: const TextStyle(
               color: _white,
-              fontSize: 13,
+              fontSize: AcoTypography.bodySmall,
               fontWeight: FontWeight.w600,
             ),
           ),
         ),
-        Text(price, style: const TextStyle(color: _white, fontSize: 13)),
+        Text(
+          price,
+          style: const TextStyle(
+            color: _white,
+            fontSize: AcoTypography.bodySmall,
+          ),
+        ),
         const SizedBox(width: 10),
         Text(
           change,
           style: TextStyle(
             color: change.startsWith('-') ? const Color(0xFFFF6868) : _lime,
-            fontSize: 11,
+            fontSize: AcoTypography.caption,
           ),
         ),
       ],
@@ -1259,7 +1317,7 @@ class _ChatRow extends StatelessWidget {
                 name,
                 style: const TextStyle(
                   color: _white,
-                  fontSize: 13,
+                  fontSize: AcoTypography.bodySmall,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1268,7 +1326,10 @@ class _ChatRow extends StatelessWidget {
                 preview,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _muted, fontSize: 11),
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: AcoTypography.caption,
+                ),
               ),
             ],
           ),
@@ -1276,7 +1337,13 @@ class _ChatRow extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(time, style: const TextStyle(color: _muted, fontSize: 10)),
+            Text(
+              time,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: AcoTypography.caption,
+              ),
+            ),
             if (unread != null) ...[
               const SizedBox(height: 4),
               Container(
@@ -1291,7 +1358,7 @@ class _ChatRow extends StatelessWidget {
                   unread!,
                   style: const TextStyle(
                     color: _black,
-                    fontSize: 10,
+                    fontSize: AcoTypography.caption,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1328,12 +1395,18 @@ class _ContactRow extends StatelessWidget {
                 name,
                 style: const TextStyle(
                   color: _white,
-                  fontSize: 13,
+                  fontSize: AcoTypography.bodySmall,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
-              Text(handle, style: const TextStyle(color: _muted, fontSize: 11)),
+              Text(
+                handle,
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: AcoTypography.caption,
+                ),
+              ),
             ],
           ),
         ),
@@ -1380,7 +1453,7 @@ class _SegmentedTabs extends StatelessWidget {
                 labels[i],
                 style: TextStyle(
                   color: selected == i ? _black : _muted,
-                  fontSize: 12,
+                  fontSize: AcoTypography.caption,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1399,7 +1472,13 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 90),
     child: Center(
-      child: Text(message, style: const TextStyle(color: _muted, fontSize: 14)),
+      child: Text(
+        message,
+        style: const TextStyle(
+          color: _muted,
+          fontSize: AcoTypography.bodySmall,
+        ),
+      ),
     ),
   );
 }
