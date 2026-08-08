@@ -1,6 +1,9 @@
+import 'dart:typed_data';
+
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 
 const _lime = Color(0xFFA1FF00);
@@ -36,6 +39,8 @@ enum AcoScreen {
   voiceRoom,
   mining,
   profile,
+  comingSoon,
+  createLive,
 }
 
 class AcoDesignShell extends StatefulWidget {
@@ -56,12 +61,19 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   }
 
   void _open(AcoScreen screen) {
+    final target =
+        screen == AcoScreen.squareFeed || screen == AcoScreen.createLive
+        ? AcoScreen.squareFeed
+        : AcoScreen.comingSoon;
+    final destination = screen == AcoScreen.createLive
+        ? AcoScreen.createLive
+        : target;
     Navigator.of(context).push<void>(
       CupertinoPageRoute(
         builder: (_) => ValueListenableBuilder<bool>(
           valueListenable: _isDark,
           builder: (_, dark, _) => AcoScreenPage(
-            screen: screen,
+            screen: destination,
             dark: dark,
             isRoot: false,
             onOpen: _open,
@@ -76,13 +88,6 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
     valueListenable: _isDark,
     builder: (_, dark, _) {
-      final tabs = [
-        AcoScreen.walletHome,
-        AcoScreen.browserDiscover,
-        AcoScreen.dexToken,
-        AcoScreen.squareFeed,
-        AcoScreen.socialMessages,
-      ];
       return CupertinoPageScaffold(
         backgroundColor: AcoPalette(dark).background,
         child: _AcoViewport(
@@ -93,24 +98,20 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
             child: Column(
               children: [
                 Expanded(
-                  child: IndexedStack(
-                    index: _selectedNav,
-                    children: [
-                      for (final page in tabs)
-                        AcoScreenPage(
-                          screen: page,
-                          dark: dark,
-                          isRoot: true,
-                          onOpen: _open,
-                          onThemeToggle: () => _isDark.value = !_isDark.value,
-                        ),
-                    ],
+                  child: AcoScreenPage(
+                    screen: AcoScreen.squareFeed,
+                    dark: dark,
+                    isRoot: true,
+                    onOpen: _open,
+                    onThemeToggle: () => _isDark.value = !_isDark.value,
                   ),
                 ),
                 AcoBottomNav(
                   selected: _selectedNav,
                   dark: dark,
-                  onSelected: (index) => setState(() => _selectedNav = index),
+                  onSelected: (index) {
+                    if (index != 3) _open(AcoScreen.comingSoon);
+                  },
                 ),
               ],
             ),
@@ -186,6 +187,8 @@ class AcoScreenPage extends StatelessWidget {
         onThemeToggle: onThemeToggle,
         onOpen: onOpen,
       ),
+      AcoScreen.comingSoon => _ComingSoonPage(palette: palette),
+      AcoScreen.createLive => _CreateLivePage(palette: palette),
     };
 
     return ColoredBox(
@@ -1605,24 +1608,21 @@ class _SquareFeedPage extends StatefulWidget {
 }
 
 class _LiveSession {
-  const _LiveSession({required this.title, required this.host});
+  const _LiveSession({required this.title, this.coverAsset});
 
   final String title;
-  final String host;
+  final String? coverAsset;
 }
 
-const _defaultLiveSession = _LiveSession(
-  title: '美股凭什么依然能打？3节课带你从小白上手美股交易！',
-  host: 'OKX中文',
-);
+const _defaultLiveSession = _LiveSession(title: '美股凭什么依然能打？3节课带你从小白上手美股交易！');
 
 class _SquareFeedPageState extends State<_SquareFeedPage> {
-  bool _showLive = false;
+  bool _showLive = true;
   static const List<_LiveSession> _liveSessions = [
     _defaultLiveSession,
-    _LiveSession(title: 'BTC 强势突破后，接下来应该关注哪些关键位置？', host: '链上观察员'),
-    _LiveSession(title: 'AI Agent 热潮持续，哪些项目值得长期跟踪？', host: 'Web3 研究社'),
-    _LiveSession(title: '从零搭建交易策略：风险控制与仓位管理实战', host: '交易员阿峰'),
+    _LiveSession(title: 'BTC 强势突破后，接下来应该关注哪些关键位置？'),
+    _LiveSession(title: 'AI Agent 热潮持续，哪些项目值得长期跟踪？'),
+    _LiveSession(title: '从零搭建交易策略：风险控制与仓位管理实战'),
   ];
 
   List<Widget> _buildLiveContent(AcoPalette palette) => [
@@ -1638,97 +1638,124 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     final palette = widget.palette;
     final onOpen = widget.onOpen;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(35, 16, 35, 24),
+    return Stack(
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: AcoTopActions(palette: palette, onOpen: onOpen),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
+        ListView(
+          padding: const EdgeInsets.fromLTRB(35, 16, 35, 96),
           children: [
-            const AcoAvatar(size: 42),
-            const SizedBox(width: 16),
-            Expanded(
-              child: AcoSearch(
-                palette: palette,
-                hint: '搜索帖文或消息',
-                height: 44,
-                variant: AcoSearchVariant.squareComposer,
-                submitIcon: CupertinoIcons.add,
-                onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16),
+                child: AcoTopActions(palette: palette, onOpen: onOpen),
               ),
             ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '推荐',
-              style: TextStyle(
-                color: _showLive ? palette.mutedText : palette.primaryText,
-                fontSize: AcoTypography.bodyEmphasis,
-                fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
-              ),
-            ),
-            const SizedBox(width: 40),
-            Stack(
-              clipBehavior: Clip.none,
+            const SizedBox(height: 12),
+            Row(
               children: [
-                Text(
-                  '好友',
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.bodyEmphasis,
+                const AcoAvatar(size: 42),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: AcoSearch(
+                    palette: palette,
+                    hint: '搜索帖文或消息',
+                    height: 44,
+                    variant: AcoSearchVariant.squareComposer,
+                    submitIcon: CupertinoIcons.add,
+                    onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
                   ),
                 ),
-                const Positioned(
-                  top: -10,
-                  right: -24,
-                  child: _GreenBadge(label: '77'),
+              ],
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '推荐',
+                  style: TextStyle(
+                    color: _showLive ? palette.mutedText : palette.primaryText,
+                    fontSize: AcoTypography.bodyEmphasis,
+                    fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(width: 40),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Text(
+                      '好友',
+                      style: TextStyle(
+                        color: palette.mutedText,
+                        fontSize: AcoTypography.bodyEmphasis,
+                      ),
+                    ),
+                    const Positioned(
+                      top: -10,
+                      right: -24,
+                      child: _GreenBadge(label: '77'),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 40),
+                Text(
+                  '直播',
+                  style: TextStyle(
+                    color: _showLive ? palette.primaryText : palette.mutedText,
+                    fontSize: AcoTypography.bodyEmphasis,
+                    fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(width: 40),
-            CupertinoButton(
-              padding: EdgeInsets.zero,
-              onPressed: () => setState(() => _showLive = true),
-              child: Text(
-                '直播',
-                style: TextStyle(
-                  color: _showLive ? palette.primaryText : palette.mutedText,
-                  fontSize: AcoTypography.bodyEmphasis,
-                  fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
+            const SizedBox(height: 8),
+            Container(height: 1, color: palette.border),
+            if (_showLive)
+              ..._buildLiveContent(palette)
+            else ...[
+              const SizedBox(height: 32),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _TopicChip(palette: palette, label: '买买买!!', width: 164),
+                    const SizedBox(width: 10),
+                    _TopicChip(
+                      palette: palette,
+                      label: 'ALD! V587!',
+                      width: 184,
+                    ),
+                  ],
                 ),
               ),
-            ),
+              const SizedBox(height: 32),
+              _PostCard(palette: palette),
+            ],
           ],
         ),
-        const SizedBox(height: 8),
-        Container(height: 1, color: palette.border),
-        if (_showLive)
-          ..._buildLiveContent(palette)
-        else ...[
-          const SizedBox(height: 32),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _TopicChip(palette: palette, label: '买买买!!', width: 164),
-                const SizedBox(width: 10),
-                _TopicChip(palette: palette, label: 'ALD! V587!', width: 184),
-              ],
+        Positioned(
+          right: 22,
+          bottom: 22,
+          child: Semantics(
+            button: true,
+            label: '创建直播',
+            child: CupertinoButton(
+              key: const Key('create-live-button'),
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(54, 54),
+              onPressed: () => onOpen(AcoScreen.createLive),
+              child: Container(
+                width: 54,
+                height: 54,
+                decoration: const BoxDecoration(
+                  color: _lime,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(CupertinoIcons.add, color: _black, size: 30),
+              ),
             ),
           ),
-          const SizedBox(height: 32),
-          _PostCard(palette: palette),
-        ],
+        ),
       ],
     );
   }
@@ -1839,6 +1866,530 @@ class _ChatPage extends StatelessWidget {
           onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
         ),
       ],
+    ),
+  );
+}
+
+class _ComingSoonPage extends StatelessWidget {
+  const _ComingSoonPage({required this.palette});
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => _DetailScaffold(
+    palette: palette,
+    title: 'Coming Soon',
+    child: Center(
+      child: Text(
+        'Coming Soon',
+        style: TextStyle(
+          color: palette.mutedText,
+          fontSize: AcoTypography.title,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
+class _CreateLivePage extends StatefulWidget {
+  const _CreateLivePage({required this.palette});
+  final AcoPalette palette;
+
+  @override
+  State<_CreateLivePage> createState() => _CreateLivePageState();
+}
+
+class _CreateLivePageState extends State<_CreateLivePage> {
+  static const _maxCoverSizeBytes = 5 * 1024 * 1024;
+
+  final _titleController = TextEditingController();
+  DateTime? _scheduledAt;
+  Uint8List? _coverBytes;
+  String? _joinPassword;
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    super.dispose();
+  }
+
+  bool get _canConfirm =>
+      _titleController.text.trim().isNotEmpty && _coverBytes != null;
+
+  void _confirm() {
+    if (!_canConfirm) return;
+    final title = _titleController.text.trim();
+    _showNotice(context, '直播已创建', '正在为“$title”准备直播间。');
+  }
+
+  String get _scheduleLabel {
+    final scheduledAt = _scheduledAt;
+    if (scheduledAt == null) return '立即开播';
+    final hour = scheduledAt.hour.toString().padLeft(2, '0');
+    final minute = scheduledAt.minute.toString().padLeft(2, '0');
+    return '${scheduledAt.month}月${scheduledAt.day}日 $hour:$minute';
+  }
+
+  Future<void> _selectSchedule() async {
+    final now = DateTime.now();
+    var selected = _scheduledAt ?? now.add(const Duration(hours: 1));
+    final palette = widget.palette;
+
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: palette.dark ? Brightness.dark : Brightness.light,
+          primaryColor: _lime,
+        ),
+        child: Container(
+          height: 332,
+          color: palette.surface,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                SizedBox(
+                  height: 52,
+                  child: Row(
+                    children: [
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        onPressed: () {
+                          setState(() => _scheduledAt = null);
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: Text(
+                          '立即开播',
+                          style: const TextStyle(
+                            color: _lime,
+                            fontSize: AcoTypography.bodySmall,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '选择开播时间',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: AcoTypography.body,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        onPressed: () {
+                          setState(() => _scheduledAt = selected);
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: Text(
+                          '确定',
+                          style: const TextStyle(
+                            color: _lime,
+                            fontSize: AcoTypography.body,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(height: 1, color: palette.border),
+                Expanded(
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.dateAndTime,
+                    minimumDate: now,
+                    initialDateTime: selected,
+                    onDateTimeChanged: (value) => selected = value,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _selectCover() async {
+    final image = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1600,
+      maxHeight: 900,
+      imageQuality: 85,
+    );
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    if (!mounted) return;
+    if (bytes.lengthInBytes > _maxCoverSizeBytes) {
+      _showNotice(context, '图片过大', '请选择小于 5 MB 的直播封面。');
+      return;
+    }
+
+    setState(() => _coverBytes = bytes);
+  }
+
+  String get _joinAccessLabel => _joinPassword == null ? '任何人直接加入' : '需要密码才能加入';
+
+  Future<void> _selectJoinAccess() async {
+    final palette = widget.palette;
+    final choice = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (sheetContext) => CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: palette.dark ? Brightness.dark : Brightness.light,
+          primaryColor: _lime,
+        ),
+        child: CupertinoActionSheet(
+          title: const Text('设置加入权限'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(sheetContext).pop('open'),
+              child: const Text('任何人直接加入'),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(sheetContext).pop('password'),
+              child: const Text('需要密码才能加入'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('取消'),
+          ),
+        ),
+      ),
+    );
+
+    if (choice == 'open') {
+      setState(() => _joinPassword = null);
+    } else if (choice == 'password') {
+      await _setJoinPassword();
+    }
+  }
+
+  Future<void> _setJoinPassword() async {
+    final palette = widget.palette;
+    var password = _joinPassword ?? '';
+    final confirmedPassword = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogContext) => CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: palette.dark ? Brightness.dark : Brightness.light,
+          primaryColor: _lime,
+        ),
+        child: StatefulBuilder(
+          builder: (context, setDialogState) => CupertinoAlertDialog(
+            title: const Text('设置加入密码'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CupertinoTextField(
+                autofocus: true,
+                obscureText: true,
+                maxLength: 20,
+                onChanged: (value) => setDialogState(() => password = value),
+                placeholder: '输入至少 4 位密码',
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: password.trim().length >= 4
+                    ? () => Navigator.of(dialogContext).pop(password.trim())
+                    : null,
+                child: const Text('保存'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmedPassword != null) {
+      setState(() => _joinPassword = confirmedPassword);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+    final hasCover = _coverBytes != null;
+    final canConfirm = _canConfirm;
+    return _DetailScaffold(
+      palette: palette,
+      title: '创建直播',
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(top: 18),
+              children: [
+                Container(
+                  height: 164,
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
+                  decoration: BoxDecoration(
+                    color: palette.surface,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: CupertinoTextField(
+                          controller: _titleController,
+                          maxLength: 60,
+                          maxLines: null,
+                          expands: true,
+                          textAlignVertical: TextAlignVertical.top,
+                          onChanged: (_) => setState(() {}),
+                          placeholder: '输入直播主题',
+                          placeholderStyle: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.title,
+                          ),
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: AcoTypography.bodyEmphasis,
+                          ),
+                          decoration: null,
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          '${_titleController.text.length}/60',
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.bodySmall,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _CreateLiveRow(
+                  palette: palette,
+                  title: '预约时间',
+                  value: _scheduleLabel,
+                  highlighted: true,
+                  onTap: _selectSchedule,
+                ),
+                const SizedBox(height: 12),
+                _CreateLiveRow(
+                  palette: palette,
+                  title: '谁能加入？',
+                  subtitle: _joinAccessLabel,
+                  onTap: _selectJoinAccess,
+                ),
+                const SizedBox(height: 12),
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  onPressed: _selectCover,
+                  child: Container(
+                    height: 76,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: palette.surface,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        if (_coverBytes case final bytes?)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.memory(
+                              bytes,
+                              width: 54,
+                              height: 52,
+                              fit: BoxFit.cover,
+                              filterQuality: FilterQuality.medium,
+                            ),
+                          )
+                        else
+                          Container(
+                            width: 54,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: palette.surfaceRaised,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              CupertinoIcons.photo,
+                              color: palette.mutedText,
+                              size: 26,
+                            ),
+                          ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Text(
+                                    '*',
+                                    style: TextStyle(
+                                      color: _danger,
+                                      fontSize: AcoTypography.bodyEmphasis,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    _coverBytes == null ? '上传封面' : '更换封面',
+                                    style: TextStyle(
+                                      color: palette.primaryText,
+                                      fontSize: AcoTypography.bodyEmphasis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              if (hasCover)
+                                Text(
+                                  '已选择直播封面',
+                                  style: TextStyle(
+                                    color: palette.mutedText,
+                                    fontSize: AcoTypography.bodySmall,
+                                  ),
+                                )
+                              else
+                                Text(
+                                  '建议使用横向图片',
+                                  style: TextStyle(
+                                    color: palette.mutedText,
+                                    fontSize: AcoTypography.bodySmall,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          CupertinoIcons.chevron_right,
+                          color: palette.mutedText,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: CupertinoButton(
+                key: const Key('confirm-create-live-button'),
+                padding: EdgeInsets.zero,
+                onPressed: canConfirm ? _confirm : null,
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: canConfirm ? _lime : palette.surfaceRaised,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Text(
+                    '确认',
+                    style: TextStyle(
+                      color: canConfirm ? _black : palette.mutedText,
+                      fontSize: AcoTypography.bodyEmphasis,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CreateLiveRow extends StatelessWidget {
+  const _CreateLiveRow({
+    required this.palette,
+    required this.title,
+    required this.onTap,
+    this.value,
+    this.subtitle,
+    this.highlighted = false,
+  });
+
+  final AcoPalette palette;
+  final String title;
+  final String? value;
+  final String? subtitle;
+  final bool highlighted;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    onPressed: onTap,
+    child: Container(
+      height: subtitle == null ? 56 : 68,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.bodyEmphasis,
+                  ),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle!,
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (value != null) ...[
+            Text(
+              value!,
+              style: TextStyle(
+                color: highlighted ? _lime : palette.mutedText,
+                fontSize: AcoTypography.bodyEmphasis,
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Icon(
+            CupertinoIcons.chevron_right,
+            color: palette.mutedText,
+            size: 20,
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -3132,13 +3683,16 @@ class _LiveCard extends StatelessWidget {
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Image.asset(
-            palette.dark
-                ? 'assets/icons/live_brand_dark.png'
-                : 'assets/icons/live_brand_light.png',
-            width: 52,
-            height: 52,
-            fit: BoxFit.contain,
+          Transform.translate(
+            offset: const Offset(0, -3),
+            child: Image.asset(
+              palette.dark
+                  ? 'assets/icons/live_brand_dark.png'
+                  : 'assets/icons/live_brand_light.png',
+              width: 52,
+              height: 52,
+              fit: BoxFit.contain,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -3153,32 +3707,23 @@ class _LiveCard extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  session.host,
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.bodySmall,
-                  ),
-                ),
               ],
             ),
           ),
         ],
       ),
-      const SizedBox(height: 10),
-      AcoSurface(
-        palette: palette,
-        radius: 22,
-        padding: EdgeInsets.zero,
-        child: Container(
-          height: 220,
-          decoration: BoxDecoration(
-            color: palette.surface,
-            borderRadius: BorderRadius.circular(22),
+      if (session.coverAsset case final coverAsset?) ...[
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: Image.asset(
+            coverAsset,
+            width: double.infinity,
+            height: 220,
+            fit: BoxFit.cover,
           ),
         ),
-      ),
+      ],
     ],
   );
 }
