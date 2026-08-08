@@ -1,6 +1,7 @@
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 
 void main() {
@@ -21,6 +22,12 @@ class AcoApp extends StatelessWidget {
       appBuilder: (_) => CupertinoApp(
         title: 'Aco',
         debugShowCheckedModeBanner: false,
+        locale: const Locale('zh', 'CN'),
+        supportedLocales: const [Locale('zh', 'CN')],
+        localizationsDelegates: const [
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
         theme: const CupertinoThemeData(
           brightness: Brightness.dark,
           primaryColor: accent,
