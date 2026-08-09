@@ -34,8 +34,10 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  emoji_picker_flutter: ^4.3.0
   flutter_svg: ^2.3.0
   image_picker: ^1.1.2
+  mobile_scanner: ^6.0.11
   shadcn_ui: ^0.55.0
 
 dev_dependencies:
@@ -54,12 +56,15 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  uses-material-design: true
 
   assets:
     - assets/images/
     - assets/icons/
     - assets/icons/light/
     - assets/icons/lucide/
+    - assets/icons/crypto/tokens/
+    - assets/icons/crypto/chains/
     - assets/design_svg/source/images/
 
   fonts:
