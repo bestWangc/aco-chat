@@ -58,6 +58,26 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
+    await tester.pumpAndSettle(const Duration(seconds: 2));
+    await tester.tap(find.byKey(const Key('backup-confirmation')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('wallet-password-field')),
+      'secure123',
+    );
+    await tester.enterText(
+      find.byKey(const Key('wallet-password-confirm-field')),
+      'secure123',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('wallet-biometric-button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
+    await tester.pumpAndSettle();
+
     expect(walletConfigured, isTrue);
     expect(find.text('Wallet1'), findsOneWidget);
   });
