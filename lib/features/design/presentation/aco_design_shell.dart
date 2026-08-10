@@ -1,8 +1,11 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -50,25 +53,387 @@ enum AcoScreen {
   createLive,
 }
 
+class AcoWalletWelcomePage extends StatefulWidget {
+  const AcoWalletWelcomePage({
+    required this.dark,
+    required this.onWalletReady,
+    super.key,
+  });
+
+  final bool dark;
+  final VoidCallback onWalletReady;
+
+  @override
+  State<AcoWalletWelcomePage> createState() => _AcoWalletWelcomePageState();
+}
+
+class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
+  @override
+  Widget build(BuildContext context) {
+    final palette = AcoPalette(widget.dark);
+    return ColoredBox(
+      color: palette.background,
+      child: SafeArea(
+        child: LayoutBuilder(
+          builder: (_, constraints) => SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minHeight: constraints.maxHeight - 46,
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 118),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _AcoBrandMark(
+                        color: palette.primaryText,
+                        cutoutColor: palette.background,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        '开始你的Aco之旅',
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: AcoTypography.displaySmall,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '创建新钱包或导入已有钱包，\n管理你的数字资产',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodyEmphasis,
+                      height: 1.7,
+                    ),
+                  ),
+                  const SizedBox(height: 52),
+                  _WalletSetupButton(
+                    key: const Key('create-wallet-button'),
+                    label: '创建新钱包',
+                    enabled: true,
+                    filled: true,
+                    palette: palette,
+                    onPressed: widget.onWalletReady,
+                  ),
+                  const SizedBox(height: 14),
+                  _WalletSetupButton(
+                    key: const Key('import-wallet-button'),
+                    label: '导入已有钱包',
+                    enabled: true,
+                    filled: false,
+                    palette: palette,
+                    onPressed: widget.onWalletReady,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WalletSetupButton extends StatelessWidget {
+  const _WalletSetupButton({
+    required this.label,
+    required this.enabled,
+    required this.filled,
+    required this.palette,
+    required this.onPressed,
+    super.key,
+  });
+
+  final String label;
+  final bool enabled;
+  final bool filled;
+  final AcoPalette palette;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Opacity(
+    opacity: enabled ? 1 : .42,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(double.infinity, 48),
+      onPressed: enabled ? onPressed : null,
+      child: Container(
+        width: double.infinity,
+        height: 48,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: filled ? (palette.dark ? _lime : _black) : _transparent,
+          border: Border.all(
+            color: filled ? (palette.dark ? _lime : _black) : palette.mutedText,
+          ),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: filled
+                ? (palette.dark ? _black : _white)
+                : palette.primaryText,
+            fontSize: AcoTypography.titleLarge,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _WelcomeGlobe extends StatefulWidget {
+  const _WelcomeGlobe();
+
+  @override
+  State<_WelcomeGlobe> createState() => _WelcomeGlobeState();
+}
+
+class _WelcomeGlobeState extends State<_WelcomeGlobe>
+    with SingleTickerProviderStateMixin {
+  ui.Image? _texture;
+  late final AnimationController _rotation = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 24),
+  )..repeat();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTexture();
+  }
+
+  Future<void> _loadTexture() async {
+    final data = await rootBundle.load('assets/images/welcome-globe.png');
+    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+    final frame = await codec.getNextFrame();
+    codec.dispose();
+    if (!mounted) {
+      frame.image.dispose();
+      return;
+    }
+    setState(() => _texture = frame.image);
+  }
+
+  @override
+  void dispose() {
+    _rotation.dispose();
+    _texture?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _rotation,
+    builder: (_, _) => _texture == null
+        ? _globeImage()
+        : CustomPaint(
+            size: const Size.square(255),
+            painter: _WelcomeGlobePainter(
+              texture: _texture!,
+              phase: _rotation.value * math.pi * 2,
+            ),
+          ),
+  );
+
+  Widget _globeImage() => Image.asset(
+    'assets/images/welcome-globe.png',
+    width: 255,
+    height: 255,
+    filterQuality: FilterQuality.high,
+    errorBuilder: (_, _, _) => const SizedBox.square(dimension: 255),
+  );
+}
+
+class _WelcomeGlobePainter extends CustomPainter {
+  const _WelcomeGlobePainter({required this.texture, required this.phase});
+
+  final ui.Image texture;
+  final double phase;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * .457;
+    final clip = Path()
+      ..addOval(Rect.fromCircle(center: center, radius: radius));
+    final background = Paint()..color = const Color(0xFFF8F8F8);
+    canvas.drawCircle(center, radius, background);
+    canvas.save();
+    canvas.clipPath(clip);
+
+    const segments = 48;
+    final positions = <Offset>[];
+    final textureCoordinates = <Offset>[];
+    final vertexIndex = List<int?>.filled(
+      (segments + 1) * (segments + 1),
+      null,
+    );
+    final sourceCenter = Offset(texture.width / 2, texture.height / 2);
+    final sourceRadius = texture.width * .457;
+    final cosPhase = math.cos(phase);
+    final sinPhase = math.sin(phase);
+
+    for (var row = 0; row <= segments; row++) {
+      final y = -1 + row * 2 / segments;
+      for (var column = 0; column <= segments; column++) {
+        final x = -1 + column * 2 / segments;
+        final distanceSquared = x * x + y * y;
+        if (distanceSquared > 1) continue;
+
+        final frontDepth = math.sqrt(1 - distanceSquared);
+        final sourceX = x * cosPhase - frontDepth * sinPhase;
+        final sourceDepth = x * sinPhase + frontDepth * cosPhase;
+        // The supplied artwork has one visible hemisphere. Mirror its texture
+        // for the unseen side so the globe remains filled throughout a turn.
+        final wrappedX = sourceDepth < 0 ? -sourceX : sourceX;
+        vertexIndex[row * (segments + 1) + column] = positions.length;
+        positions.add(Offset(center.dx + x * radius, center.dy + y * radius));
+        textureCoordinates.add(
+          Offset(
+            sourceCenter.dx + wrappedX * sourceRadius,
+            sourceCenter.dy + y * sourceRadius,
+          ),
+        );
+      }
+    }
+
+    final indices = <int>[];
+    for (var row = 0; row < segments; row++) {
+      for (var column = 0; column < segments; column++) {
+        final topLeft = vertexIndex[row * (segments + 1) + column];
+        final topRight = vertexIndex[row * (segments + 1) + column + 1];
+        final bottomLeft = vertexIndex[(row + 1) * (segments + 1) + column];
+        final bottomRight =
+            vertexIndex[(row + 1) * (segments + 1) + column + 1];
+        if (topLeft == null ||
+            topRight == null ||
+            bottomLeft == null ||
+            bottomRight == null) {
+          continue;
+        }
+        indices.addAll([
+          topLeft,
+          bottomLeft,
+          topRight,
+          topRight,
+          bottomLeft,
+          bottomRight,
+        ]);
+      }
+    }
+
+    final vertices = ui.Vertices(
+      ui.VertexMode.triangles,
+      positions,
+      textureCoordinates: textureCoordinates,
+      indices: indices,
+    );
+    final texturePaint = Paint()
+      ..shader = ui.ImageShader(
+        texture,
+        TileMode.clamp,
+        TileMode.clamp,
+        Matrix4.identity().storage,
+      );
+    canvas.drawVertices(vertices, BlendMode.srcOver, texturePaint);
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _WelcomeGlobePainter oldDelegate) =>
+      oldDelegate.texture != texture || oldDelegate.phase != phase;
+}
+
+class _AcoBrandMark extends StatelessWidget {
+  const _AcoBrandMark({required this.color, required this.cutoutColor});
+
+  final Color color;
+  final Color cutoutColor;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    size: const Size.square(30),
+    painter: _AcoBrandMarkPainter(color, cutoutColor),
+  );
+}
+
+class _AcoBrandMarkPainter extends CustomPainter {
+  const _AcoBrandMarkPainter(this.color, this.cutoutColor);
+
+  final Color color;
+  final Color cutoutColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mark = Paint()..color = color;
+    final cutout = Paint()..color = cutoutColor;
+    final triangle = Path()
+      ..moveTo(size.width / 2, 1)
+      ..lineTo(1, size.height - 2)
+      ..lineTo(size.width - 1, size.height - 2)
+      ..close();
+    canvas.drawPath(triangle, mark);
+    canvas.drawCircle(Offset(size.width / 2, size.height * .58), 4.2, cutout);
+    canvas.drawPath(
+      Path()
+        ..moveTo(size.width / 2, size.height * .22)
+        ..lineTo(size.width * .64, size.height * .64)
+        ..lineTo(size.width * .36, size.height * .64)
+        ..close(),
+      cutout,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _AcoBrandMarkPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.cutoutColor != cutoutColor;
+}
+
 class AcoDesignShell extends StatefulWidget {
-  const AcoDesignShell({super.key});
+  const AcoDesignShell({this.themeNotifier, this.onThemeChanged, super.key});
+
+  /// Owned by [AcoApp] so the Cupertino and shadcn themes update together.
+  final ValueNotifier<bool>? themeNotifier;
+  final ValueChanged<bool>? onThemeChanged;
 
   @override
   State<AcoDesignShell> createState() => _AcoDesignShellState();
 }
 
 class _AcoDesignShellState extends State<AcoDesignShell> {
-  final ValueNotifier<bool> _isDark = ValueNotifier<bool>(true);
+  late final ValueNotifier<bool> _isDark;
+  late final bool _ownsThemeNotifier;
   int _selectedNav = 0;
   AcoScreen _rootScreen = AcoScreen.walletHome;
   final ValueNotifier<String> _displayName = ValueNotifier<String>('Marry');
   String _language = '简体中文';
 
   @override
+  void initState() {
+    super.initState();
+    _ownsThemeNotifier = widget.themeNotifier == null;
+    _isDark = widget.themeNotifier ?? ValueNotifier<bool>(true);
+  }
+
+  @override
   void dispose() {
-    _isDark.dispose();
+    if (_ownsThemeNotifier) _isDark.dispose();
     _displayName.dispose();
     super.dispose();
+  }
+
+  void _toggleTheme() {
+    final isDark = !_isDark.value;
+    _isDark.value = isDark;
+    widget.onThemeChanged?.call(isDark);
   }
 
   void _open(AcoScreen screen) {
@@ -108,7 +473,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
               dark: dark,
               isRoot: false,
               onOpen: _open,
-              onThemeToggle: () => _isDark.value = !_isDark.value,
+              onThemeToggle: _toggleTheme,
               displayName: displayName,
               onDisplayNameChanged: (name) => _displayName.value = name,
               language: _language,
@@ -142,7 +507,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       dark: dark,
                       isRoot: true,
                       onOpen: _open,
-                      onThemeToggle: () => _isDark.value = !_isDark.value,
+                      onThemeToggle: _toggleTheme,
                       displayName: displayName,
                       onDisplayNameChanged: (name) => _displayName.value = name,
                       language: _language,
@@ -198,7 +563,7 @@ class AcoPalette {
       dark ? const Color(0xFF929292) : const Color(0xFF939393);
   Color get border => dark ? const Color(0xFF2D2D2D) : const Color(0xFFE2E2E2);
   Color get navInactive =>
-      dark ? const Color(0xFF9E9E9E) : const Color(0xFF777777);
+      dark ? const Color(0xFF9E9E9E) : const Color(0xFFC4C4C4);
 }
 
 class AcoScreenPage extends StatelessWidget {
@@ -237,7 +602,7 @@ class AcoScreenPage extends StatelessWidget {
       ),
       AcoScreen.assetDetail => _AssetDetail(palette: palette, onOpen: onOpen),
       AcoScreen.receive => _ReceivePage(palette: palette),
-      AcoScreen.scan => const _ScanPage(),
+      AcoScreen.scan => _ScanPage(palette: palette),
       AcoScreen.addTokenV1 => _AddTokenPage(palette: palette),
       AcoScreen.addTokenV2 => _AddTokenPage(palette: palette),
       AcoScreen.dexToken => _DexTokenPage(palette: palette, onOpen: onOpen),
@@ -373,7 +738,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? _lime : palette.navInactive;
+    final color = active
+        ? (palette.dark ? _lime : palette.primaryText)
+        : palette.navInactive;
     if (index == 2) {
       return SizedBox(
         width: 48,
@@ -386,12 +753,56 @@ class _NavItem extends StatelessWidget {
               left: -4,
               width: 55,
               height: 52,
-              child: SvgPicture.asset(
-                active
-                    ? 'assets/icons/source_dex_active.svg'
-                    : 'assets/icons/source_dex_inactive.svg',
-                fit: BoxFit.contain,
-              ),
+              child: active && !palette.dark
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        SvgPicture.asset(
+                          'assets/icons/source_dex_fill.svg',
+                          fit: BoxFit.contain,
+                          colorFilter: const ColorFilter.mode(
+                            _lime,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                        SvgPicture.asset(
+                          'assets/icons/source_dex_wordmark.svg',
+                          fit: BoxFit.contain,
+                          colorFilter: ColorFilter.mode(
+                            palette.primaryText,
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ],
+                    )
+                  : !active && !palette.dark
+                  ? Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        SvgPicture.asset(
+                          'assets/icons/source_dex_inactive.svg',
+                          fit: BoxFit.contain,
+                          colorFilter: const ColorFilter.mode(
+                            Color(0xFFE4E4E4),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                        SvgPicture.asset(
+                          'assets/icons/source_dex_wordmark.svg',
+                          fit: BoxFit.contain,
+                          colorFilter: const ColorFilter.mode(
+                            Color(0xFFC4C4C4),
+                            BlendMode.srcIn,
+                          ),
+                        ),
+                      ],
+                    )
+                  : SvgPicture.asset(
+                      active
+                          ? 'assets/icons/source_dex_active.svg'
+                          : 'assets/icons/source_dex_inactive.svg',
+                      fit: BoxFit.contain,
+                    ),
             ),
           ],
         ),
@@ -771,7 +1182,9 @@ class AcoSearch extends StatelessWidget {
               width: isSquareComposer ? 20 : 32,
               height: isSquareComposer ? 20 : 32,
               child: Image.asset(
-                'assets/icons/design_plus_dark.png',
+                palette.dark
+                    ? 'assets/icons/design_plus_dark.png'
+                    : 'assets/icons/design_plus_light.png',
                 filterQuality: FilterQuality.high,
               ),
             ),
@@ -1003,9 +1416,11 @@ class _WalletHomeState extends State<_WalletHome> {
                           fontSize: AcoTypography.bodyEmphasis,
                         ),
                       ),
-                      const Icon(
+                      Icon(
                         CupertinoIcons.chevron_down,
-                        color: _lime,
+                        color: widget.palette.dark
+                            ? _lime
+                            : widget.palette.primaryText,
                         size: 15,
                       ),
                       const SizedBox(width: 22),
@@ -1148,7 +1563,6 @@ class _WalletHomeState extends State<_WalletHome> {
               title: asset.title,
               amount: '0.00',
               value: '≈0.00 USD',
-              onTap: () => widget.onOpen(AcoScreen.assetDetail),
             );
           },
         ),
@@ -1684,7 +2098,9 @@ class _ReceivePage extends StatelessWidget {
 }
 
 class _ScanPage extends StatefulWidget {
-  const _ScanPage();
+  const _ScanPage({required this.palette});
+
+  final AcoPalette palette;
 
   @override
   State<_ScanPage> createState() => _ScanPageState();
@@ -1721,12 +2137,12 @@ class _ScanPageState extends State<_ScanPage> {
         controller: _controller,
         onDetect: _handleCapture,
         errorBuilder: (_, error, _) => ColoredBox(
-          color: _black,
+          color: widget.palette.background,
           child: Center(
             child: Text(
               '无法打开相机',
               style: TextStyle(
-                color: _white,
+                color: widget.palette.primaryText,
                 fontSize: AcoTypography.bodyEmphasis,
               ),
             ),
@@ -1734,7 +2150,11 @@ class _ScanPageState extends State<_ScanPage> {
         ),
       ),
       DecoratedBox(
-        decoration: BoxDecoration(color: _black.withValues(alpha: .38)),
+        decoration: BoxDecoration(
+          color: (widget.palette.dark ? _black : _white).withValues(
+            alpha: widget.palette.dark ? .38 : .76,
+          ),
+        ),
       ),
       SafeArea(
         child: Column(
@@ -1745,17 +2165,17 @@ class _ScanPageState extends State<_ScanPage> {
                 children: [
                   AcoIconButton(
                     icon: CupertinoIcons.xmark,
-                    palette: const AcoPalette(true),
+                    palette: widget.palette,
                     label: '关闭扫码',
                     onPressed: () => Navigator.of(context).maybePop(),
                     size: 26,
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '扫一扫',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: _white,
+                        color: widget.palette.primaryText,
                         fontSize: AcoTypography.title,
                         fontWeight: FontWeight.w700,
                       ),
@@ -1767,10 +2187,16 @@ class _ScanPageState extends State<_ScanPage> {
             ),
             const Spacer(flex: 3),
             Container(
+              key: const ValueKey('scan-frame'),
               width: 248,
               height: 248,
               decoration: BoxDecoration(
-                border: Border.all(color: _lime, width: 2),
+                border: Border.all(
+                  color: widget.palette.dark
+                      ? _lime
+                      : widget.palette.primaryText,
+                  width: 2,
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Align(
@@ -1779,20 +2205,25 @@ class _ScanPageState extends State<_ScanPage> {
               ),
             ),
             const SizedBox(height: 22),
-            const Text(
+            Text(
               '将二维码放入框内，即可自动扫描',
               style: TextStyle(
-                color: _white,
+                color: widget.palette.primaryText,
                 fontSize: AcoTypography.bodySmall,
               ),
             ),
             const Spacer(flex: 2),
             if (_result case final value?)
-              _ScanResult(value: value, onContinue: _continueScanning)
+              _ScanResult(
+                palette: widget.palette,
+                value: value,
+                onContinue: _continueScanning,
+              )
             else
               Padding(
                 padding: const EdgeInsets.only(bottom: 32),
                 child: _ScanControl(
+                  palette: widget.palette,
                   icon: CupertinoIcons.bolt_fill,
                   label: '闪光灯',
                   onPressed: _controller.toggleTorch,
@@ -1807,11 +2238,13 @@ class _ScanPageState extends State<_ScanPage> {
 
 class _ScanControl extends StatelessWidget {
   const _ScanControl({
+    required this.palette,
     required this.icon,
     required this.label,
     required this.onPressed,
   });
 
+  final AcoPalette palette;
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
@@ -1824,12 +2257,12 @@ class _ScanControl extends StatelessWidget {
       width: 84,
       child: Column(
         children: [
-          Icon(icon, color: _white, size: 25),
+          Icon(icon, color: palette.primaryText, size: 25),
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(
-              color: _white,
+            style: TextStyle(
+              color: palette.primaryText,
               fontSize: AcoTypography.bodySmall,
             ),
           ),
@@ -1840,8 +2273,13 @@ class _ScanControl extends StatelessWidget {
 }
 
 class _ScanResult extends StatelessWidget {
-  const _ScanResult({required this.value, required this.onContinue});
+  const _ScanResult({
+    required this.palette,
+    required this.value,
+    required this.onContinue,
+  });
 
+  final AcoPalette palette;
   final String value;
   final VoidCallback onContinue;
 
@@ -1849,17 +2287,17 @@ class _ScanResult extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.fromLTRB(24, 18, 24, 32),
-    decoration: const BoxDecoration(
-      color: Color(0xFF161616),
+    decoration: BoxDecoration(
+      color: palette.surface,
       borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
     ),
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
+        Text(
           '已识别二维码',
           style: TextStyle(
-            color: _white,
+            color: palette.primaryText,
             fontSize: AcoTypography.bodyEmphasis,
             fontWeight: FontWeight.w700,
           ),
@@ -1870,7 +2308,7 @@ class _ScanResult extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Color(0xFFB0B0B0)),
+          style: TextStyle(color: palette.mutedText),
         ),
         const SizedBox(height: 18),
         AcoLimeButton(label: '继续扫描', onPressed: onContinue),
@@ -1922,7 +2360,7 @@ class _AddTokenPage extends StatelessWidget {
   Widget build(BuildContext context) => _DetailScaffold(
     palette: palette,
     title: '添加代币',
-    right: const _AddTokenMoreButton(),
+    right: _AddTokenMoreButton(palette: palette),
     child: ListView(
       padding: const EdgeInsets.fromLTRB(27, 12, 27, 26),
       children: [
@@ -1952,7 +2390,9 @@ class _AddTokenPage extends StatelessWidget {
 }
 
 class _AddTokenMoreButton extends StatelessWidget {
-  const _AddTokenMoreButton();
+  const _AddTokenMoreButton({required this.palette});
+
+  final AcoPalette palette;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
@@ -1962,7 +2402,7 @@ class _AddTokenMoreButton extends StatelessWidget {
     child: Stack(
       clipBehavior: Clip.none,
       children: [
-        const Icon(CupertinoIcons.ellipsis, color: _white, size: 26),
+        Icon(CupertinoIcons.ellipsis, color: palette.primaryText, size: 26),
         Positioned(
           right: -1,
           top: 6,
@@ -2471,14 +2911,27 @@ class _MarketOverviewPage extends StatelessWidget {
       const SizedBox(height: 34),
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: const [
-          _MarketIcon(icon: CupertinoIcons.chart_bar_alt_fill, label: '现货'),
-          _MarketIcon(icon: CupertinoIcons.chart_pie_fill, label: '合约'),
+        children: [
           _MarketIcon(
+            palette: palette,
+            icon: CupertinoIcons.chart_bar_alt_fill,
+            label: '现货',
+          ),
+          _MarketIcon(
+            palette: palette,
+            icon: CupertinoIcons.chart_pie_fill,
+            label: '合约',
+          ),
+          _MarketIcon(
+            palette: palette,
             icon: CupertinoIcons.money_dollar_circle_fill,
             label: '股票',
           ),
-          _MarketIcon(icon: CupertinoIcons.bolt_fill, label: '闪兑'),
+          _MarketIcon(
+            palette: palette,
+            icon: CupertinoIcons.bolt_fill,
+            label: '闪兑',
+          ),
         ],
       ),
       const SizedBox(height: 54),
@@ -3632,11 +4085,13 @@ class _ProfilePage extends StatelessWidget {
         title: '设置',
         actions: [
           _ProfileAction(
+            palette: palette,
             icon: CupertinoIcons.flag,
             label: '主题模式',
             onPressed: () => onOpen(AcoScreen.profileTheme),
           ),
           _ProfileAction(
+            palette: palette,
             icon: CupertinoIcons.globe,
             label: '语言',
             onPressed: () => onOpen(AcoScreen.profileLanguage),
@@ -3649,6 +4104,7 @@ class _ProfilePage extends StatelessWidget {
         title: '其他',
         actions: [
           _ProfileAction(
+            palette: palette,
             icon: CupertinoIcons.person_2,
             label: '切换钱包',
             onPressed: () => onOpen(AcoScreen.walletSwitcher),
@@ -4013,11 +4469,13 @@ class _ProfileSection extends StatelessWidget {
 
 class _ProfileAction extends StatelessWidget {
   const _ProfileAction({
+    required this.palette,
     required this.icon,
     required this.label,
     required this.onPressed,
   });
 
+  final AcoPalette palette;
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
@@ -4030,14 +4488,14 @@ class _ProfileAction extends StatelessWidget {
       width: 68,
       child: Column(
         children: [
-          Icon(icon, color: _white, size: 28),
+          Icon(icon, color: palette.primaryText, size: 28),
           const SizedBox(height: 12),
           Text(
             label,
             maxLines: 1,
             overflow: TextOverflow.visible,
-            style: const TextStyle(
-              color: _white,
+            style: TextStyle(
+              color: palette.primaryText,
               fontSize: AcoTypography.bodySmall,
             ),
           ),
@@ -4229,15 +4687,12 @@ class _WalletAssetRow extends StatelessWidget {
     required this.title,
     required this.amount,
     required this.value,
-    required this.onTap,
   });
   final AcoPalette palette;
   final String symbol, title, amount, value;
-  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => CupertinoButton(
+  Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 12),
-    onPressed: onTap,
     child: Row(
       children: [
         Container(
@@ -4557,7 +5012,12 @@ class _DiscoverShortcut extends StatelessWidget {
 }
 
 class _MarketIcon extends StatelessWidget {
-  const _MarketIcon({required this.icon, required this.label});
+  const _MarketIcon({
+    required this.palette,
+    required this.icon,
+    required this.label,
+  });
+  final AcoPalette palette;
   final IconData icon;
   final String label;
   @override
@@ -4566,11 +5026,11 @@ class _MarketIcon extends StatelessWidget {
       Container(
         width: 70,
         height: 70,
-        decoration: const BoxDecoration(
-          color: Color(0xFF222222),
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
           shape: BoxShape.circle,
         ),
-        child: Icon(icon, color: _white),
+        child: Icon(icon, color: palette.primaryText),
       ),
     ],
   );
@@ -5256,8 +5716,8 @@ class _RoomMessage extends StatelessWidget {
       ),
       child: Text(
         '$name:  $text',
-        style: const TextStyle(
-          color: _lime,
+        style: TextStyle(
+          color: palette.dark ? _lime : palette.primaryText,
           fontSize: AcoTypography.bodySmall,
           height: 1.25,
         ),
@@ -5270,15 +5730,16 @@ class _RoomChatHistory extends StatelessWidget {
   const _RoomChatHistory({required this.palette});
   final AcoPalette palette;
 
-  static const messages = [
-    ('Mia', '大家晚上好！'),
-    ('Jason', '欢迎来到直播间，今天聊聊市场走势。'),
-    ('Alex', '已经准备好了！'),
-    ('Luna', '老师好，今天会讲 BTC 吗？'),
-    ('Chris', '行情波动有点大，先听听思路。'),
-    ('Nora', '已关注，期待后面的分享。'),
-    ('Evan', '大家可以把问题发在这里。'),
-    ('Iris', '感谢主持人的分析。'),
+  static const messages = <({String? name, String text})>[
+    (name: 'Mia', text: '大家晚上好！'),
+    (name: 'Jason', text: '欢迎来到直播间，今天聊聊市场走势。'),
+    (name: 'Alex', text: '已经准备好了！'),
+    (name: null, text: '欢迎 Sophia 进入直播间'),
+    (name: 'Luna', text: '老师好，今天会讲 BTC 吗？'),
+    (name: 'Chris', text: '行情波动有点大，先听听思路。'),
+    (name: 'Nora', text: '已关注，期待后面的分享。'),
+    (name: 'Evan', text: '大家可以把问题发在这里。'),
+    (name: 'Iris', text: '感谢主持人的分析。'),
   ];
 
   @override
@@ -5287,10 +5748,41 @@ class _RoomChatHistory extends StatelessWidget {
     padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
     itemCount: messages.length,
     separatorBuilder: (_, _) => const SizedBox(height: 10),
-    itemBuilder: (_, index) => _RoomMessage(
-      palette: palette,
-      name: messages[index].$1,
-      text: messages[index].$2,
+    itemBuilder: (_, index) {
+      final message = messages[index];
+      return message.name == null
+          ? _RoomSystemMessage(palette: palette, text: message.text)
+          : _RoomMessage(
+              palette: palette,
+              name: message.name!,
+              text: message.text,
+            );
+    },
+  );
+}
+
+class _RoomSystemMessage extends StatelessWidget {
+  const _RoomSystemMessage({required this.palette, required this.text});
+
+  final AcoPalette palette;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(
+        color: palette.dark ? const Color(0xFF1B2A04) : const Color(0xFFF1F7E8),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: palette.dark ? _lime : const Color(0xFF4D7800),
+          fontSize: AcoTypography.caption,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     ),
   );
 }
@@ -5430,8 +5922,10 @@ class _RoomBottomBar extends StatelessWidget {
           _RoomControl(
             icon: muted ? CupertinoIcons.mic_slash : CupertinoIcons.mic,
             label: muted ? '取消静音' : '静音',
-            background: _lime,
-            foreground: _black,
+            background: muted && !palette.dark
+                ? const Color(0xFFF2F2F2)
+                : _lime,
+            foreground: muted && !palette.dark ? _danger : _black,
             onPressed: onMic,
             large: true,
           ),
