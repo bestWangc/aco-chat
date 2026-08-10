@@ -2,6 +2,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:aco_chat/core/theme/aco_typography.dart';
+import 'package:aco_chat/services/biometric_authentication.dart';
+import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:flutter/cupertino.dart';
@@ -180,11 +182,19 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   final _confirmPasswordController = TextEditingController();
   var _step = 0;
   var _backedUp = false;
-  var _biometricVerified = false;
+  var _isCompletingWalletSetup = false;
+  var _mnemonicCopied = false;
   late final String _createdMnemonic = _walletSecurity.createMnemonic();
+  late final List<String> _createdWords = _createdMnemonic.split(' ');
+  late final List<int> _verificationIndexes = _createVerificationIndexes();
+  late final List<int> _verificationChoiceIndexes =
+      _createVerificationChoiceIndexes();
+  final List<int> _selectedVerificationIndexes = [];
+  var _verificationError = false;
 
   @override
   void dispose() {
+    SensitiveScreenProtection.setEnabled(false);
     _nameController.dispose();
     _phraseController.dispose();
     _passwordController.dispose();
@@ -195,9 +205,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   @override
   Widget build(BuildContext context) {
     final palette = AcoPalette(widget.dark);
-    final creating = widget.mode == _WalletSetupMode.create;
-    final security = _step == (creating ? 2 : 1);
-    final title = _titleFor(creating, security);
     return ColoredBox(
       color: palette.background,
       child: SafeArea(
@@ -208,18 +215,22 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(36, 36),
-                  onPressed: _step == 0
-                      ? widget.onBack
-                      : () => setState(() => _step = 0),
-                  child: Icon(CupertinoIcons.back, color: palette.primaryText),
+                child: Transform.translate(
+                  offset: const Offset(-16, 0),
+                  child: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(36, 36),
+                    onPressed: _goBack,
+                    child: Icon(
+                      CupertinoIcons.back,
+                      color: palette.primaryText,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 36),
               Text(
-                title,
+                _title,
                 style: TextStyle(
                   color: palette.primaryText,
                   fontSize: AcoTypography.displaySmall,
@@ -228,7 +239,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               ),
               const SizedBox(height: 10),
               Text(
-                _descriptionFor(creating, security),
+                _description,
                 style: TextStyle(
                   color: palette.mutedText,
                   fontSize: AcoTypography.body,
@@ -236,29 +247,20 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                 ),
               ),
               const SizedBox(height: 32),
-              if (creating && _step == 0) _nameField(palette),
-              if (creating && _step == 1) _backupWords(palette),
-              if (!creating && _step == 0) _importField(palette),
-              if (security) _securityFields(palette),
+              if (_isCreating && _step == 0) _nameField(palette),
+              if (_isCreating && _step == 1) _backupWords(palette),
+              if (_isVerificationStep) _verifyWords(palette),
+              if (!_isCreating && _step == 0) _importField(palette),
+              if (_isSecurityStep) _securityFields(palette),
               const Spacer(),
               _WalletSetupButton(
                 key: Key(
-                  creating
+                  _isCreating
                       ? 'continue-create-wallet-button'
                       : 'confirm-import-wallet-button',
                 ),
-                label: security
-                    ? '完成并进入钱包'
-                    : creating && _step == 0
-                    ? '继续'
-                    : creating
-                    ? '我已安全备份'
-                    : '导入钱包',
-                enabled: security
-                    ? _passwordsMatch && _biometricVerified
-                    : creating
-                    ? (_step == 0 || _backedUp)
-                    : _hasValidPhrase,
+                label: _continueLabel,
+                enabled: _canContinue,
                 filled: true,
                 palette: palette,
                 onPressed: _continue,
@@ -284,27 +286,38 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   Widget _backupWords(AcoPalette palette) => Column(
     children: [
-      Wrap(
-        spacing: 8,
-        runSpacing: 10,
-        children: List.generate(
-          12,
-          (index) => Container(
-            width: 145,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-            decoration: BoxDecoration(
-              color: palette.surface,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              '${index + 1}. ${_createdMnemonic.split(' ')[index]}',
-              style: TextStyle(
-                color: palette.primaryText,
-                fontSize: AcoTypography.body,
+      LayoutBuilder(
+        builder: (_, constraints) {
+          const spacing = 8.0;
+          final wordWidth = (constraints.maxWidth - spacing * 2) / 3;
+          return Wrap(
+            spacing: spacing,
+            runSpacing: 10,
+            children: List.generate(
+              _createdWords.length,
+              (index) => Container(
+                width: wordWidth,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 11,
+                ),
+                decoration: BoxDecoration(
+                  color: palette.surface,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${index + 1}. ${_createdWords[index]}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.bodySmall,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
       const SizedBox(height: 22),
       CupertinoButton(
@@ -330,7 +343,140 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
           ],
         ),
       ),
+      const SizedBox(height: 14),
+      CupertinoButton(
+        key: const Key('copy-mnemonic-button'),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        onPressed: _copyMnemonic,
+        color: palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(10),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _mnemonicCopied
+                  ? CupertinoIcons.check_mark
+                  : CupertinoIcons.doc_on_doc,
+              size: 17,
+              color: palette.primaryText,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _mnemonicCopied ? '已复制' : '复制助记词',
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.body,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
     ],
+  );
+
+  Widget _verifyWords(AcoPalette palette) {
+    final targetLabels = _verificationIndexes
+        .map((index) => '第 ${index + 1} 个')
+        .join('、');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          '请按顺序选择：$targetLabels',
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodyEmphasis,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          constraints: const BoxConstraints(minHeight: 52),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _selectedVerificationIndexes.isEmpty
+                ? [
+                    Text(
+                      '从下方词库中依次点选',
+                      style: TextStyle(color: palette.mutedText),
+                    ),
+                  ]
+                : _selectedVerificationIndexes
+                      .map(
+                        (index) => _wordChip(
+                          palette: palette,
+                          index: index,
+                          selected: true,
+                          onPressed: () => _removeVerificationWord(index),
+                        ),
+                      )
+                      .toList(),
+          ),
+        ),
+        if (_verificationError) ...[
+          const SizedBox(height: 10),
+          Text(
+            '助记词顺序不正确，请重新选择。',
+            style: const TextStyle(
+              color: _danger,
+              fontSize: AcoTypography.bodySmall,
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        Text(
+          '词库',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.bodySmall,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 10,
+          children: _verificationChoiceIndexes
+              .where((index) => !_selectedVerificationIndexes.contains(index))
+              .map(
+                (index) => _wordChip(
+                  palette: palette,
+                  index: index,
+                  onPressed: () => _selectVerificationWord(index),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _wordChip({
+    required AcoPalette palette,
+    required int index,
+    required VoidCallback onPressed,
+    bool selected = false,
+  }) => CupertinoButton(
+    key: Key('mnemonic-word-$index'),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    minimumSize: Size.zero,
+    color: selected ? _lime.withValues(alpha: .16) : palette.surfaceRaised,
+    borderRadius: BorderRadius.circular(9),
+    onPressed: onPressed,
+    child: Text(
+      _createdWords[index],
+      style: TextStyle(
+        color: palette.primaryText,
+        fontSize: AcoTypography.bodySmall,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
   );
 
   Widget _importField(AcoPalette palette) => CupertinoTextField(
@@ -377,33 +523,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
           borderRadius: BorderRadius.circular(14),
         ),
       ),
-      const SizedBox(height: 24),
-      CupertinoButton(
-        key: const Key('wallet-biometric-button'),
-        padding: EdgeInsets.zero,
-        onPressed: _passwordsMatch
-            ? () => setState(() => _biometricVerified = true)
-            : null,
-        child: Row(
-          children: [
-            Icon(
-              _biometricVerified
-                  ? CupertinoIcons.check_mark_circled_solid
-                  : CupertinoIcons.lock_shield,
-              color: _biometricVerified ? _lime : palette.primaryText,
-              size: 32,
-            ),
-            const SizedBox(width: 12),
-            Text(
-              _biometricVerified ? '指纹验证成功' : '验证指纹',
-              style: TextStyle(
-                color: palette.primaryText,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
     ],
   );
 
@@ -415,35 +534,153 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       _passwordController.text.length >= 8 &&
       _passwordController.text == _confirmPasswordController.text;
 
-  String _titleFor(bool creating, bool security) {
-    if (security) return '保护你的钱包';
-    if (!creating) return '导入已有钱包';
-    return _step == 0 ? '创建新钱包' : '备份助记词';
+  bool get _hasSelectedAllVerificationWords =>
+      _selectedVerificationIndexes.length == _verificationIndexes.length;
+
+  bool get _isCreating => widget.mode == _WalletSetupMode.create;
+
+  bool get _isVerificationStep => _isCreating && _step == 2;
+
+  bool get _isSecurityStep => _step == _securityStep;
+
+  int get _securityStep => _isCreating ? 3 : 1;
+
+  String get _continueLabel {
+    if (_isSecurityStep) return '完成并进入钱包';
+    if (!_isCreating) return '导入钱包';
+
+    return switch (_step) {
+      0 => '继续',
+      1 => '我已安全备份',
+      _ => '确认助记词',
+    };
   }
 
-  String _descriptionFor(bool creating, bool security) {
-    if (security) return '设置钱包密码，并使用指纹验证以完成操作。';
-    if (!creating) return '输入 12 或 24 个助记词，单词之间用空格分隔。';
-    return _step == 0 ? '为你的数字资产创建一个本地钱包。' : '请按顺序安全备份这些助记词，任何人索取它们都是诈骗。';
+  bool get _canContinue {
+    if (_isSecurityStep) {
+      return _passwordsMatch && !_isCompletingWalletSetup;
+    }
+    if (!_isCreating) return _hasValidPhrase;
+
+    return switch (_step) {
+      0 => true,
+      1 => _backedUp,
+      _ => _hasSelectedAllVerificationWords,
+    };
+  }
+
+  List<int> _createVerificationIndexes() {
+    final indexes = List<int>.generate(_createdWords.length, (i) => i)
+      ..shuffle(math.Random.secure());
+    return (indexes.take(3).toList()..sort());
+  }
+
+  List<int> _createVerificationChoiceIndexes() {
+    final choices = List<int>.generate(_createdWords.length, (index) => index)
+      ..shuffle(math.Random.secure());
+    return choices;
+  }
+
+  void _selectVerificationWord(int index) {
+    if (_selectedVerificationIndexes.length >= _verificationIndexes.length) {
+      return;
+    }
+    setState(() {
+      _verificationError = false;
+      _selectedVerificationIndexes.add(index);
+    });
+  }
+
+  void _removeVerificationWord(int index) {
+    setState(() {
+      _verificationError = false;
+      _selectedVerificationIndexes.remove(index);
+    });
+  }
+
+  bool get _verificationMatches =>
+      _selectedVerificationIndexes.length == _verificationIndexes.length &&
+      _selectedVerificationIndexes.asMap().entries.every(
+        (entry) => entry.value == _verificationIndexes[entry.key],
+      );
+
+  Future<void> _copyMnemonic() async {
+    await Clipboard.setData(ClipboardData(text: _createdMnemonic));
+    if (mounted) setState(() => _mnemonicCopied = true);
+  }
+
+  String get _title {
+    if (_isSecurityStep) return '保护你的钱包';
+    if (!_isCreating) return '导入已有钱包';
+    if (_step == 0) return '创建新钱包';
+    return _step == 1 ? '备份助记词' : '验证助记词';
+  }
+
+  String get _description {
+    if (_isSecurityStep) return '设置钱包密码，并使用指纹验证以完成操作。';
+    if (!_isCreating) return '输入 12 或 24 个助记词，单词之间用空格分隔。';
+    if (_step == 0) return '为你的数字资产创建一个本地钱包。';
+    if (_isVerificationStep) return '确认你已妥善备份。请从词库中按顺序选择指定单词。';
+    return '请按顺序安全备份这些助记词，任何人索取它们都是诈骗。';
   }
 
   Future<void> _continue() async {
-    final securityStep = widget.mode == _WalletSetupMode.create ? 2 : 1;
-    if (_step < securityStep) {
-      setState(() => _step++);
-    } else {
-      final mnemonic = widget.mode == _WalletSetupMode.create
-          ? _createdMnemonic
-          : _walletSecurity.normalizeMnemonic(_phraseController.text);
-      final walletAddress = 'aco_${mnemonic.hashCode.abs().toRadixString(16)}';
-      await _walletSecurity.saveMnemonic(
-        store: _secretStore,
-        walletAddress: walletAddress,
-        mnemonic: mnemonic,
-        password: _passwordController.text,
-      );
-      widget.onComplete();
+    if (_step < _securityStep) {
+      if (_isVerificationStep && !_verificationMatches) {
+        setState(() {
+          _verificationError = true;
+          _selectedVerificationIndexes.clear();
+        });
+        return;
+      }
+      await _advanceSetupStep();
+      return;
     }
+
+    await _completeWalletSetup();
+  }
+
+  Future<void> _advanceSetupStep() async {
+    final nextStep = _step + 1;
+    setState(() => _step = nextStep);
+    await SensitiveScreenProtection.setEnabled(
+      _isCreating && nextStep >= 1 && nextStep <= 2,
+    );
+  }
+
+  Future<void> _completeWalletSetup() async {
+    if (_isCompletingWalletSetup) return;
+    setState(() => _isCompletingWalletSetup = true);
+    final authenticated = await BiometricAuthentication.authenticateOrSkip();
+    if (!authenticated) {
+      if (mounted) setState(() => _isCompletingWalletSetup = false);
+      return;
+    }
+
+    await SensitiveScreenProtection.setEnabled(false);
+    final mnemonic = _isCreating
+        ? _createdMnemonic
+        : _walletSecurity.normalizeMnemonic(_phraseController.text);
+    final walletAddress = 'aco_${mnemonic.hashCode.abs().toRadixString(16)}';
+    await _walletSecurity.saveMnemonic(
+      store: _secretStore,
+      walletAddress: walletAddress,
+      mnemonic: mnemonic,
+      password: _passwordController.text,
+    );
+    widget.onComplete();
+  }
+
+  Future<void> _goBack() async {
+    if (_step == 0) {
+      widget.onBack();
+      return;
+    }
+    final previousStep = _step - 1;
+    setState(() => _step = previousStep);
+    await SensitiveScreenProtection.setEnabled(
+      _isCreating && previousStep >= 1 && previousStep <= 2,
+    );
   }
 }
 

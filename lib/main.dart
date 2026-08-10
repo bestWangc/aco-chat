@@ -13,7 +13,7 @@ Future<void> main() async {
   final isDark = await ThemePreferences.load();
   final walletConfigured = await WalletPreferences.load();
   if (walletConfigured) {
-    await AccountSession.signInForWallet();
+    await PersistentAppSession.restoreSilently();
   }
   runApp(
     AcoApp(
@@ -91,14 +91,15 @@ class AccountProfile {
   );
 }
 
-class AccountSession {
-  const AccountSession._();
+class PersistentAppSession {
+  const PersistentAppSession._();
 
   static const _accountPrefix = 'account.wallet.';
   static const _activeAccountKey = 'account.active';
 
-  /// Silently resumes the account tied to this wallet, or creates its defaults.
-  static Future<AccountProfile> signInForWallet() async {
+  /// Restores the account linked to this device without ever presenting a
+  /// login screen or clearing an existing wallet session.
+  static Future<AccountProfile> restoreSilently() async {
     final preferences = await SharedPreferences.getInstance();
     final walletId = await WalletPreferences.walletId();
     final accountKey = '$_accountPrefix$walletId';
@@ -150,7 +151,7 @@ class _AcoAppState extends State<AcoApp> {
   }
 
   Future<void> _completeWalletSetup() async {
-    await AccountSession.signInForWallet();
+    await PersistentAppSession.restoreSilently();
     setState(() => _walletConfigured = true);
     widget.onWalletConfigured?.call(true);
   }
