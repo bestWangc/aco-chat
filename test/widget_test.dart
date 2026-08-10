@@ -120,6 +120,20 @@ void main() {
     expect(find.text('币安智能链'), findsOneWidget);
   });
 
+  testWidgets('returns to the wallet after selecting a wallet card', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+    await tester.tap(find.bySemanticsLabel('切换钱包'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('BSC-2'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wallet1'), findsOneWidget);
+    expect(find.text('钱包详情'), findsNothing);
+  });
+
   testWidgets('opens the profile page from the account action', (
     WidgetTester tester,
   ) async {
