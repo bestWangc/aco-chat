@@ -1,11 +1,14 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
+
+const _biometricChannel = MethodChannel('aco/biometric-authentication');
 
 Future<void> _openSquareTab(WidgetTester tester) async {
   await tester.tap(find.bySemanticsLabel('广场').first);
@@ -64,6 +67,32 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
     await tester.pumpAndSettle();
+    expect(find.text('验证助记词'), findsOneWidget);
+    final verificationPrompt = tester
+        .widget<Text>(find.textContaining('请按顺序选择：'))
+        .data!;
+    final verificationIndexes = RegExp(
+      r'第 (\d+) 个',
+    ).allMatches(verificationPrompt).map((match) => int.parse(match.group(1)!));
+    final indexes = verificationIndexes.toList();
+    for (final index in indexes.reversed) {
+      await tester.tap(find.byKey(Key('mnemonic-word-${index - 1}')));
+      await tester.pump();
+    }
+    await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('助记词顺序不正确，请重新选择。'), findsOneWidget);
+    expect(find.byKey(const Key('wallet-password-field')), findsNothing);
+
+    for (final index in indexes) {
+      await tester.tap(find.byKey(Key('mnemonic-word-${index - 1}')));
+      await tester.pump();
+    }
+    await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('wallet-password-field')), findsOneWidget);
+    expect(find.byKey(const Key('wallet-biometric-button')), findsNothing);
+
     await tester.enterText(
       find.byKey(const Key('wallet-password-field')),
       'secure123',
@@ -73,13 +102,19 @@ void main() {
       'secure123',
     );
     await tester.pump();
-    await tester.tap(find.byKey(const Key('wallet-biometric-button')));
-    await tester.pump();
+    var biometricPrompted = false;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_biometricChannel, (call) async {
+          biometricPrompted = call.method == 'authenticate';
+          return false;
+        });
     await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
-    await tester.pumpAndSettle();
-
-    expect(walletConfigured, isTrue);
-    expect(find.text('Wallet1'), findsOneWidget);
+    await tester.pump();
+    expect(biometricPrompted, isTrue);
+    expect(find.byKey(const Key('wallet-password-field')), findsOneWidget);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_biometricChannel, null);
+    expect(walletConfigured, isFalse);
   });
 
   testWidgets('shows live content inline by default on the square tab', (
