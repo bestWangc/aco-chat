@@ -72,6 +72,15 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   }
 
   void _open(AcoScreen screen) {
+    if (screen == AcoScreen.walletHome) {
+      setState(() {
+        _selectedNav = 0;
+        _rootScreen = AcoScreen.walletHome;
+      });
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
     final target = switch (screen) {
       AcoScreen.squareFeed || AcoScreen.createLive => AcoScreen.squareFeed,
       AcoScreen.receive => AcoScreen.receive,
@@ -1262,7 +1271,10 @@ class _WalletChainsState extends State<_WalletChains> {
                         palette: widget.palette,
                         name: '${_chains[_selectedChain].$3}-${index + 1}',
                         current: index == _selectedWallet,
-                        onTap: () => setState(() => _selectedWallet = index),
+                        onTap: () {
+                          setState(() => _selectedWallet = index);
+                          widget.onOpen(AcoScreen.walletHome);
+                        },
                       ),
                     ),
                   ),
@@ -1274,7 +1286,7 @@ class _WalletChainsState extends State<_WalletChains> {
         Positioned(
           left: 0,
           top: 0,
-          bottom: 80,
+          bottom: 0,
           width: 84,
           child: _WalletChainRail(
             palette: widget.palette,
