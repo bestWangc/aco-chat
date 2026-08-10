@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
@@ -12,6 +13,55 @@ Future<void> _openSquareTab(WidgetTester tester) async {
 }
 
 void main() {
+  test('persists the selected theme preference', () async {
+    SharedPreferences.setMockInitialValues({ThemePreferences.themeKey: false});
+
+    expect(await ThemePreferences.load(), isFalse);
+    await ThemePreferences.save(true);
+    expect(await ThemePreferences.load(), isTrue);
+  });
+
+  test('persists whether a wallet has been configured', () async {
+    SharedPreferences.setMockInitialValues({
+      WalletPreferences.configuredKey: false,
+    });
+
+    expect(await WalletPreferences.load(), isFalse);
+    await WalletPreferences.save(true);
+    expect(await WalletPreferences.load(), isTrue);
+  });
+
+  testWidgets('shows wallet setup before the first wallet is configured', (
+    WidgetTester tester,
+  ) async {
+    var walletConfigured = false;
+    await tester.pumpWidget(
+      AcoApp(
+        initialWalletConfigured: false,
+        onWalletConfigured: (_) => walletConfigured = true,
+      ),
+    );
+
+    expect(find.text('开始你的Aco之旅'), findsOneWidget);
+    expect(find.text('创建新钱包'), findsOneWidget);
+    expect(find.text('导入已有钱包'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('create-wallet-button')),
+      160,
+    );
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const Key('create-wallet-button')),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(walletConfigured, isTrue);
+    expect(find.text('Wallet1'), findsOneWidget);
+  });
+
   testWidgets('shows live content inline by default on the square tab', (
     WidgetTester tester,
   ) async {
@@ -78,6 +128,70 @@ void main() {
     expect(pickerBounds.right, lessThanOrEqualTo(screenWidth));
   });
 
+  testWidgets('uses readable room chat text in light mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.light,
+          colorScheme: shad.ShadSlateColorScheme.light(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.voiceRoom,
+            dark: false,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+          ),
+        ),
+      ),
+    );
+
+    final message = tester.widget<Text>(find.text('Mia:  大家晚上好！'));
+    expect(message.style?.color, const Color(0xFF151515));
+    await tester.scrollUntilVisible(
+      find.text('欢迎 Sophia 进入直播间'),
+      100,
+      scrollable: find.descendant(
+        of: find.byKey(const Key('room-chat-history')),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(find.text('欢迎 Sophia 进入直播间'), findsOneWidget);
+  });
+
+  testWidgets('uses the muted microphone treatment in light mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.light,
+          colorScheme: shad.ShadSlateColorScheme.light(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.voiceRoom,
+            dark: false,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.bySemanticsLabel('静音'));
+    await tester.pump();
+
+    final microphone = tester.widget<Icon>(
+      find.byIcon(CupertinoIcons.mic_slash),
+    );
+    expect(microphone.color, const Color(0xFFFF3B4E));
+  });
+
   testWidgets('opens the wallet from root navigation', (
     WidgetTester tester,
   ) async {
@@ -108,6 +222,46 @@ void main() {
     expect(swapButton.onPressed, isNull);
   });
 
+  testWidgets('uses a dark wallet selector arrow in light mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.light,
+          colorScheme: shad.ShadSlateColorScheme.light(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.walletHome,
+            dark: false,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+          ),
+        ),
+      ),
+    );
+
+    final arrow = tester.widget<Icon>(find.byIcon(CupertinoIcons.chevron_down));
+    expect(arrow.color, const Color(0xFF151515));
+  });
+
+  testWidgets('uses dark active bottom navigation in light mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoBottomNav(selected: 0, dark: false, onSelected: (_) {}),
+      ),
+    );
+
+    final label = tester.widget<Text>(find.text('钱包'));
+    expect(label.style?.color, const Color(0xFF151515));
+    final inactiveLabel = tester.widget<Text>(find.text('探索'));
+    expect(inactiveLabel.style?.color, const Color(0xFFC4C4C4));
+  });
+
   testWidgets('opens the wallet switcher from the wallet selector', (
     WidgetTester tester,
   ) async {
@@ -118,6 +272,20 @@ void main() {
 
     expect(find.text('钱包详情'), findsOneWidget);
     expect(find.text('币安智能链'), findsOneWidget);
+  });
+
+  testWidgets('does not make wallet assets tappable', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+
+    expect(
+      find.ancestor(
+        of: find.text('BTC'),
+        matching: find.byType(CupertinoButton),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('returns to the wallet after selecting a wallet card', (
@@ -219,6 +387,22 @@ void main() {
     expect(find.text('English'), findsOneWidget);
   });
 
+  testWidgets('applies light mode to the app theme and current screen', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+    await tester.tap(find.bySemanticsLabel('账户'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('主题模式'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('浅色模式'));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(AcoScreenPage));
+    expect(CupertinoTheme.of(context).brightness, Brightness.light);
+  });
+
   testWidgets('opens wallet action menu and navigates to add token', (
     WidgetTester tester,
   ) async {
@@ -289,6 +473,38 @@ void main() {
     expect(find.text('将二维码放入框内，即可自动扫描'), findsOneWidget);
     expect(find.text('闪光灯'), findsOneWidget);
     expect(find.text('相册'), findsNothing);
+  });
+
+  testWidgets('uses light controls on the scanner in light mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.light,
+          colorScheme: shad.ShadSlateColorScheme.light(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.scan,
+            dark: false,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+          ),
+        ),
+      ),
+    );
+
+    final title = tester.widget<Text>(find.text('扫一扫'));
+    expect(title.style?.color, const Color(0xFF151515));
+
+    final scanFrame = tester.widget<Container>(
+      find.byKey(const ValueKey('scan-frame')),
+    );
+    final decoration = scanFrame.decoration! as BoxDecoration;
+    expect(decoration.border, isA<Border>());
+    expect((decoration.border! as Border).top.color, const Color(0xFF151515));
   });
 
   testWidgets('keeps explore, DEX, and social root navigation unavailable', (
