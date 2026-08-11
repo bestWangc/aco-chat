@@ -51,17 +51,15 @@ class ThemePreferences {
 class WalletAccountAuthentication {
   const WalletAccountAuthentication._();
 
-  static const _loginTimeout = Duration(seconds: 10);
-
   /// Restores the server account for [walletAddress] without showing a login UI.
   /// A network failure leaves the local wallet usable and is retried next launch.
   static Future<AccountProfile?> signInSilently(String walletAddress) async {
     final client = AccountApiClient();
     try {
-      final result = await AccountSession(
-        client,
-      ).signInForWallet(walletAddress: walletAddress).timeout(_loginTimeout);
-      return result.user;
+      final session = AccountSession(client);
+      final restoredProfile = await session.restoreProfile();
+      if (restoredProfile != null) return restoredProfile;
+      return null;
     } catch (_) {
       // A later launch will retry without preventing local wallet access.
       return null;
@@ -124,16 +122,32 @@ class _AcoAppState extends State<AcoApp> {
     widget.onThemeChanged?.call(isDark);
   }
 
-  Future<void> _completeWalletSetup(WalletIdentity identity) async {
+  Future<void> _completeWalletSetup(
+    WalletIdentity identity,
+    String mnemonic,
+  ) async {
     await WalletPreferences.saveWalletIdentity(identity);
     setState(() {
       _walletConfigured = true;
       _walletIdentity = identity;
     });
     widget.onWalletConfigured?.call(true);
-    final profile = await WalletAccountAuthentication.signInSilently(
-      identity.address,
-    );
+    final client = AccountApiClient();
+    AccountProfile? profile;
+    try {
+      profile =
+          (await AccountSession(client)
+                  .signInForWallet(
+                    walletAddress: identity.address,
+                    mnemonic: mnemonic,
+                  )
+                  .timeout(const Duration(seconds: 10)))
+              .user;
+    } catch (_) {
+      // The local wallet remains usable while the account login is retried later.
+    } finally {
+      client.close();
+    }
     if (profile != null && mounted) {
       setState(() => _accountProfile = profile);
     }

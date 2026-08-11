@@ -318,15 +318,10 @@ void main() {
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
+    await tester.pumpAndSettle();
 
-    expect(
-      find.ancestor(
-        of: find.text('ETH'),
-        matching: find.byType(CupertinoButton),
-      ),
-      findsNothing,
-    );
-    expect(find.text('USDT'), findsOneWidget);
+    expect(find.text('地址派生中，请稍后刷新。'), findsOneWidget);
+    expect(find.text('USDT'), findsNothing);
     expect(find.text('BTC'), findsNothing);
   });
 
@@ -335,7 +330,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const AcoApp());
 
-    await tester.tap(find.text('以太坊'));
+    await tester.tap(find.byKey(const Key('wallet-network-selector')));
     await tester.pumpAndSettle();
 
     expect(find.text('钱包列表'), findsOneWidget);
@@ -350,7 +345,7 @@ void main() {
       const AcoApp(initialWalletIdentity: WalletIdentity(address: address)),
     );
 
-    await tester.tap(find.text('以太坊'));
+    await tester.tap(find.byKey(const Key('wallet-network-selector')));
     await tester.pumpAndSettle();
 
     for (final chain in ['以太坊', 'BSC', 'Polygon', 'Tron', 'Solana', 'Base']) {
@@ -363,7 +358,7 @@ void main() {
     expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
     expect(find.byIcon(CupertinoIcons.checkmark), findsOneWidget);
     expect(find.text('ETH 0'), findsNothing);
-    expect(find.text(r'$ 0.00'), findsOneWidget);
+    expect(find.text(r'$ 0.00'), findsNothing);
 
     final addressRect = tester.getRect(find.text('0x9858effd...aeda94'));
     final copyIconRect = tester.getRect(find.byIcon(CupertinoIcons.doc_on_doc));
@@ -375,18 +370,17 @@ void main() {
   ) async {
     await tester.pumpWidget(const AcoApp());
 
-    await tester.tap(find.text('以太坊'));
+    await tester.tap(find.byKey(const Key('wallet-network-selector')));
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsLabel('选择公链 BSC'));
     await tester.pumpAndSettle();
 
-    expect(find.text('BSC'), findsOneWidget);
+    expect(find.text('BSC'), findsWidgets);
     await tester.tap(find.bySemanticsLabel('返回'));
     await tester.pumpAndSettle();
 
-    expect(find.text('BSC'), findsOneWidget);
-    expect(find.text('BNB'), findsOneWidget);
-    expect(find.text('ETH'), findsNothing);
+    expect(find.text('BSC'), findsWidgets);
+    expect(find.text('39800.00'), findsNothing);
   });
 
   testWidgets('opens wallet list from the wallet dropdown', (
@@ -424,6 +418,22 @@ void main() {
     expect(find.text('打赏记录'), findsNothing);
   });
 
+  testWidgets('opens a personal QR code from the profile page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+
+    await tester.tap(find.bySemanticsLabel('账户'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('个人二维码'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('我的二维码'), findsOneWidget);
+    expect(find.text('@aco'), findsOneWidget);
+    expect(find.bySemanticsLabel('个人二维码：@aco'), findsOneWidget);
+    expect(find.text('扫一扫上面的二维码图案，加我为朋友。'), findsOneWidget);
+  });
+
   testWidgets('returns from the profile page', (WidgetTester tester) async {
     await tester.pumpWidget(const AcoApp());
 
@@ -436,7 +446,9 @@ void main() {
     expect(find.text('Wallet1'), findsOneWidget);
   });
 
-  testWidgets('edits the profile display name', (WidgetTester tester) async {
+  testWidgets('edits the profile nickname and username', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(const AcoApp());
     await tester.tap(find.bySemanticsLabel('账户'));
     await tester.pumpAndSettle();
@@ -445,10 +457,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('编辑资料'), findsOneWidget);
     await tester.enterText(find.byKey(const Key('profile-name-input')), 'Mina');
+    await tester.enterText(
+      find.byKey(const Key('profile-username-input')),
+      'mina_aco',
+    );
     await tester.tap(find.text('保存修改'));
     await tester.pumpAndSettle();
 
     expect(find.text('Mina'), findsOneWidget);
+    expect(find.text('@mina_aco'), findsOneWidget);
   });
 
   testWidgets('opens dedicated theme and language settings pages', (
@@ -471,6 +488,12 @@ void main() {
     expect(find.text('显示语言'), findsOneWidget);
     expect(find.text('简体中文'), findsOneWidget);
     expect(find.text('English'), findsOneWidget);
+    await tester.tap(find.text('English'));
+    await tester.pump();
+    expect(
+      find.byIcon(CupertinoIcons.check_mark_circled_solid),
+      findsOneWidget,
+    );
   });
 
   testWidgets('applies light mode to the app theme and current screen', (

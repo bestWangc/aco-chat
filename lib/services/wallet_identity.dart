@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:blockchain_utils/blockchain_utils.dart';
 
@@ -19,6 +21,38 @@ class WalletIdentity {
 
   Map<String, String> toJson() => {'address': address};
 
+  static WalletLoginProof signLoginChallenge({
+    required String mnemonic,
+    required String challenge,
+  }) {
+    final key = Bip44.fromSeed(
+      bip39.mnemonicToSeed(mnemonic),
+      Bip44Coins.ethereum,
+    ).deriveDefaultPath;
+    return WalletLoginProof(
+      challenge: challenge,
+      publicKey: base64UrlEncode(
+        key.publicKey.uncompressed,
+      ).replaceAll('=', ''),
+      signature: base64UrlEncode(
+        ETHSigner.fromKeyBytes(
+          key.privateKey.raw,
+        ).signProsonalMessage(utf8.encode(challenge)),
+      ).replaceAll('=', ''),
+    );
+  }
+
   static String _addressFor(List<int> seed, Bip44Coins coin) =>
       Bip44.fromSeed(seed, coin).deriveDefaultPath.publicKey.toAddress;
+}
+
+class WalletLoginProof {
+  const WalletLoginProof({
+    required this.challenge,
+    required this.publicKey,
+    required this.signature,
+  });
+  final String challenge;
+  final String publicKey;
+  final String signature;
 }

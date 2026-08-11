@@ -9,6 +9,7 @@ import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
+import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -55,6 +56,7 @@ enum AcoScreen {
   voiceRoom,
   mining,
   profile,
+  profileQr,
   profileEdit,
   profileTheme,
   profileLanguage,
@@ -70,7 +72,7 @@ class AcoWalletWelcomePage extends StatefulWidget {
   });
 
   final bool dark;
-  final Future<void> Function(WalletIdentity) onWalletReady;
+  final Future<void> Function(WalletIdentity, String) onWalletReady;
 
   @override
   State<AcoWalletWelcomePage> createState() => _AcoWalletWelcomePageState();
@@ -334,7 +336,7 @@ class _WalletSetupFlow extends StatefulWidget {
   final bool dark;
   final _WalletSetupMode mode;
   final VoidCallback onBack;
-  final Future<void> Function(WalletIdentity) onComplete;
+  final Future<void> Function(WalletIdentity, String) onComplete;
 
   @override
   State<_WalletSetupFlow> createState() => _WalletSetupFlowState();
@@ -827,15 +829,17 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       mnemonic: mnemonic,
       password: _passwordController.text,
     );
-    await widget.onComplete(identity);
-    _cacheNonEvmAddresses(mnemonic, identity);
+    await _cacheNonEvmAddresses(mnemonic, identity);
+    await widget.onComplete(identity, mnemonic);
   }
 
-  void _cacheNonEvmAddresses(String mnemonic, WalletIdentity identity) {
-    _chainIdentityService
-        .cacheNonEvmAddresses(mnemonic: mnemonic, identity: identity)
-        .catchError((_) {});
-  }
+  Future<void> _cacheNonEvmAddresses(
+    String mnemonic,
+    WalletIdentity identity,
+  ) => _chainIdentityService.cacheNonEvmAddresses(
+    mnemonic: mnemonic,
+    identity: identity,
+  );
 
   Future<void> _goBack() async {
     if (_step == 0 || (_isCreating && _step == 1)) {
@@ -1116,8 +1120,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   AcoScreen _rootScreen = AcoScreen.walletHome;
   final ValueNotifier<String> _displayName = ValueNotifier<String>('Marry');
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
-  String? _accountId = 'local';
-  String _username = 'aco';
+  String? _accountId = '1000000000000000';
+  final ValueNotifier<String> _username = ValueNotifier<String>('aco');
   String _language = '简体中文';
 
   @override
@@ -1132,7 +1136,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     if (profile == null) return;
     _accountId = profile.accountId;
     _displayName.value = profile.nickname;
-    _username = profile.username;
+    _username.value = profile.username;
   }
 
   @override
@@ -1152,6 +1156,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   void dispose() {
     if (_ownsThemeNotifier) _isDark.dispose();
     _displayName.dispose();
+    _username.dispose();
     _selectedWalletChain.dispose();
     super.dispose();
   }
@@ -1183,6 +1188,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.walletSwitcher => AcoScreen.walletSwitcher,
       AcoScreen.scan => AcoScreen.scan,
       AcoScreen.profile => AcoScreen.profile,
+      AcoScreen.profileQr => AcoScreen.profileQr,
       AcoScreen.profileEdit => AcoScreen.profileEdit,
       AcoScreen.profileTheme => AcoScreen.profileTheme,
       AcoScreen.profileLanguage => AcoScreen.profileLanguage,
@@ -1195,30 +1201,30 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         : target;
     Navigator.of(context).push<void>(
       _AcoPageRoute<void>(
-        builder: (_) => ValueListenableBuilder<bool>(
-          valueListenable: _isDark,
-          builder: (_, dark, _) => ValueListenableBuilder<String>(
-            valueListenable: _displayName,
-            builder: (_, displayName, _) => ValueListenableBuilder<int>(
-              valueListenable: _selectedWalletChain,
-              builder: (_, selectedWalletChain, _) => AcoScreenPage(
-                screen: destination,
-                dark: dark,
-                isRoot: false,
-                onOpen: _open,
-                onThemeToggle: _toggleTheme,
-                walletIdentity: widget.walletIdentity,
-                walletChainIndex: selectedWalletChain,
-                onWalletChainSelected: _selectWalletChain,
-                accountId: _accountId,
-                username: _username,
-                displayName: displayName,
-                onDisplayNameChanged: (name) => _displayName.value = name,
-                language: _language,
-                onLanguageChanged: (language) =>
-                    setState(() => _language = language),
-              ),
-            ),
+        builder: (_) => AnimatedBuilder(
+          animation: Listenable.merge([
+            _isDark,
+            _displayName,
+            _username,
+            _selectedWalletChain,
+          ]),
+          builder: (_, _) => AcoScreenPage(
+            screen: destination,
+            dark: _isDark.value,
+            isRoot: false,
+            onOpen: _open,
+            onThemeToggle: _toggleTheme,
+            walletIdentity: widget.walletIdentity,
+            walletChainIndex: _selectedWalletChain.value,
+            onWalletChainSelected: _selectWalletChain,
+            accountId: _accountId,
+            username: _username.value,
+            displayName: _displayName.value,
+            onDisplayNameChanged: (name) => _displayName.value = name,
+            onUsernameChanged: (username) => _username.value = username,
+            language: _language,
+            onLanguageChanged: (language) =>
+                setState(() => _language = language),
           ),
         ),
       ),
@@ -1239,28 +1245,30 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
             child: Column(
               children: [
                 Expanded(
-                  child: ValueListenableBuilder<String>(
-                    valueListenable: _displayName,
-                    builder: (_, displayName, _) => ValueListenableBuilder<int>(
-                      valueListenable: _selectedWalletChain,
-                      builder: (_, selectedWalletChain, _) => AcoScreenPage(
-                        screen: _rootScreen,
-                        dark: dark,
-                        isRoot: true,
-                        onOpen: _open,
-                        onThemeToggle: _toggleTheme,
-                        walletIdentity: widget.walletIdentity,
-                        walletChainIndex: selectedWalletChain,
-                        onWalletChainSelected: _selectWalletChain,
-                        accountId: _accountId,
-                        username: _username,
-                        displayName: displayName,
-                        onDisplayNameChanged: (name) =>
-                            _displayName.value = name,
-                        language: _language,
-                        onLanguageChanged: (language) =>
-                            setState(() => _language = language),
-                      ),
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([
+                      _displayName,
+                      _username,
+                      _selectedWalletChain,
+                    ]),
+                    builder: (_, _) => AcoScreenPage(
+                      screen: _rootScreen,
+                      dark: dark,
+                      isRoot: true,
+                      onOpen: _open,
+                      onThemeToggle: _toggleTheme,
+                      walletIdentity: widget.walletIdentity,
+                      walletChainIndex: _selectedWalletChain.value,
+                      onWalletChainSelected: _selectWalletChain,
+                      accountId: _accountId,
+                      username: _username.value,
+                      displayName: _displayName.value,
+                      onDisplayNameChanged: (name) => _displayName.value = name,
+                      onUsernameChanged: (username) =>
+                          _username.value = username,
+                      language: _language,
+                      onLanguageChanged: (language) =>
+                          setState(() => _language = language),
                     ),
                   ),
                 ),
@@ -1328,6 +1336,7 @@ class AcoScreenPage extends StatelessWidget {
     this.walletChainIndex = 0,
     this.onWalletChainSelected,
     this.onDisplayNameChanged,
+    this.onUsernameChanged,
     this.language = '简体中文',
     this.onLanguageChanged,
     super.key,
@@ -1345,6 +1354,7 @@ class AcoScreenPage extends StatelessWidget {
   final int walletChainIndex;
   final ValueChanged<int>? onWalletChainSelected;
   final ValueChanged<String>? onDisplayNameChanged;
+  final ValueChanged<String>? onUsernameChanged;
   final String language;
   final ValueChanged<String>? onLanguageChanged;
 
@@ -1414,13 +1424,29 @@ class AcoScreenPage extends StatelessWidget {
                 onBack: isRoot ? null : () => Navigator.of(context).maybePop(),
               ),
       AcoScreen.profileEdit =>
-        currentDisplayName == null || currentAccountId == null
+        currentDisplayName == null ||
+                currentAccountId == null ||
+                currentUsername == null
             ? _ProfileLoadingPage(palette: palette)
             : _ProfileEditPage(
                 palette: palette,
                 initialName: currentDisplayName,
+                initialUsername: currentUsername,
                 accountId: currentAccountId,
                 onDisplayNameChanged: onDisplayNameChanged,
+                onUsernameChanged: onUsernameChanged,
+              ),
+      AcoScreen.profileQr =>
+        currentDisplayName == null ||
+                currentAccountId == null ||
+                currentUsername == null
+            ? _ProfileLoadingPage(palette: palette)
+            : _ProfileQrPage(
+                palette: palette,
+                displayName: currentDisplayName,
+                accountId: currentAccountId,
+                username: currentUsername,
+                onBack: () => Navigator.of(context).maybePop(),
               ),
       AcoScreen.profileTheme => _ThemeSettingsPage(
         palette: palette,
@@ -2076,12 +2102,14 @@ class _WalletChain {
     required this.asset,
     required this.label,
     required this.nativeToken,
+    required this.network,
     this.backgroundColor,
   });
 
   final String asset;
   final String label;
   final _WalletToken nativeToken;
+  final WalletNetwork network;
   final Color? backgroundColor;
 }
 
@@ -2090,31 +2118,37 @@ const _supportedWalletChains = [
     asset: 'assets/icons/crypto/domi/chains/network-ethereum.png',
     label: '以太坊',
     nativeToken: _WalletToken('ETH', 'Ethereum'),
+    network: WalletNetwork.ethereum,
   ),
   _WalletChain(
     asset: 'assets/icons/crypto/domi/chains/network-bsc.png',
     label: 'BSC',
-    nativeToken: _WalletToken('BNB', 'BNB Smart Chain'),
+    nativeToken: _WalletToken('BNB', 'BNB'),
+    network: WalletNetwork.bsc,
   ),
   _WalletChain(
     asset: 'assets/icons/crypto/domi/chains/network-polygon.png',
     label: 'Polygon',
-    nativeToken: _WalletToken('POL', 'Polygon'),
+    nativeToken: _WalletToken('POL', 'Polygon Ecosystem Token'),
+    network: WalletNetwork.polygon,
   ),
   _WalletChain(
     asset: 'assets/icons/crypto/domi/chains/tron.svg',
     label: 'Tron',
-    nativeToken: _WalletToken('TRX', 'Tron'),
+    nativeToken: _WalletToken('TRX', 'TRON'),
+    network: WalletNetwork.tron,
   ),
   _WalletChain(
     asset: 'assets/icons/crypto/domi/chains/network-solana.png',
     label: 'Solana',
     nativeToken: _WalletToken('SOL', 'Solana'),
+    network: WalletNetwork.solana,
   ),
   _WalletChain(
     asset: 'assets/icons/crypto/domi/chains/network-base.png',
     label: 'Base',
-    nativeToken: _WalletToken('ETH', 'Base'),
+    nativeToken: _WalletToken('ETH', 'Ethereum'),
+    network: WalletNetwork.base,
     backgroundColor: Color(0xFF0052FF),
   ),
 ];
@@ -2136,10 +2170,10 @@ class _WalletHome extends StatefulWidget {
 }
 
 class _WalletHomeState extends State<_WalletHome> {
-  static const _usdt = _WalletToken('USDT', 'Tether');
-  List<_WalletToken> get _assets => [widget.selectedChain.nativeToken, _usdt];
   late final WalletPortfolioService _portfolioService;
   late Future<List<WalletBalance>> _balancesFuture;
+  late List<WalletBalance> _initialBalances;
+  final Map<WalletNetwork, List<WalletBalance>> _balanceCache = {};
   final LayerLink _walletActionsLink = LayerLink();
   OverlayEntry? _walletActionsEntry;
   int _selectedTab = 0;
@@ -2148,10 +2182,80 @@ class _WalletHomeState extends State<_WalletHome> {
   void initState() {
     super.initState();
     _portfolioService = WalletPortfolioService();
+    _initialBalances = _placeholderBalances();
+    _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WalletHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedChain.network != widget.selectedChain.network ||
+        oldWidget.walletIdentity != widget.walletIdentity) {
+      _reloadBalances();
+    }
+  }
+
+  Future<List<WalletBalance>> _loadBalances(WalletNetwork network) async {
     final identity = widget.walletIdentity;
-    _balancesFuture = identity == null
-        ? Future.value(const <WalletBalance>[])
-        : _portfolioService.loadDefaultBalances(identity);
+    if (identity == null) return const [];
+    final addresses = await WalletPreferences.derivedAddresses(identity);
+    return _portfolioService.loadBalances(
+      network: network,
+      identity: identity,
+      derivedAddresses: addresses,
+    );
+  }
+
+  Future<List<WalletBalance>> _loadAndCacheBalances(
+    WalletNetwork network,
+  ) async {
+    final balances = await _loadBalances(network);
+    _balanceCache[network] = balances;
+    return balances;
+  }
+
+  List<WalletBalance> _placeholderBalances() {
+    final chain = widget.selectedChain;
+    final identity = widget.walletIdentity;
+    final decimals = switch (chain.network) {
+      WalletNetwork.tron => 6,
+      WalletNetwork.solana => 9,
+      _ => 18,
+    };
+    final native = WalletBalance(
+      chain: chain.label,
+      symbol: chain.nativeToken.symbol,
+      assetName: chain.nativeToken.title,
+      isNative: true,
+      address: identity?.address ?? '',
+      decimals: decimals,
+      balance: BigInt.zero,
+    );
+    if (chain.network == WalletNetwork.tron ||
+        chain.network == WalletNetwork.solana) {
+      return [native];
+    }
+    return [
+      native,
+      WalletBalance(
+        chain: chain.label,
+        symbol: 'USDT',
+        assetName: 'Tether USD',
+        isNative: false,
+        address: identity?.address ?? '',
+        decimals: 6,
+        balance: BigInt.zero,
+      ),
+    ];
+  }
+
+  void _reloadBalances() {
+    final network = widget.selectedChain.network;
+    final balancesFuture = _loadAndCacheBalances(network);
+    setState(() {
+      _balancesFuture = balancesFuture;
+      _initialBalances = _balanceCache[network] ?? _placeholderBalances();
+    });
   }
 
   void _dismissWalletActions() {
@@ -2209,7 +2313,7 @@ class _WalletHomeState extends State<_WalletHome> {
                       palette: widget.palette,
                       onPressed: () {
                         _dismissWalletActions();
-                        setState(() {});
+                        _reloadBalances();
                       },
                     ),
                     _WalletMenuItem(
@@ -2282,6 +2386,7 @@ class _WalletHomeState extends State<_WalletHome> {
                     button: true,
                     label: '切换网络',
                     child: GestureDetector(
+                      key: const Key('wallet-network-selector'),
                       behavior: HitTestBehavior.opaque,
                       onTap: () => widget.onOpen(AcoScreen.walletChains),
                       child: Row(
@@ -2421,31 +2526,33 @@ class _WalletHomeState extends State<_WalletHome> {
       ),
       Expanded(
         child: FutureBuilder<List<WalletBalance>>(
+          key: ValueKey(widget.selectedChain.network),
           future: _balancesFuture,
+          initialData: _initialBalances,
           builder: (context, snapshot) {
             final balances = snapshot.data ?? const <WalletBalance>[];
             return ListView.builder(
               padding: const EdgeInsets.fromLTRB(28, 17, 28, 22),
-              itemCount: _assets.length,
+              itemCount: balances.isEmpty ? 1 : balances.length,
               itemBuilder: (context, index) {
-                final asset = _assets[index];
-                WalletBalance? balance;
-                for (final candidate in balances) {
-                  if (candidate.symbol == asset.symbol) {
-                    balance = candidate;
-                    break;
-                  }
+                if (balances.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 24),
+                    child: Text(
+                      '地址派生中，请稍后刷新。',
+                      style: TextStyle(color: widget.palette.mutedText),
+                    ),
+                  );
                 }
-                final amount = balance?.isAvailable == true
-                    ? formatChainAmount(
-                        balance!.balance!,
-                        decimals: balance.decimals,
-                      )
-                    : '0.00';
+                final balance = balances[index];
+                final amount = formatChainAmount(
+                  balance.balance ?? BigInt.zero,
+                  decimals: balance.decimals,
+                );
                 return _WalletAssetRow(
                   palette: widget.palette,
-                  symbol: asset.symbol,
-                  title: asset.title,
+                  symbol: balance.symbol,
+                  title: balance.assetName,
                   amount: amount,
                   value: '≈0.00 USD',
                 );
@@ -2745,8 +2852,6 @@ class _WalletChainCard extends StatelessWidget {
   final bool current;
   final VoidCallback onTap;
 
-  static const _portfolioValue = r'$ 0.00';
-
   String _displayAddress() {
     if (address.length <= 19) return address;
     return '${address.substring(0, 10)}...${address.substring(address.length - 6)}';
@@ -2757,8 +2862,8 @@ class _WalletChainCard extends StatelessWidget {
     padding: EdgeInsets.zero,
     onPressed: onTap,
     child: Container(
-      height: 142,
-      padding: const EdgeInsets.fromLTRB(18, 14, 16, 12),
+      height: 96,
+      padding: const EdgeInsets.fromLTRB(18, 14, 16, 14),
       decoration: BoxDecoration(
         color: current ? palette.surface : _transparent,
         borderRadius: BorderRadius.circular(16),
@@ -2812,19 +2917,6 @@ class _WalletChainCard extends StatelessWidget {
                 size: 15,
               ),
             ],
-          ),
-          const Spacer(),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              _portfolioValue,
-              style: TextStyle(
-                color: palette.primaryText,
-                fontWeight: FontWeight.w700,
-                fontSize: AcoTypography.bodyEmphasis,
-              ),
-            ),
           ),
         ],
       ),
@@ -5059,7 +5151,7 @@ class _ProfilePage extends StatelessWidget {
           icon: CupertinoIcons.qrcode_viewfinder,
           palette: palette,
           label: '个人二维码',
-          onPressed: () => _showNotice(context, '个人二维码', '个人二维码即将生成。'),
+          onPressed: () => onOpen(AcoScreen.profileQr),
         ),
       ),
       const SizedBox(height: 2),
@@ -5088,7 +5180,8 @@ class _ProfilePage extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: palette.mutedText,
-                    fontSize: AcoTypography.body,
+                    fontSize: AcoTypography.bodyEmphasis,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 3),
@@ -5136,6 +5229,125 @@ class _ProfilePage extends StatelessWidget {
   );
 }
 
+class _ProfileQrPage extends StatelessWidget {
+  const _ProfileQrPage({
+    required this.palette,
+    required this.displayName,
+    required this.accountId,
+    required this.username,
+    required this.onBack,
+  });
+
+  final AcoPalette palette;
+  final String displayName;
+  final String accountId;
+  final String username;
+  final VoidCallback onBack;
+
+  String get _handle => username.startsWith('@') ? username : '@$username';
+
+  String get _qrData =>
+      'aco://profile/${Uri.encodeComponent(username.replaceFirst('@', ''))}?uid=${Uri.encodeComponent(accountId)}';
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AcoPageHeader(palette: palette, title: '我的二维码', onBack: onBack),
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            const AcoAvatar(size: 70),
+            const SizedBox(width: 18),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.title,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    _handle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.body,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'UID:${displayAccountId(accountId)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const Spacer(),
+        Center(
+          child: Container(
+            width: 286,
+            height: 286,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: _white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: _black.withValues(alpha: palette.dark ? .32 : .08),
+                  blurRadius: 28,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: QrImageView(
+              data: _qrData,
+              version: QrVersions.auto,
+              errorCorrectionLevel: QrErrorCorrectLevel.M,
+              backgroundColor: _white,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: _black,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: _black,
+              ),
+              semanticsLabel: '个人二维码：$_handle',
+            ),
+          ),
+        ),
+        const Spacer(),
+        Text(
+          '扫一扫上面的二维码图案，加我为朋友。',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _ProfileLoadingPage extends StatelessWidget {
   const _ProfileLoadingPage({required this.palette});
 
@@ -5162,14 +5374,18 @@ class _ProfileEditPage extends StatefulWidget {
   const _ProfileEditPage({
     required this.palette,
     required this.initialName,
+    required this.initialUsername,
     required this.accountId,
     this.onDisplayNameChanged,
+    this.onUsernameChanged,
   });
 
   final AcoPalette palette;
   final String initialName;
+  final String initialUsername;
   final String accountId;
   final ValueChanged<String>? onDisplayNameChanged;
+  final ValueChanged<String>? onUsernameChanged;
 
   @override
   State<_ProfileEditPage> createState() => _ProfileEditPageState();
@@ -5179,17 +5395,23 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
   late final TextEditingController _nameController = TextEditingController(
     text: widget.initialName,
   );
+  late final TextEditingController _usernameController = TextEditingController(
+    text: widget.initialUsername,
+  );
 
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     super.dispose();
   }
 
   void _save() {
     final name = _nameController.text.trim();
-    if (name.isEmpty) return;
+    final username = _usernameController.text.trim();
+    if (name.isEmpty || username.isEmpty) return;
     widget.onDisplayNameChanged?.call(name);
+    widget.onUsernameChanged?.call(username);
     Navigator.of(context).pop();
   }
 
@@ -5243,6 +5465,29 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
               CupertinoTextField(
                 key: const Key('profile-name-input'),
                 controller: _nameController,
+                maxLength: 20,
+                cursorColor: _lime,
+                style: TextStyle(
+                  color: widget.palette.primaryText,
+                  fontSize: AcoTypography.body,
+                ),
+                decoration: BoxDecoration(
+                  color: widget.palette.surfaceRaised,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '用户名',
+                style: TextStyle(
+                  color: widget.palette.primaryText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
+              ),
+              const SizedBox(height: 10),
+              CupertinoTextField(
+                key: const Key('profile-username-input'),
+                controller: _usernameController,
                 maxLength: 20,
                 cursorColor: _lime,
                 style: TextStyle(
@@ -5392,8 +5637,11 @@ class _LanguageSettingsPageState extends State<_LanguageSettingsPage> {
                   title: language.$1,
                   subtitle: language.$2,
                   selected: _selectedLanguage == language.$1,
+                  enabled: language.$1 != 'English',
                   palette: widget.palette,
-                  onPressed: _selectedLanguage == language.$1
+                  onPressed:
+                      language.$1 == 'English' ||
+                          _selectedLanguage == language.$1
                       ? null
                       : () => _selectLanguage(language.$1),
                 ),
@@ -5416,6 +5664,7 @@ class _PreferenceOption extends StatelessWidget {
     required this.selected,
     required this.palette,
     required this.onPressed,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -5424,6 +5673,7 @@ class _PreferenceOption extends StatelessWidget {
   final bool selected;
   final AcoPalette palette;
   final VoidCallback? onPressed;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
@@ -5433,7 +5683,15 @@ class _PreferenceOption extends StatelessWidget {
       height: 64,
       child: Row(
         children: [
-          Icon(icon, color: selected ? _lime : palette.primaryText, size: 21),
+          Icon(
+            icon,
+            color: selected
+                ? _lime
+                : enabled
+                ? palette.primaryText
+                : palette.mutedText.withValues(alpha: .5),
+            size: 21,
+          ),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -5443,7 +5701,9 @@ class _PreferenceOption extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    color: palette.primaryText,
+                    color: enabled
+                        ? palette.primaryText
+                        : palette.mutedText.withValues(alpha: .5),
                     fontSize: AcoTypography.body,
                     fontWeight: FontWeight.w600,
                   ),
@@ -5452,7 +5712,9 @@ class _PreferenceOption extends StatelessWidget {
                 Text(
                   subtitle,
                   style: TextStyle(
-                    color: palette.mutedText,
+                    color: enabled
+                        ? palette.mutedText
+                        : palette.mutedText.withValues(alpha: .4),
                     fontSize: AcoTypography.caption,
                   ),
                 ),
@@ -5797,26 +6059,35 @@ class _WalletAssetRow extends StatelessWidget {
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                amount,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.body,
-                  fontWeight: FontWeight.w600,
+          SizedBox(
+            width: 112,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  amount,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.body,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                value,
-                style: TextStyle(
-                  color: palette.mutedText,
-                  fontSize: AcoTypography.bodySmall,
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: AcoTypography.bodySmall,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

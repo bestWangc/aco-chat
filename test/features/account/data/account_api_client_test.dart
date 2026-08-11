@@ -1,12 +1,13 @@
 import 'dart:convert';
 
 import 'package:aco_chat/features/account/data/account_api_client.dart';
+import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  test('posts a silent wallet login with the server contract', () async {
+  test('posts a signed wallet login with the server contract', () async {
     late Uri requestUri;
     late Map<String, dynamic> requestBody;
     final client = AccountApiClient(
@@ -16,6 +17,8 @@ void main() {
         requestBody = jsonDecode(request.body) as Map<String, dynamic>;
         return response({
           'created': true,
+          'access_token': 'signed-token',
+          'refresh_token': 'refresh-token',
           'user': {
             'account_id': 'aco_account',
             'username': 'aco_1234',
@@ -27,11 +30,22 @@ void main() {
 
     final result = await client.walletLogin(
       walletAddress: '0xabc',
+      proof: const WalletLoginProof(
+        challenge: 'challenge',
+        publicKey: 'public-key',
+        signature: 'signature',
+      ),
     );
 
     expect(requestUri.path, '/api/v1/auth/wallet-login');
-    expect(requestBody, {'wallet_address': '0xabc'});
+    expect(requestBody, {
+      'wallet_address': '0xabc',
+      'challenge': 'challenge',
+      'public_key': 'public-key',
+      'signature': 'signature',
+    });
     expect(result.created, isTrue);
+    expect(result.tokens.accessToken, 'signed-token');
     expect(result.user.accountId, 'aco_account');
   });
 
@@ -42,6 +56,7 @@ void main() {
       httpClient: MockClient((request) async {
         requests.add(request.url);
         if (request.method == 'POST') {
+          expect(request.headers['authorization'], 'Bearer signed-token');
           expect(jsonDecode(request.body), {'wallet_address': '0xdef'});
           return response({
             'id': 8,
@@ -61,8 +76,12 @@ void main() {
     final added = await client.addWallet(
       accountId: 'aco_account',
       walletAddress: '0xdef',
+      token: 'signed-token',
     );
-    final wallets = await client.listWallets('aco_account');
+    final wallets = await client.listWallets(
+      accountId: 'aco_account',
+      token: 'signed-token',
+    );
 
     expect(added.address, '0xdef');
     expect(wallets.map((wallet) => wallet.address), ['0xabc', '0xdef']);
