@@ -1,8 +1,11 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:aco_chat/core/theme/aco_typography.dart';
+import 'package:aco_chat/features/account/data/account_api_client.dart';
+import 'package:aco_chat/features/account/data/account_session.dart';
+import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -11,16 +14,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final isDark = await ThemePreferences.load();
-  final walletConfigured = await WalletPreferences.load();
-  if (walletConfigured) {
-    await PersistentAppSession.restoreSilently();
-  }
+  await WalletPreferences.removeLegacyPlaceholderData();
+  final identity = await WalletPreferences.walletIdentity();
+  final walletConfigured = await WalletPreferences.load() && identity != null;
+  final accountProfileFuture = walletConfigured
+      ? WalletAccountAuthentication.signInSilently(identity.address)
+      : null;
   runApp(
     AcoApp(
       initialIsDark: isDark,
       onThemeChanged: ThemePreferences.save,
       initialWalletConfigured: walletConfigured,
+      initialWalletIdentity: identity,
       onWalletConfigured: WalletPreferences.save,
+      accountProfileFuture: accountProfileFuture,
     ),
   );
 }
@@ -41,84 +48,26 @@ class ThemePreferences {
   }
 }
 
-class WalletPreferences {
-  const WalletPreferences._();
+class WalletAccountAuthentication {
+  const WalletAccountAuthentication._();
 
-  static const configuredKey = 'wallet.configured';
-  static const walletIdKey = 'wallet.localId';
+  static const _loginTimeout = Duration(seconds: 10);
 
-  static Future<bool> load() async {
-    final preferences = await SharedPreferences.getInstance();
-    return preferences.getBool(configuredKey) ?? false;
-  }
-
-  static Future<void> save(bool configured) async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(configuredKey, configured);
-  }
-
-  static Future<String> walletId() async {
-    final preferences = await SharedPreferences.getInstance();
-    final existing = preferences.getString(walletIdKey);
-    if (existing != null) return existing;
-    final id = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
-    await preferences.setString(walletIdKey, id);
-    return id;
-  }
-}
-
-class AccountProfile {
-  const AccountProfile({
-    required this.walletId,
-    required this.username,
-    required this.nickname,
-  });
-
-  final String walletId;
-  final String username;
-  final String nickname;
-
-  Map<String, String> toJson() => {
-    'walletId': walletId,
-    'username': username,
-    'nickname': nickname,
-  };
-
-  static AccountProfile fromJson(Map<String, dynamic> json) => AccountProfile(
-    walletId: json['walletId'] as String,
-    username: json['username'] as String,
-    nickname: json['nickname'] as String,
-  );
-}
-
-class PersistentAppSession {
-  const PersistentAppSession._();
-
-  static const _accountPrefix = 'account.wallet.';
-  static const _activeAccountKey = 'account.active';
-
-  /// Restores the account linked to this device without ever presenting a
-  /// login screen or clearing an existing wallet session.
-  static Future<AccountProfile> restoreSilently() async {
-    final preferences = await SharedPreferences.getInstance();
-    final walletId = await WalletPreferences.walletId();
-    final accountKey = '$_accountPrefix$walletId';
-    final stored = preferences.getString(accountKey);
-    final profile = stored == null
-        ? AccountProfile(
-            walletId: walletId,
-            username: 'aco_${walletId.substring(walletId.length - 6)}',
-            nickname: 'Aco ${walletId.substring(walletId.length - 4)}',
-          )
-        : AccountProfile.fromJson(jsonDecode(stored) as Map<String, dynamic>);
-    if (stored == null) {
-      await preferences.setString(accountKey, jsonEncode(profile.toJson()));
+  /// Restores the server account for [walletAddress] without showing a login UI.
+  /// A network failure leaves the local wallet usable and is retried next launch.
+  static Future<AccountProfile?> signInSilently(String walletAddress) async {
+    final client = AccountApiClient();
+    try {
+      final result = await AccountSession(
+        client,
+      ).signInForWallet(walletAddress: walletAddress).timeout(_loginTimeout);
+      return result.user;
+    } catch (_) {
+      // A later launch will retry without preventing local wallet access.
+      return null;
+    } finally {
+      client.close();
     }
-    await preferences.setString(
-      _activeAccountKey,
-      jsonEncode(profile.toJson()),
-    );
-    return profile;
   }
 }
 
@@ -127,14 +76,18 @@ class AcoApp extends StatefulWidget {
     this.initialIsDark = true,
     this.onThemeChanged,
     this.initialWalletConfigured = true,
+    this.initialWalletIdentity,
     this.onWalletConfigured,
+    this.accountProfileFuture,
     super.key,
   });
 
   final bool initialIsDark;
   final ValueChanged<bool>? onThemeChanged;
   final bool initialWalletConfigured;
+  final WalletIdentity? initialWalletIdentity;
   final ValueChanged<bool>? onWalletConfigured;
+  final Future<AccountProfile?>? accountProfileFuture;
 
   @override
   State<AcoApp> createState() => _AcoAppState();
@@ -145,15 +98,45 @@ class _AcoAppState extends State<AcoApp> {
     widget.initialIsDark,
   );
   late bool _walletConfigured = widget.initialWalletConfigured;
+  late WalletIdentity? _walletIdentity = widget.initialWalletIdentity;
+  AccountProfile? _accountProfile;
+
+  @override
+  void initState() {
+    super.initState();
+    _accountProfile = null;
+    final profileFuture = widget.accountProfileFuture;
+    if (profileFuture != null) {
+      unawaited(_resolveAccountProfile(profileFuture));
+    }
+  }
+
+  Future<void> _resolveAccountProfile(
+    Future<AccountProfile?> profileFuture,
+  ) async {
+    final profile = await profileFuture;
+    if (profile != null && mounted) {
+      setState(() => _accountProfile = profile);
+    }
+  }
 
   void _onThemeChanged(bool isDark) {
     widget.onThemeChanged?.call(isDark);
   }
 
-  Future<void> _completeWalletSetup() async {
-    await PersistentAppSession.restoreSilently();
-    setState(() => _walletConfigured = true);
+  Future<void> _completeWalletSetup(WalletIdentity identity) async {
+    await WalletPreferences.saveWalletIdentity(identity);
+    setState(() {
+      _walletConfigured = true;
+      _walletIdentity = identity;
+    });
     widget.onWalletConfigured?.call(true);
+    final profile = await WalletAccountAuthentication.signInSilently(
+      identity.address,
+    );
+    if (profile != null && mounted) {
+      setState(() => _accountProfile = profile);
+    }
   }
 
   @override
@@ -201,6 +184,8 @@ class _AcoAppState extends State<AcoApp> {
               ? AcoDesignShell(
                   themeNotifier: _isDark,
                   onThemeChanged: _onThemeChanged,
+                  accountProfile: _accountProfile,
+                  walletIdentity: _walletIdentity,
                 )
               : AcoWalletWelcomePage(
                   dark: isDark,
