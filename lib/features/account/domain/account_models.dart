@@ -1,3 +1,10 @@
+const _shortAccountIdLength = 17;
+
+String displayAccountId(String accountId) {
+  if (accountId.length <= _shortAccountIdLength) return accountId;
+  return accountId.substring(0, _shortAccountIdLength);
+}
+
 class AccountProfile {
   const AccountProfile({
     required this.accountId,
