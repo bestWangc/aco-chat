@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -118,14 +120,18 @@ void main() {
     );
     await tester.pump();
     var biometricPrompted = false;
+    final biometricResponse = Completer<bool>();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_biometricChannel, (call) async {
           biometricPrompted = call.method == 'authenticate';
-          return false;
+          return biometricResponse.future;
         });
     await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
     await tester.pump();
     expect(biometricPrompted, isTrue);
+    expect(find.text('正在创建钱包...'), findsOneWidget);
+    biometricResponse.complete(false);
+    await tester.pump();
     expect(find.byKey(const Key('wallet-password-field')), findsOneWidget);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_biometricChannel, null);
@@ -324,7 +330,7 @@ void main() {
     expect(find.text('BTC'), findsNothing);
   });
 
-  testWidgets('opens wallet details from the network selector', (
+  testWidgets('opens wallet list from the network selector', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -332,11 +338,58 @@ void main() {
     await tester.tap(find.text('以太坊'));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包详情'), findsOneWidget);
+    expect(find.text('钱包列表'), findsOneWidget);
     expect(find.text('选择网络'), findsNothing);
   });
 
-  testWidgets('opens wallet details from the wallet dropdown', (
+  testWidgets('shows only supported chains in the wallet list', (
+    WidgetTester tester,
+  ) async {
+    const address = '0x9858effd232b4033e47d90003d41ec34ecaeda94';
+    await tester.pumpWidget(
+      const AcoApp(initialWalletIdentity: WalletIdentity(address: address)),
+    );
+
+    await tester.tap(find.text('以太坊'));
+    await tester.pumpAndSettle();
+
+    for (final chain in ['以太坊', 'BSC', 'Polygon', 'Tron', 'Solana', 'Base']) {
+      expect(find.bySemanticsLabel('选择公链 $chain'), findsOneWidget);
+    }
+    expect(find.text('Avalanche'), findsNothing);
+    expect(find.text('Bitcoin'), findsNothing);
+    expect(find.text('Cosmos'), findsNothing);
+    expect(find.text('当前'), findsNothing);
+    expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
+    expect(find.byIcon(CupertinoIcons.checkmark), findsOneWidget);
+    expect(find.text('ETH 0'), findsNothing);
+    expect(find.text(r'$ 0.00'), findsOneWidget);
+
+    final addressRect = tester.getRect(find.text('0x9858effd...aeda94'));
+    final copyIconRect = tester.getRect(find.byIcon(CupertinoIcons.doc_on_doc));
+    expect(copyIconRect.left, closeTo(addressRect.right + 5, 1));
+  });
+
+  testWidgets('switches the wallet network from the chain rail', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+
+    await tester.tap(find.text('以太坊'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('选择公链 BSC'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('BSC'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('返回'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('BSC'), findsOneWidget);
+    expect(find.text('BNB'), findsOneWidget);
+    expect(find.text('ETH'), findsNothing);
+  });
+
+  testWidgets('opens wallet list from the wallet dropdown', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -344,7 +397,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('切换钱包'));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包详情'), findsOneWidget);
+    expect(find.text('钱包列表'), findsOneWidget);
     expect(find.text('暂无钱包'), findsOneWidget);
     expect(find.text('BSC-1'), findsNothing);
     expect(find.text('TASDFSk...FAGSGS2324t'), findsNothing);
