@@ -27,16 +27,10 @@ void main() {
 
     final result = await client.walletLogin(
       walletAddress: '0xabc',
-      username: 'aco_1234',
-      nickname: 'Aco 1234',
     );
 
     expect(requestUri.path, '/api/v1/auth/wallet-login');
-    expect(requestBody, {
-      'wallet_address': '0xabc',
-      'username': 'aco_1234',
-      'nickname': 'Aco 1234',
-    });
+    expect(requestBody, {'wallet_address': '0xabc'});
     expect(result.created, isTrue);
     expect(result.user.accountId, 'aco_account');
   });

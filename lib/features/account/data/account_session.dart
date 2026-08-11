@@ -11,18 +11,12 @@ class AccountSession {
   static const activeAccountKey = 'account.active';
   final AccountApiClient _apiClient;
 
-  /// Finds the account for [walletAddress], or creates the account's defaults
-  /// when this is the first address seen by the server.
+  /// Finds the account for [walletAddress]. The server creates its profile
+  /// when the address is first seen.
   Future<WalletLoginResult> signInForWallet({
     required String walletAddress,
-    required String username,
-    required String nickname,
   }) async {
-    final result = await _apiClient.walletLogin(
-      walletAddress: walletAddress,
-      username: username,
-      nickname: nickname,
-    );
+    final result = await _apiClient.walletLogin(walletAddress: walletAddress);
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(
       activeAccountKey,

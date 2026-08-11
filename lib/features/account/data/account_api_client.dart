@@ -26,17 +26,11 @@ class AccountApiClient {
 
   Future<WalletLoginResult> walletLogin({
     required String walletAddress,
-    required String username,
-    required String nickname,
   }) async {
     final response = await _httpClient.post(
       _uri('auth/wallet-login'),
       headers: const {'content-type': 'application/json'},
-      body: jsonEncode({
-        'wallet_address': walletAddress,
-        'username': username,
-        'nickname': nickname,
-      }),
+      body: jsonEncode({'wallet_address': walletAddress}),
     );
     return WalletLoginResult.fromJson(_body(response));
   }
@@ -64,8 +58,12 @@ class AccountApiClient {
 
   void close() => _httpClient.close();
 
-  Uri _uri(String path) =>
-      _baseUri.resolve('${_baseUri.path.endsWith('/') ? '' : '/'}$path');
+  Uri _uri(String path) {
+    final basePath = _baseUri.path.endsWith('/')
+        ? _baseUri.path.substring(0, _baseUri.path.length - 1)
+        : _baseUri.path;
+    return _baseUri.replace(path: '$basePath/$path');
+  }
 
   Map<String, dynamic> _body(http.Response response) {
     final decoded = response.body.isEmpty

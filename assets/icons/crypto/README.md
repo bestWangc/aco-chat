@@ -9,3 +9,8 @@ not depend on runtime network access.
   DOT, MATIC and ATOM.
 - `chains/`: Bitcoin, Ethereum, Solana, BNB Chain, Tron, Avalanche, Polygon
   and Cosmos.
+
+`domi/` contains the locally bundled logos currently used in the domi Flutter
+wallet. `tokens/` provides USDT and USDC; `chains/` provides Ethereum, BSC,
+Polygon, Arbitrum, Optimism, Base, Tron and Solana. These assets originate
+from the domi project and retain its Trust Wallet asset provenance.
