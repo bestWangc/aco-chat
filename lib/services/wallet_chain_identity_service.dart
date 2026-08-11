@@ -4,6 +4,7 @@ import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:blockchain_utils/blockchain_utils.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Derives non-EVM public addresses after the default EVM address is ready.
 ///
@@ -17,12 +18,18 @@ class WalletChainIdentityService {
     'cosmos': Bip44Coins.cosmos,
   };
 
-  /// Caches the first account for supported non-EVM chains off the UI isolate.
+  /// Caches the first account for supported non-EVM chains.
+  ///
+  /// Web builds do not support Dart isolates, so address derivation runs in the
+  /// current execution context there. Native platforms keep it off the UI
+  /// isolate.
   Future<void> cacheNonEvmAddresses({
     required String mnemonic,
     required WalletIdentity identity,
   }) async {
-    final addresses = await Isolate.run(() => deriveNonEvmAddresses(mnemonic));
+    final addresses = kIsWeb
+        ? deriveNonEvmAddresses(mnemonic)
+        : await Isolate.run(() => deriveNonEvmAddresses(mnemonic));
     await WalletPreferences.saveDerivedAddresses(identity, addresses);
   }
 

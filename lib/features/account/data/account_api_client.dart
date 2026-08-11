@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
+import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:http/http.dart' as http;
 
 class AccountApiException implements Exception {
@@ -26,34 +27,74 @@ class AccountApiClient {
 
   Future<WalletLoginResult> walletLogin({
     required String walletAddress,
+    required WalletLoginProof proof,
   }) async {
     final response = await _httpClient.post(
       _uri('auth/wallet-login'),
       headers: const {'content-type': 'application/json'},
-      body: jsonEncode({'wallet_address': walletAddress}),
+      body: jsonEncode({
+        'wallet_address': walletAddress,
+        'challenge': proof.challenge,
+        'public_key': proof.publicKey,
+        'signature': proof.signature,
+      }),
     );
     return WalletLoginResult.fromJson(_body(response));
+  }
+
+  Future<String> walletChallenge(String walletAddress) async {
+    final response = await _httpClient.post(
+      _uri('auth/wallet-challenge'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({'wallet_address': walletAddress}),
+    );
+    return _body(response)['challenge'] as String;
+  }
+
+  Future<AccountTokens> refreshAccessToken(String refreshToken) async {
+    final response = await _httpClient.post(
+      _uri('auth/refresh'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({'refresh_token': refreshToken}),
+    );
+    return AccountTokens.fromJson(_body(response));
   }
 
   Future<WalletAddress> addWallet({
     required String accountId,
     required String walletAddress,
+    required String token,
   }) async {
     final response = await _httpClient.post(
       _uri('accounts/$accountId/wallets'),
-      headers: const {'content-type': 'application/json'},
+      headers: _authorizedHeaders(token),
       body: jsonEncode({'wallet_address': walletAddress}),
     );
     return WalletAddress.fromJson(_body(response));
   }
 
-  Future<List<WalletAddress>> listWallets(String accountId) async {
-    final response = await _httpClient.get(_uri('accounts/$accountId/wallets'));
+  Future<List<WalletAddress>> listWallets({
+    required String accountId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('accounts/$accountId/wallets'),
+      headers: _authorizedHeaders(token),
+    );
     final body = _body(response);
     return (body['data'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .map(WalletAddress.fromJson)
         .toList(growable: false);
+  }
+
+  Future<AccountProfile> currentProfile({required String token}) async {
+    final response = await _httpClient.get(
+      _uri('auth/me'),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
   }
 
   void close() => _httpClient.close();
@@ -64,6 +105,11 @@ class AccountApiClient {
         : _baseUri.path;
     return _baseUri.replace(path: '$basePath/$path');
   }
+
+  Map<String, String> _authorizedHeaders(String token) => {
+    'content-type': 'application/json',
+    'authorization': 'Bearer $token',
+  };
 
   Map<String, dynamic> _body(http.Response response) {
     final decoded = response.body.isEmpty
