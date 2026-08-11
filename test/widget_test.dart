@@ -77,8 +77,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
-    await tester.pumpAndSettle(const Duration(seconds: 2));
+    expect(find.text('备份助记词'), findsOneWidget);
     await tester.tap(find.byKey(const Key('backup-confirmation')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('continue-create-wallet-button')));

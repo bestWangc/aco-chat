@@ -342,7 +342,6 @@ class _WalletSetupFlow extends StatefulWidget {
 class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   final _walletSecurity = WalletSecurity();
   final _secretStore = SecureWalletSecretStore();
-  final _nameController = TextEditingController(text: '我的钱包');
   final _phraseController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -359,9 +358,17 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   var _verificationError = false;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.mode == _WalletSetupMode.create) {
+      _step = 1;
+      SensitiveScreenProtection.setEnabled(true);
+    }
+  }
+
+  @override
   void dispose() {
     SensitiveScreenProtection.setEnabled(false);
-    _nameController.dispose();
     _phraseController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -413,7 +420,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                 ),
               ),
               const SizedBox(height: 32),
-              if (_isCreating && _step == 0) _nameField(palette),
               if (_isCreating && _step == 1) _backupWords(palette),
               if (_isVerificationStep) _verifyWords(palette),
               if (!_isCreating && _step == 0) _importField(palette),
@@ -437,18 +443,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       ),
     );
   }
-
-  Widget _nameField(AcoPalette palette) => CupertinoTextField(
-    key: const Key('wallet-name-field'),
-    controller: _nameController,
-    placeholder: '钱包名称',
-    style: TextStyle(color: palette.primaryText),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: palette.surface,
-      borderRadius: BorderRadius.circular(14),
-    ),
-  );
 
   Widget _backupWords(AcoPalette palette) => Column(
     children: [
@@ -716,7 +710,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     if (!_isCreating) return '导入钱包';
 
     return switch (_step) {
-      0 => '继续',
       1 => '我已安全备份',
       _ => '确认助记词',
     };
@@ -729,7 +722,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     if (!_isCreating) return _hasValidPhrase;
 
     return switch (_step) {
-      0 => true,
       1 => _backedUp,
       _ => _hasSelectedAllVerificationWords,
     };
@@ -778,14 +770,12 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   String get _title {
     if (_isSecurityStep) return '保护你的钱包';
     if (!_isCreating) return '导入已有钱包';
-    if (_step == 0) return '创建新钱包';
     return _step == 1 ? '备份助记词' : '验证助记词';
   }
 
   String get _description {
     if (_isSecurityStep) return '设置钱包密码，并使用指纹验证以完成操作。';
     if (!_isCreating) return '输入 12 或 24 个助记词，单词之间用空格分隔。';
-    if (_step == 0) return '为你的数字资产创建一个本地钱包。';
     if (_isVerificationStep) return '确认你已妥善备份。请从词库中按顺序选择指定单词。';
     return '请按顺序安全备份这些助记词，任何人索取它们都是诈骗。';
   }
@@ -838,7 +828,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   }
 
   Future<void> _goBack() async {
-    if (_step == 0) {
+    if (_step == 0 || (_isCreating && _step == 1)) {
       widget.onBack();
       return;
     }
