@@ -5000,7 +5000,7 @@ class _ProfilePage extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'UID:$accountId',
+                  'UID:${displayAccountId(accountId)}',
                   style: TextStyle(
                     color: palette.primaryText,
                     fontSize: AcoTypography.body,
@@ -5176,7 +5176,7 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
               ),
               const SizedBox(height: 4),
               Text(
-                widget.accountId,
+                displayAccountId(widget.accountId),
                 style: TextStyle(
                   color: widget.palette.primaryText,
                   fontSize: AcoTypography.bodySmall,
