@@ -400,11 +400,14 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: AcoIconButton(
-                  icon: CupertinoIcons.back,
-                  palette: palette,
-                  label: '返回',
-                  onPressed: _goBack,
+                child: Transform.translate(
+                  offset: const Offset(-8, 0),
+                  child: AcoIconButton(
+                    icon: CupertinoIcons.back,
+                    palette: palette,
+                    label: '返回',
+                    onPressed: _goBack,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -1732,6 +1735,7 @@ class AcoPageHeader extends StatelessWidget {
     this.onBack,
     this.right,
     this.titleFollowsBack = false,
+    this.backButtonOffset = const Offset(-8, 0),
     super.key,
   });
   final AcoPalette palette;
@@ -1739,6 +1743,7 @@ class AcoPageHeader extends StatelessWidget {
   final VoidCallback? onBack;
   final Widget? right;
   final bool titleFollowsBack;
+  final Offset backButtonOffset;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -1750,11 +1755,14 @@ class AcoPageHeader extends StatelessWidget {
         if (onBack != null)
           Align(
             alignment: Alignment.centerLeft,
-            child: AcoIconButton(
-              icon: CupertinoIcons.back,
-              palette: palette,
-              label: '返回',
-              onPressed: onBack!,
+            child: Transform.translate(
+              offset: backButtonOffset,
+              child: AcoIconButton(
+                icon: CupertinoIcons.back,
+                palette: palette,
+                label: '返回',
+                onPressed: onBack!,
+              ),
             ),
           ),
         if (title != null)
@@ -1883,6 +1891,7 @@ class AcoRootHeader extends StatelessWidget {
     this.title,
     this.trailing,
     this.onLeadingPressed,
+    this.leadingButtonOffset = Offset.zero,
     super.key,
   });
 
@@ -1891,6 +1900,7 @@ class AcoRootHeader extends StatelessWidget {
   final String? title;
   final Widget? trailing;
   final VoidCallback? onLeadingPressed;
+  final Offset leadingButtonOffset;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -1901,11 +1911,14 @@ class AcoRootHeader extends StatelessWidget {
         if (onLeadingPressed != null)
           Align(
             alignment: Alignment.centerLeft,
-            child: AcoIconButton(
-              icon: CupertinoIcons.back,
-              palette: palette,
-              label: '返回',
-              onPressed: onLeadingPressed!,
+            child: Transform.translate(
+              offset: leadingButtonOffset,
+              child: AcoIconButton(
+                icon: CupertinoIcons.back,
+                palette: palette,
+                label: '返回',
+                onPressed: onLeadingPressed!,
+              ),
             ),
           ),
         if (title != null)
@@ -3867,7 +3880,7 @@ class _AssetDetailState extends State<_AssetDetail> {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(28, 4, 28, 0),
+            padding: const EdgeInsets.fromLTRB(20, 4, 28, 0),
             child: SizedBox(
               height: 48,
               child: Stack(
@@ -5590,6 +5603,7 @@ class _DexSwapPageState extends State<_DexSwapPage> {
           onOpen: (_) {},
           title: 'DEX',
           onLeadingPressed: () => Navigator.of(context).maybePop(),
+          leadingButtonOffset: const Offset(-23, 0),
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -7601,12 +7615,13 @@ class _DetailScaffold extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(28, 4, 28, 0),
+        padding: const EdgeInsets.fromLTRB(20, 4, 28, 0),
         child: AcoPageHeader(
           palette: palette,
           title: title,
           right: right,
           titleFollowsBack: titleFollowsBack,
+          backButtonOffset: Offset.zero,
           onBack: showBack ? () => Navigator.of(context).maybePop() : null,
         ),
       ),
