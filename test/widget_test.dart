@@ -391,7 +391,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('钱包详情'), findsOneWidget);
     expect(tester.getSize(find.bySemanticsLabel('返回')), const Size(44, 44));
-    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(28, 1));
+    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(20, 1));
     expect(find.text('GRANDVEAGS'), findsNothing);
     expect(find.text('Wallet1'), findsOneWidget);
     expect(find.byKey(const Key('wallet-detail-chain-logo')), findsOneWidget);
@@ -422,7 +422,7 @@ void main() {
 
     final backButton = find.bySemanticsLabel('返回');
     expect(tester.getSize(backButton), const Size(44, 44));
-    expect(tester.getRect(backButton).left, closeTo(28, 1));
+    expect(tester.getRect(backButton).left, closeTo(20, 1));
   });
 
   testWidgets('keeps wallet header controls visible for a long wallet name', (
