@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
@@ -5839,41 +5841,74 @@ class _SquareFeedPage extends StatefulWidget {
   State<_SquareFeedPage> createState() => _SquareFeedPageState();
 }
 
-class _LiveSession {
-  const _LiveSession({required this.title, this.coverAsset});
-
-  final String title;
-  final String? coverAsset;
-}
-
-const _defaultLiveSession = _LiveSession(title: '美股凭什么依然能打？3节课带你从小白上手美股交易！');
-
-String _liveRoomHeaderTitle(String title) {
-  const maxLength = 10;
-  return title.length > maxLength
-      ? '${title.substring(0, maxLength)}...'
-      : title;
-}
-
 class _SquareFeedPageState extends State<_SquareFeedPage> {
   final bool _showLive = true;
-  static const List<_LiveSession> _liveSessions = [
-    _defaultLiveSession,
-    _LiveSession(title: 'BTC 强势突破后，接下来应该关注哪些关键位置？'),
-    _LiveSession(title: 'AI Agent 热潮持续，哪些项目值得长期跟踪？'),
-    _LiveSession(title: '从零搭建交易策略：风险控制与仓位管理实战'),
-  ];
+  final AccountApiClient _apiClient = AccountApiClient();
+  late Future<List<LiveSession>> _lives;
+
+  @override
+  void initState() {
+    super.initState();
+    _lives = _loadLives();
+  }
+
+  Future<List<LiveSession>> _loadLives() =>
+      AccountSession(_apiClient).listLives();
+
+  void _retryLoadingLives() => setState(() => _lives = _loadLives());
+
+  @override
+  void dispose() {
+    _apiClient.close();
+    super.dispose();
+  }
+
+  void _openLiveRoom(LiveSession session) {
+    if (session.status != 'live') {
+      _showNotice(context, '预约直播', '该直播尚未开始。');
+      return;
+    }
+    Navigator.of(context).push<void>(
+      CupertinoPageRoute(
+        builder: (_) => _VoiceRoomPage(palette: widget.palette, live: session),
+      ),
+    );
+  }
 
   List<Widget> _buildLiveContent(AcoPalette palette) => [
     const SizedBox(height: 24),
-    for (final session in _liveSessions) ...[
-      _LiveCard(
-        palette: palette,
-        session: session,
-        onTap: () => widget.onOpen(AcoScreen.voiceRoom),
-      ),
-      const SizedBox(height: 24),
-    ],
+    FutureBuilder<List<LiveSession>>(
+      future: _lives,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CupertinoActivityIndicator());
+        }
+        if (snapshot.hasError) {
+          return _LiveListMessage(
+            palette: palette,
+            message: '直播列表加载失败，请检查网络后重试。',
+            actionLabel: '重试',
+            onPressed: _retryLoadingLives,
+          );
+        }
+        final sessions = snapshot.data ?? const <LiveSession>[];
+        if (sessions.isEmpty) {
+          return _LiveListMessage(palette: palette, message: '暂无直播，去创建一场吧。');
+        }
+        return Column(
+          children: [
+            for (final session in sessions) ...[
+              _LiveCard(
+                palette: palette,
+                session: session,
+                onTap: () => _openLiveRoom(session),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ],
+        );
+      },
+    ),
   ];
 
   @override
@@ -6150,6 +6185,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   DateTime? _scheduledAt;
   Uint8List? _coverBytes;
   String? _joinPassword;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -6160,10 +6196,30 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   bool get _canConfirm =>
       _titleController.text.trim().isNotEmpty && _coverBytes != null;
 
-  void _confirm() {
-    if (!_canConfirm) return;
+  Future<void> _confirm() async {
+    final coverBytes = _coverBytes;
+    if (!_canConfirm || coverBytes == null || _submitting) return;
     final title = _titleController.text.trim();
-    _showNotice(context, '直播已创建', '正在为“$title”准备直播间。');
+    final apiClient = AccountApiClient();
+    setState(() => _submitting = true);
+    try {
+      await AccountSession(apiClient).createLive(
+        title: title,
+        coverBytes: coverBytes,
+        access: _joinPassword == null ? 'open' : 'password',
+        joinPassword: _joinPassword,
+        scheduledAt: _scheduledAt,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '创建失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '创建失败', '请检查网络后重试。');
+    } finally {
+      apiClient.close();
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   String get _scheduleLabel {
@@ -6365,7 +6421,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   Widget build(BuildContext context) {
     final palette = widget.palette;
     final hasCover = _coverBytes != null;
-    final canConfirm = _canConfirm;
+    final canConfirm = _canConfirm && !_submitting;
     return _DetailScaffold(
       palette: palette,
       title: '创建直播',
@@ -6546,14 +6602,16 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                       color: canConfirm ? _lime : palette.surfaceRaised,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: Text(
-                      '确认',
-                      style: TextStyle(
-                        color: canConfirm ? _black : palette.mutedText,
-                        fontSize: AcoTypography.bodyEmphasis,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    child: _submitting
+                        ? const CupertinoActivityIndicator(color: _black)
+                        : Text(
+                            '确认',
+                            style: TextStyle(
+                              color: canConfirm ? _black : palette.mutedText,
+                              fontSize: AcoTypography.bodyEmphasis,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ),
               ),
@@ -6650,25 +6708,14 @@ class _LiveStreamPage extends StatelessWidget {
     palette: palette,
     title: '正在直播',
     right: AcoTopActions(palette: palette, onOpen: onOpen),
-    child: ListView(
-      children: [
-        _LiveCard(palette: palette, onTap: () => onOpen(AcoScreen.voiceRoom)),
-        const SizedBox(height: 28),
-        _LiveCard(palette: palette, onTap: () => onOpen(AcoScreen.voiceRoom)),
-        const SizedBox(height: 24),
-        AcoLimeButton(
-          label: '进入语音房',
-          icon: CupertinoIcons.mic_fill,
-          onPressed: () => onOpen(AcoScreen.voiceRoom),
-        ),
-      ],
-    ),
+    child: _LiveListMessage(palette: palette, message: '请前往广场查看实时直播列表。'),
   );
 }
 
 class _VoiceRoomPage extends StatefulWidget {
-  const _VoiceRoomPage({required this.palette});
+  const _VoiceRoomPage({required this.palette, this.live});
   final AcoPalette palette;
+  final LiveSession? live;
 
   @override
   State<_VoiceRoomPage> createState() => _VoiceRoomPageState();
@@ -6678,16 +6725,83 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _muted = false;
   bool _handRaised = false;
   bool _emojiPickerVisible = false;
+  bool _sending = false;
+  List<LiveMessage> _messages = const [];
+  Timer? _messagePoller;
+  late final AccountApiClient _apiClient;
+  late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _apiClient = AccountApiClient();
+    _accountSession = AccountSession(_apiClient);
+    if (widget.live != null) {
+      unawaited(_loadMessages());
+      _messagePoller = Timer.periodic(
+        const Duration(seconds: 3),
+        (_) => unawaited(_loadMessages()),
+      );
+    }
+  }
+
+  @override
   void dispose() {
+    _messagePoller?.cancel();
+    _apiClient.close();
     _messageController.dispose();
     super.dispose();
   }
 
   void _toggleEmojiPicker() =>
       setState(() => _emojiPickerVisible = !_emojiPickerVisible);
+
+  Future<void> _loadMessages() async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      final messages = await _accountSession.listLiveMessages(
+        live.id,
+        after: _messages.isEmpty ? null : _messages.last.id,
+      );
+      if (!mounted || messages.isEmpty) return;
+      _appendMessages(messages);
+    } catch (_) {
+      // The next polling interval reconnects after a transient network error.
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final live = widget.live;
+    final text = _messageController.text.trim();
+    if (live == null || text.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      final message = await _accountSession.createLiveMessage(
+        liveId: live.id,
+        text: text,
+      );
+      if (!mounted) return;
+      _messageController.clear();
+      _appendMessages([message]);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '发送失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '发送失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  void _appendMessages(Iterable<LiveMessage> incomingMessages) {
+    final knownMessageIDs = _messages.map((message) => message.id).toSet();
+    final newMessages = incomingMessages
+        .where((message) => knownMessageIDs.add(message.id))
+        .toList(growable: false);
+    if (newMessages.isEmpty) return;
+    setState(() => _messages = [..._messages, ...newMessages]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -6712,7 +6826,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
     return _DetailScaffold(
       palette: palette,
-      title: _liveRoomHeaderTitle(_defaultLiveSession.title),
+      title: '语音房',
       right: _RoomAudienceCount(palette: palette, count: members.length + 1),
       titleFollowsBack: true,
       child: Stack(
@@ -6751,7 +6865,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                         ),
                       ],
                       const SizedBox(height: 14),
-                      Expanded(child: _RoomChatHistory(palette: palette)),
+                      Expanded(
+                        child: _RoomChatHistory(
+                          palette: palette,
+                          liveMessages: widget.live == null ? null : _messages,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -6770,7 +6889,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               onHand: () => setState(() => _handRaised = !_handRaised),
               controller: _messageController,
               onEmojiPressed: _toggleEmojiPicker,
-              onSubmitted: () => _showNotice(context, '发言', '消息已发送。'),
+              onSubmitted: _sendMessage,
             ),
           ),
           if (_emojiPickerVisible)
@@ -8612,13 +8731,9 @@ class _Bubble extends StatelessWidget {
 }
 
 class _LiveCard extends StatelessWidget {
-  const _LiveCard({
-    required this.palette,
-    this.session = _defaultLiveSession,
-    this.onTap,
-  });
+  const _LiveCard({required this.palette, required this.session, this.onTap});
   final AcoPalette palette;
-  final _LiveSession session;
+  final LiveSession session;
   final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
@@ -8660,15 +8775,17 @@ class _LiveCard extends StatelessWidget {
             ),
           ],
         ),
-        if (session.coverAsset case final coverAsset?) ...[
+        if (session.coverUrl.isNotEmpty) ...[
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(22),
-            child: Image.asset(
-              coverAsset,
+            child: Image.network(
+              _liveCoverUrl(session.coverUrl),
               width: double.infinity,
               height: 220,
               fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  _LiveCoverPlaceholder(palette: palette),
             ),
           ),
         ],
@@ -8683,6 +8800,68 @@ class _LiveCard extends StatelessWidget {
             child: content,
           );
   }
+}
+
+String _liveCoverUrl(String coverUrl) {
+  if (Uri.tryParse(coverUrl)?.hasScheme ?? false) return coverUrl;
+  final apiUri = Uri.parse(const AppConfig().apiBaseUrl);
+  return apiUri.replace(path: coverUrl).toString();
+}
+
+class _LiveCoverPlaceholder extends StatelessWidget {
+  const _LiveCoverPlaceholder({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    height: 220,
+    color: palette.surfaceRaised,
+    alignment: Alignment.center,
+    child: Icon(CupertinoIcons.photo, color: palette.mutedText, size: 30),
+  );
+}
+
+class _LiveListMessage extends StatelessWidget {
+  const _LiveListMessage({
+    required this.palette,
+    required this.message,
+    this.actionLabel,
+    this.onPressed,
+  });
+
+  final AcoPalette palette;
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 56),
+    child: Column(
+      children: [
+        Icon(CupertinoIcons.video_camera, color: palette.mutedText, size: 32),
+        const SizedBox(height: 12),
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+        if (actionLabel != null) ...[
+          const SizedBox(height: 16),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            onPressed: onPressed,
+            child: Text(actionLabel!),
+          ),
+        ],
+      ],
+    ),
+  );
 }
 
 class _RoomHost extends StatelessWidget {
@@ -8803,10 +8982,11 @@ class _RoomMessage extends StatelessWidget {
 }
 
 class _RoomChatHistory extends StatelessWidget {
-  const _RoomChatHistory({required this.palette});
+  const _RoomChatHistory({required this.palette, this.liveMessages});
   final AcoPalette palette;
+  final List<LiveMessage>? liveMessages;
 
-  static const messages = <({String? name, String text})>[
+  static const demoMessages = <({String? name, String text})>[
     (name: 'Mia', text: '大家晚上好！'),
     (name: 'Jason', text: '欢迎来到直播间，今天聊聊市场走势。'),
     (name: 'Alex', text: '已经准备好了！'),
@@ -8819,22 +8999,53 @@ class _RoomChatHistory extends StatelessWidget {
   ];
 
   @override
-  Widget build(BuildContext context) => ListView.separated(
-    key: const Key('room-chat-history'),
-    padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-    itemCount: messages.length,
-    separatorBuilder: (_, _) => const SizedBox(height: 10),
-    itemBuilder: (_, index) {
-      final message = messages[index];
-      return message.name == null
-          ? _RoomSystemMessage(palette: palette, text: message.text)
-          : _RoomMessage(
-              palette: palette,
-              name: message.name!,
-              text: message.text,
-            );
-    },
-  );
+  Widget build(BuildContext context) {
+    final roomMessages = liveMessages;
+    if (roomMessages == null) {
+      return _buildDemoMessages();
+    }
+    if (roomMessages.isEmpty) {
+      return Center(
+        child: Text(
+          '还没有弹幕，来说点什么吧。',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.bodySmall,
+          ),
+        ),
+      );
+    }
+    return ListView.separated(
+      key: const Key('room-chat-history'),
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+      itemCount: roomMessages.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (_, index) => _RoomMessage(
+        palette: palette,
+        name: roomMessages[index].nickname,
+        text: roomMessages[index].text,
+      ),
+    );
+  }
+
+  Widget _buildDemoMessages() {
+    return ListView.separated(
+      key: const Key('room-chat-history'),
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+      itemCount: demoMessages.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (_, index) {
+        final message = demoMessages[index];
+        return message.name == null
+            ? _RoomSystemMessage(palette: palette, text: message.text)
+            : _RoomMessage(
+                palette: palette,
+                name: message.name!,
+                text: message.text,
+              );
+      },
+    );
+  }
 }
 
 class _RoomSystemMessage extends StatelessWidget {

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
@@ -101,6 +102,47 @@ class AccountSession {
     if (value == null) return null;
     return AccountProfile.fromJson(jsonDecode(value) as Map<String, dynamic>);
   }
+
+  Future<List<LiveSession>> listLives() async =>
+      _apiClient.listLives(token: await _requireToken());
+
+  Future<LiveSession> createLive({
+    required String title,
+    required Uint8List coverBytes,
+    required String access,
+    String? joinPassword,
+    DateTime? scheduledAt,
+  }) async {
+    final token = await _requireToken();
+    final coverUrl = await _apiClient.uploadLiveCover(
+      bytes: coverBytes,
+      token: token,
+    );
+    return _apiClient.createLive(
+      title: title,
+      coverUrl: coverUrl,
+      access: access,
+      joinPassword: joinPassword,
+      scheduledAt: scheduledAt,
+      token: token,
+    );
+  }
+
+  Future<List<LiveMessage>> listLiveMessages(int liveId, {int? after}) async =>
+      _apiClient.listLiveMessages(
+        liveId: liveId,
+        after: after,
+        token: await _requireToken(),
+      );
+
+  Future<LiveMessage> createLiveMessage({
+    required int liveId,
+    required String text,
+  }) async => _apiClient.createLiveMessage(
+    liveId: liveId,
+    text: text,
+    token: await _requireToken(),
+  );
 
   Future<String> _requireToken() async {
     final tokens = await _tokenStore.read();

@@ -122,7 +122,96 @@ void main() {
     });
     expect(profile.nickname, 'Aco Updated');
   });
+
+  test('lists live sessions with the active access token', () async {
+    late http.Request request;
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((value) async {
+        request = value;
+        return response({
+          'data': [
+            {
+              'id': 9,
+              'title': '真实直播主题',
+              'cover_url': '/uploads/live-cover-9.jpg',
+              'access': 'open',
+              'status': 'live',
+              'created_at': '2026-08-12T08:30:00Z',
+            },
+          ],
+        });
+      }),
+    );
+
+    final lives = await client.listLives(token: 'signed-token');
+
+    expect(request.method, 'GET');
+    expect(request.url.path, '/api/v1/lives');
+    expect(request.headers['authorization'], 'Bearer signed-token');
+    expect(lives.single.title, '真实直播主题');
+    expect(lives.single.coverUrl, '/uploads/live-cover-9.jpg');
+    expect(lives.single.status, 'live');
+  });
+
+  test('sends and incrementally loads live messages', () async {
+    final requests = <http.Request>[];
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'POST') {
+          expect(jsonDecode(request.body), {'text': '大家好 👋'});
+          return response({
+            'id': 8,
+            'nickname': 'Aco',
+            'text': '大家好 👋',
+            'created_at': '2026-08-12T08:30:00Z',
+          }, statusCode: 201);
+        }
+        return response({
+          'data': [
+            {
+              'id': 9,
+              'nickname': 'Mia',
+              'text': '欢迎',
+              'created_at': '2026-08-12T08:31:00Z',
+            },
+          ],
+        });
+      }),
+    );
+
+    final created = await client.createLiveMessage(
+      liveId: 7,
+      text: '大家好 👋',
+      token: 'signed-token',
+    );
+    final messages = await client.listLiveMessages(
+      liveId: 7,
+      after: created.id,
+      token: 'signed-token',
+    );
+
+    expect(created.text, '大家好 👋');
+    expect(messages.single.nickname, 'Mia');
+    expect(requests.map((request) => request.url.path), [
+      '/api/v1/lives/7/messages',
+      '/api/v1/lives/7/messages',
+    ]);
+    expect(requests.last.url.queryParameters['after'], '8');
+    expect(
+      requests.every(
+        (request) => request.headers['authorization'] == 'Bearer signed-token',
+      ),
+      isTrue,
+    );
+  });
 }
 
 http.Response response(Map<String, dynamic> body, {int statusCode = 200}) =>
-    http.Response(jsonEncode(body), statusCode);
+    http.Response(
+      jsonEncode(body),
+      statusCode,
+      headers: const {'content-type': 'application/json; charset=utf-8'},
+    );
