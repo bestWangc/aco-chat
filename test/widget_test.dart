@@ -95,6 +95,40 @@ void main() {
         .setMockMethodCallHandler(_sensitiveScreenChannel, null);
   });
 
+  testWidgets('opens the private-key export password prompt', (
+    WidgetTester tester,
+  ) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          _sensitiveScreenChannel,
+          (_) async => <String, Object?>{},
+        );
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.exportPrivateKey,
+          dark: true,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+          walletIdentity: const WalletIdentity(address: '0x1234'),
+          walletSecretStore: InMemoryWalletSecretStore(),
+        ),
+      ),
+    );
+
+    expect(find.text('导出私钥，保护钱包安全'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('backup-mnemonic-continue')));
+    await tester.pump();
+    expect(
+      find.byKey(const Key('export-private-key-password')),
+      findsOneWidget,
+    );
+    expect(find.text('导出私钥，保护钱包安全'), findsOneWidget);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_sensitiveScreenChannel, null);
+  });
+
   testWidgets('shows wallet setup before the first wallet is configured', (
     WidgetTester tester,
   ) async {
@@ -365,6 +399,10 @@ void main() {
     expect(find.text('导出私钥'), findsOneWidget);
     expect(find.text('删除钱包'), findsOneWidget);
     expect(find.byKey(const Key('wallet-detail-copy-address')), findsOneWidget);
+
+    await tester.tap(find.text('导出私钥'));
+    await tester.pumpAndSettle();
+    expect(find.text('导出私钥，保护钱包安全'), findsOneWidget);
   });
 
   testWidgets('uses a consistent 44 point back button on detail pages', (

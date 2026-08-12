@@ -10,10 +10,17 @@ class WalletIdentity {
   final String address;
 
   factory WalletIdentity.fromMnemonic(String mnemonic) {
-    final seed = bip39.mnemonicToSeed(mnemonic);
     return WalletIdentity(
-      address: _addressFor(seed, Bip44Coins.ethereum).toLowerCase(),
+      address: _ethereumAccountFromMnemonic(
+        mnemonic,
+      ).publicKey.toAddress.toLowerCase(),
     );
+  }
+
+  /// Private key for the first Ethereum account at m/44'/60'/0'/0/0.
+  static String privateKeyFromMnemonic(String mnemonic) {
+    final key = _ethereumAccountFromMnemonic(mnemonic).privateKey.raw;
+    return key.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   }
 
   factory WalletIdentity.fromJson(Map<String, dynamic> json) =>
@@ -25,10 +32,7 @@ class WalletIdentity {
     required String mnemonic,
     required String challenge,
   }) {
-    final key = Bip44.fromSeed(
-      bip39.mnemonicToSeed(mnemonic),
-      Bip44Coins.ethereum,
-    ).deriveDefaultPath;
+    final key = _ethereumAccountFromMnemonic(mnemonic);
     return WalletLoginProof(
       challenge: challenge,
       publicKey: base64UrlEncode(
@@ -42,8 +46,10 @@ class WalletIdentity {
     );
   }
 
-  static String _addressFor(List<int> seed, Bip44Coins coin) =>
-      Bip44.fromSeed(seed, coin).deriveDefaultPath.publicKey.toAddress;
+  static Bip44 _ethereumAccountFromMnemonic(String mnemonic) => Bip44.fromSeed(
+    bip39.mnemonicToSeed(mnemonic),
+    Bip44Coins.ethereum,
+  ).deriveDefaultPath;
 }
 
 class WalletLoginProof {
