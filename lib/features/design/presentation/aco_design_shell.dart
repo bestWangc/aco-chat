@@ -405,30 +405,39 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                   onPressed: _goBack,
                 ),
               ),
-              const SizedBox(height: 36),
-              Text(
-                _title,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.displaySmall,
-                  fontWeight: FontWeight.w700,
+              const SizedBox(height: 20),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _title,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: AcoTypography.displaySmall,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _description,
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: AcoTypography.body,
+                          height: 1.55,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      if (_isCreating && _step == 1) _backupWords(palette),
+                      if (_isVerificationStep) _verifyWords(palette),
+                      if (!_isCreating && _step == 0) _importField(palette),
+                      if (_isSecurityStep) _securityFields(palette),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 10),
-              Text(
-                _description,
-                style: TextStyle(
-                  color: palette.mutedText,
-                  fontSize: AcoTypography.body,
-                  height: 1.55,
-                ),
-              ),
-              const SizedBox(height: 32),
-              if (_isCreating && _step == 1) _backupWords(palette),
-              if (_isVerificationStep) _verifyWords(palette),
-              if (!_isCreating && _step == 0) _importField(palette),
-              if (_isSecurityStep) _securityFields(palette),
-              const Spacer(),
+              const SizedBox(height: 16),
               _WalletSetupButton(
                 key: Key(
                   _isCreating
@@ -451,96 +460,66 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     );
   }
 
-  Widget _backupWords(AcoPalette palette) => Column(
-    children: [
-      LayoutBuilder(
-        builder: (_, constraints) {
-          const spacing = 8.0;
-          final wordWidth = (constraints.maxWidth - spacing * 2) / 3;
-          return Wrap(
-            spacing: spacing,
-            runSpacing: 10,
-            children: List.generate(
-              _createdWords.length,
-              (index) => Container(
-                width: wordWidth,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 11,
-                ),
-                decoration: BoxDecoration(
-                  color: palette.surface,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '${index + 1}. ${_createdWords[index]}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: AcoTypography.bodySmall,
-                  ),
+  Widget _backupWords(AcoPalette palette) {
+    return Column(
+      children: [
+        _MnemonicWordGrid(palette: palette, words: _createdWords),
+        const SizedBox(height: 22),
+        CupertinoButton(
+          key: const Key('backup-confirmation'),
+          padding: EdgeInsets.zero,
+          onPressed: () => setState(() => _backedUp = !_backedUp),
+          child: Row(
+            children: [
+              Icon(
+                _backedUp
+                    ? CupertinoIcons.check_mark_circled_solid
+                    : CupertinoIcons.circle,
+                color: _backedUp ? _lime : palette.mutedText,
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '我已安全备份，绝不分享给他人',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.body,
                 ),
               ),
-            ),
-          );
-        },
-      ),
-      const SizedBox(height: 22),
-      CupertinoButton(
-        key: const Key('backup-confirmation'),
-        padding: EdgeInsets.zero,
-        onPressed: () => setState(() => _backedUp = !_backedUp),
-        child: Row(
-          children: [
-            Icon(
-              _backedUp
-                  ? CupertinoIcons.check_mark_circled_solid
-                  : CupertinoIcons.circle,
-              color: _backedUp ? _lime : palette.mutedText,
-            ),
-            const SizedBox(width: 10),
-            Text(
-              '我已安全备份，绝不分享给他人',
-              style: TextStyle(
-                color: palette.primaryText,
-                fontSize: AcoTypography.body,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
-      const SizedBox(height: 14),
-      CupertinoButton(
-        key: const Key('copy-mnemonic-button'),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        onPressed: _copyMnemonic,
-        color: palette.surfaceRaised,
-        borderRadius: BorderRadius.circular(10),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              _mnemonicCopied
-                  ? CupertinoIcons.check_mark
-                  : CupertinoIcons.doc_on_doc,
-              size: 17,
-              color: palette.primaryText,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              _mnemonicCopied ? '已复制' : '复制助记词',
-              style: TextStyle(
+        const SizedBox(height: 14),
+        CupertinoButton(
+          key: const Key('copy-mnemonic-button'),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          onPressed: _copyMnemonic,
+          color: palette.surfaceRaised,
+          borderRadius: BorderRadius.circular(10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _mnemonicCopied
+                    ? CupertinoIcons.check_mark
+                    : CupertinoIcons.doc_on_doc,
+                size: 17,
                 color: palette.primaryText,
-                fontSize: AcoTypography.body,
-                fontWeight: FontWeight.w600,
               ),
-            ),
-          ],
+              const SizedBox(width: 8),
+              Text(
+                _mnemonicCopied ? '已复制' : '复制助记词',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.body,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _verifyWords(AcoPalette palette) {
     final targetLabels = _verificationIndexes
@@ -4369,7 +4348,6 @@ class _MnemonicPhraseView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final words = mnemonic.split(' ').where((word) => word.isNotEmpty).toList();
-    final rowCount = (words.length + 1) ~/ 2;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -4414,38 +4392,7 @@ class _MnemonicPhraseView extends StatelessWidget {
                 border: Border.all(color: palette.border),
               ),
               child: visible
-                  ? Column(
-                      children: List<Widget>.generate(rowCount, (rowIndex) {
-                        final firstIndex = rowIndex * 2;
-                        final secondIndex = firstIndex + 1;
-                        return Padding(
-                          padding: EdgeInsets.only(
-                            bottom: rowIndex == rowCount - 1 ? 0 : 10,
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _MnemonicWordChip(
-                                  palette: palette,
-                                  index: firstIndex + 1,
-                                  word: words[firstIndex],
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: secondIndex < words.length
-                                    ? _MnemonicWordChip(
-                                        palette: palette,
-                                        index: secondIndex + 1,
-                                        word: words[secondIndex],
-                                      )
-                                    : const SizedBox(),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    )
+                  ? _MnemonicWordGrid(palette: palette, words: words)
                   : SizedBox(
                       height: 276,
                       child: Center(
@@ -4482,6 +4429,53 @@ class _MnemonicPhraseView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _MnemonicWordGrid extends StatelessWidget {
+  const _MnemonicWordGrid({required this.palette, required this.words});
+
+  final AcoPalette palette;
+  final List<String> words;
+
+  @override
+  Widget build(BuildContext context) {
+    final rowCount = (words.length + 1) ~/ 2;
+    return Column(
+      children: [
+        for (var rowIndex = 0; rowIndex < rowCount; rowIndex++)
+          _buildRow(rowIndex, rowCount),
+      ],
+    );
+  }
+
+  Widget _buildRow(int rowIndex, int rowCount) {
+    final firstIndex = rowIndex * 2;
+    final secondIndex = firstIndex + 1;
+    return Padding(
+      padding: EdgeInsets.only(bottom: rowIndex == rowCount - 1 ? 0 : 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: _MnemonicWordChip(
+              palette: palette,
+              index: firstIndex + 1,
+              word: words[firstIndex],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: secondIndex < words.length
+                ? _MnemonicWordChip(
+                    palette: palette,
+                    index: secondIndex + 1,
+                    word: words[secondIndex],
+                  )
+                : const SizedBox(),
+          ),
+        ],
+      ),
     );
   }
 }
