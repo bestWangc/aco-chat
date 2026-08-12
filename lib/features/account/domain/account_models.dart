@@ -80,3 +80,57 @@ class AccountTokens {
     'refresh_token': refreshToken,
   };
 }
+
+class LiveSession {
+  const LiveSession({
+    required this.id,
+    required this.title,
+    required this.coverUrl,
+    required this.access,
+    required this.status,
+    required this.createdAt,
+    this.scheduledAt,
+  });
+
+  final int id;
+  final String title;
+  final String coverUrl;
+  final String access;
+  final String status;
+  final DateTime createdAt;
+  final DateTime? scheduledAt;
+
+  factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
+    id: json['id'] as int,
+    title: json['title'] as String,
+    coverUrl: json['cover_url'] as String,
+    access: json['access'] as String,
+    status: json['status'] as String,
+    createdAt: DateTime.parse(json['created_at'] as String),
+    scheduledAt: switch (json['scheduled_at'] as String?) {
+      final value? when value.isNotEmpty => DateTime.parse(value),
+      _ => null,
+    },
+  );
+}
+
+class LiveMessage {
+  const LiveMessage({
+    required this.id,
+    required this.nickname,
+    required this.text,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String nickname;
+  final String text;
+  final DateTime createdAt;
+
+  factory LiveMessage.fromJson(Map<String, dynamic> json) => LiveMessage(
+    id: json['id'] as int,
+    nickname: json['nickname'] as String,
+    text: json['text'] as String,
+    createdAt: DateTime.parse(json['created_at'] as String),
+  );
+}

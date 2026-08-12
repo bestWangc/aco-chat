@@ -1,4 +1,8 @@
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
+import 'package:aco_chat/features/account/data/account_api_client.dart';
+import 'package:aco_chat/features/account/data/account_session.dart';
+import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -115,9 +119,34 @@ class SquareHome extends StatelessWidget {
   );
 }
 
-class LivePage extends StatelessWidget {
+class LivePage extends StatefulWidget {
   const LivePage({this.onNav, super.key});
   final ValueChanged<int>? onNav;
+
+  @override
+  State<LivePage> createState() => _LivePageState();
+}
+
+class _LivePageState extends State<LivePage> {
+  final AccountApiClient _apiClient = AccountApiClient();
+  late Future<List<LiveSession>> _lives;
+
+  @override
+  void initState() {
+    super.initState();
+    _lives = _loadLives();
+  }
+
+  Future<List<LiveSession>> _loadLives() =>
+      AccountSession(_apiClient).listLives();
+
+  void _retry() => setState(() => _lives = _loadLives());
+
+  @override
+  void dispose() {
+    _apiClient.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
@@ -151,9 +180,36 @@ class LivePage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 22),
-                const _LiveItem(),
-                const SizedBox(height: 38),
-                const _LiveItem(),
+                FutureBuilder<List<LiveSession>>(
+                  future: _lives,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 64),
+                        child: Center(child: CupertinoActivityIndicator()),
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return _LiveListState(
+                        message: '直播列表加载失败，请检查网络后重试。',
+                        actionLabel: '重试',
+                        onPressed: _retry,
+                      );
+                    }
+                    final sessions = snapshot.data ?? const <LiveSession>[];
+                    if (sessions.isEmpty) {
+                      return const _LiveListState(message: '暂无直播');
+                    }
+                    return Column(
+                      children: [
+                        for (final session in sessions) ...[
+                          _LiveItem(session: session),
+                          const SizedBox(height: 28),
+                        ],
+                      ],
+                    );
+                  },
+                ),
               ],
             ),
           ),
@@ -161,8 +217,8 @@ class LivePage extends StatelessWidget {
             selected: 3,
             onSelected: (value) {
               if (value != 3) {
-                onNav?.call(value);
-                if (onNav == null) Navigator.of(context).maybePop();
+                widget.onNav?.call(value);
+                if (widget.onNav == null) Navigator.of(context).maybePop();
               }
             },
           ),
@@ -958,49 +1014,32 @@ class _DownMarkPainter extends CustomPainter {
 }
 
 class _LiveItem extends StatelessWidget {
-  const _LiveItem();
+  const _LiveItem({required this.session});
+
+  final LiveSession session;
+
   @override
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Row(
         children: [
-          SvgPicture.asset(
-            'assets/icons/source_live_brand.svg',
-            width: 46,
-            height: 46,
-          ),
+          const Icon(CupertinoIcons.video_camera_solid, color: _lime, size: 38),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '美股凭什么依然能打？3节课带你从小白\n上手美股交易！',
-                  style: TextStyle(
+                  session.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: _white,
                     fontSize: AcoTypography.bodySmall,
                     height: 1.2,
                     fontWeight: FontWeight.w600,
                   ),
-                ),
-                SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      'OKX中文',
-                      style: TextStyle(
-                        color: _muted,
-                        fontSize: AcoTypography.bodySmall,
-                      ),
-                    ),
-                    SizedBox(width: 6),
-                    Icon(
-                      CupertinoIcons.checkmark_seal_fill,
-                      color: _lime,
-                      size: 19,
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -1008,14 +1047,59 @@ class _LiveItem extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 14),
-      Container(
-        height: 155,
-        decoration: BoxDecoration(
-          color: _surface,
+      if (session.coverUrl.isNotEmpty)
+        ClipRRect(
           borderRadius: BorderRadius.circular(22),
+          child: Image.network(
+            _liveCoverUrl(session.coverUrl),
+            height: 155,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(
+              height: 155,
+              decoration: BoxDecoration(
+                color: _surface,
+                borderRadius: BorderRadius.circular(22),
+              ),
+            ),
+          ),
         ),
-      ),
     ],
+  );
+}
+
+String _liveCoverUrl(String coverUrl) {
+  if (Uri.tryParse(coverUrl)?.hasScheme ?? false) return coverUrl;
+  final apiUri = Uri.parse(const AppConfig().apiBaseUrl);
+  return apiUri.replace(path: coverUrl).toString();
+}
+
+class _LiveListState extends StatelessWidget {
+  const _LiveListState({
+    required this.message,
+    this.actionLabel,
+    this.onPressed,
+  });
+
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 64),
+    child: Column(
+      children: [
+        const Icon(CupertinoIcons.video_camera, color: _muted, size: 32),
+        const SizedBox(height: 12),
+        Text(
+          message,
+          style: const TextStyle(color: _muted, fontSize: AcoTypography.body),
+        ),
+        if (actionLabel != null)
+          CupertinoButton(onPressed: onPressed, child: Text(actionLabel!)),
+      ],
+    ),
   );
 }
 

@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -18,7 +17,8 @@ const _sensitiveScreenChannel = MethodChannel('aco/sensitive-screen');
 
 Future<void> _openSquareTab(WidgetTester tester) async {
   await tester.tap(find.bySemanticsLabel('广场').first);
-  await tester.pumpAndSettle();
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 void main() {
@@ -216,7 +216,7 @@ void main() {
     expect(walletConfigured, isFalse);
   });
 
-  testWidgets('shows live content inline by default on the square tab', (
+  testWidgets('does not show mock live sessions on the square tab', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -224,62 +224,7 @@ void main() {
 
     expect(find.text('推荐'), findsOneWidget);
     expect(find.text('正在直播'), findsNothing);
-    expect(find.textContaining('美股凭什么依然能打'), findsOneWidget);
-  });
-
-  testWidgets('opens the voice room when a live card is tapped', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const AcoApp());
-    await _openSquareTab(tester);
-
-    await tester.tap(find.textContaining('美股凭什么依然能打'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Jason'), findsOneWidget);
-    expect(find.text('主持人'), findsOneWidget);
-    expect(find.text('美股凭什么依然能打？...'), findsOneWidget);
-    expect(find.text('16 人'), findsOneWidget);
-    expect(find.text('全屏'), findsNothing);
-
-    final composer = find.byKey(const Key('room-message-input'));
-    expect(composer, findsOneWidget);
-    expect(tester.getSize(composer).width, greaterThan(140));
-    await tester.enterText(composer, '正在听');
-    expect(find.text('正在听'), findsOneWidget);
-
-    final micBounds = tester.getRect(find.bySemanticsLabel('静音'));
-    final handBounds = tester.getRect(find.bySemanticsLabel('举手'));
-    final screenWidth =
-        tester.view.physicalSize.width / tester.view.devicePixelRatio;
-    expect(micBounds.left, greaterThanOrEqualTo(18));
-    expect(screenWidth - handBounds.right, greaterThanOrEqualTo(18));
-
-    final titleCenter = tester.getCenter(find.text('美股凭什么依然能打？...'));
-    final backCenter = tester.getCenter(find.bySemanticsLabel('返回'));
-    expect(titleCenter.dx, greaterThan(backCenter.dx));
-    expect(titleCenter.dx, lessThan(screenWidth / 2));
-  });
-
-  testWidgets('opens the emoji library from the room composer', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(const AcoApp());
-    await _openSquareTab(tester);
-    await tester.tap(find.textContaining('美股凭什么依然能打'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byIcon(CupertinoIcons.smiley));
-    await tester.pumpAndSettle();
-
-    final picker = find.byType(emoji.EmojiPicker);
-    expect(picker, findsOneWidget);
-
-    final screenWidth =
-        tester.view.physicalSize.width / tester.view.devicePixelRatio;
-    final pickerBounds = tester.getRect(picker);
-    expect(pickerBounds.left, greaterThanOrEqualTo(0));
-    expect(pickerBounds.right, lessThanOrEqualTo(screenWidth));
+    expect(find.textContaining('美股凭什么依然能打'), findsNothing);
   });
 
   testWidgets('uses readable room chat text in light mode', (

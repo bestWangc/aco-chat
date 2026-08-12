@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
@@ -109,6 +110,88 @@ class AccountApiClient {
     );
     final body = _body(response);
     return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
+  }
+
+  Future<List<LiveSession>> listLives({required String token}) async {
+    final response = await _httpClient.get(
+      _uri('lives'),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return (body['data'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(LiveSession.fromJson)
+        .toList(growable: false);
+  }
+
+  /// Uploads a selected cover before creating the live session. The API
+  /// validates the image format and returns its server-hosted path.
+  Future<String> uploadLiveCover({
+    required Uint8List bytes,
+    required String token,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('uploads/live-covers'))
+      ..headers['authorization'] = 'Bearer $token'
+      ..files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: 'live-cover.jpg'),
+      );
+    final response = await _httpClient.send(request);
+    final body = await response.stream.bytesToString();
+    return _body(http.Response(body, response.statusCode))['url'] as String;
+  }
+
+  Future<LiveSession> createLive({
+    required String title,
+    required String coverUrl,
+    required String access,
+    required String token,
+    String? joinPassword,
+    DateTime? scheduledAt,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({
+        'title': title,
+        'cover_url': coverUrl,
+        'access': access,
+        if (joinPassword case final value?) 'join_password': value,
+        if (scheduledAt case final value?)
+          'scheduled_at': value.toUtc().toIso8601String(),
+      }),
+    );
+    return LiveSession.fromJson(_body(response));
+  }
+
+  Future<List<LiveMessage>> listLiveMessages({
+    required int liveId,
+    required String token,
+    int? after,
+  }) async {
+    final response = await _httpClient.get(
+      _uri(
+        'lives/$liveId/messages',
+      ).replace(queryParameters: {if (after != null) 'after': '$after'}),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return (body['data'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(LiveMessage.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<LiveMessage> createLiveMessage({
+    required int liveId,
+    required String text,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/messages'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'text': text}),
+    );
+    return LiveMessage.fromJson(_body(response));
   }
 
   void close() => _httpClient.close();
