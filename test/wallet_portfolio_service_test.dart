@@ -140,6 +140,27 @@ void main() {
       everyElement(BigInt.zero),
     );
   });
+
+  test('uses the API RPC proxy when requested', () async {
+    final serviceClient = _RpcClient();
+    final service = WalletPortfolioService(
+      client: serviceClient,
+      rpcProxyBaseUri: Uri.parse('http://localhost:8082/api/v1'),
+      useRpcProxy: true,
+    );
+    const identity = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000001',
+    );
+
+    await service.loadBalances(
+      network: WalletNetwork.ethereum,
+      identity: identity,
+      derivedAddresses: const {},
+    );
+
+    expect(serviceClient.hosts, everyElement('localhost'));
+    expect(serviceClient.paths, everyElement('/api/v1/wallets/rpc/ethereum'));
+  });
 }
 
 String? _erc20ContractAddress(Map body) {
@@ -150,12 +171,14 @@ String? _erc20ContractAddress(Map body) {
 
 class _RpcClient extends http.BaseClient {
   final hosts = <String>[];
+  final paths = <String>[];
   final requestBodies = <String, List<Map>>{};
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     final body = jsonDecode(await request.finalize().bytesToString()) as Map;
     hosts.add(request.url.host);
+    paths.add(request.url.path);
     requestBodies.putIfAbsent(request.url.host, () => []).add(body);
     final response = switch (request.url.host) {
       'api.trongrid.io' => {
