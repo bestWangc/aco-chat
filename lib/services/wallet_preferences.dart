@@ -4,9 +4,11 @@ import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WalletPreferences {
+  static const walletNameMaxLength = 12;
   static const configuredKey = 'wallet.configured';
   static const walletIdentityKey = 'wallet.identity';
   static const _derivedAddressesKeyPrefix = 'wallet.derived-addresses.';
+  static const _walletNameKeyPrefix = 'wallet.name.';
 
   static Future<bool> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -39,6 +41,23 @@ class WalletPreferences {
       walletIdentityKey,
       jsonEncode(identity.toJson()),
     );
+  }
+
+  static Future<String> walletName(WalletIdentity identity) async {
+    final preferences = await SharedPreferences.getInstance();
+    return _normalizeWalletName(
+      preferences.getString(_walletNameKey(identity)) ?? 'Wallet1',
+    );
+  }
+
+  static Future<String> saveWalletName(
+    WalletIdentity identity,
+    String name,
+  ) async {
+    final normalizedName = _normalizeWalletName(name);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_walletNameKey(identity), normalizedName);
+    return normalizedName;
   }
 
   static Future<Map<String, String>> derivedAddresses(
@@ -78,4 +97,14 @@ class WalletPreferences {
 
   static String _derivedAddressesKey(WalletIdentity identity) =>
       '$_derivedAddressesKeyPrefix${identity.address.toLowerCase()}';
+
+  static String _walletNameKey(WalletIdentity identity) =>
+      '$_walletNameKeyPrefix${identity.address.toLowerCase()}';
+
+  static String _normalizeWalletName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'Wallet1';
+    if (trimmed.length <= walletNameMaxLength) return trimmed;
+    return trimmed.substring(0, walletNameMaxLength);
+  }
 }

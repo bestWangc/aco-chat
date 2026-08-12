@@ -30,10 +30,10 @@ class WalletBalance {
   bool get isAvailable => balance != null;
 }
 
-/// Fetches native-token balances directly from public JSON-RPC nodes.
+/// Fetches wallet balances directly from public JSON-RPC nodes.
 ///
-/// Token discovery and fiat valuation need an indexer or price feed, so this
-/// intentionally reports only balances that are authoritative on-chain.
+/// Fiat valuation and token metadata need an indexer or price feed. Every
+/// reported balance remains authoritative on-chain.
 class WalletPortfolioService {
   WalletPortfolioService({http.Client? client})
     : _client = client ?? http.Client(),
@@ -67,7 +67,16 @@ class WalletPortfolioService {
           decimals: chain.decimals,
           balance: BigInt.zero,
         ),
+        if (network == WalletNetwork.tron) _zeroTokenBalance(chain, _tronUsdt),
+        if (network == WalletNetwork.solana)
+          _zeroTokenBalance(chain, _solanaUsdt),
       ]);
+    }
+    if (network == WalletNetwork.solana) {
+      return _loadSolanaBalances(chain, address);
+    }
+    if (network == WalletNetwork.tron) {
+      return _loadTronBalances(chain, address);
     }
     return Future.wait([_loadNonEvmBalance(chain, address)]);
   }
@@ -134,11 +143,56 @@ class WalletPortfolioService {
       );
 
   Future<BigInt> _tronBalance(_Chain chain, String address) async {
-    final body = await _postJson(chain.rpcUrl, {
-      'address': address,
-      'visible': true,
-    });
-    return BigInt.from((body['balance'] as num?) ?? 0);
+    final body = await _tronAccount(chain, address);
+    return _tronNativeBalance(body);
+  }
+
+  Future<Map<String, dynamic>> _tronAccount(_Chain chain, String address) =>
+      _postJson(chain.rpcUrl, {'address': address, 'visible': true});
+
+  BigInt _tronNativeBalance(Map<String, dynamic> body) =>
+      BigInt.from((body['balance'] as num?) ?? 0);
+
+  Future<List<WalletBalance>> _loadTronBalances(_Chain chain, String address) {
+    final account = _tronAccount(chain, address);
+    return Future.wait([
+      _load(
+        chain: chain.name,
+        symbol: chain.symbol,
+        assetName: chain.nativeAssetName,
+        isNative: true,
+        address: address,
+        decimals: chain.decimals,
+        request: () async => _tronNativeBalance(await account),
+      ),
+      _loadTronUsdtBalance(chain, address, account),
+    ]);
+  }
+
+  Future<WalletBalance> _loadTronUsdtBalance(
+    _Chain chain,
+    String address,
+    Future<Map<String, dynamic>> account,
+  ) => _load(
+    chain: chain.name,
+    symbol: _tronUsdt.symbol,
+    assetName: _tronUsdt.name,
+    isNative: false,
+    address: address,
+    decimals: _tronUsdt.decimals,
+    request: () async => _tronTrc20Balance(await account, _tronUsdt.address),
+  );
+
+  BigInt _tronTrc20Balance(Map<String, dynamic> body, String contract) {
+    final trc20 = body['trc20'];
+    if (trc20 is! List) return BigInt.zero;
+    for (final token in trc20) {
+      if (token is! Map) continue;
+      final balance = token[contract];
+      if (balance is String) return BigInt.parse(balance);
+      if (balance is num) return BigInt.from(balance);
+    }
+    return BigInt.zero;
   }
 
   Future<BigInt> _solanaBalance(_Chain chain, String address) async {
@@ -153,6 +207,107 @@ class WalletPortfolioService {
       throw const FormatException('Missing RPC result');
     }
     return BigInt.from(result['value'] as num);
+  }
+
+  Future<List<WalletBalance>> _loadSolanaBalances(
+    _Chain chain,
+    String address,
+  ) async {
+    final nativeBalance = _loadNonEvmBalance(chain, address);
+    final tokenBalances = _loadSolanaTokenBalances(chain, address);
+    final loadedTokens = await tokenBalances;
+    return [
+      await nativeBalance,
+      ...loadedTokens,
+      if (!loadedTokens.any((balance) => balance.symbol == _solanaUsdt.symbol))
+        _zeroTokenBalance(chain, _solanaUsdt, address: address),
+    ];
+  }
+
+  Future<List<WalletBalance>> _loadSolanaTokenBalances(
+    _Chain chain,
+    String address,
+  ) async {
+    try {
+      final responses = await Future.wait([
+        for (final programID in _solanaTokenProgramIDs)
+          _postJson(chain.rpcUrl, {
+            'jsonrpc': '2.0',
+            'id': 2,
+            'method': 'getTokenAccountsByOwner',
+            'params': [
+              address,
+              {'programId': programID},
+              {'encoding': 'jsonParsed'},
+            ],
+          }),
+      ]);
+      return [
+        for (final response in responses)
+          ..._parseSolanaTokenBalances(chain, address, response),
+      ];
+    } catch (_) {
+      // A token-account lookup failure must not hide the SOL balance.
+      return const [];
+    }
+  }
+
+  List<WalletBalance> _parseSolanaTokenBalances(
+    _Chain chain,
+    String address,
+    Map<String, dynamic> response,
+  ) {
+    final result = response['result'];
+    if (result is! Map || result['value'] is! List) {
+      throw const FormatException('Missing SPL token accounts');
+    }
+    return [
+      for (final account in result['value'])
+        if (account is Map) _parseSolanaTokenBalance(chain, address, account),
+    ];
+  }
+
+  WalletBalance _parseSolanaTokenBalance(
+    _Chain chain,
+    String ownerAddress,
+    Map account,
+  ) {
+    final accountData = account['account'];
+    if (accountData is! Map) {
+      throw const FormatException('Missing SPL token account data');
+    }
+    final data = accountData['data'];
+    if (data is! Map) {
+      throw const FormatException('Missing SPL token account payload');
+    }
+    final parsed = data['parsed'];
+    if (parsed is! Map) {
+      throw const FormatException('Missing SPL token account details');
+    }
+    final info = parsed['info'];
+    if (info is! Map) {
+      throw const FormatException('Missing SPL token info');
+    }
+    final tokenAmount = info['tokenAmount'];
+    final mint = info['mint'];
+    if (tokenAmount is! Map || mint is! String) {
+      throw const FormatException('Missing SPL token amount');
+    }
+    final amount = tokenAmount['amount'];
+    final decimals = tokenAmount['decimals'];
+    if (amount is! String || decimals is! num) {
+      throw const FormatException('Invalid SPL token amount');
+    }
+    final token = _solanaKnownTokens[mint];
+    return WalletBalance(
+      chain: chain.name,
+      symbol: token?.symbol ?? 'SPL',
+      assetName: token?.name ?? 'SPL Token ${_shortAddress(mint)}',
+      isNative: false,
+      address: ownerAddress,
+      decimals: decimals.toInt(),
+      balance: BigInt.parse(amount),
+    );
   }
 
   static const _chains = <WalletNetwork, _Chain>{
@@ -202,10 +357,37 @@ class WalletPortfolioService {
       'Solana',
       'SOL',
       'Solana',
-      'https://api.mainnet-beta.solana.com',
+      'https://solana-rpc.publicnode.com',
       'solana',
       9,
     ),
+  };
+
+  static const _solanaTokenProgramIDs = [
+    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+    'TokenzQdBNbLqP5VEhdkAS6EPFwh6G9s34M3iKkj1P',
+  ];
+
+  // Official Tether USD mainnet identifiers for their native token programs.
+  static const _tronUsdt = _Token(
+    'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+    6,
+    'Tether USD',
+  );
+  static const _solanaUsdt = _Token(
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+    6,
+    'Tether USD',
+  );
+
+  static final _solanaKnownTokens = {
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v': _Token(
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+      6,
+      'USD Coin',
+      symbol: 'USDC',
+    ),
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB': _solanaUsdt,
   };
 
   BigInt _hexBalance(Map<String, dynamic> body) {
@@ -255,6 +437,20 @@ class WalletPortfolioService {
       );
     }
   }
+
+  WalletBalance _zeroTokenBalance(
+    _Chain chain,
+    _Token token, {
+    String address = '',
+  }) => WalletBalance(
+    chain: chain.name,
+    symbol: token.symbol,
+    assetName: token.name,
+    isNative: false,
+    address: address,
+    decimals: token.decimals,
+    balance: BigInt.zero,
+  );
 
   Future<Map<String, dynamic>> _postJson(
     String url,
@@ -312,12 +508,16 @@ class _Chain {
 }
 
 class _Token {
-  const _Token(this.address, this.decimals, this.name);
+  const _Token(this.address, this.decimals, this.name, {this.symbol = 'USDT'});
 
   final String address;
   final int decimals;
   final String name;
+  final String symbol;
 }
+
+String _shortAddress(String address) =>
+    '${address.substring(0, 4)}...${address.substring(address.length - 4)}';
 
 String formatChainAmount(BigInt amount, {required int decimals}) {
   final whole = amount ~/ BigInt.from(10).pow(decimals);

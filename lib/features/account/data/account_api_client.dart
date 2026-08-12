@@ -97,6 +97,20 @@ class AccountApiClient {
     return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
   }
 
+  Future<AccountProfile> updateProfile({
+    required String username,
+    required String nickname,
+    required String token,
+  }) async {
+    final response = await _httpClient.patch(
+      _uri('auth/me'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'username': username, 'nickname': nickname}),
+    );
+    final body = _body(response);
+    return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
+  }
+
   void close() => _httpClient.close();
 
   Uri _uri(String path) {

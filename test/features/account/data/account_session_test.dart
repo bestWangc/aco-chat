@@ -97,6 +97,37 @@ void main() {
     expect(profile, isNull);
     expect(tokenStore.value, isNull);
   });
+
+  test('updates and persists the active profile', () async {
+    final tokenStore = _InMemoryTokenStore()..value = 'access-token';
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((request) async {
+        expect(request.method, 'PATCH');
+        expect(request.headers['authorization'], 'Bearer access-token');
+        expect(jsonDecode(request.body), {
+          'username': 'aco_updated',
+          'nickname': 'Aco Updated',
+        });
+        return _response({
+          'user': {
+            'account_id': '1000000000000001',
+            'username': 'aco_updated',
+            'nickname': 'Aco Updated',
+          },
+        });
+      }),
+    );
+    final session = AccountSession(client, tokenStore: tokenStore);
+
+    final profile = await session.updateProfile(
+      username: 'aco_updated',
+      nickname: 'Aco Updated',
+    );
+
+    expect(profile.username, 'aco_updated');
+    expect((await session.activeProfile())?.nickname, 'Aco Updated');
+  });
 }
 
 http.Response _response(Map<String, dynamic> body) =>

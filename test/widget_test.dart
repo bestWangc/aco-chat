@@ -38,6 +38,17 @@ void main() {
     expect(await WalletPreferences.load(), isTrue);
   });
 
+  test('persists a wallet name per wallet address', () async {
+    final identity = WalletIdentity(address: '0x1234567890abcdef');
+    SharedPreferences.setMockInitialValues({});
+
+    expect(await WalletPreferences.walletName(identity), 'Wallet1');
+    await WalletPreferences.saveWalletName(identity, '主钱包');
+    expect(await WalletPreferences.walletName(identity), '主钱包');
+    await WalletPreferences.saveWalletName(identity, 'Wallet1234567890');
+    expect(await WalletPreferences.walletName(identity), 'Wallet123456');
+  });
+
   test('removes legacy placeholder wallet data', () async {
     SharedPreferences.setMockInitialValues({
       'wallet.address': 'aco_123456',
@@ -283,6 +294,7 @@ void main() {
       tester.getRect(find.byIcon(CupertinoIcons.creditcard)).left,
       closeTo(28, 1),
     );
+    expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
 
     final addTokenCenter = tester.getCenter(
       find.byKey(const Key('add-token-button')),
@@ -297,6 +309,64 @@ void main() {
       ),
     );
     expect(swapButton.onPressed, isNull);
+
+    for (final label in ['NFT', '最近活动']) {
+      final tab = tester.widget<CupertinoButton>(
+        find.ancestor(
+          of: find.text(label),
+          matching: find.byType(CupertinoButton),
+        ),
+      );
+      expect(tab.onPressed, isNull, reason: '$label 暂未开放');
+    }
+
+    await tester.tap(find.byKey(const Key('wallet-details-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('钱包详情'), findsOneWidget);
+    expect(find.text('GRANDVEAGS'), findsNothing);
+    expect(find.text('Wallet1'), findsOneWidget);
+    expect(find.byKey(const Key('wallet-detail-chain-logo')), findsOneWidget);
+    expect(find.text('导出助记词'), findsOneWidget);
+    expect(find.text('导出私钥'), findsOneWidget);
+    expect(find.text('删除钱包'), findsOneWidget);
+    expect(find.byKey(const Key('wallet-detail-copy-address')), findsOneWidget);
+  });
+
+  testWidgets('keeps wallet header controls visible for a long wallet name', (
+    WidgetTester tester,
+  ) async {
+    const walletName = 'Wallet199999325152615123';
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.walletHome,
+            dark: true,
+            isRoot: true,
+            walletName: walletName,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final name = tester.widget<Text>(find.text(walletName));
+    expect(name.maxLines, 1);
+    expect(name.overflow, TextOverflow.ellipsis);
+    expect(find.byKey(const Key('wallet-network-selector')), findsOneWidget);
+    expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
+    final screenWidth =
+        tester.view.physicalSize.width / tester.view.devicePixelRatio;
+    expect(
+      tester.getRect(find.byKey(const Key('wallet-details-button'))).right,
+      lessThanOrEqualTo(screenWidth),
+    );
   });
 
   testWidgets('uses dark active bottom navigation in light mode', (
@@ -446,7 +516,7 @@ void main() {
     expect(find.text('Wallet1'), findsOneWidget);
   });
 
-  testWidgets('edits the profile nickname and username', (
+  testWidgets('requires an authenticated session to save profile changes', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -464,8 +534,8 @@ void main() {
     await tester.tap(find.text('保存修改'));
     await tester.pumpAndSettle();
 
+    expect(find.text('编辑资料'), findsOneWidget);
     expect(find.text('Mina'), findsOneWidget);
-    expect(find.text('@mina_aco'), findsOneWidget);
   });
 
   testWidgets('opens dedicated theme and language settings pages', (
@@ -512,7 +582,7 @@ void main() {
     expect(CupertinoTheme.of(context).brightness, Brightness.light);
   });
 
-  testWidgets('opens wallet action menu and navigates to add token', (
+  testWidgets('opens wallet action menu and disables adding tokens', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -531,12 +601,16 @@ void main() {
 
     await tester.tap(find.byKey(const Key('add-token-button')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('添加代币'));
-    await tester.pumpAndSettle();
-    expect(find.text('通过代币名称或合约进行搜索'), findsOneWidget);
+    final addTokenMenuItem = tester.widget<CupertinoButton>(
+      find.ancestor(
+        of: find.text('添加代币'),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(addTokenMenuItem.onPressed, isNull);
   });
 
-  testWidgets('shows a notice when sending assets is unavailable', (
+  testWidgets('selects a token before opening the transfer page', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -546,8 +620,37 @@ void main() {
     await tester.tap(find.text('发送资产'));
     await tester.pumpAndSettle();
 
-    expect(find.text('发送资产'), findsNWidgets(2));
-    expect(find.text('发送功能即将开放。'), findsOneWidget);
+    expect(find.byKey(const Key('send-token-picker')), findsOneWidget);
+    expect(find.text('选择转账代币'), findsOneWidget);
+    expect(find.byKey(const Key('send-token-ETH')), findsOneWidget);
+    expect(find.byKey(const Key('send-token-USDT')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const Key('send-token-search')),
+      'ethereum',
+    );
+    await tester.pump();
+    expect(find.byKey(const Key('send-token-ETH')), findsOneWidget);
+    expect(find.byKey(const Key('send-token-USDT')), findsNothing);
+    await tester.tap(find.byKey(const Key('send-token-ETH')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('转账'), findsOneWidget);
+    expect(find.text('收款地址'), findsOneWidget);
+    expect(find.text('选择钱包'), findsNothing);
+    expect(find.text('转账金额'), findsOneWidget);
+    expect(find.text('网络费'), findsOneWidget);
+    expect(find.text('0 ETH'), findsNWidgets(2));
+    final confirmButton = find.byKey(const Key('transfer-confirm-button'));
+    expect(tester.widget<CupertinoButton>(confirmButton).onPressed, isNull);
+
+    await tester.enterText(
+      find.byKey(const Key('transfer-recipient-field')),
+      '0x1234567890abcdef',
+    );
+    await tester.enterText(find.byKey(const Key('transfer-amount-field')), '1');
+    await tester.pump();
+    expect(tester.widget<CupertinoButton>(confirmButton).onPressed, isNull);
   });
 
   testWidgets('opens the receive page from the wallet', (
@@ -563,7 +666,7 @@ void main() {
     await tester.tap(find.text('接收资产'));
     await tester.pumpAndSettle();
 
-    expect(find.text('仅向该地址转入BSC/BEP20相关资产'), findsOneWidget);
+    expect(find.text('仅向该地址转入 Ethereum/ERC20 相关资产'), findsOneWidget);
     expect(find.text('收款地址'), findsOneWidget);
     expect(find.text(address), findsOneWidget);
     expect(find.bySemanticsLabel('收款二维码：$address'), findsOneWidget);
@@ -571,6 +674,43 @@ void main() {
     expect(find.text('分享'), findsOneWidget);
     expect(find.text('复制'), findsOneWidget);
     expect(find.text('设置数额'), findsOneWidget);
+  });
+
+  testWidgets('uses derived addresses when receiving on Tron and Solana', (
+    WidgetTester tester,
+  ) async {
+    const evmAddress = '0x9858effd232b4033e47d90003d41ec34ecaeda94';
+    const tronAddress = 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH';
+    const solanaAddress = 'GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL';
+    SharedPreferences.setMockInitialValues({
+      'wallet.derived-addresses.$evmAddress':
+          '{"tron":"$tronAddress","solana":"$solanaAddress"}',
+    });
+    await tester.pumpWidget(
+      const AcoApp(initialWalletIdentity: WalletIdentity(address: evmAddress)),
+    );
+
+    for (final chain in [
+      ('Tron', tronAddress, '仅向该地址转入 TRON/TRC20 相关资产'),
+      ('Solana', solanaAddress, '仅向该地址转入 Solana 相关资产'),
+    ]) {
+      await tester.tap(find.byKey(const Key('wallet-network-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('选择公链 ${chain.$1}'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.bySemanticsLabel('返回'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('接收资产'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(chain.$3), findsOneWidget);
+      expect(find.text(chain.$2), findsOneWidget);
+      expect(find.text(evmAddress), findsNothing);
+      expect(find.bySemanticsLabel('收款二维码：${chain.$2}'), findsOneWidget);
+
+      await tester.tap(find.bySemanticsLabel('返回'));
+      await tester.pumpAndSettle();
+    }
   });
 
   testWidgets('opens the scanner from the wallet', (WidgetTester tester) async {
