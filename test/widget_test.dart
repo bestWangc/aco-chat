@@ -11,8 +11,10 @@ import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
+import 'package:aco_chat/services/wallet_security.dart';
 
 const _biometricChannel = MethodChannel('aco/biometric-authentication');
+const _sensitiveScreenChannel = MethodChannel('aco/sensitive-screen');
 
 Future<void> _openSquareTab(WidgetTester tester) async {
   await tester.tap(find.bySemanticsLabel('广场').first);
@@ -60,6 +62,37 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     expect(preferences.getString('wallet.address'), isNull);
     expect(await WalletPreferences.load(), isFalse);
+  });
+
+  testWidgets('opens the mnemonic backup password prompt', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.backupMnemonic,
+          dark: true,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+          walletIdentity: const WalletIdentity(address: '0x1234'),
+          walletSecretStore: InMemoryWalletSecretStore(),
+        ),
+      ),
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          _sensitiveScreenChannel,
+          (_) async => <String, Object?>{},
+        );
+
+    expect(find.text('备份助记词，保护钱包安全'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('backup-mnemonic-continue')));
+    await tester.pump();
+    expect(find.byKey(const Key('export-mnemonic-password')), findsOneWidget);
+    expect(find.text('备份助记词，保护钱包安全'), findsOneWidget);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_sensitiveScreenChannel, null);
   });
 
   testWidgets('shows wallet setup before the first wallet is configured', (
@@ -323,6 +356,8 @@ void main() {
     await tester.tap(find.byKey(const Key('wallet-details-button')));
     await tester.pumpAndSettle();
     expect(find.text('钱包详情'), findsOneWidget);
+    expect(tester.getSize(find.bySemanticsLabel('返回')), const Size(44, 44));
+    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(28, 1));
     expect(find.text('GRANDVEAGS'), findsNothing);
     expect(find.text('Wallet1'), findsOneWidget);
     expect(find.byKey(const Key('wallet-detail-chain-logo')), findsOneWidget);
@@ -330,6 +365,26 @@ void main() {
     expect(find.text('导出私钥'), findsOneWidget);
     expect(find.text('删除钱包'), findsOneWidget);
     expect(find.byKey(const Key('wallet-detail-copy-address')), findsOneWidget);
+  });
+
+  testWidgets('uses a consistent 44 point back button on detail pages', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.receive,
+          dark: true,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+        ),
+      ),
+    );
+
+    final backButton = find.bySemanticsLabel('返回');
+    expect(tester.getSize(backButton), const Size(44, 44));
+    expect(tester.getRect(backButton).left, closeTo(28, 1));
   });
 
   testWidgets('keeps wallet header controls visible for a long wallet name', (

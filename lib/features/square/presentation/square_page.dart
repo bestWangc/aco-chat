@@ -127,7 +127,7 @@ class LivePage extends StatelessWidget {
         children: [
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -848,11 +848,15 @@ class _IconButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: EdgeInsets.zero,
-    minimumSize: const Size(29, 29),
-    onPressed: onPressed,
-    child: Icon(icon, color: _white, size: 27),
+  Widget build(BuildContext context) => SizedBox(
+    width: 44,
+    height: 44,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(44, 44),
+      onPressed: onPressed,
+      child: Icon(icon, color: _white, size: 25),
+    ),
   );
 }
 
