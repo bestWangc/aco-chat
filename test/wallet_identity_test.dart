@@ -13,6 +13,13 @@ void main() {
     expect(WalletIdentity.fromMnemonic(mnemonic).toJson(), identity.toJson());
   });
 
+  test('derives the first Ethereum private key', () {
+    expect(
+      WalletIdentity.privateKeyFromMnemonic(mnemonic),
+      '1ab42cc412b618bdea3a599e3c9bae199ebf030895b039e9db1e30dafb12b727',
+    );
+  });
+
   test('reads the previous Ethereum-only identity format', () {
     expect(WalletIdentity.fromJson({'evm': '0xabc'}).address, '0xabc');
   });
