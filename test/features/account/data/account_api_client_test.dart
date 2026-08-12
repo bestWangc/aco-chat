@@ -90,6 +90,38 @@ void main() {
       '/api/v1/accounts/aco_account/wallets',
     ]);
   });
+
+  test('patches the current profile with the access token', () async {
+    late http.Request request;
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((value) async {
+        request = value;
+        return response({
+          'user': {
+            'account_id': 'aco_account',
+            'username': 'aco_updated',
+            'nickname': 'Aco Updated',
+          },
+        });
+      }),
+    );
+
+    final profile = await client.updateProfile(
+      username: 'aco_updated',
+      nickname: 'Aco Updated',
+      token: 'signed-token',
+    );
+
+    expect(request.method, 'PATCH');
+    expect(request.url.path, '/api/v1/auth/me');
+    expect(request.headers['authorization'], 'Bearer signed-token');
+    expect(jsonDecode(request.body), {
+      'username': 'aco_updated',
+      'nickname': 'Aco Updated',
+    });
+    expect(profile.nickname, 'Aco Updated');
+  });
 }
 
 http.Response response(Map<String, dynamic> body, {int statusCode = 200}) =>

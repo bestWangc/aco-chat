@@ -80,6 +80,21 @@ class AccountSession {
     );
   }
 
+  /// Updates the server profile and keeps the local active profile in sync.
+  Future<AccountProfile> updateProfile({
+    required String username,
+    required String nickname,
+  }) async {
+    final profile = await _apiClient.updateProfile(
+      username: username,
+      nickname: nickname,
+      token: await _requireToken(),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(activeAccountKey, jsonEncode(profile.toJson()));
+    return profile;
+  }
+
   Future<AccountProfile?> activeProfile() async {
     final preferences = await SharedPreferences.getInstance();
     final value = preferences.getString(activeAccountKey);

@@ -26,13 +26,13 @@ void main() {
     ]);
     final balances = loads.expand((balances) => balances).toList();
 
-    expect(balances, hasLength(10));
+    expect(balances, hasLength(13));
     expect(balances.every((balance) => balance.isAvailable), isTrue);
     expect(balances.where((balance) => balance.symbol == 'BNB'), hasLength(1));
     expect(balances.where((balance) => balance.symbol == 'TRX'), hasLength(1));
     expect(balances.where((balance) => balance.symbol == 'SOL'), hasLength(1));
     final usdt = balances.where((balance) => balance.symbol == 'USDT').toList();
-    expect(usdt, hasLength(4));
+    expect(usdt, hasLength(6));
     expect(
       usdt
           .singleWhere((balance) => balance.chain == 'BNB Smart Chain')
@@ -53,19 +53,42 @@ void main() {
         'polygon-bor-rpc.publicnode.com',
         'base-rpc.publicnode.com',
         'api.trongrid.io',
-        'api.mainnet-beta.solana.com',
+        'solana-rpc.publicnode.com',
       ]),
     );
     expect(
-      serviceClient.requestBodies['api.trongrid.io']?.single['address'],
-      'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH',
+      serviceClient.requestBodies['api.trongrid.io']?.map(
+        (body) => body['address'],
+      ),
+      everyElement('TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH'),
+    );
+    final tronUSDT = balances.singleWhere(
+      (balance) => balance.chain == 'TRON' && balance.symbol == 'USDT',
+    );
+    expect(tronUSDT.balance, BigInt.from(4));
+    expect(tronUSDT.decimals, 6);
+    expect(
+      serviceClient.requestBodies['solana-rpc.publicnode.com']?.map(
+        (body) => body['method'],
+      ),
+      containsAll(['getBalance', 'getTokenAccountsByOwner']),
     );
     expect(
-      serviceClient
-          .requestBodies['api.mainnet-beta.solana.com']
-          ?.single['params'],
-      contains('GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL'),
+      serviceClient.requestBodies['solana-rpc.publicnode.com']
+          ?.where((body) => body['method'] == 'getTokenAccountsByOwner')
+          .map((body) => body['params'].first),
+      everyElement('GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL'),
     );
+    final solanaUSDC = balances.singleWhere(
+      (balance) => balance.symbol == 'USDC',
+    );
+    expect(solanaUSDC.balance, BigInt.from(3));
+    expect(solanaUSDC.decimals, 6);
+    final solanaUSDT = balances.singleWhere(
+      (balance) => balance.chain == 'Solana' && balance.symbol == 'USDT',
+    );
+    expect(solanaUSDT.balance, BigInt.from(5));
+    expect(solanaUSDT.decimals, 6);
     expect(
       serviceClient.requestBodies['polygon-bor-rpc.publicnode.com']?.map(
         _erc20ContractAddress,
@@ -111,8 +134,11 @@ void main() {
       derivedAddresses: const {},
     );
 
-    expect(balances.single.symbol, 'TRX');
-    expect(balances.single.balance, BigInt.zero);
+    expect(balances.map((balance) => balance.symbol), ['TRX', 'USDT']);
+    expect(
+      balances.map((balance) => balance.balance),
+      everyElement(BigInt.zero),
+    );
   });
 }
 
@@ -132,10 +158,46 @@ class _RpcClient extends http.BaseClient {
     hosts.add(request.url.host);
     requestBodies.putIfAbsent(request.url.host, () => []).add(body);
     final response = switch (request.url.host) {
-      'api.trongrid.io' => {'balance': 3},
-      'api.mainnet-beta.solana.com' => {
+      'api.trongrid.io' => {
+        'balance': 3,
+        'trc20': [
+          {'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t': '4'},
+        ],
+      },
+      'solana-rpc.publicnode.com' when body['method'] == 'getBalance' => {
         'result': {'value': 2},
       },
+      'solana-rpc.publicnode.com'
+          when body['method'] == 'getTokenAccountsByOwner' =>
+        {
+          'result': {
+            'value':
+                body['params'][1]['programId'] ==
+                    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+                ? [
+                    for (final token in const [
+                      ('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', '3'),
+                      ('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', '5'),
+                    ])
+                      {
+                        'account': {
+                          'data': {
+                            'parsed': {
+                              'info': {
+                                'mint': token.$1,
+                                'tokenAmount': {
+                                  'amount': token.$2,
+                                  'decimals': 6,
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                  ]
+                : [],
+          },
+        },
       _ when body['method'] == 'eth_call' => {'result': '0x2'},
       _ => {'result': '0x1'},
     };
