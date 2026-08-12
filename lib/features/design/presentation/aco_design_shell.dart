@@ -42,6 +42,7 @@ enum AcoScreen {
   walletChains,
   walletSwitcher,
   assetDetail,
+  backupMnemonic,
   send,
   receive,
   scan,
@@ -391,23 +392,17 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       color: palette.background,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 14, 24, 28),
+          padding: const EdgeInsets.fromLTRB(28, 14, 28, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: Transform.translate(
-                  offset: const Offset(-16, 0),
-                  child: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(36, 36),
-                    onPressed: _goBack,
-                    child: Icon(
-                      CupertinoIcons.back,
-                      color: palette.primaryText,
-                    ),
-                  ),
+                child: AcoIconButton(
+                  icon: CupertinoIcons.back,
+                  palette: palette,
+                  label: '返回',
+                  onPressed: _goBack,
                 ),
               ),
               const SizedBox(height: 36),
@@ -1230,6 +1225,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.walletChains => AcoScreen.walletChains,
       AcoScreen.walletSwitcher => AcoScreen.walletSwitcher,
       AcoScreen.assetDetail => AcoScreen.assetDetail,
+      AcoScreen.backupMnemonic => AcoScreen.backupMnemonic,
       AcoScreen.scan => AcoScreen.scan,
       AcoScreen.profile => AcoScreen.profile,
       AcoScreen.profileQr => AcoScreen.profileQr,
@@ -1387,6 +1383,7 @@ class AcoScreenPage extends StatelessWidget {
     this.accountId,
     this.username,
     this.walletIdentity,
+    this.walletSecretStore,
     this.walletName = 'Wallet1',
     this.onWalletNameChanged,
     this.walletChainIndex = 0,
@@ -1409,6 +1406,7 @@ class AcoScreenPage extends StatelessWidget {
   final String? accountId;
   final String? username;
   final WalletIdentity? walletIdentity;
+  final WalletSecretStore? walletSecretStore;
   final String walletName;
   final Future<void> Function(String name)? onWalletNameChanged;
   final int walletChainIndex;
@@ -1457,6 +1455,12 @@ class AcoScreenPage extends StatelessWidget {
         selectedChain: _supportedWalletChains[walletChainIndex],
         walletName: walletName,
         onWalletNameChanged: onWalletNameChanged,
+        onOpen: onOpen,
+      ),
+      AcoScreen.backupMnemonic => _BackupMnemonicFlow(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        secretStore: walletSecretStore ?? SecureWalletSecretStore(),
       ),
       AcoScreen.send => _SendTransferPage(
         palette: palette,
@@ -1758,14 +1762,11 @@ class AcoPageHeader extends StatelessWidget {
         if (onBack != null)
           Align(
             alignment: Alignment.centerLeft,
-            child: Transform.translate(
-              offset: const Offset(-20, 0),
-              child: AcoIconButton(
-                icon: CupertinoIcons.back,
-                palette: palette,
-                label: '返回',
-                onPressed: onBack!,
-              ),
+            child: AcoIconButton(
+              icon: CupertinoIcons.back,
+              palette: palette,
+              label: '返回',
+              onPressed: onBack!,
             ),
           ),
         if (title != null)
@@ -3747,6 +3748,7 @@ class _AssetDetail extends StatefulWidget {
     required this.walletIdentity,
     required this.selectedChain,
     required this.walletName,
+    required this.onOpen,
     this.onWalletNameChanged,
   });
 
@@ -3754,6 +3756,7 @@ class _AssetDetail extends StatefulWidget {
   final WalletIdentity? walletIdentity;
   final _WalletChain selectedChain;
   final String walletName;
+  final ValueChanged<AcoScreen> onOpen;
   final Future<void> Function(String name)? onWalletNameChanged;
 
   @override
@@ -3876,7 +3879,7 @@ class _AssetDetailState extends State<_AssetDetail> {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+            padding: const EdgeInsets.fromLTRB(28, 4, 28, 0),
             child: SizedBox(
               height: 48,
               child: Stack(
@@ -3888,7 +3891,6 @@ class _AssetDetailState extends State<_AssetDetail> {
                       icon: CupertinoIcons.back,
                       palette: widget.palette,
                       label: '返回',
-                      size: 32,
                       onPressed: () => Navigator.of(context).maybePop(),
                     ),
                   ),
@@ -4039,8 +4041,7 @@ class _AssetDetailState extends State<_AssetDetail> {
                   child: _WalletDetailAction(
                     label: '导出助记词',
                     palette: widget.palette,
-                    onPressed: () =>
-                        _showNotice(context, '导出助记词', '请在安全验证后导出助记词。'),
+                    onPressed: () => widget.onOpen(AcoScreen.backupMnemonic),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -4064,6 +4065,522 @@ class _AssetDetailState extends State<_AssetDetail> {
         ],
       );
     },
+  );
+}
+
+enum _MnemonicExportStep { warning, phrase }
+
+class _BackupMnemonicFlow extends StatefulWidget {
+  const _BackupMnemonicFlow({
+    required this.palette,
+    required this.walletIdentity,
+    required this.secretStore,
+  });
+
+  final AcoPalette palette;
+  final WalletIdentity? walletIdentity;
+  final WalletSecretStore secretStore;
+
+  @override
+  State<_BackupMnemonicFlow> createState() => _BackupMnemonicFlowState();
+}
+
+class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
+  final _walletSecurity = WalletSecurity();
+  var _step = _MnemonicExportStep.warning;
+  String? _mnemonic;
+  var _mnemonicVisible = false;
+  var _mnemonicCopied = false;
+
+  String get _actionLabel {
+    if (_step == _MnemonicExportStep.warning) return '下一步';
+    return _mnemonicCopied ? '已复制助记词' : '复制助记词';
+  }
+
+  @override
+  void dispose() {
+    SensitiveScreenProtection.setEnabled(false);
+    super.dispose();
+  }
+
+  Future<void> _continue() async {
+    switch (_step) {
+      case _MnemonicExportStep.warning:
+        await _showPasswordPrompt();
+        return;
+      case _MnemonicExportStep.phrase:
+        await _copyMnemonic();
+        return;
+    }
+  }
+
+  Future<void> _showPasswordPrompt() async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return;
+    final controller = TextEditingController();
+    var password = '';
+    var isVerifying = false;
+    String? errorMessage;
+
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: widget.palette.dark ? Brightness.dark : Brightness.light,
+          primaryColor: _lime,
+        ),
+        child: StatefulBuilder(
+          builder: (context, setDialogState) => CupertinoAlertDialog(
+            title: const Text('验证钱包密码'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(
+                children: [
+                  CupertinoTextField(
+                    key: const Key('export-mnemonic-password'),
+                    controller: controller,
+                    autofocus: true,
+                    obscureText: true,
+                    onChanged: (value) => setDialogState(() {
+                      password = value;
+                      errorMessage = null;
+                    }),
+                    placeholder: '请输入钱包密码',
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                        color: _danger,
+                        fontSize: AcoTypography.bodySmall,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: isVerifying
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: password.length < 8 || isVerifying
+                    ? null
+                    : () async {
+                        setDialogState(() => isVerifying = true);
+                        try {
+                          final mnemonic = await _walletSecurity.unlockMnemonic(
+                            store: widget.secretStore,
+                            walletAddress: identity.address,
+                            password: password,
+                          );
+                          if (!dialogContext.mounted || !mounted) return;
+                          Navigator.of(dialogContext).pop();
+                          setState(() {
+                            _mnemonic = mnemonic;
+                            _step = _MnemonicExportStep.phrase;
+                            _mnemonicVisible = false;
+                            _mnemonicCopied = false;
+                          });
+                          await SensitiveScreenProtection.setEnabled(true);
+                        } on WalletSecurityException catch (error) {
+                          if (dialogContext.mounted) {
+                            setDialogState(() {
+                              errorMessage = error.message;
+                              isVerifying = false;
+                            });
+                          }
+                        } catch (_) {
+                          if (dialogContext.mounted) {
+                            setDialogState(() {
+                              errorMessage = '验证失败，请稍后重试。';
+                              isVerifying = false;
+                            });
+                          }
+                        }
+                      },
+                child: Text(isVerifying ? '验证中...' : '确认'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    controller.dispose();
+  }
+
+  Future<void> _copyMnemonic() async {
+    final mnemonic = _mnemonic;
+    if (mnemonic == null || mnemonic.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: mnemonic));
+    if (mounted) setState(() => _mnemonicCopied = true);
+  }
+
+  @override
+  Widget build(BuildContext context) => _DetailScaffold(
+    palette: widget.palette,
+    title: '备份助记词',
+    child: SafeArea(
+      top: false,
+      child: Column(
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 30, 24, 24),
+              children: [
+                switch (_step) {
+                  _MnemonicExportStep.warning => _MnemonicBackupWarning(
+                    palette: widget.palette,
+                  ),
+                  _MnemonicExportStep.phrase => _MnemonicPhraseView(
+                    palette: widget.palette,
+                    mnemonic: _mnemonic ?? '',
+                    visible: _mnemonicVisible,
+                    onReveal: () => setState(() => _mnemonicVisible = true),
+                  ),
+                },
+              ],
+            ),
+          ),
+          SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+            child: SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: CupertinoButton(
+                key: const Key('backup-mnemonic-continue'),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size.fromHeight(56),
+                color: _lime,
+                disabledColor: widget.palette.surfaceRaised,
+                borderRadius: BorderRadius.circular(14),
+                onPressed: _continue,
+                child: Center(
+                  child: Text(
+                    _actionLabel,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: _black,
+                      fontSize: AcoTypography.bodyEmphasis,
+                      height: 1.2,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _MnemonicBackupWarning extends StatelessWidget {
+  const _MnemonicBackupWarning({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Container(
+        width: double.infinity,
+        height: 172,
+        decoration: BoxDecoration(
+          color: palette.surfaceRaised,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Center(
+          child: Icon(
+            CupertinoIcons.shield_lefthalf_fill,
+            color: _lime,
+            size: 64,
+          ),
+        ),
+      ),
+      const SizedBox(height: 30),
+      Text(
+        '备份助记词，保护钱包安全',
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: AcoTypography.titleLarge,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Text(
+        '助记词是恢复钱包的唯一凭证。请妥善备份，并确保仅由你自己保存。',
+        style: TextStyle(
+          color: palette.mutedText,
+          fontSize: AcoTypography.body,
+          height: 1.55,
+        ),
+      ),
+      const SizedBox(height: 24),
+      _MnemonicNoticeCard(
+        palette: palette,
+        icon: CupertinoIcons.exclamationmark_circle,
+        title: '重要提醒',
+        message: '任何人只要获取助记词，即可控制你的资产。',
+      ),
+      const SizedBox(height: 32),
+      Text(
+        '建议备份方式',
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: AcoTypography.titleLarge,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: 14),
+      Text(
+        '使用笔和纸按顺序抄写\n保存到安全地点\n不要截屏、复制或通过网络传输',
+        style: TextStyle(
+          color: palette.mutedText,
+          fontSize: AcoTypography.body,
+          height: 1.7,
+        ),
+      ),
+    ],
+  );
+}
+
+class _MnemonicPhraseView extends StatelessWidget {
+  const _MnemonicPhraseView({
+    required this.palette,
+    required this.mnemonic,
+    required this.visible,
+    required this.onReveal,
+  });
+
+  final AcoPalette palette;
+  final String mnemonic;
+  final bool visible;
+  final VoidCallback onReveal;
+
+  @override
+  Widget build(BuildContext context) {
+    final words = mnemonic.split(' ').where((word) => word.isNotEmpty).toList();
+    final rowCount = (words.length + 1) ~/ 2;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '请妥善保管助记词',
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.titleLarge,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          '点击下方区域查看并按顺序抄写。不要向任何人透露。',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _MnemonicNoticeCard(
+          palette: palette,
+          icon: CupertinoIcons.eye_slash_fill,
+          title: '安全保护已开启',
+          message: '助记词默认隐藏，离开此页面后将自动清除显示。',
+        ),
+        const SizedBox(height: 20),
+        Semantics(
+          button: !visible,
+          label: visible ? '助记词已显示' : '点击显示助记词',
+          child: CupertinoButton(
+            key: const Key('mnemonic-reveal-button'),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size.fromHeight(0),
+            onPressed: visible ? null : onReveal,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: palette.border),
+              ),
+              child: visible
+                  ? Column(
+                      children: List<Widget>.generate(rowCount, (rowIndex) {
+                        final firstIndex = rowIndex * 2;
+                        final secondIndex = firstIndex + 1;
+                        return Padding(
+                          padding: EdgeInsets.only(
+                            bottom: rowIndex == rowCount - 1 ? 0 : 10,
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _MnemonicWordChip(
+                                  palette: palette,
+                                  index: firstIndex + 1,
+                                  word: words[firstIndex],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: secondIndex < words.length
+                                    ? _MnemonicWordChip(
+                                        palette: palette,
+                                        index: secondIndex + 1,
+                                        word: words[secondIndex],
+                                      )
+                                    : const SizedBox(),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    )
+                  : SizedBox(
+                      height: 276,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.eye_slash,
+                              color: palette.mutedText,
+                              size: 30,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '助记词已隐藏',
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: AcoTypography.bodyEmphasis,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '点击查看',
+                              style: TextStyle(
+                                color: palette.mutedText,
+                                fontSize: AcoTypography.bodySmall,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MnemonicNoticeCard extends StatelessWidget {
+  const _MnemonicNoticeCard({
+    required this.palette,
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final AcoPalette palette;
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: palette.surfaceRaised,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: palette.border),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: palette.mutedText, size: 20),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.bodyEmphasis,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                message,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.bodySmall,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MnemonicWordChip extends StatelessWidget {
+  const _MnemonicWordChip({
+    required this.palette,
+    required this.index,
+    required this.word,
+  });
+
+  final AcoPalette palette;
+  final int index;
+  final String word;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+    decoration: BoxDecoration(
+      color: palette.surfaceRaised,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$index',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          word,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodySmall,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -5005,7 +5522,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
   final ValueChanged<AcoScreen> onOpen;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(35, 20, 35, 24),
+    padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
     children: [
       AcoPageHeader(
         palette: palette,
