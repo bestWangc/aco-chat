@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 enum WalletNetwork { ethereum, bsc, polygon, tron, solana, base }
@@ -30,18 +32,28 @@ class WalletBalance {
   bool get isAvailable => balance != null;
 }
 
-/// Fetches wallet balances directly from public JSON-RPC nodes.
+/// Fetches wallet balances from public JSON-RPC nodes.
 ///
 /// Fiat valuation and token metadata need an indexer or price feed. Every
-/// reported balance remains authoritative on-chain.
+/// reported balance remains authoritative on-chain. Flutter Web uses the app
+/// API as a constrained RPC proxy because public nodes do not consistently
+/// grant browser CORS access.
 class WalletPortfolioService {
-  WalletPortfolioService({http.Client? client})
-    : _client = client ?? http.Client(),
-      _ownsClient = client == null;
+  WalletPortfolioService({
+    http.Client? client,
+    Uri? rpcProxyBaseUri,
+    bool? useRpcProxy,
+  }) : _rpcProxyBaseUri =
+           rpcProxyBaseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
+       _useRpcProxy = useRpcProxy ?? kIsWeb,
+       _client = client ?? http.Client(),
+       _ownsClient = client == null;
 
   static const _requestTimeout = Duration(seconds: 5);
   final http.Client _client;
   final bool _ownsClient;
+  final Uri _rpcProxyBaseUri;
+  final bool _useRpcProxy;
 
   Future<List<WalletBalance>> loadBalances({
     required WalletNetwork network,
@@ -103,7 +115,7 @@ class WalletPortfolioService {
       decimals: usdt.decimals,
       request: () async {
         final callData = '0x70a08231${address.substring(2).padLeft(64, '0')}';
-        final body = await _postJson(chain.rpcUrl, {
+        final body = await _postJson(chain, {
           'jsonrpc': '2.0',
           'id': 2,
           'method': 'eth_call',
@@ -118,7 +130,7 @@ class WalletPortfolioService {
   }
 
   Future<BigInt> _nativeBalance(_Chain chain, String address) async {
-    final body = await _postJson(chain.rpcUrl, {
+    final body = await _postJson(chain, {
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'eth_getBalance',
@@ -148,7 +160,7 @@ class WalletPortfolioService {
   }
 
   Future<Map<String, dynamic>> _tronAccount(_Chain chain, String address) =>
-      _postJson(chain.rpcUrl, {'address': address, 'visible': true});
+      _postJson(chain, {'address': address, 'visible': true});
 
   BigInt _tronNativeBalance(Map<String, dynamic> body) =>
       BigInt.from((body['balance'] as num?) ?? 0);
@@ -196,7 +208,7 @@ class WalletPortfolioService {
   }
 
   Future<BigInt> _solanaBalance(_Chain chain, String address) async {
-    final body = await _postJson(chain.rpcUrl, {
+    final body = await _postJson(chain, {
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'getBalance',
@@ -231,7 +243,7 @@ class WalletPortfolioService {
     try {
       final responses = await Future.wait([
         for (final programID in _solanaTokenProgramIDs)
-          _postJson(chain.rpcUrl, {
+          _postJson(chain, {
             'jsonrpc': '2.0',
             'id': 2,
             'method': 'getTokenAccountsByOwner',
@@ -453,12 +465,12 @@ class WalletPortfolioService {
   );
 
   Future<Map<String, dynamic>> _postJson(
-    String url,
+    _Chain chain,
     Map<String, Object> request,
   ) async {
     final response = await _client
         .post(
-          Uri.parse(url),
+          _rpcUri(chain),
           headers: const {'content-type': 'application/json'},
           body: jsonEncode(request),
         )
@@ -471,6 +483,16 @@ class WalletPortfolioService {
       throw const FormatException('Invalid RPC response');
     }
     return body;
+  }
+
+  Uri _rpcUri(_Chain chain) {
+    if (!_useRpcProxy) return Uri.parse(chain.rpcUrl);
+    final basePath = _rpcProxyBaseUri.path.endsWith('/')
+        ? _rpcProxyBaseUri.path.substring(0, _rpcProxyBaseUri.path.length - 1)
+        : _rpcProxyBaseUri.path;
+    return _rpcProxyBaseUri.replace(
+      path: '$basePath/wallets/rpc/${chain.network.name}',
+    );
   }
 }
 
