@@ -171,6 +171,12 @@ class AccountSession {
   Future<LiveRoom> liveRoom(int liveId) async =>
       _apiClient.getLiveRoom(liveId: liveId, token: await _requireToken());
 
+  Future<String> liveWebsocketTicket(int liveId) async => _apiClient
+      .createLiveWebsocketTicket(liveId: liveId, token: await _requireToken());
+
+  Future<void> leaveLive(int liveId) async =>
+      _apiClient.leaveLive(liveId: liveId, token: await _requireToken());
+
   Future<void> raiseLiveHand(int liveId) async =>
       _apiClient.raiseLiveHand(liveId: liveId, token: await _requireToken());
 

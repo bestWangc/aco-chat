@@ -229,6 +229,20 @@ class AccountApiClient {
     return LiveRoom.fromJson(_body(response));
   }
 
+  Future<String> createLiveWebsocketTicket({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/ws-ticket'),
+      headers: _authorizedHeaders(token),
+    );
+    return _body(response)['ticket'] as String;
+  }
+
+  Future<void> leaveLive({required int liveId, required String token}) =>
+      _postWithoutBody('lives/$liveId/leave', token);
+
   Future<void> raiseLiveHand({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/raise-hand', token);
 
