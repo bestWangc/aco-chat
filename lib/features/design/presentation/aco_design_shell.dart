@@ -25,6 +25,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 const _lime = Color(0xFFA1FF00);
 const _danger = Color(0xFFFF3B4E);
@@ -2144,7 +2145,7 @@ class AcoSearch extends StatelessWidget {
                 width: submitWidth,
                 height: height,
                 decoration: BoxDecoration(
-                  color: _lime,
+                  color: palette.mutedText,
                   borderRadius: BorderRadius.circular(height / 2),
                 ),
                 child: submitChild,
@@ -6886,31 +6887,34 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(WakelockPlus.enable());
     _apiClient = AccountApiClient();
     _accountSession = AccountSession(_apiClient);
     if (widget.live != null) {
       unawaited(_loadRoom());
       unawaited(_loadMessages());
-      _messagePoller = Timer.periodic(
-        const Duration(seconds: 3),
-        (_) => unawaited(_loadMessages()),
-      );
+      _messagePoller = Timer.periodic(const Duration(seconds: 3), (_) {
+        unawaited(_loadMessages());
+        unawaited(_loadRoom(silent: true));
+      });
     }
   }
 
-  Future<void> _loadRoom() async {
+  Future<void> _loadRoom({bool silent = false}) async {
     final live = widget.live;
     if (live == null) return;
-    if (mounted) setState(() => _roomLoading = true);
+    if (!silent && mounted) setState(() => _roomLoading = true);
     try {
       final room = await _accountSession.liveRoom(live.id);
       if (mounted) setState(() => _room = room);
     } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '无法进入直播间', error.message);
+      if (!silent && mounted) _showNotice(context, '无法进入直播间', error.message);
     } catch (_) {
-      if (mounted) _showNotice(context, '无法进入直播间', '请检查网络后重试。');
+      if (!silent && mounted) {
+        _showNotice(context, '无法进入直播间', '请检查网络后重试。');
+      }
     } finally {
-      if (mounted) setState(() => _roomLoading = false);
+      if (!silent && mounted) setState(() => _roomLoading = false);
     }
   }
 
@@ -6935,6 +6939,106 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       if (mounted) Navigator.of(context).pop();
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '结束失败', error.message);
+    }
+  }
+
+  Future<void> _muteAllSpeakers() async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.muteAllLiveSpeakers(live.id);
+      await _loadRoom(silent: true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '全员静音失败', error.message);
+    }
+  }
+
+  void _showHostActions() {
+    final speakers = _room?.speakers ?? const <LiveParticipant>[];
+    final hasSpeakers = speakers.isNotEmpty;
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        actions: [
+          if (hasSpeakers)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_muteAllSpeakers());
+              },
+              child: const Text('全员静音'),
+            ),
+          if (hasSpeakers)
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                _showHostTransferPicker(speakers);
+              },
+              child: const Text('转让主持人'),
+            ),
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () {
+              Navigator.of(sheetContext).pop();
+              unawaited(_endLive());
+            },
+            child: const Text('结束直播'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  void _handleBack() {
+    if (_room?.viewerRole == 'host') {
+      _showHostActions();
+      return;
+    }
+    Navigator.of(context).maybePop();
+  }
+
+  void _showHostTransferPicker(List<LiveParticipant> speakers) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('转让主持人'),
+        message: const Text('选择一位正在发言的成员成为新主持人。直播不会中断，你将成为普通成员。'),
+        actions: speakers
+            .map((speaker) => _transferHostAction(sheetContext, speaker))
+            .toList(growable: false),
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+  }
+
+  CupertinoActionSheetAction _transferHostAction(
+    BuildContext sheetContext,
+    LiveParticipant speaker,
+  ) => CupertinoActionSheetAction(
+    onPressed: () {
+      Navigator.of(sheetContext).pop();
+      unawaited(_transferHost(speaker));
+    },
+    child: Text(speaker.nickname),
+  );
+
+  Future<void> _transferHost(LiveParticipant speaker) async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.transferLiveHost(live.id, speaker.userId);
+      if (mounted) Navigator.of(context).pop();
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '转让失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '转让失败', '请检查网络后重试。');
     }
   }
 
@@ -6971,6 +7075,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   @override
   void dispose() {
+    unawaited(WakelockPlus.disable());
     _messagePoller?.cancel();
     _apiClient.close();
     _messageController.dispose();
@@ -7031,13 +7136,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final palette = widget.palette;
     final live = widget.live;
     final room = _room;
-    final isHost = room?.viewerRole == 'host';
-    final canSpeak = isHost || room?.viewerRole == 'speaker';
+    final viewerRole = room?.viewerRole;
+    final isHost = viewerRole == 'host';
+    final canSpeak = isHost || viewerRole == 'speaker';
 
     return _DetailScaffold(
       palette: palette,
       title: live?.title.trim().isNotEmpty == true ? live!.title : '语音房',
       titleFollowsBack: true,
+      onBack: _handleBack,
+      right: _LiveRoomHeaderActions(
+        palette: palette,
+        count: room?.participantCount,
+        onMore: isHost ? _showHostActions : null,
+      ),
       child: Stack(
         children: [
           Padding(
@@ -7048,21 +7160,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                   child: Column(
                     children: [
                       if (!_emojiPickerVisible) ...[
-                        if (live != null)
-                          _LiveRoomHero(palette: palette, live: live)
-                        else
-                          const SizedBox(height: 18),
-                        if (room != null)
+                        if (room != null) ...[
+                          _LiveRoomHostCard(palette: palette, host: room.host),
+                          if (room.speakers.isNotEmpty ||
+                              room.listeners.isNotEmpty)
+                            _LiveRoomParticipantStage(
+                              palette: palette,
+                              speakers: room.speakers,
+                              listeners: room.listeners,
+                            ),
                           _LiveRoomStatus(
                             palette: palette,
                             room: room,
-                            onEnd: isHost ? _endLive : null,
                             onApprove: isHost ? _approveSpeaker : null,
                             onRemove: isHost ? _removeSpeaker : null,
-                          )
-                        else if (_roomLoading)
+                          ),
+                        ] else if (_roomLoading)
                           const Padding(
-                            padding: EdgeInsets.only(top: 12),
+                            padding: EdgeInsets.only(top: 48),
                             child: CupertinoActivityIndicator(),
                           ),
                       ],
@@ -7086,7 +7201,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
             bottom: _emojiPickerVisible ? 292 : 0,
             child: _RoomBottomBar(
               palette: palette,
-              muted: _muted,
+              muted: room?.viewerMuted ?? _muted,
+              canSpeak: canSpeak,
               handRaised: _handRaised,
               onMic: canSpeak ? () => setState(() => _muted = !_muted) : null,
               onHand: room?.canRaiseHand == true ? _raiseHand : null,
@@ -7897,6 +8013,7 @@ class _DetailScaffold extends StatelessWidget {
     required this.child,
     this.title,
     this.right,
+    this.onBack,
     this.titleFollowsBack = false,
     this.showBack = true,
   });
@@ -7904,6 +8021,7 @@ class _DetailScaffold extends StatelessWidget {
   final Widget child;
   final String? title;
   final Widget? right;
+  final VoidCallback? onBack;
   final bool titleFollowsBack;
   final bool showBack;
   @override
@@ -7917,7 +8035,9 @@ class _DetailScaffold extends StatelessWidget {
           right: right,
           titleFollowsBack: titleFollowsBack,
           backButtonOffset: Offset.zero,
-          onBack: showBack ? () => Navigator.of(context).maybePop() : null,
+          onBack: showBack
+              ? onBack ?? () => Navigator.of(context).maybePop()
+              : null,
         ),
       ),
       Expanded(child: child),
@@ -9124,26 +9244,226 @@ class _LiveListMessage extends StatelessWidget {
   );
 }
 
-class _LiveRoomHero extends StatelessWidget {
-  const _LiveRoomHero({required this.palette, required this.live});
+class _LiveRoomHostCard extends StatelessWidget {
+  const _LiveRoomHostCard({required this.palette, required this.host});
 
   final AcoPalette palette;
-  final LiveSession live;
+  final LiveParticipant host;
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: SizedBox(
-        height: 150,
-        width: double.infinity,
-        child: Image.network(
-          _liveCoverUrl(live.coverUrl),
-          fit: BoxFit.cover,
-          errorBuilder: (_, _, _) => _LiveCoverPlaceholder(palette: palette),
+    padding: const EdgeInsets.only(top: 26, bottom: 12),
+    child: Column(
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AcoAvatar(size: 108),
+            Positioned(
+              right: -3,
+              bottom: -3,
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: _lime,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: palette.background, width: 3),
+                ),
+                child: Icon(
+                  CupertinoIcons.mic_slash_fill,
+                  color: palette.background,
+                  size: 18,
+                ),
+              ),
+            ),
+          ],
         ),
-      ),
+        const SizedBox(height: 14),
+        Text(
+          host.nickname,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.title,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '主持人',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _LiveRoomHeaderActions extends StatelessWidget {
+  const _LiveRoomHeaderActions({
+    required this.palette,
+    required this.count,
+    this.onMore,
+  });
+
+  final AcoPalette palette;
+  final int? count;
+  final VoidCallback? onMore;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          constraints: const BoxConstraints(minHeight: 36),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: palette.surfaceRaised,
+            borderRadius: BorderRadius.circular(18),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                CupertinoIcons.person_2,
+                size: 15,
+                color: palette.primaryText,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                count == null ? '—' : '$count 人',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.bodySmall,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (onMore != null)
+          CupertinoButton(
+            padding: const EdgeInsets.only(left: 8),
+            minimumSize: const Size(44, 44),
+            onPressed: onMore,
+            child: Icon(
+              CupertinoIcons.ellipsis,
+              color: palette.primaryText,
+              size: 22,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _LiveRoomParticipantStage extends StatelessWidget {
+  const _LiveRoomParticipantStage({
+    required this.palette,
+    required this.speakers,
+    required this.listeners,
+  });
+
+  final AcoPalette palette;
+  final List<LiveParticipant> speakers;
+  final List<LiveParticipant> listeners;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+    child: Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 22,
+      runSpacing: 16,
+      children: [
+        ...speakers.map(
+          (participant) => _LiveRoomParticipantCard(
+            palette: palette,
+            participant: participant,
+          ),
+        ),
+        ...listeners.map(
+          (participant) => _LiveRoomParticipantCard(
+            palette: palette,
+            participant: participant,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _LiveRoomParticipantCard extends StatelessWidget {
+  const _LiveRoomParticipantCard({
+    required this.palette,
+    required this.participant,
+  });
+
+  final AcoPalette palette;
+  final LiveParticipant participant;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 86,
+    child: Column(
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AcoAvatar(size: 58),
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: _MutedMicrophoneBadge(palette: palette),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        Text(
+          participant.nickname,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodySmall,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          participant.role == 'speaker' ? '发言中' : '成员',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _MutedMicrophoneBadge extends StatelessWidget {
+  const _MutedMicrophoneBadge({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 23,
+    height: 23,
+    decoration: BoxDecoration(
+      color: palette.mutedText,
+      shape: BoxShape.circle,
+      border: Border.all(color: palette.background, width: 2),
+    ),
+    child: Icon(
+      CupertinoIcons.mic_slash_fill,
+      color: palette.background,
+      size: 13,
     ),
   );
 }
@@ -9152,14 +9472,12 @@ class _LiveRoomStatus extends StatelessWidget {
   const _LiveRoomStatus({
     required this.palette,
     required this.room,
-    this.onEnd,
     this.onApprove,
     this.onRemove,
   });
 
   final AcoPalette palette;
   final LiveRoom room;
-  final VoidCallback? onEnd;
   final ValueChanged<int>? onApprove;
   final ValueChanged<int>? onRemove;
 
@@ -9169,38 +9487,6 @@ class _LiveRoomStatus extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(
-              '${room.participantCount} 人在线 · 主播 ${room.host.nickname}',
-              style: TextStyle(
-                color: palette.mutedText,
-                fontSize: AcoTypography.bodySmall,
-              ),
-            ),
-            const Spacer(),
-            if (room.speakers.isNotEmpty)
-              Text(
-                '${room.speakers.length} 位嘉宾发言中',
-                style: TextStyle(
-                  color: palette.mutedText,
-                  fontSize: AcoTypography.bodySmall,
-                ),
-              ),
-            if (onEnd != null) ...[
-              const SizedBox(width: 10),
-              CupertinoButton(
-                minSize: 36,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                onPressed: onEnd,
-                child: const Text('结束直播'),
-              ),
-            ],
-          ],
-        ),
         _ParticipantActions(
           users: room.raisedHands,
           action: onApprove,
@@ -9209,7 +9495,7 @@ class _LiveRoomStatus extends StatelessWidget {
         _ParticipantActions(
           users: room.speakers,
           action: onRemove,
-          label: '移除 {name}',
+          label: '停止 {name} 发言',
         ),
       ],
     ),
@@ -9427,6 +9713,7 @@ class _RoomBottomBar extends StatelessWidget {
   const _RoomBottomBar({
     required this.palette,
     required this.muted,
+    required this.canSpeak,
     required this.handRaised,
     required this.onMic,
     required this.onHand,
@@ -9436,6 +9723,7 @@ class _RoomBottomBar extends StatelessWidget {
   });
   final AcoPalette palette;
   final bool muted;
+  final bool canSpeak;
   final bool handRaised;
   final VoidCallback? onMic;
   final VoidCallback? onHand;
@@ -9451,12 +9739,18 @@ class _RoomBottomBar extends StatelessWidget {
       child: Row(
         children: [
           _RoomControl(
-            icon: muted ? CupertinoIcons.mic_slash : CupertinoIcons.mic,
-            label: muted ? '取消静音' : '静音',
-            background: muted && !palette.dark
+            icon: canSpeak && !muted
+                ? CupertinoIcons.mic
+                : CupertinoIcons.mic_slash,
+            label: canSpeak ? (muted ? '取消静音' : '静音') : '获准后可发言',
+            background: canSpeak && (!muted || palette.dark)
+                ? _lime
+                : muted && !palette.dark
                 ? const Color(0xFFF2F2F2)
-                : _lime,
-            foreground: muted && !palette.dark ? _danger : _black,
+                : palette.surfaceRaised,
+            foreground: canSpeak && (!muted || palette.dark)
+                ? _black
+                : palette.mutedText,
             onPressed: onMic,
             large: true,
           ),
@@ -9472,10 +9766,10 @@ class _RoomBottomBar extends StatelessWidget {
           const SizedBox(width: 8),
           _RoomControl(
             icon: CupertinoIcons.hand_raised_fill,
-            label: handRaised ? '放下手' : '举手',
+            label: handRaised ? '已举手' : '举手',
             background: palette.surfaceRaised,
             foreground: palette.primaryText,
-            onPressed: onHand,
+            onPressed: handRaised ? null : onHand,
           ),
         ],
       ),

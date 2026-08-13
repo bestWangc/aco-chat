@@ -188,8 +188,18 @@ class AccountSession {
         token: await _requireToken(),
       );
 
+  Future<void> transferLiveHost(int liveId, int userId) async =>
+      _apiClient.transferLiveHost(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
   Future<void> endLive(int liveId) async =>
       _apiClient.endLive(liveId: liveId, token: await _requireToken());
+
+  Future<void> muteAllLiveSpeakers(int liveId) async => _apiClient
+      .muteAllLiveSpeakers(liveId: liveId, token: await _requireToken());
 
   Future<String> _requireToken() async {
     final tokens = await _tokenStore.read();

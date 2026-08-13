@@ -167,8 +167,10 @@ class LiveRoom {
     required this.viewerRole,
     required this.participantCount,
     required this.speakers,
+    required this.listeners,
     required this.raisedHands,
     required this.canRaiseHand,
+    required this.viewerMuted,
   });
 
   final LiveSession live;
@@ -176,8 +178,10 @@ class LiveRoom {
   final String viewerRole;
   final int participantCount;
   final List<LiveParticipant> speakers;
+  final List<LiveParticipant> listeners;
   final List<LiveParticipant> raisedHands;
   final bool canRaiseHand;
+  final bool viewerMuted;
 
   factory LiveRoom.fromJson(Map<String, dynamic> json) => LiveRoom(
     live: LiveSession.fromJson(json['live'] as Map<String, dynamic>),
@@ -188,10 +192,15 @@ class LiveRoom {
         .cast<Map<String, dynamic>>()
         .map(LiveParticipant.fromJson)
         .toList(growable: false),
+    listeners: (json['listeners'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(LiveParticipant.fromJson)
+        .toList(growable: false),
     raisedHands: (json['raised_hands'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>()
         .map(LiveParticipant.fromJson)
         .toList(growable: false),
     canRaiseHand: json['can_raise_hand'] as bool? ?? false,
+    viewerMuted: json['viewer_muted'] as bool? ?? false,
   );
 }
