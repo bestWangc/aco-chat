@@ -272,6 +272,19 @@ class AccountApiClient {
     required String token,
   }) => _postWithoutBody('lives/$liveId/mute-all', token);
 
+  Future<void> setLiveChatMute({
+    required int liveId,
+    required bool muted,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/chat-mute'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'muted': muted}),
+    );
+    _body(response);
+  }
+
   Future<void> _postWithoutBody(String path, String token) async {
     final response = await _httpClient.post(
       _uri(path),
