@@ -128,7 +128,54 @@ void main() {
     expect(profile.username, 'aco_updated');
     expect((await session.activeProfile())?.nickname, 'Aco Updated');
   });
+
+  test(
+    'updates a live session without re-uploading an unchanged cover',
+    () async {
+      final tokenStore = _InMemoryTokenStore()..value = 'access-token';
+      final requests = <http.Request>[];
+      final client = AccountApiClient(
+        baseUri: Uri.parse('https://api.aco.test/api/v1'),
+        httpClient: MockClient((request) async {
+          requests.add(request);
+          expect(request.method, 'PATCH');
+          expect(request.url.path, '/api/v1/lives/9');
+          expect(jsonDecode(request.body), {
+            'title': '更新后的直播',
+            'cover_url': '/uploads/live-cover-9.jpg',
+            'access': 'open',
+            'scheduled_at': '2026-08-12T13:00:00.000Z',
+          });
+          return _response({
+            'id': 9,
+            'title': '更新后的直播',
+            'cover_url': '/uploads/live-cover-9.jpg',
+            'access': 'open',
+            'status': 'scheduled',
+            'can_edit': true,
+            'scheduled_at': '2026-08-12T13:00:00Z',
+            'created_at': '2026-08-12T08:30:00Z',
+          });
+        }),
+      );
+
+      final live = await AccountSession(client, tokenStore: tokenStore)
+          .updateLive(
+            liveId: 9,
+            title: '更新后的直播',
+            coverUrl: '/uploads/live-cover-9.jpg',
+            access: 'open',
+            scheduledAt: DateTime.utc(2026, 8, 12, 13),
+          );
+
+      expect(live.canEdit, isTrue);
+      expect(requests, hasLength(1));
+    },
+  );
 }
 
-http.Response _response(Map<String, dynamic> body) =>
-    http.Response(jsonEncode(body), 200);
+http.Response _response(Map<String, dynamic> body) => http.Response(
+  jsonEncode(body),
+  200,
+  headers: const {'content-type': 'application/json; charset=utf-8'},
+);

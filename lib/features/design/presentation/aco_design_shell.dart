@@ -1117,6 +1117,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<String> _walletName = ValueNotifier<String>('Wallet1');
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
   TransferToken? _selectedTransferToken;
+  int _liveListRevision = 0;
   String? _accountId = '1000000000000000';
   final ValueNotifier<String> _username = ValueNotifier<String>('aco');
   String _language = '简体中文';
@@ -1226,41 +1227,48 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     final destination = screen == AcoScreen.createLive
         ? AcoScreen.createLive
         : target;
-    Navigator.of(context).push<void>(
-      _AcoPageRoute<void>(
-        builder: (_) => AnimatedBuilder(
-          animation: Listenable.merge([
-            _isDark,
-            _displayName,
-            _username,
-            _walletName,
-            _selectedWalletChain,
-          ]),
-          builder: (_, _) => AcoScreenPage(
-            screen: destination,
-            dark: _isDark.value,
-            isRoot: false,
-            onOpen: _open,
-            onThemeToggle: _toggleTheme,
-            walletIdentity: widget.walletIdentity,
-            walletName: _walletName.value,
-            onWalletNameChanged: _saveWalletName,
-            walletChainIndex: _selectedWalletChain.value,
-            onWalletChainSelected: _selectWalletChain,
-            transferToken: _selectedTransferToken,
-            onSendTokenSelected: _sendToken,
-            accountId: _accountId,
-            username: _username.value,
-            displayName: _displayName.value,
-            onDisplayNameChanged: (name) => _displayName.value = name,
-            onUsernameChanged: (username) => _username.value = username,
-            language: _language,
-            onLanguageChanged: (language) =>
-                setState(() => _language = language),
+    Navigator.of(context)
+        .push<bool>(
+          _AcoPageRoute<bool>(
+            builder: (_) => AnimatedBuilder(
+              animation: Listenable.merge([
+                _isDark,
+                _displayName,
+                _username,
+                _walletName,
+                _selectedWalletChain,
+              ]),
+              builder: (_, _) => AcoScreenPage(
+                screen: destination,
+                dark: _isDark.value,
+                isRoot: false,
+                onOpen: _open,
+                onThemeToggle: _toggleTheme,
+                walletIdentity: widget.walletIdentity,
+                walletName: _walletName.value,
+                onWalletNameChanged: _saveWalletName,
+                walletChainIndex: _selectedWalletChain.value,
+                onWalletChainSelected: _selectWalletChain,
+                transferToken: _selectedTransferToken,
+                onSendTokenSelected: _sendToken,
+                accountId: _accountId,
+                username: _username.value,
+                displayName: _displayName.value,
+                onDisplayNameChanged: (name) => _displayName.value = name,
+                onUsernameChanged: (username) => _username.value = username,
+                language: _language,
+                liveListRevision: _liveListRevision,
+                onLanguageChanged: (language) =>
+                    setState(() => _language = language),
+              ),
+            ),
           ),
-        ),
-      ),
-    );
+        )
+        .then((created) {
+          if (screen == AcoScreen.createLive && created == true && mounted) {
+            setState(() => _liveListRevision++);
+          }
+        });
   }
 
   @override
@@ -1304,6 +1312,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       onUsernameChanged: (username) =>
                           _username.value = username,
                       language: _language,
+                      liveListRevision: _liveListRevision,
                       onLanguageChanged: (language) =>
                           setState(() => _language = language),
                     ),
@@ -1380,7 +1389,10 @@ class AcoScreenPage extends StatelessWidget {
     this.onDisplayNameChanged,
     this.onUsernameChanged,
     this.language = '简体中文',
+    this.liveListRevision = 0,
     this.onLanguageChanged,
+    this.live,
+    this.initialLives,
     super.key,
   });
 
@@ -1403,7 +1415,10 @@ class AcoScreenPage extends StatelessWidget {
   final ValueChanged<String>? onDisplayNameChanged;
   final ValueChanged<String>? onUsernameChanged;
   final String language;
+  final int liveListRevision;
   final ValueChanged<String>? onLanguageChanged;
+  final LiveSession? live;
+  final List<LiveSession>? initialLives;
 
   @override
   Widget build(BuildContext context) {
@@ -1478,7 +1493,12 @@ class AcoScreenPage extends StatelessWidget {
         onOpen: onOpen,
       ),
       AcoScreen.marketOverview => _MarketOverviewPage(palette: palette),
-      AcoScreen.squareFeed => _SquareFeedPage(palette: palette, onOpen: onOpen),
+      AcoScreen.squareFeed => _SquareFeedPage(
+        key: ValueKey('square-feed-$liveListRevision'),
+        palette: palette,
+        onOpen: onOpen,
+        initialLives: initialLives,
+      ),
       AcoScreen.socialMessages => _SocialMessagesPage(
         palette: palette,
         onOpen: onOpen,
@@ -1486,7 +1506,7 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.chatV1 => _ChatPage(palette: palette, version: 1),
       AcoScreen.chatV2 => _ChatPage(palette: palette, version: 2),
       AcoScreen.liveStream => _LiveStreamPage(palette: palette, onOpen: onOpen),
-      AcoScreen.voiceRoom => _VoiceRoomPage(palette: palette),
+      AcoScreen.voiceRoom => _VoiceRoomPage(palette: palette, live: live),
       AcoScreen.mining => _MiningPage(palette: palette),
       AcoScreen.profile =>
         currentDisplayName == null ||
@@ -2175,6 +2195,26 @@ void _showNotice(BuildContext context, String title, String message) {
   );
 }
 
+void showAcoAlertNotice(BuildContext context, String title, String message) {
+  showCupertinoDialog<void>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      title: Text(title),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(message),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('知道了'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _WalletToken {
   const _WalletToken(this.symbol, this.title);
 
@@ -2780,13 +2820,11 @@ class _TransferSectionLabel extends StatelessWidget {
     required this.palette,
     required this.label,
     this.action,
-    this.onPressed,
   });
 
   final AcoPalette palette;
   final String label;
   final String? action;
-  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -2805,11 +2843,11 @@ class _TransferSectionLabel extends StatelessWidget {
           CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: const Size(48, 28),
-            onPressed: onPressed,
+            onPressed: null,
             child: Text(
               action,
               style: TextStyle(
-                color: onPressed == null ? palette.mutedText : _lime,
+                color: palette.mutedText,
                 fontSize: AcoTypography.bodySmall,
                 fontWeight: FontWeight.w600,
               ),
@@ -5833,9 +5871,15 @@ class _MarketOverviewPage extends StatelessWidget {
 }
 
 class _SquareFeedPage extends StatefulWidget {
-  const _SquareFeedPage({required this.palette, required this.onOpen});
+  const _SquareFeedPage({
+    super.key,
+    required this.palette,
+    required this.onOpen,
+    this.initialLives,
+  });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+  final List<LiveSession>? initialLives;
 
   @override
   State<_SquareFeedPage> createState() => _SquareFeedPageState();
@@ -5852,10 +5896,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     _lives = _loadLives();
   }
 
-  Future<List<LiveSession>> _loadLives() =>
-      AccountSession(_apiClient).listLives();
+  Future<List<LiveSession>> _loadLives() async =>
+      widget.initialLives ?? AccountSession(_apiClient).listLives();
 
-  void _retryLoadingLives() => setState(() => _lives = _loadLives());
+  void _retryLoadingLives() {
+    setState(() {
+      _lives = _loadLives();
+    });
+  }
 
   @override
   void dispose() {
@@ -5865,14 +5913,49 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
   void _openLiveRoom(LiveSession session) {
     if (session.status != 'live') {
-      _showNotice(context, '预约直播', '该直播尚未开始。');
+      showAcoAlertNotice(context, '预约直播', '该直播尚未开始。');
       return;
     }
     Navigator.of(context).push<void>(
-      CupertinoPageRoute(
-        builder: (_) => _VoiceRoomPage(palette: widget.palette, live: session),
+      _AcoPageRoute<void>(
+        builder: (_) => CupertinoPageScaffold(
+          backgroundColor: widget.palette.background,
+          child: SafeArea(
+            bottom: false,
+            child: ColoredBox(
+              color: widget.palette.background,
+              child: _VoiceRoomPage(palette: widget.palette, live: session),
+            ),
+          ),
+        ),
       ),
     );
+  }
+
+  void _editLive(LiveSession session) {
+    Navigator.of(context)
+        .push<bool>(
+          _AcoPageRoute<bool>(
+            builder: (_) => CupertinoPageScaffold(
+              backgroundColor: widget.palette.background,
+              child: SafeArea(
+                bottom: false,
+                child: ColoredBox(
+                  color: widget.palette.background,
+                  child: _CreateLivePage(
+                    palette: widget.palette,
+                    live: session,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+        .then((updated) {
+          if (updated == true && mounted) {
+            _retryLoadingLives();
+          }
+        });
   }
 
   List<Widget> _buildLiveContent(AcoPalette palette) => [
@@ -5902,6 +5985,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                 palette: palette,
                 session: session,
                 onTap: () => _openLiveRoom(session),
+                onEdit: session.canEdit && session.status == 'scheduled'
+                    ? () => _editLive(session)
+                    : null,
               ),
               const SizedBox(height: 24),
             ],
@@ -6171,8 +6257,9 @@ class _ComingSoonPage extends StatelessWidget {
 }
 
 class _CreateLivePage extends StatefulWidget {
-  const _CreateLivePage({required this.palette});
+  const _CreateLivePage({required this.palette, this.live});
   final AcoPalette palette;
+  final LiveSession? live;
 
   @override
   State<_CreateLivePage> createState() => _CreateLivePageState();
@@ -6186,6 +6273,20 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   Uint8List? _coverBytes;
   String? _joinPassword;
   bool _submitting = false;
+  bool _coverChanged = false;
+
+  bool get _isEditing => widget.live != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final live = widget.live;
+    if (live != null) {
+      _titleController.text = live.title;
+      _scheduledAt = live.scheduledAt;
+      _joinPassword = live.access == 'password' ? '' : null;
+    }
+  }
 
   @override
   void dispose() {
@@ -6194,28 +6295,46 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   }
 
   bool get _canConfirm =>
-      _titleController.text.trim().isNotEmpty && _coverBytes != null;
+      _titleController.text.trim().isNotEmpty &&
+      (_coverBytes != null || widget.live?.coverUrl.isNotEmpty == true) &&
+      (!_isEditing || _scheduledAt != null);
 
   Future<void> _confirm() async {
-    final coverBytes = _coverBytes;
-    if (!_canConfirm || coverBytes == null || _submitting) return;
+    if (!_canConfirm || _submitting) return;
     final title = _titleController.text.trim();
     final apiClient = AccountApiClient();
     setState(() => _submitting = true);
     try {
-      await AccountSession(apiClient).createLive(
-        title: title,
-        coverBytes: coverBytes,
-        access: _joinPassword == null ? 'open' : 'password',
-        joinPassword: _joinPassword,
-        scheduledAt: _scheduledAt,
-      );
+      final session = AccountSession(apiClient);
+      if (widget.live case final live?) {
+        await session.updateLive(
+          liveId: live.id,
+          title: title,
+          coverUrl: live.coverUrl,
+          coverBytes: _coverChanged ? _coverBytes : null,
+          access: _joinPassword == null ? 'open' : 'password',
+          joinPassword: _joinPassword?.isEmpty == true ? null : _joinPassword,
+          scheduledAt: _scheduledAt,
+        );
+      } else if (_coverBytes case final coverBytes?) {
+        await session.createLive(
+          title: title,
+          coverBytes: coverBytes,
+          access: _joinPassword == null ? 'open' : 'password',
+          joinPassword: _joinPassword,
+          scheduledAt: _scheduledAt,
+        );
+      }
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pop(true);
     } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '创建失败', error.message);
+      if (mounted) {
+        _showNotice(context, _isEditing ? '保存失败' : '创建失败', error.message);
+      }
     } catch (_) {
-      if (mounted) _showNotice(context, '创建失败', '请检查网络后重试。');
+      if (mounted) {
+        _showNotice(context, _isEditing ? '保存失败' : '创建失败', '请检查网络后重试。');
+      }
     } finally {
       apiClient.close();
       if (mounted) setState(() => _submitting = false);
@@ -6255,14 +6374,16 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                     children: [
                       CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        onPressed: () {
-                          setState(() => _scheduledAt = null);
-                          Navigator.of(sheetContext).pop();
-                        },
+                        onPressed: _isEditing
+                            ? null
+                            : () {
+                                setState(() => _scheduledAt = null);
+                                Navigator.of(sheetContext).pop();
+                              },
                         child: Text(
                           '立即开播',
-                          style: const TextStyle(
-                            color: _lime,
+                          style: TextStyle(
+                            color: _isEditing ? palette.mutedText : _lime,
                             fontSize: AcoTypography.bodySmall,
                           ),
                         ),
@@ -6329,7 +6450,10 @@ class _CreateLivePageState extends State<_CreateLivePage> {
       return;
     }
 
-    setState(() => _coverBytes = bytes);
+    setState(() {
+      _coverBytes = bytes;
+      _coverChanged = true;
+    });
   }
 
   String get _joinAccessLabel => _joinPassword == null ? '任何人直接加入' : '需要密码才能加入';
@@ -6344,21 +6468,33 @@ class _CreateLivePageState extends State<_CreateLivePage> {
           primaryColor: _lime,
         ),
         child: CupertinoActionSheet(
-          title: const Text('设置加入权限'),
+          title: const Text(
+            '设置加入权限',
+            style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+          ),
           actions: [
             CupertinoActionSheetAction(
               onPressed: () => Navigator.of(sheetContext).pop('open'),
-              child: const Text('任何人直接加入'),
+              child: const Text(
+                '任何人直接加入',
+                style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+              ),
             ),
             CupertinoActionSheetAction(
               onPressed: () => Navigator.of(sheetContext).pop('password'),
-              child: const Text('需要密码才能加入'),
+              child: const Text(
+                '需要密码才能加入',
+                style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+              ),
             ),
           ],
           cancelButton: CupertinoActionSheetAction(
             isDefaultAction: true,
             onPressed: () => Navigator.of(sheetContext).pop(),
-            child: const Text('取消'),
+            child: const Text(
+              '取消',
+              style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+            ),
           ),
         ),
       ),
@@ -6420,11 +6556,12 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   @override
   Widget build(BuildContext context) {
     final palette = widget.palette;
-    final hasCover = _coverBytes != null;
+    final hasCover =
+        _coverBytes != null || widget.live?.coverUrl.isNotEmpty == true;
     final canConfirm = _canConfirm && !_submitting;
     return _DetailScaffold(
       palette: palette,
-      title: '创建直播',
+      title: _isEditing ? '修改直播' : '创建直播',
       child: Column(
         children: [
           Expanded(
@@ -6513,6 +6650,18 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                               filterQuality: FilterQuality.medium,
                             ),
                           )
+                        else if (widget.live?.coverUrl case final coverUrl?)
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.network(
+                              _liveCoverUrl(coverUrl),
+                              width: 54,
+                              height: 52,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  _LiveCoverThumbnailFallback(palette: palette),
+                            ),
+                          )
                         else
                           Container(
                             width: 54,
@@ -6545,7 +6694,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                   ),
                                   const SizedBox(width: 2),
                                   Text(
-                                    _coverBytes == null ? '上传封面' : '更换封面',
+                                    hasCover ? '更换封面' : '上传封面',
                                     style: TextStyle(
                                       color: palette.primaryText,
                                       fontSize: AcoTypography.bodyEmphasis,
@@ -6605,7 +6754,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                     child: _submitting
                         ? const CupertinoActivityIndicator(color: _black)
                         : Text(
-                            '确认',
+                            _isEditing ? '保存' : '确认',
                             style: TextStyle(
                               color: canConfirm ? _black : palette.mutedText,
                               fontSize: AcoTypography.bodyEmphasis,
@@ -6726,6 +6875,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _handRaised = false;
   bool _emojiPickerVisible = false;
   bool _sending = false;
+  bool _roomLoading = false;
+  LiveRoom? _room;
   List<LiveMessage> _messages = const [];
   Timer? _messagePoller;
   late final AccountApiClient _apiClient;
@@ -6738,11 +6889,83 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _apiClient = AccountApiClient();
     _accountSession = AccountSession(_apiClient);
     if (widget.live != null) {
+      unawaited(_loadRoom());
       unawaited(_loadMessages());
       _messagePoller = Timer.periodic(
         const Duration(seconds: 3),
         (_) => unawaited(_loadMessages()),
       );
+    }
+  }
+
+  Future<void> _loadRoom() async {
+    final live = widget.live;
+    if (live == null) return;
+    if (mounted) setState(() => _roomLoading = true);
+    try {
+      final room = await _accountSession.liveRoom(live.id);
+      if (mounted) setState(() => _room = room);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '无法进入直播间', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '无法进入直播间', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _roomLoading = false);
+    }
+  }
+
+  Future<void> _raiseHand() async {
+    final live = widget.live;
+    if (live == null || _handRaised) return;
+    try {
+      await _accountSession.raiseLiveHand(live.id);
+      if (mounted) setState(() => _handRaised = true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '举手失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '举手失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _endLive() async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.endLive(live.id);
+      if (mounted) Navigator.of(context).pop();
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '结束失败', error.message);
+    }
+  }
+
+  Future<void> _approveSpeaker(int userId) async {
+    await _updateSpeaker(
+      userId: userId,
+      action: _accountSession.approveLiveSpeaker,
+      failureTitle: '批准失败',
+    );
+  }
+
+  Future<void> _removeSpeaker(int userId) async {
+    await _updateSpeaker(
+      userId: userId,
+      action: _accountSession.removeLiveSpeaker,
+      failureTitle: '移除失败',
+    );
+  }
+
+  Future<void> _updateSpeaker({
+    required int userId,
+    required Future<void> Function(int liveId, int userId) action,
+    required String failureTitle,
+  }) async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await action(live.id, userId);
+      await _loadRoom();
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, failureTitle, error.message);
     }
   }
 
@@ -6806,28 +7029,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   @override
   Widget build(BuildContext context) {
     final palette = widget.palette;
-    const members = [
-      ('img4.jpg', 'Mia', false),
-      ('img5.jpg', 'Alex', true),
-      ('img3.jpg', 'Luna', false),
-      ('img4.jpg', 'Chris', true),
-      ('img5.jpg', 'Nora', false),
-      ('img3.jpg', 'Evan', true),
-      ('img4.jpg', 'Iris', false),
-      ('img5.jpg', 'Noah', false),
-      ('img3.jpg', 'Olivia', false),
-      ('img4.jpg', 'Leo', true),
-      ('img5.jpg', 'Emma', false),
-      ('img3.jpg', 'Ryan', true),
-      ('img4.jpg', 'Sofia', false),
-      ('img5.jpg', 'Theo', false),
-      ('img3.jpg', 'Ava', true),
-    ];
+    final live = widget.live;
+    final room = _room;
+    final isHost = room?.viewerRole == 'host';
+    final canSpeak = isHost || room?.viewerRole == 'speaker';
 
     return _DetailScaffold(
       palette: palette,
-      title: '语音房',
-      right: _RoomAudienceCount(palette: palette, count: members.length + 1),
+      title: live?.title.trim().isNotEmpty == true ? live!.title : '语音房',
       titleFollowsBack: true,
       child: Stack(
         children: [
@@ -6839,36 +7048,30 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                   child: Column(
                     children: [
                       if (!_emojiPickerVisible) ...[
-                        const SizedBox(height: 10),
-                        _RoomHost(palette: palette),
-                        const SizedBox(height: 29),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
-                          child: GridView.count(
-                            crossAxisCount: 5,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            mainAxisExtent: 78,
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              for (final member in members)
-                                _RoomMember(
-                                  palette: palette,
-                                  asset:
-                                      'assets/design_svg/source/images/${member.$1}',
-                                  name: member.$2,
-                                  muted: member.$3,
-                                ),
-                            ],
+                        if (live != null)
+                          _LiveRoomHero(palette: palette, live: live)
+                        else
+                          const SizedBox(height: 18),
+                        if (room != null)
+                          _LiveRoomStatus(
+                            palette: palette,
+                            room: room,
+                            onEnd: isHost ? _endLive : null,
+                            onApprove: isHost ? _approveSpeaker : null,
+                            onRemove: isHost ? _removeSpeaker : null,
+                          )
+                        else if (_roomLoading)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: CupertinoActivityIndicator(),
                           ),
-                        ),
                       ],
                       const SizedBox(height: 14),
                       Expanded(
                         child: _RoomChatHistory(
                           palette: palette,
-                          liveMessages: widget.live == null ? null : _messages,
+                          liveMessages: _messages,
+                          hasLive: live != null,
                         ),
                       ),
                     ],
@@ -6885,8 +7088,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               palette: palette,
               muted: _muted,
               handRaised: _handRaised,
-              onMic: () => setState(() => _muted = !_muted),
-              onHand: () => setState(() => _handRaised = !_handRaised),
+              onMic: canSpeak ? () => setState(() => _muted = !_muted) : null,
+              onHand: room?.canRaiseHand == true ? _raiseHand : null,
               controller: _messageController,
               onEmojiPressed: _toggleEmojiPicker,
               onSubmitted: _sendMessage,
@@ -6908,33 +7111,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       ),
     );
   }
-}
-
-class _RoomAudienceCount extends StatelessWidget {
-  const _RoomAudienceCount({required this.palette, required this.count});
-
-  final AcoPalette palette;
-  final int count;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: '$count 人在线',
-    child: Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(CupertinoIcons.person_2_fill, color: palette.mutedText, size: 17),
-        const SizedBox(width: 5),
-        Text(
-          '$count 人',
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.bodySmall,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
 class _MiningPage extends StatelessWidget {
@@ -8731,48 +8907,115 @@ class _Bubble extends StatelessWidget {
 }
 
 class _LiveCard extends StatelessWidget {
-  const _LiveCard({required this.palette, required this.session, this.onTap});
+  const _LiveCard({
+    required this.palette,
+    required this.session,
+    this.onTap,
+    this.onEdit,
+  });
   final AcoPalette palette;
   final LiveSession session;
   final VoidCallback? onTap;
+  final VoidCallback? onEdit;
+
+  String? get _scheduledStartLabel {
+    final scheduledAt = session.scheduledAt;
+    if (session.status != 'scheduled' || scheduledAt == null) return null;
+    final localTime = scheduledAt.toLocal();
+    final hour = localTime.hour.toString().padLeft(2, '0');
+    final minute = localTime.minute.toString().padLeft(2, '0');
+    return '开始时间 ${localTime.month}月${localTime.day}日 $hour:$minute';
+  }
+
+  bool get _isLive => session.status == 'live';
+
   @override
   Widget build(BuildContext context) {
+    final scheduledStartLabel = _scheduledStartLabel;
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Transform.translate(
-              offset: const Offset(0, -3),
-              child: Image.asset(
-                palette.dark
-                    ? 'assets/icons/live_brand_dark.png'
-                    : 'assets/icons/live_brand_light.png',
-                width: 52,
-                height: 52,
-                fit: BoxFit.contain,
-              ),
+            Image.asset(
+              palette.dark
+                  ? 'assets/icons/live_brand_dark.png'
+                  : 'assets/icons/live_brand_light.png',
+              width: 52,
+              height: 52,
+              fit: BoxFit.contain,
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      session.title,
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: AcoTypography.body,
-                        fontWeight: FontWeight.w600,
-                      ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    session.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.body,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (_isLive || scheduledStartLabel != null) ...[
+                    const SizedBox(height: 5),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _lime.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            _isLive ? '直播中' : '预约中',
+                            style: const TextStyle(
+                              color: _lime,
+                              fontSize: AcoTypography.caption,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        if (scheduledStartLabel != null) ...[
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              scheduledStartLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: AcoTypography.caption,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
-                ),
+                ],
               ),
             ),
+            if (onEdit != null) ...[
+              const SizedBox(width: 6),
+              AcoIconButton(
+                icon: CupertinoIcons.pencil,
+                palette: palette,
+                label: '修改直播',
+                size: 20,
+                onPressed: onEdit!,
+              ),
+            ],
           ],
         ),
         if (session.coverUrl.isNotEmpty) ...[
@@ -8823,6 +9066,23 @@ class _LiveCoverPlaceholder extends StatelessWidget {
   );
 }
 
+class _LiveCoverThumbnailFallback extends StatelessWidget {
+  const _LiveCoverThumbnailFallback({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 54,
+    height: 52,
+    decoration: BoxDecoration(
+      color: palette.surfaceRaised,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: Icon(CupertinoIcons.photo, color: palette.mutedText, size: 26),
+  );
+}
+
 class _LiveListMessage extends StatelessWidget {
   const _LiveListMessage({
     required this.palette,
@@ -8864,90 +9124,129 @@ class _LiveListMessage extends StatelessWidget {
   );
 }
 
-class _RoomHost extends StatelessWidget {
-  const _RoomHost({required this.palette});
+class _LiveRoomHero extends StatelessWidget {
+  const _LiveRoomHero({required this.palette, required this.live});
+
   final AcoPalette palette;
+  final LiveSession live;
+
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      ClipOval(
-        child: Image.asset(
-          'assets/design_svg/source/images/img3.jpg',
-          width: 100,
-          height: 100,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: SizedBox(
+        height: 150,
+        width: double.infinity,
+        child: Image.network(
+          _liveCoverUrl(live.coverUrl),
           fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _LiveCoverPlaceholder(palette: palette),
         ),
       ),
-      const SizedBox(height: 8),
-      Text(
-        'Jason',
-        style: TextStyle(
-          color: palette.primaryText,
-          fontSize: AcoTypography.bodyEmphasis,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 3),
-      Text(
-        '主持人',
-        style: TextStyle(
-          color: palette.mutedText,
-          fontSize: AcoTypography.bodySmall,
-        ),
-      ),
-    ],
+    ),
   );
 }
 
-class _RoomMember extends StatelessWidget {
-  const _RoomMember({
+class _LiveRoomStatus extends StatelessWidget {
+  const _LiveRoomStatus({
     required this.palette,
-    required this.asset,
-    required this.name,
-    required this.muted,
+    required this.room,
+    this.onEnd,
+    this.onApprove,
+    this.onRemove,
   });
+
   final AcoPalette palette;
-  final String asset;
-  final String name;
-  final bool muted;
+  final LiveRoom room;
+  final VoidCallback? onEnd;
+  final ValueChanged<int>? onApprove;
+  final ValueChanged<int>? onRemove;
+
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Stack(
-        clipBehavior: Clip.none,
-        children: [
-          ClipOval(
-            child: Image.asset(asset, width: 52, height: 52, fit: BoxFit.cover),
-          ),
-          Positioned(
-            right: -2,
-            bottom: -2,
-            child: Container(
-              width: 20,
-              height: 20,
-              decoration: const BoxDecoration(
-                color: _black,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                muted ? CupertinoIcons.mic_slash_fill : CupertinoIcons.mic_fill,
-                color: muted ? palette.mutedText : _lime,
-                size: 12,
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '${room.participantCount} 人在线 · 主播 ${room.host.nickname}',
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.bodySmall,
               ),
             ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 5),
-      Text(
-        name,
-        style: TextStyle(
-          color: palette.mutedText,
-          fontSize: AcoTypography.caption,
+            const Spacer(),
+            if (room.speakers.isNotEmpty)
+              Text(
+                '${room.speakers.length} 位嘉宾发言中',
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
+              ),
+            if (onEnd != null) ...[
+              const SizedBox(width: 10),
+              CupertinoButton(
+                minSize: 36,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                onPressed: onEnd,
+                child: const Text('结束直播'),
+              ),
+            ],
+          ],
         ),
-      ),
-    ],
+        _ParticipantActions(
+          users: room.raisedHands,
+          action: onApprove,
+          label: '允许 {name} 发言',
+        ),
+        _ParticipantActions(
+          users: room.speakers,
+          action: onRemove,
+          label: '移除 {name}',
+        ),
+      ],
+    ),
   );
+}
+
+class _ParticipantActions extends StatelessWidget {
+  const _ParticipantActions({
+    required this.users,
+    required this.action,
+    required this.label,
+  });
+
+  final List<LiveParticipant> users;
+  final ValueChanged<int>? action;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    if (action == null || users.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Wrap(
+        spacing: 6,
+        children: users
+            .map(
+              (user) => CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minSize: 32,
+                onPressed: () => action!(user.userId),
+                child: Text(label.replaceFirst('{name}', user.nickname)),
+              ),
+            )
+            .toList(growable: false),
+      ),
+    );
+  }
 }
 
 class _RoomMessage extends StatelessWidget {
@@ -8982,32 +9281,22 @@ class _RoomMessage extends StatelessWidget {
 }
 
 class _RoomChatHistory extends StatelessWidget {
-  const _RoomChatHistory({required this.palette, this.liveMessages});
+  const _RoomChatHistory({
+    required this.palette,
+    required this.hasLive,
+    this.liveMessages,
+  });
   final AcoPalette palette;
+  final bool hasLive;
   final List<LiveMessage>? liveMessages;
-
-  static const demoMessages = <({String? name, String text})>[
-    (name: 'Mia', text: '大家晚上好！'),
-    (name: 'Jason', text: '欢迎来到直播间，今天聊聊市场走势。'),
-    (name: 'Alex', text: '已经准备好了！'),
-    (name: null, text: '欢迎 Sophia 进入直播间'),
-    (name: 'Luna', text: '老师好，今天会讲 BTC 吗？'),
-    (name: 'Chris', text: '行情波动有点大，先听听思路。'),
-    (name: 'Nora', text: '已关注，期待后面的分享。'),
-    (name: 'Evan', text: '大家可以把问题发在这里。'),
-    (name: 'Iris', text: '感谢主持人的分析。'),
-  ];
 
   @override
   Widget build(BuildContext context) {
     final roomMessages = liveMessages;
-    if (roomMessages == null) {
-      return _buildDemoMessages();
-    }
-    if (roomMessages.isEmpty) {
+    if (roomMessages == null || roomMessages.isEmpty) {
       return Center(
         child: Text(
-          '还没有弹幕，来说点什么吧。',
+          hasLive ? '还没有弹幕，来说点什么吧。' : '请选择直播间后查看弹幕。',
           style: TextStyle(
             color: palette.mutedText,
             fontSize: AcoTypography.bodySmall,
@@ -9027,51 +9316,6 @@ class _RoomChatHistory extends StatelessWidget {
       ),
     );
   }
-
-  Widget _buildDemoMessages() {
-    return ListView.separated(
-      key: const Key('room-chat-history'),
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
-      itemCount: demoMessages.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 10),
-      itemBuilder: (_, index) {
-        final message = demoMessages[index];
-        return message.name == null
-            ? _RoomSystemMessage(palette: palette, text: message.text)
-            : _RoomMessage(
-                palette: palette,
-                name: message.name!,
-                text: message.text,
-              );
-      },
-    );
-  }
-}
-
-class _RoomSystemMessage extends StatelessWidget {
-  const _RoomSystemMessage({required this.palette, required this.text});
-
-  final AcoPalette palette;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-      decoration: BoxDecoration(
-        color: palette.dark ? const Color(0xFF1B2A04) : const Color(0xFFF1F7E8),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          color: palette.dark ? _lime : const Color(0xFF4D7800),
-          fontSize: AcoTypography.caption,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    ),
-  );
 }
 
 class _RoomEmojiPicker extends StatelessWidget {
@@ -9193,8 +9437,8 @@ class _RoomBottomBar extends StatelessWidget {
   final AcoPalette palette;
   final bool muted;
   final bool handRaised;
-  final VoidCallback onMic;
-  final VoidCallback onHand;
+  final VoidCallback? onMic;
+  final VoidCallback? onHand;
   final TextEditingController controller;
   final VoidCallback onEmojiPressed;
   final VoidCallback onSubmitted;
@@ -9252,7 +9496,7 @@ class _RoomControl extends StatelessWidget {
   final String label;
   final Color background;
   final Color foreground;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool large;
   @override
   Widget build(BuildContext context) => Semantics(

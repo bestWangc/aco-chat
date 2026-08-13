@@ -128,6 +128,30 @@ class AccountSession {
     );
   }
 
+  Future<LiveSession> updateLive({
+    required int liveId,
+    required String title,
+    required String coverUrl,
+    Uint8List? coverBytes,
+    required String access,
+    String? joinPassword,
+    DateTime? scheduledAt,
+  }) async {
+    final token = await _requireToken();
+    final resolvedCoverUrl = coverBytes == null
+        ? coverUrl
+        : await _apiClient.uploadLiveCover(bytes: coverBytes, token: token);
+    return _apiClient.updateLive(
+      liveId: liveId,
+      title: title,
+      coverUrl: resolvedCoverUrl,
+      access: access,
+      joinPassword: joinPassword,
+      scheduledAt: scheduledAt,
+      token: token,
+    );
+  }
+
   Future<List<LiveMessage>> listLiveMessages(int liveId, {int? after}) async =>
       _apiClient.listLiveMessages(
         liveId: liveId,
@@ -143,6 +167,29 @@ class AccountSession {
     text: text,
     token: await _requireToken(),
   );
+
+  Future<LiveRoom> liveRoom(int liveId) async =>
+      _apiClient.getLiveRoom(liveId: liveId, token: await _requireToken());
+
+  Future<void> raiseLiveHand(int liveId) async =>
+      _apiClient.raiseLiveHand(liveId: liveId, token: await _requireToken());
+
+  Future<void> approveLiveSpeaker(int liveId, int userId) async =>
+      _apiClient.approveLiveSpeaker(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
+  Future<void> removeLiveSpeaker(int liveId, int userId) async =>
+      _apiClient.removeLiveSpeaker(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
+  Future<void> endLive(int liveId) async =>
+      _apiClient.endLive(liveId: liveId, token: await _requireToken());
 
   Future<String> _requireToken() async {
     final tokens = await _tokenStore.read();

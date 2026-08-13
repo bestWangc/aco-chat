@@ -89,6 +89,7 @@ class LiveSession {
     required this.access,
     required this.status,
     required this.createdAt,
+    this.canEdit = false,
     this.scheduledAt,
   });
 
@@ -98,6 +99,7 @@ class LiveSession {
   final String access;
   final String status;
   final DateTime createdAt;
+  final bool canEdit;
   final DateTime? scheduledAt;
 
   factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
@@ -106,6 +108,7 @@ class LiveSession {
     coverUrl: json['cover_url'] as String,
     access: json['access'] as String,
     status: json['status'] as String,
+    canEdit: json['can_edit'] as bool? ?? false,
     createdAt: DateTime.parse(json['created_at'] as String),
     scheduledAt: switch (json['scheduled_at'] as String?) {
       final value? when value.isNotEmpty => DateTime.parse(value),
@@ -132,5 +135,63 @@ class LiveMessage {
     nickname: json['nickname'] as String,
     text: json['text'] as String,
     createdAt: DateTime.parse(json['created_at'] as String),
+  );
+}
+
+class LiveParticipant {
+  const LiveParticipant({
+    required this.userId,
+    required this.nickname,
+    required this.role,
+    required this.handRaised,
+  });
+
+  final int userId;
+  final String nickname;
+  final String role;
+  final bool handRaised;
+
+  factory LiveParticipant.fromJson(Map<String, dynamic> json) =>
+      LiveParticipant(
+        userId: json['user_id'] as int,
+        nickname: json['nickname'] as String,
+        role: json['role'] as String,
+        handRaised: json['hand_raised'] as bool? ?? false,
+      );
+}
+
+class LiveRoom {
+  const LiveRoom({
+    required this.live,
+    required this.host,
+    required this.viewerRole,
+    required this.participantCount,
+    required this.speakers,
+    required this.raisedHands,
+    required this.canRaiseHand,
+  });
+
+  final LiveSession live;
+  final LiveParticipant host;
+  final String viewerRole;
+  final int participantCount;
+  final List<LiveParticipant> speakers;
+  final List<LiveParticipant> raisedHands;
+  final bool canRaiseHand;
+
+  factory LiveRoom.fromJson(Map<String, dynamic> json) => LiveRoom(
+    live: LiveSession.fromJson(json['live'] as Map<String, dynamic>),
+    host: LiveParticipant.fromJson(json['host'] as Map<String, dynamic>),
+    viewerRole: json['viewer_role'] as String,
+    participantCount: json['participant_count'] as int,
+    speakers: (json['speakers'] as List<dynamic>)
+        .cast<Map<String, dynamic>>()
+        .map(LiveParticipant.fromJson)
+        .toList(growable: false),
+    raisedHands: (json['raised_hands'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(LiveParticipant.fromJson)
+        .toList(growable: false),
+    canRaiseHand: json['can_raise_hand'] as bool? ?? false,
   );
 }
