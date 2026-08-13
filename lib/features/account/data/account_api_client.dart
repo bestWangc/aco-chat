@@ -244,8 +244,19 @@ class AccountApiClient {
     required String token,
   }) => _postWithoutBody('lives/$liveId/speakers/$userId/remove', token);
 
+  Future<void> transferLiveHost({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/host/$userId/transfer', token);
+
   Future<void> endLive({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/end', token);
+
+  Future<void> muteAllLiveSpeakers({
+    required int liveId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/mute-all', token);
 
   Future<void> _postWithoutBody(String path, String token) async {
     final response = await _httpClient.post(
