@@ -207,6 +207,13 @@ class AccountSession {
   Future<void> muteAllLiveSpeakers(int liveId) async => _apiClient
       .muteAllLiveSpeakers(liveId: liveId, token: await _requireToken());
 
+  Future<void> setLiveChatMute(int liveId, bool muted) async =>
+      _apiClient.setLiveChatMute(
+        liveId: liveId,
+        muted: muted,
+        token: await _requireToken(),
+      );
+
   Future<String> _requireToken() async {
     final tokens = await _tokenStore.read();
     if (tokens == null) throw StateError('No access token is available');

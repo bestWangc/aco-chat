@@ -2148,7 +2148,7 @@ class AcoSearch extends StatelessWidget {
                 width: submitWidth,
                 height: height,
                 decoration: BoxDecoration(
-                  color: palette.mutedText,
+                  color: _lime,
                   borderRadius: BorderRadius.circular(height / 2),
                 ),
                 child: submitChild,
@@ -2160,16 +2160,27 @@ class AcoSearch extends StatelessWidget {
   }
 }
 
+const _defaultAvatarAsset = 'assets/design_svg/source/images/img1.jpg';
+const _liveRoomHostAvatarAsset = 'assets/design_svg/source/images/img3.jpg';
+const _liveRoomListenerAvatarAsset = 'assets/design_svg/source/images/img5.jpg';
+
 class AcoAvatar extends StatelessWidget {
-  const AcoAvatar({this.large = false, this.size, super.key});
+  const AcoAvatar({
+    this.large = false,
+    this.size,
+    this.assetPath = _defaultAvatarAsset,
+    super.key,
+  });
   final bool large;
   final double? size;
+  final String assetPath;
+
   @override
   Widget build(BuildContext context) {
     final resolvedSize = size ?? (large ? 76.0 : 42.0);
     return ClipOval(
       child: Image.asset(
-        'assets/design_svg/source/images/img1.jpg',
+        assetPath,
         width: resolvedSize,
         height: resolvedSize,
         fit: BoxFit.cover,
@@ -6888,11 +6899,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _roomLoading = false;
   bool _leaving = false;
   bool _allowPop = false;
+  bool _handRaiseNoticeVisible = false;
   LiveRoom? _room;
   List<LiveMessage> _messages = const [];
   WebSocketChannel? _eventChannel;
   StreamSubscription<dynamic>? _eventSubscription;
   Timer? _reconnectTimer;
+  Timer? _handRaiseNoticeTimer;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
@@ -7004,6 +7017,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _handRaised = room.raisedHands.any(
         (participant) => participant.userId == room.viewerUserId,
       );
+      if (room.chatMuted && room.viewerRole != 'host') {
+        _emojiPickerVisible = false;
+      }
     });
   }
 
@@ -7012,12 +7028,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     if (live == null || _handRaised) return;
     try {
       await _accountSession.raiseLiveHand(live.id);
-      if (mounted) setState(() => _handRaised = true);
+      if (!mounted) return;
+      setState(() => _handRaised = true);
+      _showHandRaiseNotice();
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '举手失败', error.message);
     } catch (_) {
       if (mounted) _showNotice(context, '举手失败', '请检查网络后重试。');
     }
+  }
+
+  void _showHandRaiseNotice() {
+    _handRaiseNoticeTimer?.cancel();
+    setState(() => _handRaiseNoticeVisible = true);
+    _handRaiseNoticeTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _handRaiseNoticeVisible = false);
+    });
   }
 
   Future<void> _endLive() async {
@@ -7031,6 +7057,33 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
+  Future<void> _confirmEndLive() async {
+    final shouldEnd = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('结束直播'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('确定要结束这场直播吗？'),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('结束直播'),
+          ),
+        ],
+      ),
+    );
+    if (shouldEnd == true && mounted) {
+      await _endLive();
+    }
+  }
+
   Future<void> _muteAllSpeakers() async {
     final live = widget.live;
     if (live == null) return;
@@ -7041,13 +7094,34 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
+  Future<void> _setChatMute(bool muted) async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.setLiveChatMute(live.id, muted);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '设置失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '设置失败', '请检查网络后重试。');
+    }
+  }
+
   void _showHostActions() {
+    final room = _room;
     final speakers = _room?.speakers ?? const <LiveParticipant>[];
     final hasSpeakers = speakers.isNotEmpty;
+    final chatMuted = room?.chatMuted ?? false;
     showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
         actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(sheetContext).pop();
+              unawaited(_setChatMute(!chatMuted));
+            },
+            child: Text(chatMuted ? '解除全员禁言' : '全员禁言'),
+          ),
           if (hasSpeakers)
             CupertinoActionSheetAction(
               onPressed: () {
@@ -7083,7 +7157,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _handleBack() async {
     if (_room?.viewerRole == 'host') {
-      _showHostActions();
+      await _confirmEndLive();
       return;
     }
     if (_leaving) return;
@@ -7165,6 +7239,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     );
   }
 
+  Future<void> _rejectSpeakerRequest(int userId) async {
+    await _updateSpeaker(
+      userId: userId,
+      action: _accountSession.removeLiveSpeaker,
+      failureTitle: '拒绝失败',
+    );
+  }
+
   Future<void> _updateSpeaker({
     required int userId,
     required Future<void> Function(int liveId, int userId) action,
@@ -7183,6 +7265,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   void dispose() {
     unawaited(_setLiveRoomWakelock(false));
     _reconnectTimer?.cancel();
+    _handRaiseNoticeTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     _apiClient.close();
@@ -7211,7 +7294,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   Future<void> _sendMessage() async {
     final live = widget.live;
     final text = _messageController.text.trim();
-    if (live == null || text.isEmpty || _sending) return;
+    final isViewerChatMuted =
+        _room?.chatMuted == true && _room?.viewerRole != 'host';
+    if (live == null || text.isEmpty || _sending || isViewerChatMuted) {
+      return;
+    }
     setState(() => _sending = true);
     try {
       await _accountSession.createLiveMessage(liveId: live.id, text: text);
@@ -7243,6 +7330,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final viewerRole = room?.viewerRole;
     final isHost = viewerRole == 'host';
     final canSpeak = live == null || isHost || viewerRole == 'speaker';
+    final chatMuted = room?.chatMuted == true && !isHost;
 
     return PopScope(
       canPop: _allowPop,
@@ -7253,6 +7341,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         palette: palette,
         title: live?.title.trim().isNotEmpty == true ? live!.title : '语音房',
         titleFollowsBack: true,
+        headerTopPadding: 14,
         onBack: () => unawaited(_handleBack()),
         right: _LiveRoomHeaderActions(
           palette: palette,
@@ -7288,7 +7377,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                             _LiveRoomStatus(
                               palette: palette,
                               room: room,
-                              onApprove: isHost ? _approveSpeaker : null,
                               onRemove: isHost ? _removeSpeaker : null,
                             ),
                           ] else if (_roomLoading)
@@ -7311,6 +7399,28 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                 ],
               ),
             ),
+            if (!_emojiPickerVisible &&
+                isHost &&
+                room != null &&
+                room.raisedHands.isNotEmpty)
+              Positioned(
+                top: 32,
+                right: 12,
+                width: math
+                    .max(
+                      78,
+                      math.min(160, MediaQuery.sizeOf(context).width / 2 - 78),
+                    )
+                    .toDouble(),
+                child: _RaisedHandRequests(
+                  palette: palette,
+                  users: room.raisedHands,
+                  onApprove: _approveSpeaker,
+                  onReject: _rejectSpeakerRequest,
+                ),
+              ),
+            if (_handRaiseNoticeVisible)
+              const Center(child: _LiveRoomInfoNotice()),
             Positioned(
               left: 0,
               right: 0,
@@ -7320,6 +7430,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                 muted: room?.viewerMuted ?? _muted,
                 canSpeak: canSpeak,
                 handRaised: _handRaised,
+                chatMuted: chatMuted,
                 onMic: canSpeak ? () => setState(() => _muted = !_muted) : null,
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
                 controller: _messageController,
@@ -8148,6 +8259,7 @@ class _DetailScaffold extends StatelessWidget {
     this.onBack,
     this.titleFollowsBack = false,
     this.showBack = true,
+    this.headerTopPadding = 4,
   });
   final AcoPalette palette;
   final Widget child;
@@ -8156,11 +8268,12 @@ class _DetailScaffold extends StatelessWidget {
   final VoidCallback? onBack;
   final bool titleFollowsBack;
   final bool showBack;
+  final double headerTopPadding;
   @override
   Widget build(BuildContext context) => Column(
     children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 28, 0),
+        padding: EdgeInsets.fromLTRB(20, headerTopPadding, 28, 0),
         child: AcoPageHeader(
           palette: palette,
           title: title,
@@ -9410,58 +9523,7 @@ class _LiveRoomHostCard extends StatelessWidget {
     padding: const EdgeInsets.only(top: 26, bottom: 12),
     child: Column(
       children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            ColorFiltered(
-              colorFilter: active
-                  ? const ColorFilter.mode(_transparent, BlendMode.dst)
-                  : const ColorFilter.matrix(<double>[
-                      .2126,
-                      .7152,
-                      .0722,
-                      0,
-                      0,
-                      .2126,
-                      .7152,
-                      .0722,
-                      0,
-                      0,
-                      .2126,
-                      .7152,
-                      .0722,
-                      0,
-                      0,
-                      0,
-                      0,
-                      0,
-                      .48,
-                      0,
-                    ]),
-              child: AcoAvatar(size: 108),
-            ),
-            Positioned(
-              right: -3,
-              bottom: -3,
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: active ? _lime : palette.mutedText,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: palette.background, width: 3),
-                ),
-                child: Icon(
-                  active
-                      ? CupertinoIcons.mic_slash_fill
-                      : CupertinoIcons.mic_slash,
-                  color: palette.background,
-                  size: 18,
-                ),
-              ),
-            ),
-          ],
-        ),
+        _buildHostAvatar(),
         const SizedBox(height: 14),
         Text(
           host.nickname,
@@ -9481,6 +9543,57 @@ class _LiveRoomHostCard extends StatelessWidget {
         ),
       ],
     ),
+  );
+
+  Widget _buildHostAvatar() => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      ColorFiltered(
+        colorFilter: active
+            ? const ColorFilter.mode(_transparent, BlendMode.dst)
+            : const ColorFilter.matrix(<double>[
+                .2126,
+                .7152,
+                .0722,
+                0,
+                0,
+                .2126,
+                .7152,
+                .0722,
+                0,
+                0,
+                .2126,
+                .7152,
+                .0722,
+                0,
+                0,
+                0,
+                0,
+                0,
+                .48,
+                0,
+              ]),
+        child: AcoAvatar(size: 108, assetPath: _liveRoomHostAvatarAsset),
+      ),
+      Positioned(
+        right: -3,
+        bottom: -3,
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: active ? _lime : palette.mutedText,
+            shape: BoxShape.circle,
+            border: Border.all(color: palette.background, width: 3),
+          ),
+          child: Icon(
+            active ? CupertinoIcons.mic_fill : CupertinoIcons.mic_slash,
+            color: palette.background,
+            size: 18,
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -9615,7 +9728,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
         Stack(
           clipBehavior: Clip.none,
           children: [
-            AcoAvatar(size: 58),
+            AcoAvatar(size: 58, assetPath: _liveRoomListenerAvatarAsset),
             Positioned(
               right: -2,
               bottom: -2,
@@ -9670,17 +9783,40 @@ class _MutedMicrophoneBadge extends StatelessWidget {
   );
 }
 
+class _LiveRoomInfoNotice extends StatelessWidget {
+  const _LiveRoomInfoNotice();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Container(
+      margin: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xE6000000),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Text(
+        '已举手，请等待主持人批准',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: _white,
+          fontSize: AcoTypography.bodySmall,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
 class _LiveRoomStatus extends StatelessWidget {
   const _LiveRoomStatus({
     required this.palette,
     required this.room,
-    this.onApprove,
     this.onRemove,
   });
 
   final AcoPalette palette;
   final LiveRoom room;
-  final ValueChanged<int>? onApprove;
   final ValueChanged<int>? onRemove;
 
   @override
@@ -9690,16 +9826,165 @@ class _LiveRoomStatus extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _ParticipantActions(
-          users: room.raisedHands,
-          action: onApprove,
-          label: '允许 {name} 发言',
-        ),
-        _ParticipantActions(
           users: room.speakers,
           action: onRemove,
           label: '停止 {name} 发言',
         ),
       ],
+    ),
+  );
+}
+
+class _RaisedHandRequests extends StatelessWidget {
+  const _RaisedHandRequests({
+    required this.palette,
+    required this.users,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final AcoPalette palette;
+  final List<LiveParticipant> users;
+  final ValueChanged<int>? onApprove;
+  final ValueChanged<int>? onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    if (onApprove == null || onReject == null || users.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: _lime.withValues(alpha: 0.16),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                CupertinoIcons.hand_raised_fill,
+                color: _lime,
+                size: 14,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '${users.length} 人申请发言',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.caption,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 228),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                for (final user in users) ...[
+                  _RaisedHandRequestChip(
+                    palette: palette,
+                    user: user,
+                    onApprove: onApprove!,
+                    onReject: onReject!,
+                  ),
+                  if (user != users.last) const SizedBox(height: 8),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RaisedHandRequestChip extends StatelessWidget {
+  const _RaisedHandRequestChip({
+    required this.palette,
+    required this.user,
+    required this.onApprove,
+    required this.onReject,
+  });
+
+  final AcoPalette palette;
+  final LiveParticipant user;
+  final ValueChanged<int> onApprove;
+  final ValueChanged<int> onReject;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: palette.dark
+          ? _lime.withValues(alpha: 0.18)
+          : _lime.withValues(alpha: 0.24),
+      border: Border.all(color: _lime.withValues(alpha: 0.72)),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(9, 8, 9, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            user.nickname,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.bodySmall,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Row(
+            children: [
+              Expanded(
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 30),
+                  onPressed: () => onApprove(user.userId),
+                  child: const Text(
+                    '允许',
+                    style: TextStyle(
+                      color: _lime,
+                      fontSize: AcoTypography.caption,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 30),
+                  onPressed: () => onReject(user.userId),
+                  child: Text(
+                    '拒绝',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.caption,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -9750,18 +10035,18 @@ class _RoomMessage extends StatelessWidget {
   Widget build(BuildContext context) => Align(
     alignment: Alignment.centerLeft,
     child: Container(
-      constraints: const BoxConstraints(maxWidth: 320),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      constraints: const BoxConstraints(maxWidth: 280),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: palette.surfaceRaised,
-        borderRadius: BorderRadius.circular(16),
+        color: palette.dark ? const Color(0xFF3D3D3D) : palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
         '$name:  $text',
         style: TextStyle(
           color: palette.dark ? _lime : palette.primaryText,
-          fontSize: AcoTypography.bodySmall,
-          height: 1.25,
+          fontSize: AcoTypography.caption,
+          height: 1.2,
         ),
       ),
     ),
@@ -9852,11 +10137,13 @@ class _RoomComposer extends StatelessWidget {
   const _RoomComposer({
     required this.palette,
     required this.controller,
+    required this.chatMuted,
     required this.onEmojiPressed,
     required this.onSubmitted,
   });
   final AcoPalette palette;
   final TextEditingController controller;
+  final bool chatMuted;
   final VoidCallback onEmojiPressed;
   final VoidCallback onSubmitted;
 
@@ -9865,7 +10152,9 @@ class _RoomComposer extends StatelessWidget {
     height: 50,
     child: Container(
       decoration: BoxDecoration(
-        color: palette.surfaceRaised,
+        color: chatMuted
+            ? palette.surfaceRaised.withValues(alpha: 0.72)
+            : palette.surfaceRaised,
         borderRadius: BorderRadius.circular(28),
       ),
       child: Row(
@@ -9874,10 +10163,10 @@ class _RoomComposer extends StatelessWidget {
             width: 42,
             child: CupertinoButton(
               padding: EdgeInsets.zero,
-              onPressed: onEmojiPressed,
+              onPressed: chatMuted ? null : onEmojiPressed,
               child: Icon(
                 CupertinoIcons.smiley,
-                color: palette.primaryText,
+                color: chatMuted ? palette.mutedText : palette.primaryText,
                 size: 20,
               ),
             ),
@@ -9887,20 +10176,21 @@ class _RoomComposer extends StatelessWidget {
               key: const Key('room-message-input'),
               maxLines: 1,
               controller: controller,
+              enabled: !chatMuted,
               textInputAction: TextInputAction.send,
               cursorColor: _lime,
               padding: const EdgeInsets.only(right: 14),
-              placeholder: '说点什么...',
+              placeholder: chatMuted ? '全员禁言中' : '说点什么...',
               placeholderStyle: TextStyle(
-                color: palette.primaryText,
+                color: chatMuted ? palette.mutedText : palette.primaryText,
                 fontSize: AcoTypography.bodySmall,
               ),
               style: TextStyle(
-                color: palette.primaryText,
+                color: chatMuted ? palette.mutedText : palette.primaryText,
                 fontSize: AcoTypography.bodySmall,
               ),
               onSubmitted: (message) {
-                if (message.trim().isNotEmpty) onSubmitted();
+                if (!chatMuted && message.trim().isNotEmpty) onSubmitted();
               },
               decoration: const BoxDecoration(color: _transparent),
             ),
@@ -9917,6 +10207,7 @@ class _RoomBottomBar extends StatelessWidget {
     required this.muted,
     required this.canSpeak,
     required this.handRaised,
+    required this.chatMuted,
     required this.onMic,
     required this.onHand,
     required this.controller,
@@ -9927,6 +10218,7 @@ class _RoomBottomBar extends StatelessWidget {
   final bool muted;
   final bool canSpeak;
   final bool handRaised;
+  final bool chatMuted;
   final VoidCallback? onMic;
   final VoidCallback? onHand;
   final TextEditingController controller;
@@ -9957,6 +10249,7 @@ class _RoomBottomBar extends StatelessWidget {
               child: _RoomComposer(
                 palette: palette,
                 controller: controller,
+                chatMuted: chatMuted,
                 onEmojiPressed: onEmojiPressed,
                 onSubmitted: onSubmitted,
               ),
