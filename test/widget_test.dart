@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
@@ -227,7 +228,7 @@ void main() {
     expect(find.textContaining('美股凭什么依然能打'), findsNothing);
   });
 
-  testWidgets('uses readable room chat text in light mode', (
+  testWidgets('shows an empty live chat state without mock messages', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -248,17 +249,102 @@ void main() {
       ),
     );
 
-    final message = tester.widget<Text>(find.text('Mia:  大家晚上好！'));
-    expect(message.style?.color, const Color(0xFF151515));
-    await tester.scrollUntilVisible(
-      find.text('欢迎 Sophia 进入直播间'),
-      100,
-      scrollable: find.descendant(
-        of: find.byKey(const Key('room-chat-history')),
-        matching: find.byType(Scrollable),
+    expect(find.text('请选择直播间后查看弹幕。'), findsOneWidget);
+    expect(find.text('Mia:  大家晚上好！'), findsNothing);
+  });
+
+  testWidgets('uses the live title in the room header', (
+    WidgetTester tester,
+  ) async {
+    final live = LiveSession(
+      id: 7,
+      title: '真实直播主题',
+      coverUrl: '/uploads/live-cover-9.jpg',
+      access: 'open',
+      status: 'live',
+      createdAt: DateTime(2026, 8, 12, 20),
+    );
+
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.voiceRoom,
+            dark: true,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+            live: live,
+          ),
+        ),
       ),
     );
-    expect(find.text('欢迎 Sophia 进入直播间'), findsOneWidget);
+
+    expect(find.text('真实直播主题'), findsWidgets);
+    expect(find.text('语音房'), findsNothing);
+  });
+
+  testWidgets('shows scheduled live notice as a centered dialog', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Builder(
+          builder: (context) => CupertinoButton(
+            onPressed: () => showAcoAlertNotice(context, '预约直播', '该直播尚未开始。'),
+            child: const Text('预约直播'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('预约直播'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CupertinoAlertDialog), findsOneWidget);
+    expect(find.byType(CupertinoActionSheet), findsNothing);
+    expect(find.text('该直播尚未开始。'), findsOneWidget);
+  });
+
+  testWidgets('shows an edit entry for editable scheduled lives', (
+    WidgetTester tester,
+  ) async {
+    final live = LiveSession(
+      id: 7,
+      title: '明晚市场复盘',
+      coverUrl: '/uploads/live-cover-7.jpg',
+      access: 'open',
+      status: 'scheduled',
+      canEdit: true,
+      scheduledAt: DateTime(2026, 8, 13, 20),
+      createdAt: DateTime(2026, 8, 12, 20),
+    );
+
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.squareFeed,
+            dark: true,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+            initialLives: [live],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.bySemanticsLabel('修改直播'), findsOneWidget);
   });
 
   testWidgets('uses the muted microphone treatment in light mode', (

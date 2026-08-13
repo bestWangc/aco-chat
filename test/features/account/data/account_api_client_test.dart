@@ -137,6 +137,7 @@ void main() {
               'cover_url': '/uploads/live-cover-9.jpg',
               'access': 'open',
               'status': 'live',
+              'can_edit': true,
               'created_at': '2026-08-12T08:30:00Z',
             },
           ],
@@ -152,6 +153,48 @@ void main() {
     expect(lives.single.title, '真实直播主题');
     expect(lives.single.coverUrl, '/uploads/live-cover-9.jpg');
     expect(lives.single.status, 'live');
+    expect(lives.single.canEdit, isTrue);
+  });
+
+  test('updates a scheduled live session', () async {
+    late http.Request request;
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((value) async {
+        request = value;
+        expect(jsonDecode(value.body), {
+          'title': '更新后的直播',
+          'cover_url': '/uploads/live-cover-9.jpg',
+          'access': 'open',
+          'scheduled_at': '2026-08-12T13:00:00.000Z',
+        });
+        return response({
+          'id': 9,
+          'title': '更新后的直播',
+          'cover_url': '/uploads/live-cover-9.jpg',
+          'access': 'open',
+          'status': 'scheduled',
+          'can_edit': true,
+          'scheduled_at': '2026-08-12T13:00:00Z',
+          'created_at': '2026-08-12T08:30:00Z',
+        });
+      }),
+    );
+
+    final live = await client.updateLive(
+      liveId: 9,
+      title: '更新后的直播',
+      coverUrl: '/uploads/live-cover-9.jpg',
+      access: 'open',
+      scheduledAt: DateTime.utc(2026, 8, 12, 13),
+      token: 'signed-token',
+    );
+
+    expect(request.method, 'PATCH');
+    expect(request.url.path, '/api/v1/lives/9');
+    expect(request.headers['authorization'], 'Bearer signed-token');
+    expect(live.title, '更新后的直播');
+    expect(live.canEdit, isTrue);
   });
 
   test('sends and incrementally loads live messages', () async {

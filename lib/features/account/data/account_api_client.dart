@@ -148,17 +148,41 @@ class AccountApiClient {
     String? joinPassword,
     DateTime? scheduledAt,
   }) async {
+    final body = _livePayload(
+      title: title,
+      coverUrl: coverUrl,
+      access: access,
+      joinPassword: joinPassword,
+      scheduledAt: scheduledAt,
+    );
     final response = await _httpClient.post(
       _uri('lives'),
       headers: _authorizedHeaders(token),
-      body: jsonEncode({
-        'title': title,
-        'cover_url': coverUrl,
-        'access': access,
-        if (joinPassword case final value?) 'join_password': value,
-        if (scheduledAt case final value?)
-          'scheduled_at': value.toUtc().toIso8601String(),
-      }),
+      body: jsonEncode(body),
+    );
+    return LiveSession.fromJson(_body(response));
+  }
+
+  Future<LiveSession> updateLive({
+    required int liveId,
+    required String title,
+    required String coverUrl,
+    required String access,
+    required String token,
+    String? joinPassword,
+    DateTime? scheduledAt,
+  }) async {
+    final body = _livePayload(
+      title: title,
+      coverUrl: coverUrl,
+      access: access,
+      joinPassword: joinPassword,
+      scheduledAt: scheduledAt,
+    );
+    final response = await _httpClient.patch(
+      _uri('lives/$liveId'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode(body),
     );
     return LiveSession.fromJson(_body(response));
   }
@@ -194,6 +218,45 @@ class AccountApiClient {
     return LiveMessage.fromJson(_body(response));
   }
 
+  Future<LiveRoom> getLiveRoom({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/room'),
+      headers: _authorizedHeaders(token),
+    );
+    return LiveRoom.fromJson(_body(response));
+  }
+
+  Future<void> raiseLiveHand({required int liveId, required String token}) =>
+      _postWithoutBody('lives/$liveId/raise-hand', token);
+
+  Future<void> approveLiveSpeaker({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/speakers/$userId/approve', token);
+
+  Future<void> removeLiveSpeaker({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/speakers/$userId/remove', token);
+
+  Future<void> endLive({required int liveId, required String token}) =>
+      _postWithoutBody('lives/$liveId/end', token);
+
+  Future<void> _postWithoutBody(String path, String token) async {
+    final response = await _httpClient.post(
+      _uri(path),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _body(response);
+    }
+  }
+
   void close() => _httpClient.close();
 
   Uri _uri(String path) {
@@ -207,6 +270,25 @@ class AccountApiClient {
     'content-type': 'application/json',
     'authorization': 'Bearer $token',
   };
+
+  Map<String, Object?> _livePayload({
+    required String title,
+    required String coverUrl,
+    required String access,
+    String? joinPassword,
+    DateTime? scheduledAt,
+  }) {
+    final body = <String, Object?>{
+      'title': title,
+      'cover_url': coverUrl,
+      'access': access,
+    };
+    if (joinPassword != null) body['join_password'] = joinPassword;
+    if (scheduledAt != null) {
+      body['scheduled_at'] = scheduledAt.toUtc().toIso8601String();
+    }
+    return body;
+  }
 
   Map<String, dynamic> _body(http.Response response) {
     final decoded = response.body.isEmpty
