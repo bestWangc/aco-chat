@@ -164,6 +164,8 @@ class LiveRoom {
   const LiveRoom({
     required this.live,
     required this.host,
+    required this.hostActive,
+    required this.viewerUserId,
     required this.viewerRole,
     required this.participantCount,
     required this.speakers,
@@ -175,6 +177,8 @@ class LiveRoom {
 
   final LiveSession live;
   final LiveParticipant host;
+  final bool hostActive;
+  final int viewerUserId;
   final String viewerRole;
   final int participantCount;
   final List<LiveParticipant> speakers;
@@ -186,6 +190,8 @@ class LiveRoom {
   factory LiveRoom.fromJson(Map<String, dynamic> json) => LiveRoom(
     live: LiveSession.fromJson(json['live'] as Map<String, dynamic>),
     host: LiveParticipant.fromJson(json['host'] as Map<String, dynamic>),
+    hostActive: json['host_active'] as bool? ?? false,
+    viewerUserId: json['viewer_user_id'] as int? ?? 0,
     viewerRole: json['viewer_role'] as String,
     participantCount: json['participant_count'] as int,
     speakers: (json['speakers'] as List<dynamic>)
