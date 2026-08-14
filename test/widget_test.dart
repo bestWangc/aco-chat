@@ -225,8 +225,8 @@ void main() {
     expect(walletConfigured, isFalse);
   });
 
-  testWidgets('uses the login PDF button proportions', (tester) async {
-    tester.view.physicalSize = const Size(595.276, 889);
+  testWidgets('uses the login Figma button proportions', (tester) async {
+    tester.view.physicalSize = const Size(793.701, 1186);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -235,12 +235,12 @@ void main() {
     final createButtonSize = tester.getSize(
       find.byKey(const Key('create-wallet-button')),
     );
-    expect(createButtonSize.width, closeTo(252, .2));
-    expect(createButtonSize.height, 73);
+    expect(createButtonSize.width, closeTo(336.8, .2));
+    expect(createButtonSize.height, 98);
     expect(
       tester.getTopLeft(find.byKey(const Key('import-wallet-button'))).dx -
           tester.getTopRight(find.byKey(const Key('create-wallet-button'))).dx,
-      18,
+      24,
     );
   });
 
@@ -417,7 +417,7 @@ void main() {
     expect(find.text('0'), findsOneWidget);
     expect(
       tester.getRect(find.byIcon(CupertinoIcons.creditcard)).left,
-      closeTo(28, 1),
+      closeTo(46.7, 1),
     );
     expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
 
