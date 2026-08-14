@@ -3501,7 +3501,7 @@ class _WalletDetailAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: const EdgeInsets.symmetric(horizontal: 18),
-    minimumSize: const Size.fromHeight(64),
+    minimumSize: const Size.fromHeight(82),
     onPressed: onPressed,
     child: Row(
       children: [
@@ -3510,12 +3510,34 @@ class _WalletDetailAction extends StatelessWidget {
             label,
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: AcoTypography.body,
-              fontWeight: FontWeight.w600,
+              fontSize: AcoTypography.title,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
-        Icon(CupertinoIcons.chevron_right, color: palette.mutedText, size: 20),
+        _WalletDetailChevron(color: palette.mutedText),
+      ],
+    ),
+  );
+}
+
+class _WalletDetailChevron extends StatelessWidget {
+  const _WalletDetailChevron({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 28,
+    height: 28,
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        Icon(CupertinoIcons.chevron_right, color: color, size: 28),
+        Transform.translate(
+          offset: const Offset(-0.75, 0),
+          child: Icon(CupertinoIcons.chevron_right, color: color, size: 28),
+        ),
       ],
     ),
   );
@@ -3528,13 +3550,16 @@ class _WalletDetailActionCard extends StatelessWidget {
   final Widget child;
 
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      color: palette.surface,
-      borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: palette.border),
+  Widget build(BuildContext context) => SizedBox(
+    height: 165,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.dark ? palette.background : palette.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: palette.border),
+      ),
+      child: child,
     ),
-    child: child,
   );
 }
 
@@ -3549,26 +3574,19 @@ class _WalletDetailDeleteButton extends StatelessWidget {
     label: '删除钱包',
     child: SizedBox(
       width: double.infinity,
-      height: 52,
+      height: 47,
       child: CupertinoButton(
         padding: EdgeInsets.zero,
-        color: const Color(0xFF2A1717),
-        borderRadius: BorderRadius.circular(14),
+        color: _lime,
+        borderRadius: BorderRadius.circular(24),
         onPressed: onPressed,
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(CupertinoIcons.trash, color: Color(0xFFFF7777), size: 19),
-            SizedBox(width: 8),
-            Text(
-              '删除钱包',
-              style: TextStyle(
-                color: Color(0xFFFF7777),
-                fontSize: AcoTypography.body,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
+        child: const Text(
+          '删除钱包',
+          style: TextStyle(
+            color: Color(0xFF000000),
+            fontSize: AcoTypography.title,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ),
     ),
@@ -4083,7 +4101,7 @@ class _AssetDetailState extends State<_AssetDetail> {
       return Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 28, 0),
+            padding: const EdgeInsets.fromLTRB(28, 44, 28, 0),
             child: SizedBox(
               height: 48,
               child: Stack(
@@ -4106,28 +4124,23 @@ class _AssetDetailState extends State<_AssetDetail> {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const Align(
-                    alignment: Alignment.centerRight,
-                    child: _WalletMoreMark(),
-                  ),
                 ],
               ),
             ),
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 30, 20, 24),
+              padding: const EdgeInsets.fromLTRB(29, 48, 29, 24),
               children: [
                 Container(
                   decoration: BoxDecoration(
-                    color: widget.palette.surface,
-                    borderRadius: BorderRadius.circular(18),
+                    borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: widget.palette.border),
                   ),
                   child: Column(
                     children: [
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 20, 12, 20),
+                        padding: const EdgeInsets.fromLTRB(37, 34, 34, 12),
                         child: Row(
                           children: [
                             KeyedSubtree(
@@ -4139,7 +4152,7 @@ class _AssetDetailState extends State<_AssetDetail> {
                                 size: 56,
                               ),
                             ),
-                            const SizedBox(width: 14),
+                            const SizedBox(width: 18),
                             Flexible(
                               fit: FlexFit.loose,
                               child: Text(
@@ -4148,12 +4161,12 @@ class _AssetDetailState extends State<_AssetDetail> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: widget.palette.primaryText,
-                                  fontSize: AcoTypography.bodyEmphasis,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: AcoTypography.titleLarge,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
+                            const SizedBox(width: 8),
                             CupertinoButton(
                               key: const Key('edit-wallet-name'),
                               padding: EdgeInsets.zero,
@@ -4161,10 +4174,16 @@ class _AssetDetailState extends State<_AssetDetail> {
                               onPressed: widget.onWalletNameChanged == null
                                   ? null
                                   : _editWalletName,
-                              child: Icon(
-                                CupertinoIcons.pencil,
-                                color: widget.palette.mutedText,
-                                size: 17,
+                              child: Image.asset(
+                                'assets/icons/wallet_edit_pencil.png',
+                                width: 24,
+                                height: 22,
+                                color: widget.palette.primaryText,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  CupertinoIcons.pencil,
+                                  color: widget.palette.primaryText,
+                                  size: 20,
+                                ),
                               ),
                             ),
                           ],
@@ -4172,12 +4191,12 @@ class _AssetDetailState extends State<_AssetDetail> {
                       ),
                       Container(
                         width: double.infinity,
-                        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                        padding: const EdgeInsets.fromLTRB(16, 14, 10, 14),
+                        padding: const EdgeInsets.fromLTRB(26, 25, 20, 28),
                         decoration: BoxDecoration(
-                          color: widget.palette.background,
-                          borderRadius: BorderRadius.circular(13),
-                          border: Border.all(color: widget.palette.border),
+                          color: widget.palette.dark
+                              ? const Color(0xFF121212)
+                              : widget.palette.surfaceRaised,
+                          borderRadius: BorderRadius.circular(15),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -4188,13 +4207,29 @@ class _AssetDetailState extends State<_AssetDetail> {
                                   '钱包地址',
                                   style: TextStyle(
                                     color: widget.palette.mutedText,
-                                    fontSize: AcoTypography.bodySmall,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: AcoTypography.bodyEmphasis,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                const Spacer(),
+                                GestureDetector(
+                                  key: const Key('wallet-detail-copy-address'),
+                                  onTap: addressReady
+                                      ? () => _copyAddress(address)
+                                      : null,
+                                  child: SizedBox(
+                                    width: 24,
+                                    height: 24,
+                                    child: Icon(
+                                      CupertinoIcons.doc_on_doc,
+                                      color: widget.palette.mutedText,
+                                      size: 22,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 9),
+                            const SizedBox(height: 8),
                             Row(
                               children: [
                                 Expanded(
@@ -4204,30 +4239,8 @@ class _AssetDetailState extends State<_AssetDetail> {
                                     overflow: TextOverflow.visible,
                                     style: TextStyle(
                                       color: widget.palette.primaryText,
-                                      fontSize: AcoTypography.bodyEmphasis,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                CupertinoButton(
-                                  key: const Key('wallet-detail-copy-address'),
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: const Size(40, 40),
-                                  onPressed: addressReady
-                                      ? () => _copyAddress(address)
-                                      : null,
-                                  child: Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: widget.palette.surfaceRaised,
-                                      borderRadius: BorderRadius.circular(9),
-                                    ),
-                                    child: Icon(
-                                      CupertinoIcons.doc_on_doc,
-                                      color: widget.palette.primaryText,
-                                      size: 18,
+                                      fontSize: AcoTypography.title,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                   ),
                                 ),
@@ -4239,22 +4252,25 @@ class _AssetDetailState extends State<_AssetDetail> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 48),
                 _WalletDetailActionCard(
                   palette: widget.palette,
-                  child: _WalletDetailAction(
-                    label: '导出助记词',
-                    palette: widget.palette,
-                    onPressed: () => widget.onOpen(AcoScreen.backupMnemonic),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _WalletDetailActionCard(
-                  palette: widget.palette,
-                  child: _WalletDetailAction(
-                    label: '导出私钥',
-                    palette: widget.palette,
-                    onPressed: () => widget.onOpen(AcoScreen.exportPrivateKey),
+                  child: Column(
+                    children: [
+                      _WalletDetailAction(
+                        label: '导出助记词',
+                        palette: widget.palette,
+                        onPressed: () =>
+                            widget.onOpen(AcoScreen.backupMnemonic),
+                      ),
+                      Container(height: 1, color: widget.palette.border),
+                      _WalletDetailAction(
+                        label: '导出私钥',
+                        palette: widget.palette,
+                        onPressed: () =>
+                            widget.onOpen(AcoScreen.exportPrivateKey),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -4262,7 +4278,7 @@ class _AssetDetailState extends State<_AssetDetail> {
           ),
           SafeArea(
             top: false,
-            minimum: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+            minimum: const EdgeInsets.fromLTRB(67, 8, 67, 25),
             child: _WalletDetailDeleteButton(onPressed: _confirmDeleteWallet),
           ),
         ],
@@ -4448,6 +4464,7 @@ class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
   Widget build(BuildContext context) => _DetailScaffold(
     palette: widget.palette,
     title: _isMnemonicExport ? '备份助记词' : '导出私钥',
+    headerTopPadding: 36,
     child: SafeArea(
       top: false,
       child: Column(
