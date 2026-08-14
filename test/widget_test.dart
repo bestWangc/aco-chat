@@ -807,6 +807,10 @@ void main() {
     expect(find.text('收款地址'), findsOneWidget);
     expect(find.text(address), findsOneWidget);
     expect(find.bySemanticsLabel('收款二维码：$address'), findsOneWidget);
+    expect(
+      tester.getSize(find.byKey(const Key('receive-qr-surface'))),
+      const Size(288, 288),
+    );
     await tester.scrollUntilVisible(find.text('分享'), 120);
     expect(find.text('分享'), findsOneWidget);
     expect(find.text('复制'), findsOneWidget);
@@ -859,6 +863,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('扫一扫'), findsOneWidget);
+    expect(find.byKey(const Key('scan-back-button')), findsOneWidget);
     expect(find.text('将二维码放入框内，即可自动扫描'), findsOneWidget);
     expect(find.text('闪光灯'), findsOneWidget);
     expect(find.text('相册'), findsNothing);
@@ -922,6 +927,30 @@ void main() {
     expect(find.text('创建直播'), findsOneWidget);
     expect(find.text('预约时间'), findsOneWidget);
     expect(find.text('上传封面'), findsOneWidget);
+  });
+
+  testWidgets('matches the square feed search button proportions', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.squareFeed,
+          dark: true,
+          isRoot: true,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+        ),
+      ),
+    );
+
+    final submit = find.byKey(const Key('square-search-submit'));
+    expect(submit, findsOneWidget);
+    expect(tester.getSize(submit), const Size(56, 38));
+
+    final decoration =
+        tester.widget<Container>(submit).decoration! as BoxDecoration;
+    expect(decoration.borderRadius, isA<BorderRadius>());
   });
 
   testWidgets('shows the live album cover upload control', (
