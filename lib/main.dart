@@ -189,7 +189,7 @@ class _AcoAppState extends State<AcoApp> {
                 : const Color(0xFFFFFFFF),
             textTheme: const CupertinoTextThemeData(
               textStyle: TextStyle(
-                fontFamily: 'PingFang',
+                fontFamily: 'HarmonyOS Sans SC',
                 fontSize: AcoTypography.body,
               ),
             ),
