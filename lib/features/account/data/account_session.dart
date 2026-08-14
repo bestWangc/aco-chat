@@ -204,8 +204,12 @@ class AccountSession {
   Future<void> endLive(int liveId) async =>
       _apiClient.endLive(liveId: liveId, token: await _requireToken());
 
-  Future<void> muteAllLiveSpeakers(int liveId) async => _apiClient
-      .muteAllLiveSpeakers(liveId: liveId, token: await _requireToken());
+  Future<void> setLiveAudioMute(int liveId, bool muted) async =>
+      _apiClient.setLiveAudioMute(
+        liveId: liveId,
+        muted: muted,
+        token: await _requireToken(),
+      );
 
   Future<void> setLiveChatMute(int liveId, bool muted) async =>
       _apiClient.setLiveChatMute(
