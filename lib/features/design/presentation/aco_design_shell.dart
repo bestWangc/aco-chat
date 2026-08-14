@@ -3279,18 +3279,6 @@ class _WalletHomeState extends State<_WalletHome> {
                         ),
                       ),
                     ),
-                    SizedBox(width: 8 * scale),
-                    Semantics(
-                      button: true,
-                      label: '钱包详情',
-                      child: CupertinoButton(
-                        key: const Key('wallet-details-button'),
-                        padding: EdgeInsets.zero,
-                        minimumSize: Size(44 * scale, 44 * scale),
-                        onPressed: () => widget.onOpen(AcoScreen.assetDetail),
-                        child: const _WalletMoreMark(),
-                      ),
-                    ),
                   ],
                 ),
                 SizedBox(height: 22 * scale),
@@ -3484,17 +3472,6 @@ class _WalletHomeState extends State<_WalletHome> {
         ],
       );
     },
-  );
-}
-
-class _WalletMoreMark extends StatelessWidget {
-  const _WalletMoreMark();
-
-  @override
-  Widget build(BuildContext context) => SvgPicture.asset(
-    'assets/icons/wallet_more_mark.svg',
-    width: 30,
-    height: 11,
   );
 }
 
@@ -3704,13 +3681,13 @@ class _WalletChainsState extends State<_WalletChains> {
   @override
   Widget build(BuildContext context) => _DetailScaffold(
     palette: widget.palette,
-    title: '钱包列表',
+    title: '钱包详情',
     child: Stack(
       children: [
         Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(112, 8, 20, 8),
+              padding: const EdgeInsets.fromLTRB(104, 8, 20, 8),
               child: Row(
                 children: [
                   Text(
@@ -3722,11 +3699,20 @@ class _WalletChainsState extends State<_WalletChains> {
                     ),
                   ),
                   const Spacer(),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(32, 32),
-                    onPressed: () => widget.onOpen(AcoScreen.addTokenV1),
-                    child: const Icon(CupertinoIcons.add_circled, color: _lime),
+                  Semantics(
+                    button: true,
+                    label: '添加钱包',
+                    child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(32, 32),
+                      onPressed: () =>
+                          _showNotice(context, '添加钱包', '添加钱包功能即将开放。'),
+                      child: const Icon(
+                        CupertinoIcons.add_circled,
+                        color: _lime,
+                        size: 24,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -3759,14 +3745,14 @@ class _WalletChainsState extends State<_WalletChains> {
                               )
                             : ListView.separated(
                                 padding: const EdgeInsets.fromLTRB(
-                                  12,
+                                  10,
                                   0,
-                                  14,
+                                  12,
                                   0,
                                 ),
                                 itemCount: wallets.length,
                                 separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 9),
+                                    const SizedBox(height: 6),
                                 itemBuilder: (context, index) {
                                   final wallet = wallets[index];
                                   return _WalletChainCard(
@@ -3775,7 +3761,7 @@ class _WalletChainsState extends State<_WalletChains> {
                                     address: wallet.address,
                                     current: true,
                                     onTap: () =>
-                                        widget.onOpen(AcoScreen.walletHome),
+                                        widget.onOpen(AcoScreen.assetDetail),
                                   );
                                 },
                               ),
@@ -3825,7 +3811,7 @@ class _WalletChainRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ColoredBox(
-    color: palette.surface,
+    color: palette.background,
     child: ListView.builder(
       padding: EdgeInsets.zero,
       itemCount: chains.length,
@@ -3833,25 +3819,41 @@ class _WalletChainRail extends StatelessWidget {
         final active = index == selected;
         final chain = chains[index];
         return SizedBox(
-          height: 70,
-          child: Center(
-            child: Semantics(
-              button: true,
-              label: '选择公链 ${chain.label}',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => onSelected(index),
-                child: SizedBox(
-                  width: 44,
-                  height: 44,
-                  child: _WalletChainLogo(
-                    asset: chain.asset,
-                    muted: !active,
-                    backgroundColor: chain.backgroundColor,
+          height: 74,
+          child: Stack(
+            children: [
+              if (active)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: palette.dark
+                        ? const Color(0xFF1C1C1C)
+                        : palette.surfaceRaised,
+                  ),
+                ),
+              Positioned.fill(
+                child: Semantics(
+                  button: true,
+                  label: '选择公链 ${chain.label}',
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => onSelected(index),
+                    child: Center(
+                      child: _WalletChainLogo(
+                        asset: chain.asset,
+                        backgroundColor: chain.backgroundColor,
+                        size: 44,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
+              if (active)
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Container(width: 5, height: 74, color: _lime),
+                ),
+            ],
           ),
         );
       },
@@ -3876,7 +3878,7 @@ class _WalletChainLogo extends StatelessWidget {
     width: size,
     height: size,
     child: Opacity(
-      opacity: muted ? .32 : 1,
+      opacity: muted ? .76 : 1,
       child: ClipOval(
         child: ColoredBox(
           color: backgroundColor ?? _transparent,
@@ -3912,64 +3914,90 @@ class _WalletChainCard extends StatelessWidget {
   Widget build(BuildContext context) => CupertinoButton(
     padding: EdgeInsets.zero,
     onPressed: onTap,
-    child: Container(
-      height: 96,
-      padding: const EdgeInsets.fromLTRB(18, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: current ? palette.surface : _transparent,
-        borderRadius: BorderRadius.circular(16),
-        border: current
-            ? null
-            : Border.all(color: palette.border.withValues(alpha: .6)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                name,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.title,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              if (current)
-                Semantics(
-                  label: '当前钱包',
-                  child: const Icon(
-                    CupertinoIcons.checkmark,
-                    color: _lime,
-                    size: 21,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Flexible(
-                child: Text(
-                  _displayAddress(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    child: AspectRatio(
+      aspectRatio: 3.35,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 11, 12, 10),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: BorderRadius.circular(8),
+          border: current
+              ? null
+              : Border.all(color: palette.border.withValues(alpha: .6)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  name,
                   style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.caption,
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.titleLarge,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (current)
+                  Container(
+                    margin: const EdgeInsets.only(left: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _lime,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      '当前',
+                      style: TextStyle(
+                        color: _black,
+                        fontSize: AcoTypography.bodySmall,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                Icon(
+                  CupertinoIcons.chevron_right,
+                  color: palette.mutedText,
+                  size: 14,
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    _displayAddress(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  CupertinoIcons.doc_on_doc,
+                  color: palette.mutedText,
+                  size: 14,
+                ),
+              ],
+            ),
+            Text(
+              r'$0.00',
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.bodyEmphasis,
+                fontWeight: FontWeight.w700,
               ),
-              const SizedBox(width: 5),
-              Icon(
-                CupertinoIcons.doc_on_doc,
-                color: palette.mutedText,
-                size: 15,
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     ),
   );
