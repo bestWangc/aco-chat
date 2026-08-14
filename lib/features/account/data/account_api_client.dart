@@ -267,10 +267,18 @@ class AccountApiClient {
   Future<void> endLive({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/end', token);
 
-  Future<void> muteAllLiveSpeakers({
+  Future<void> setLiveAudioMute({
     required int liveId,
+    required bool muted,
     required String token,
-  }) => _postWithoutBody('lives/$liveId/mute-all', token);
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/mute-all'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'muted': muted}),
+    );
+    _body(response);
+  }
 
   Future<void> setLiveChatMute({
     required int liveId,

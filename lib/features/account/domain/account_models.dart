@@ -144,12 +144,14 @@ class LiveParticipant {
     required this.nickname,
     required this.role,
     required this.handRaised,
+    required this.muted,
   });
 
   final int userId;
   final String nickname;
   final String role;
   final bool handRaised;
+  final bool muted;
 
   factory LiveParticipant.fromJson(Map<String, dynamic> json) =>
       LiveParticipant(
@@ -157,6 +159,7 @@ class LiveParticipant {
         nickname: json['nickname'] as String,
         role: json['role'] as String,
         handRaised: json['hand_raised'] as bool? ?? false,
+        muted: json['muted'] as bool? ?? false,
       );
 }
 
@@ -174,6 +177,7 @@ class LiveRoom {
     required this.canRaiseHand,
     required this.viewerMuted,
     required this.chatMuted,
+    required this.audioMuted,
   });
 
   final LiveSession live;
@@ -188,6 +192,7 @@ class LiveRoom {
   final bool canRaiseHand;
   final bool viewerMuted;
   final bool chatMuted;
+  final bool audioMuted;
 
   factory LiveRoom.fromJson(Map<String, dynamic> json) => LiveRoom(
     live: LiveSession.fromJson(json['live'] as Map<String, dynamic>),
@@ -211,5 +216,6 @@ class LiveRoom {
     canRaiseHand: json['can_raise_hand'] as bool? ?? false,
     viewerMuted: json['viewer_muted'] as bool? ?? false,
     chatMuted: json['chat_muted'] as bool? ?? false,
+    audioMuted: json['audio_muted'] as bool? ?? false,
   );
 }

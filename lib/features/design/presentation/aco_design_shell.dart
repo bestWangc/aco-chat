@@ -7084,13 +7084,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
-  Future<void> _muteAllSpeakers() async {
+  Future<void> _setAudioMute(bool muted) async {
     final live = widget.live;
     if (live == null) return;
     try {
-      await _accountSession.muteAllLiveSpeakers(live.id);
+      await _accountSession.setLiveAudioMute(live.id, muted);
     } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '全员静音失败', error.message);
+      if (mounted) _showNotice(context, '设置失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '设置失败', '请检查网络后重试。');
     }
   }
 
@@ -7106,11 +7108,44 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
+  void _showRaisedHandRequests() {
+    final room = _room;
+    if (room == null || room.raisedHands.isEmpty) return;
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 320,
+            maxHeight: math.min(280, MediaQuery.sizeOf(context).height * .42),
+          ),
+          child: CupertinoPopupSurface(
+            child: _RaisedHandRequests(
+              palette: widget.palette,
+              users: room.raisedHands,
+              onClose: () => Navigator.of(dialogContext).pop(),
+              onApprove: (userId) {
+                Navigator.of(dialogContext).pop();
+                unawaited(_approveSpeaker(userId));
+              },
+              onReject: (userId) {
+                Navigator.of(dialogContext).pop();
+                unawaited(_rejectSpeakerRequest(userId));
+              },
+              maxHeight: 170,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showHostActions() {
     final room = _room;
     final speakers = _room?.speakers ?? const <LiveParticipant>[];
     final hasSpeakers = speakers.isNotEmpty;
     final chatMuted = room?.chatMuted ?? false;
+    final audioMuted = room?.audioMuted ?? false;
     showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
@@ -7118,25 +7153,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
           CupertinoActionSheetAction(
             onPressed: () {
               Navigator.of(sheetContext).pop();
+              unawaited(_setAudioMute(!audioMuted));
+            },
+            child: _hostActionLabel(audioMuted ? '解除全员静音' : '全员静音'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(sheetContext).pop();
               unawaited(_setChatMute(!chatMuted));
             },
-            child: Text(chatMuted ? '解除全员禁言' : '全员禁言'),
+            child: _hostActionLabel(chatMuted ? '解除全员禁言' : '全员禁言'),
           ),
-          if (hasSpeakers)
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_muteAllSpeakers());
-              },
-              child: const Text('全员静音'),
-            ),
           if (hasSpeakers)
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.of(sheetContext).pop();
                 _showHostTransferPicker(speakers);
               },
-              child: const Text('转让主持人'),
+              child: _hostActionLabel('转让主持人'),
             ),
           CupertinoActionSheetAction(
             isDestructiveAction: true,
@@ -7144,16 +7178,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               Navigator.of(sheetContext).pop();
               unawaited(_endLive());
             },
-            child: const Text('结束直播'),
+            child: _hostActionLabel('结束直播'),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
+          child: _hostActionLabel('取消'),
         ),
       ),
     );
   }
+
+  Widget _hostActionLabel(String label) =>
+      Text(label, style: const TextStyle(fontSize: AcoTypography.body));
 
   Future<void> _handleBack() async {
     if (_room?.viewerRole == 'host') {
@@ -7330,6 +7367,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final viewerRole = room?.viewerRole;
     final isHost = viewerRole == 'host';
     final canSpeak = live == null || isHost || viewerRole == 'speaker';
+    final audioMuted = room?.audioMuted == true && !isHost;
     final chatMuted = room?.chatMuted == true && !isHost;
 
     return PopScope(
@@ -7359,10 +7397,30 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                       children: [
                         if (!_emojiPickerVisible) ...[
                           if (room != null) ...[
-                            _LiveRoomHostCard(
-                              palette: palette,
-                              host: room.host,
-                              active: room.hostActive,
+                            SizedBox(
+                              width: double.infinity,
+                              child: Stack(
+                                children: [
+                                  Align(
+                                    alignment: Alignment.topCenter,
+                                    child: _LiveRoomHostCard(
+                                      palette: palette,
+                                      host: room.host,
+                                      active: room.hostActive,
+                                    ),
+                                  ),
+                                  if (isHost && room.raisedHands.isNotEmpty)
+                                    Positioned(
+                                      top: 54,
+                                      right: 14,
+                                      child: _RaisedHandIndicator(
+                                        palette: palette,
+                                        count: room.raisedHands.length,
+                                        onPressed: _showRaisedHandRequests,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                             if (room.speakers.isNotEmpty)
                               _LiveRoomParticipantStage(
@@ -7399,26 +7457,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                 ],
               ),
             ),
-            if (!_emojiPickerVisible &&
-                isHost &&
-                room != null &&
-                room.raisedHands.isNotEmpty)
-              Positioned(
-                top: 32,
-                right: 12,
-                width: math
-                    .max(
-                      78,
-                      math.min(160, MediaQuery.sizeOf(context).width / 2 - 78),
-                    )
-                    .toDouble(),
-                child: _RaisedHandRequests(
-                  palette: palette,
-                  users: room.raisedHands,
-                  onApprove: _approveSpeaker,
-                  onReject: _rejectSpeakerRequest,
-                ),
-              ),
             if (_handRaiseNoticeVisible)
               const Center(child: _LiveRoomInfoNotice()),
             Positioned(
@@ -7427,11 +7465,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               bottom: _emojiPickerVisible ? 292 : 0,
               child: _RoomBottomBar(
                 palette: palette,
-                muted: room?.viewerMuted ?? _muted,
+                muted: audioMuted || (room?.viewerMuted ?? _muted),
                 canSpeak: canSpeak,
+                audioMuted: audioMuted,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
-                onMic: canSpeak ? () => setState(() => _muted = !_muted) : null,
+                onMic: canSpeak && !audioMuted
+                    ? () => setState(() => _muted = !_muted)
+                    : null,
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
                 controller: _messageController,
                 onEmojiPressed: _toggleEmojiPicker,
@@ -9656,6 +9697,73 @@ class _LiveRoomHeaderActions extends StatelessWidget {
   }
 }
 
+class _RaisedHandIndicator extends StatelessWidget {
+  const _RaisedHandIndicator({
+    required this.palette,
+    required this.count,
+    required this.onPressed,
+  });
+
+  final AcoPalette palette;
+  final int count;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: '$count 人申请发言',
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: palette.dark ? const Color(0xE6292929) : palette.surfaceRaised,
+          border: Border.all(color: _lime.withValues(alpha: .52)),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x40000000),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(9, 7, 11, 7),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  color: _lime,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  CupertinoIcons.hand_raised_fill,
+                  color: _black,
+                  size: 15,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                '$count',
+                style: const TextStyle(
+                  color: _lime,
+                  fontSize: AcoTypography.bodySmall,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _LiveRoomParticipantStage extends StatelessWidget {
   const _LiveRoomParticipantStage({
     required this.palette,
@@ -9673,12 +9781,8 @@ class _LiveRoomParticipantStage extends StatelessWidget {
       spacing: 22,
       runSpacing: 16,
       children: [
-        ...speakers.map(
-          (participant) => _LiveRoomParticipantCard(
-            palette: palette,
-            participant: participant,
-          ),
-        ),
+        for (final participant in speakers)
+          _LiveRoomParticipantCard(palette: palette, participant: participant),
       ],
     ),
   );
@@ -9729,11 +9833,12 @@ class _LiveRoomParticipantCard extends StatelessWidget {
           clipBehavior: Clip.none,
           children: [
             AcoAvatar(size: 58, assetPath: _liveRoomListenerAvatarAsset),
-            Positioned(
-              right: -2,
-              bottom: -2,
-              child: _MutedMicrophoneBadge(palette: palette),
-            ),
+            if (participant.role != 'speaker' || participant.muted)
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: _MutedMicrophoneBadge(palette: palette),
+              ),
           ],
         ),
         const SizedBox(height: 7),
@@ -9750,7 +9855,9 @@ class _LiveRoomParticipantCard extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(
-          participant.role == 'speaker' ? '发言中' : '听众',
+          participant.role == 'speaker'
+              ? (participant.muted ? '已静音' : '发言中')
+              : '听众',
           style: TextStyle(
             color: palette.mutedText,
             fontSize: AcoTypography.caption,
@@ -9839,73 +9946,118 @@ class _RaisedHandRequests extends StatelessWidget {
   const _RaisedHandRequests({
     required this.palette,
     required this.users,
+    required this.onClose,
     required this.onApprove,
     required this.onReject,
+    this.maxHeight = 248,
   });
 
   final AcoPalette palette;
   final List<LiveParticipant> users;
-  final ValueChanged<int>? onApprove;
-  final ValueChanged<int>? onReject;
+  final VoidCallback onClose;
+  final ValueChanged<int> onApprove;
+  final ValueChanged<int> onReject;
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context) {
-    if (onApprove == null || onReject == null || users.isEmpty) {
+    if (users.isEmpty) {
       return const SizedBox.shrink();
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xF21F1F1F),
+        border: Border.all(color: _white.withValues(alpha: .12)),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x55000000),
+            blurRadius: 16,
+            offset: Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: _lime.withValues(alpha: 0.16),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                CupertinoIcons.hand_raised_fill,
-                color: _lime,
-                size: 14,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: const BoxDecoration(
+                    color: _lime,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.hand_raised_fill,
+                    color: _black,
+                    size: 15,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '申请发言',
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.bodySmall,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 24),
+                  height: 24,
+                  padding: const EdgeInsets.symmetric(horizontal: 7),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _lime.withValues(alpha: .16),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${users.length}',
+                    style: const TextStyle(
+                      color: _lime,
+                      fontSize: AcoTypography.caption,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                CupertinoButton(
+                  padding: const EdgeInsets.only(left: 8),
+                  minimumSize: const Size(28, 28),
+                  onPressed: onClose,
+                  child: Icon(
+                    CupertinoIcons.xmark,
+                    color: palette.mutedText,
+                    size: 18,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                '${users.length} 人申请发言',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.caption,
-                  fontWeight: FontWeight.w700,
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxHeight),
+              child: ListView.separated(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true,
+                itemCount: users.length,
+                separatorBuilder: (_, _) =>
+                    Container(height: 1, color: _white.withValues(alpha: .08)),
+                itemBuilder: (context, index) => _RaisedHandRequestChip(
+                  palette: palette,
+                  user: users[index],
+                  onApprove: onApprove,
+                  onReject: onReject,
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 228),
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                for (final user in users) ...[
-                  _RaisedHandRequestChip(
-                    palette: palette,
-                    user: user,
-                    onApprove: onApprove!,
-                    onReject: onReject!,
-                  ),
-                  if (user != users.last) const SizedBox(height: 8),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -9924,67 +10076,65 @@ class _RaisedHandRequestChip extends StatelessWidget {
   final ValueChanged<int> onReject;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    decoration: BoxDecoration(
-      color: palette.dark
-          ? _lime.withValues(alpha: 0.18)
-          : _lime.withValues(alpha: 0.24),
-      border: Border.all(color: _lime.withValues(alpha: 0.72)),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(9, 8, 9, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
+  Widget build(BuildContext context) => SizedBox(
+    height: 56,
+    child: Row(
+      children: [
+        AcoAvatar(size: 32, assetPath: _liveRoomListenerAvatarAsset),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
             user.nickname,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: palette.primaryText,
               fontSize: AcoTypography.bodySmall,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 3),
-          Row(
-            children: [
-              Expanded(
-                child: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 30),
-                  onPressed: () => onApprove(user.userId),
-                  child: const Text(
-                    '允许',
-                    style: TextStyle(
-                      color: _lime,
-                      fontSize: AcoTypography.caption,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              Expanded(
-                child: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(0, 30),
-                  onPressed: () => onReject(user.userId),
-                  child: Text(
-                    '拒绝',
-                    style: TextStyle(
-                      color: palette.mutedText,
-                      fontSize: AcoTypography.caption,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(width: 4),
+        _RaisedHandAction(
+          icon: CupertinoIcons.checkmark,
+          label: '允许',
+          color: _lime,
+          onPressed: () => onApprove(user.userId),
+        ),
+        const SizedBox(width: 4),
+        _RaisedHandAction(
+          icon: CupertinoIcons.xmark,
+          label: '拒绝',
+          color: palette.mutedText,
+          onPressed: () => onReject(user.userId),
+        ),
+      ],
+    ),
+  );
+}
+
+class _RaisedHandAction extends StatelessWidget {
+  const _RaisedHandAction({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: const Size(30, 30),
+    onPressed: onPressed,
+    child: Semantics(
+      button: true,
+      label: label,
+      child: Icon(icon, color: color, size: 17),
     ),
   );
 }
@@ -10045,7 +10195,7 @@ class _RoomMessage extends StatelessWidget {
         '$name:  $text',
         style: TextStyle(
           color: palette.dark ? _lime : palette.primaryText,
-          fontSize: AcoTypography.caption,
+          fontSize: AcoTypography.bodySmall,
           height: 1.2,
         ),
       ),
@@ -10206,6 +10356,7 @@ class _RoomBottomBar extends StatelessWidget {
     required this.palette,
     required this.muted,
     required this.canSpeak,
+    required this.audioMuted,
     required this.handRaised,
     required this.chatMuted,
     required this.onMic,
@@ -10217,6 +10368,7 @@ class _RoomBottomBar extends StatelessWidget {
   final AcoPalette palette;
   final bool muted;
   final bool canSpeak;
+  final bool audioMuted;
   final bool handRaised;
   final bool chatMuted;
   final VoidCallback? onMic;
@@ -10238,7 +10390,11 @@ class _RoomBottomBar extends StatelessWidget {
               icon: canSpeak && !muted
                   ? CupertinoIcons.mic
                   : CupertinoIcons.mic_slash,
-              label: canSpeak ? (muted ? '取消静音' : '静音') : '获准后可发言',
+              label: audioMuted
+                  ? '全员静音中'
+                  : canSpeak
+                  ? (muted ? '取消静音' : '静音')
+                  : '获准后可发言',
               background: micColors.background,
               foreground: micColors.foreground,
               onPressed: onMic,
@@ -10261,6 +10417,7 @@ class _RoomBottomBar extends StatelessWidget {
               background: palette.surfaceRaised,
               foreground: palette.primaryText,
               onPressed: handRaised ? null : onHand,
+              large: true,
             ),
           ],
         ),
@@ -10269,7 +10426,7 @@ class _RoomBottomBar extends StatelessWidget {
   }
 
   _RoomControlColors _micControlColors() {
-    if (!canSpeak) {
+    if (!canSpeak || audioMuted) {
       return _RoomControlColors(
         background: palette.surfaceRaised,
         foreground: palette.mutedText,
@@ -10314,14 +10471,18 @@ class _RoomControl extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: label,
-    child: CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: onPressed,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-        child: Icon(icon, color: foreground, size: large ? 18 : 17),
+    child: SizedBox.square(
+      dimension: 48,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(48, 48),
+        onPressed: onPressed,
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+          child: Center(
+            child: Icon(icon, color: foreground, size: large ? 18 : 17),
+          ),
+        ),
       ),
     ),
   );
