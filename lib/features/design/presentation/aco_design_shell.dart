@@ -2240,11 +2240,7 @@ class AcoSearch extends StatelessWidget {
                 height: height,
                 decoration: BoxDecoration(
                   color: _lime,
-                  borderRadius: isSquareComposer
-                      ? BorderRadius.horizontal(
-                          right: Radius.circular(height / 2),
-                        )
-                      : BorderRadius.circular(height / 2),
+                  borderRadius: BorderRadius.circular(height / 2),
                 ),
                 child: submitChild,
               ),
