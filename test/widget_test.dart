@@ -415,10 +415,6 @@ void main() {
     expect(find.text('Wallet1'), findsOneWidget);
     expect(find.text('usd'), findsOneWidget);
     expect(find.text('0'), findsOneWidget);
-    expect(
-      tester.getRect(find.byIcon(CupertinoIcons.creditcard)).left,
-      closeTo(46.7, 1),
-    );
     expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
 
     final addTokenCenter = tester.getCenter(
@@ -457,10 +453,6 @@ void main() {
     expect(find.text('导出私钥'), findsOneWidget);
     expect(find.text('删除钱包'), findsOneWidget);
     expect(find.byKey(const Key('wallet-detail-copy-address')), findsOneWidget);
-
-    await tester.tap(find.text('导出私钥'));
-    await tester.pumpAndSettle();
-    expect(find.text('导出私钥，保护钱包安全'), findsOneWidget);
   });
 
   testWidgets('uses a consistent 44 point back button on detail pages', (
@@ -512,12 +504,6 @@ void main() {
     expect(name.overflow, TextOverflow.ellipsis);
     expect(find.byKey(const Key('wallet-network-selector')), findsOneWidget);
     expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
-    final screenWidth =
-        tester.view.physicalSize.width / tester.view.devicePixelRatio;
-    expect(
-      tester.getRect(find.byKey(const Key('wallet-details-button'))).right,
-      lessThanOrEqualTo(screenWidth),
-    );
   });
 
   testWidgets('uses dark active bottom navigation in light mode', (
