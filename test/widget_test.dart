@@ -150,12 +150,20 @@ void main() {
       find.byKey(const Key('create-wallet-button')),
       160,
     );
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const Key('create-wallet-button')),
-        matching: find.byType(CupertinoButton),
-      ),
+    final createButton = find.descendant(
+      of: find.byKey(const Key('create-wallet-button')),
+      matching: find.byType(CupertinoButton),
     );
+    expect(tester.widget<CupertinoButton>(createButton).onPressed, isNotNull);
+    await tester.tap(createButton);
+    await tester.pumpAndSettle();
+    expect(find.text('请先同意用户协议和隐私政策'), findsOneWidget);
+    await tester.tap(find.text('知道了'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('wallet-terms-checkbox')));
+    await tester.pump();
+    await tester.tap(createButton);
     await tester.pumpAndSettle();
 
     expect(find.text('备份助记词'), findsOneWidget);
@@ -215,6 +223,25 @@ void main() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_biometricChannel, null);
     expect(walletConfigured, isFalse);
+  });
+
+  testWidgets('uses the login PDF button proportions', (tester) async {
+    tester.view.physicalSize = const Size(595.276, 889);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const AcoApp(initialWalletConfigured: false));
+
+    final createButtonSize = tester.getSize(
+      find.byKey(const Key('create-wallet-button')),
+    );
+    expect(createButtonSize.width, closeTo(252, .2));
+    expect(createButtonSize.height, 73);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('import-wallet-button'))).dx -
+          tester.getTopRight(find.byKey(const Key('create-wallet-button'))).dx,
+      18,
+    );
   });
 
   testWidgets('does not show mock live sessions on the square tab', (

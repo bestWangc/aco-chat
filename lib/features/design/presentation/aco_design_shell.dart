@@ -34,6 +34,14 @@ const _danger = Color(0xFFFF3B4E);
 const _black = Color(0xFF000000);
 const _white = Color(0xFFFFFFFF);
 const _transparent = Color(0x00000000);
+const _loginArtboardWidth = 595.276;
+const _loginContentLeftInset = 36.0;
+const _loginContentRightInset = 37.0;
+const _loginContentTopInset = 48.0;
+const _loginContentBottomInset = 54.0;
+const _loginButtonHeight = 73.0;
+const _loginButtonGap = 18.0;
+const _loginCheckboxSize = 19.0;
 const _navLabels = ['钱包', '探索', 'DEX', '广场', '社交'];
 const _navAssets = [
   'assets/icons/source_wallet.svg',
@@ -93,6 +101,7 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
   _WalletSetupMode _mode = _WalletSetupMode.welcome;
   late final VideoPlayerController _backgroundVideo;
   bool _backgroundVideoReady = false;
+  bool _hasAcceptedTerms = false;
 
   @override
   void initState() {
@@ -113,6 +122,26 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
     } catch (_) {
       // The welcome screen remains usable on platforms without video playback.
     }
+  }
+
+  void _startWalletSetup(_WalletSetupMode mode) {
+    if (!_hasAcceptedTerms) {
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (context) => CupertinoAlertDialog(
+          content: const Text('请先同意用户协议和隐私政策'),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    setState(() => _mode = mode);
   }
 
   @override
@@ -151,107 +180,39 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
         SafeArea(
           child: LayoutBuilder(
             builder: (_, constraints) {
-              final scale = (constraints.maxWidth / 636).clamp(.62, 2.2);
-              final hasVerticalSpace = constraints.maxHeight >= 900 * scale;
-              final topSpacing = math.min(
-                constraints.maxHeight * .17,
-                220 * scale,
+              // Scale every visual value directly from the Illustrator artboard.
+              final scale = constraints.maxWidth / _loginArtboardWidth;
+              final padding = EdgeInsets.fromLTRB(
+                _loginContentLeftInset * scale,
+                _loginContentTopInset * scale,
+                _loginContentRightInset * scale,
+                _loginContentBottomInset * scale,
               );
-              final buttonSpacing = math.max(
-                112 * scale,
-                constraints.maxHeight * .22,
-              );
-              final topContent = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: topSpacing),
-                  Row(
-                    children: [
-                      Image.asset(
-                        'assets/images/welcome-brand.png',
-                        width: 318 * scale,
-                        height: 62 * scale,
-                        filterQuality: FilterQuality.high,
-                        semanticLabel: 'Aco Chat 品牌标识',
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 34 * scale),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      '创建新钱包或导入已有钱包\n开始使用',
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: 48 * scale,
-                        fontWeight: FontWeight.w600,
-                        height: 1.22,
+              return SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: Padding(
+                    padding: padding,
+                    child: IntrinsicHeight(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Spacer(),
+                          _WalletWelcomeContent(
+                            palette: palette,
+                            scale: scale,
+                            hasAcceptedTerms: _hasAcceptedTerms,
+                            onTermsChanged: (accepted) =>
+                                setState(() => _hasAcceptedTerms = accepted),
+                            onCreate: () =>
+                                _startWalletSetup(_WalletSetupMode.create),
+                            onImport: () =>
+                                _startWalletSetup(_WalletSetupMode.import),
+                          ),
+                          const Spacer(),
+                        ],
                       ),
                     ),
-                  ),
-                  SizedBox(height: buttonSpacing),
-                  _WalletSetupButton(
-                    key: const Key('create-wallet-button'),
-                    label: '创建钱包',
-                    enabled: true,
-                    filled: true,
-                    palette: palette,
-                    height: 78 * scale,
-                    fontSize: 20 * scale,
-                    fontWeight: FontWeight.w500,
-                    onPressed: () =>
-                        setState(() => _mode = _WalletSetupMode.create),
-                  ),
-                  SizedBox(height: 16 * scale),
-                  _WalletSetupButton(
-                    key: const Key('import-wallet-button'),
-                    label: '导入钱包',
-                    enabled: true,
-                    filled: false,
-                    palette: palette,
-                    height: 78 * scale,
-                    fontSize: 20 * scale,
-                    fontWeight: FontWeight.w500,
-                    onPressed: () =>
-                        setState(() => _mode = _WalletSetupMode.import),
-                  ),
-                ],
-              );
-              final highlights = _WalletWelcomeHighlights(
-                palette: palette,
-                scale: scale,
-              );
-              const padding = EdgeInsets.fromLTRB(24, 18, 24, 28);
-
-              if (!hasVerticalSpace) {
-                return SingleChildScrollView(
-                  padding: padding,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      topContent,
-                      SizedBox(height: 76 * scale),
-                      highlights,
-                    ],
-                  ),
-                );
-              }
-
-              return SingleChildScrollView(
-                padding: padding,
-                child: SizedBox(
-                  height: constraints.maxHeight - padding.vertical,
-                  child: Stack(
-                    children: [
-                      topContent,
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 12 * scale,
-                        child: highlights,
-                      ),
-                    ],
                   ),
                 ),
               );
@@ -263,78 +224,177 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
   }
 }
 
-enum _WalletSetupMode { welcome, create, import }
-
-class _WalletWelcomeHighlights extends StatelessWidget {
-  const _WalletWelcomeHighlights({required this.palette, required this.scale});
+class _WalletWelcomeContent extends StatelessWidget {
+  const _WalletWelcomeContent({
+    required this.palette,
+    required this.scale,
+    required this.hasAcceptedTerms,
+    required this.onTermsChanged,
+    required this.onCreate,
+    required this.onImport,
+  });
 
   final AcoPalette palette;
   final double scale;
+  final bool hasAcceptedTerms;
+  final ValueChanged<bool> onTermsChanged;
+  final VoidCallback onCreate;
+  final VoidCallback onImport;
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    padding: EdgeInsets.only(top: 20 * scale),
-    decoration: BoxDecoration(
-      border: Border(
-        top: BorderSide(color: palette.primaryText.withValues(alpha: .32)),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Image.asset(
+        'assets/images/welcome-brand.png',
+        width: 260 * scale,
+        height: 51 * scale,
+        filterQuality: FilterQuality.high,
+        semanticLabel: 'Aco Chat 品牌标识',
       ),
-    ),
-    child: Row(
-      children: [
-        _WalletWelcomeHighlight(
-          icon: CupertinoIcons.lock_shield,
-          label: '安全存储',
-          scale: scale,
-          palette: palette,
+      SizedBox(height: 19 * scale),
+      Padding(
+        padding: EdgeInsets.only(left: 8 * scale),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '创建新钱包或导入已有钱包\n开始使用',
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 44 * scale,
+              fontWeight: FontWeight.w400,
+              height: 1.23,
+            ),
+          ),
         ),
-        _WalletWelcomeHighlight(
-          icon: CupertinoIcons.link,
-          label: '多链资产',
-          scale: scale,
+      ),
+      SizedBox(height: 27 * scale),
+      Padding(
+        padding: EdgeInsets.only(left: 8 * scale),
+        child: _WalletWelcomeAgreement(
           palette: palette,
-        ),
-        _WalletWelcomeHighlight(
-          icon: CupertinoIcons.person_crop_circle,
-          label: '自主管理',
           scale: scale,
-          palette: palette,
+          selected: hasAcceptedTerms,
+          onChanged: onTermsChanged,
         ),
-      ],
-    ),
+      ),
+      SizedBox(height: 37 * scale),
+      Row(
+        children: [
+          Expanded(
+            child: _WalletSetupButton(
+              key: const Key('create-wallet-button'),
+              label: '创建钱包',
+              enabled: true,
+              filled: true,
+              palette: palette,
+              height: _loginButtonHeight * scale,
+              fontSize: 24 * scale,
+              fontWeight: FontWeight.w700,
+              onPressed: onCreate,
+            ),
+          ),
+          SizedBox(width: _loginButtonGap * scale),
+          Expanded(
+            child: _WalletSetupButton(
+              key: const Key('import-wallet-button'),
+              label: '导入钱包',
+              enabled: true,
+              filled: false,
+              palette: palette,
+              backgroundColor: const Color(0xFF555555),
+              borderColor: const Color(0xFF555555),
+              height: _loginButtonHeight * scale,
+              fontSize: 24 * scale,
+              fontWeight: FontWeight.w700,
+              onPressed: onImport,
+            ),
+          ),
+        ],
+      ),
+    ],
   );
 }
 
-class _WalletWelcomeHighlight extends StatelessWidget {
-  const _WalletWelcomeHighlight({
-    required this.icon,
-    required this.label,
-    required this.scale,
+enum _WalletSetupMode { welcome, create, import }
+
+class _WalletWelcomeAgreement extends StatelessWidget {
+  const _WalletWelcomeAgreement({
     required this.palette,
+    required this.scale,
+    required this.selected,
+    required this.onChanged,
   });
 
-  final IconData icon;
-  final String label;
-  final double scale;
   final AcoPalette palette;
+  final double scale;
+  final bool selected;
+  final ValueChanged<bool> onChanged;
 
   @override
-  Widget build(BuildContext context) => Expanded(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: _lime, size: 21 * scale),
-        SizedBox(height: 9 * scale),
-        Text(
-          label,
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: 14 * scale,
-            fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Semantics(
+        label: '同意用户协议和隐私政策',
+        checked: selected,
+        child: CupertinoButton(
+          key: const Key('wallet-terms-checkbox'),
+          padding: EdgeInsets.zero,
+          minimumSize: Size(
+            _loginCheckboxSize * scale,
+            _loginCheckboxSize * scale,
+          ),
+          onPressed: () => onChanged(!selected),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 140),
+            width: _loginCheckboxSize * scale,
+            height: _loginCheckboxSize * scale,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected ? _lime : _transparent,
+              border: Border.all(
+                color: selected ? _lime : palette.primaryText,
+                width: scale,
+              ),
+            ),
+            child: selected
+                ? Icon(
+                    CupertinoIcons.check_mark,
+                    color: _black,
+                    size: 14 * scale,
+                  )
+                : null,
           ),
         ),
-      ],
-    ),
+      ),
+      SizedBox(width: _loginCheckboxSize * scale),
+      Expanded(
+        child: Text.rich(
+          TextSpan(
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 18 * scale,
+              fontWeight: FontWeight.w400,
+              height: 1.25,
+            ),
+            children: const [
+              TextSpan(text: '我已阅读并同意 '),
+              TextSpan(
+                text: '《用户协议》',
+                style: TextStyle(color: _lime),
+              ),
+              TextSpan(text: ' 和 '),
+              TextSpan(
+                text: '《隐私政策》',
+                style: TextStyle(color: _lime),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -860,6 +920,8 @@ class _WalletSetupButton extends StatelessWidget {
     this.height = 48,
     this.fontSize = AcoTypography.titleLarge,
     this.fontWeight = FontWeight.w600,
+    this.backgroundColor,
+    this.borderColor,
     this.loading = false,
     super.key,
   });
@@ -872,7 +934,17 @@ class _WalletSetupButton extends StatelessWidget {
   final double height;
   final double fontSize;
   final FontWeight fontWeight;
+  final Color? backgroundColor;
+  final Color? borderColor;
   final bool loading;
+
+  Color get _backgroundColor =>
+      backgroundColor ??
+      (filled ? (palette.dark ? _lime : _black) : _transparent);
+
+  Color get _borderColor =>
+      borderColor ??
+      (filled ? (palette.dark ? _lime : _black) : palette.mutedText);
 
   @override
   Widget build(BuildContext context) => Opacity(
@@ -886,10 +958,8 @@ class _WalletSetupButton extends StatelessWidget {
         height: height,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: filled ? (palette.dark ? _lime : _black) : _transparent,
-          border: Border.all(
-            color: filled ? (palette.dark ? _lime : _black) : palette.mutedText,
-          ),
+          color: _backgroundColor,
+          border: Border.all(color: _borderColor),
           borderRadius: BorderRadius.circular(height / 2),
         ),
         child: loading
