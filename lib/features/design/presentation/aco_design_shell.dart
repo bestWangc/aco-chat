@@ -1315,38 +1315,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     Navigator.of(context)
         .push<bool>(
           _AcoPageRoute<bool>(
-            builder: (_) => AnimatedBuilder(
-              animation: Listenable.merge([
-                _isDark,
-                _displayName,
-                _username,
-                _walletName,
-                _selectedWalletChain,
-              ]),
-              builder: (_, _) => AcoScreenPage(
-                screen: destination,
-                dark: _isDark.value,
-                isRoot: false,
-                onOpen: _open,
-                onThemeToggle: _toggleTheme,
-                walletIdentity: widget.walletIdentity,
-                walletName: _walletName.value,
-                onWalletNameChanged: _saveWalletName,
-                walletChainIndex: _selectedWalletChain.value,
-                onWalletChainSelected: _selectWalletChain,
-                transferToken: _selectedTransferToken,
-                onSendTokenSelected: _sendToken,
-                accountId: _accountId,
-                username: _username.value,
-                displayName: _displayName.value,
-                onDisplayNameChanged: (name) => _displayName.value = name,
-                onUsernameChanged: (username) => _username.value = username,
-                language: _language,
-                liveListRevision: _liveListRevision,
-                onLanguageChanged: (language) =>
-                    setState(() => _language = language),
-              ),
-            ),
+            builder: (_) => _buildSecondaryScreen(destination),
           ),
         )
         .then((created) {
@@ -1355,6 +1324,38 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
           }
         });
   }
+
+  Widget _buildSecondaryScreen(AcoScreen screen) => AnimatedBuilder(
+    animation: Listenable.merge([
+      _isDark,
+      _displayName,
+      _username,
+      _walletName,
+      _selectedWalletChain,
+    ]),
+    builder: (_, _) => AcoScreenPage(
+      screen: screen,
+      dark: _isDark.value,
+      isRoot: false,
+      onOpen: _open,
+      onThemeToggle: _toggleTheme,
+      walletIdentity: widget.walletIdentity,
+      walletName: _walletName.value,
+      onWalletNameChanged: _saveWalletName,
+      walletChainIndex: _selectedWalletChain.value,
+      onWalletChainSelected: _selectWalletChain,
+      transferToken: _selectedTransferToken,
+      onSendTokenSelected: _sendToken,
+      accountId: _accountId,
+      username: _username.value,
+      displayName: _displayName.value,
+      onDisplayNameChanged: (name) => _displayName.value = name,
+      onUsernameChanged: (username) => _username.value = username,
+      language: _language,
+      liveListRevision: _liveListRevision,
+      onLanguageChanged: (language) => setState(() => _language = language),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
@@ -1652,6 +1653,7 @@ class AcoScreenPage extends StatelessWidget {
         child: _AcoViewport(
           child: SafeArea(
             top: !isRoot,
+            minimum: isRoot ? EdgeInsets.zero : const EdgeInsets.only(top: 24),
             left: false,
             right: false,
             bottom: false,
@@ -2178,8 +2180,8 @@ class AcoSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSquareComposer = variant == AcoSearchVariant.squareComposer;
-    final submitWidth = isSquareComposer ? 52.0 : height;
-    final borderColor = palette.dark ? const Color(0xFFC1C1C1) : palette.border;
+    final submitWidth = isSquareComposer ? 56.0 : height;
+    final borderColor = _borderColor(isSquareComposer);
     final iconColor = palette.dark
         ? (isSquareComposer ? const Color(0xFF191919) : const Color(0xFFF7F7F7))
         : palette.mutedText;
@@ -2203,6 +2205,7 @@ class AcoSearch extends StatelessWidget {
 
     return Container(
       height: height,
+      clipBehavior: isSquareComposer ? Clip.antiAlias : Clip.none,
       decoration: BoxDecoration(
         color: palette.background,
         border: Border.all(color: borderColor),
@@ -2230,11 +2233,18 @@ class AcoSearch extends StatelessWidget {
               minimumSize: Size(submitWidth, height),
               onPressed: onSubmit,
               child: Container(
+                key: isSquareComposer
+                    ? const Key('square-search-submit')
+                    : null,
                 width: submitWidth,
                 height: height,
                 decoration: BoxDecoration(
                   color: _lime,
-                  borderRadius: BorderRadius.circular(height / 2),
+                  borderRadius: isSquareComposer
+                      ? BorderRadius.horizontal(
+                          right: Radius.circular(height / 2),
+                        )
+                      : BorderRadius.circular(height / 2),
                 ),
                 child: submitChild,
               ),
@@ -2242,6 +2252,11 @@ class AcoSearch extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Color _borderColor(bool isSquareComposer) {
+    if (!palette.dark) return palette.border;
+    return isSquareComposer ? const Color(0xFFD7D7D7) : const Color(0xFFC1C1C1);
   }
 }
 
@@ -5064,7 +5079,7 @@ class _ReceivePageContent extends StatelessWidget {
     palette: palette,
     title: '收款',
     child: ListView(
-      padding: const EdgeInsets.fromLTRB(28, 74, 28, 32),
+      padding: const EdgeInsets.fromLTRB(28, 84, 28, 32),
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -5084,11 +5099,12 @@ class _ReceivePageContent extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 44),
+        const SizedBox(height: 40),
         Center(
           child: Container(
-            width: 242,
-            height: 242,
+            width: 288,
+            height: 288,
+            key: const Key('receive-qr-surface'),
             color: _white,
             child: _hasWalletAddress
                 ? Stack(
@@ -5098,7 +5114,7 @@ class _ReceivePageContent extends StatelessWidget {
                         data: walletAddress!,
                         version: QrVersions.auto,
                         errorCorrectionLevel: QrErrorCorrectLevel.H,
-                        size: 242,
+                        size: 288,
                         padding: const EdgeInsets.all(8),
                         backgroundColor: _white,
                         eyeStyle: const QrEyeStyle(
@@ -5136,29 +5152,32 @@ class _ReceivePageContent extends StatelessWidget {
                   ),
           ),
         ),
-        const SizedBox(height: 68),
+        const SizedBox(height: 38),
         Text(
           '收款地址',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: palette.mutedText,
-            fontSize: AcoTypography.title,
+            fontSize: AcoTypography.titleLarge,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 24),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            walletAddress ?? '钱包地址未就绪',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: palette.mutedText,
-              fontSize: AcoTypography.body,
+        const SizedBox(height: 28),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              walletAddress ?? '钱包地址未就绪',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.bodySmall,
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 62),
+        const SizedBox(height: 64),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -5254,9 +5273,10 @@ class _ScanPageState extends State<_ScanPage> {
               child: Row(
                 children: [
                   AcoIconButton(
-                    icon: CupertinoIcons.xmark,
+                    key: const Key('scan-back-button'),
+                    icon: CupertinoIcons.back,
                     palette: widget.palette,
-                    label: '关闭扫码',
+                    label: '返回',
                     onPressed: () => Navigator.of(context).maybePop(),
                     size: 26,
                   ),
@@ -6209,7 +6229,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   child: AcoSearch(
                     palette: palette,
                     hint: '搜索帖文或消息',
-                    height: 44,
+                    height: 40,
                     variant: AcoSearchVariant.squareComposer,
                     submitIcon: CupertinoIcons.add,
                     onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
