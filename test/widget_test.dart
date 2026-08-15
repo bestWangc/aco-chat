@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -412,9 +413,9 @@ void main() {
     await tester.tap(find.text('钱包'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Wallet1'), findsOneWidget);
-    expect(find.text('usd'), findsOneWidget);
-    expect(find.text('0'), findsOneWidget);
+    expect(find.bySemanticsLabel('切换钱包'), findsOneWidget);
+    expect(find.text(r'$'), findsOneWidget);
+    expect(find.text('3,347.03'), findsOneWidget);
     expect(find.byKey(const Key('wallet-details-button')), findsNothing);
 
     final addTokenCenter = tester.getCenter(
@@ -422,6 +423,21 @@ void main() {
     );
     final assetTabCenter = tester.getCenter(find.text('资产'));
     expect(addTokenCenter.dy, closeTo(assetTabCenter.dy, 4));
+    expect(
+      find.byKey(const Key('wallet-tab-selection-indicator')),
+      findsOneWidget,
+    );
+
+    final addTokenIcon = tester.widget<SvgPicture>(
+      find.descendant(
+        of: find.byKey(const Key('add-token-button')),
+        matching: find.byType(SvgPicture),
+      ),
+    );
+    expect(
+      addTokenIcon.colorFilter,
+      const ColorFilter.mode(Color(0xFFA6DE00), BlendMode.srcIn),
+    );
 
     final swapButton = tester.widget<CupertinoButton>(
       find.ancestor(
@@ -504,6 +520,8 @@ void main() {
 
     final label = tester.widget<Text>(find.text('钱包'));
     expect(label.style?.color, const Color(0xFF151515));
+    expect(label.style?.fontSize, 13);
+    expect(label.style?.fontWeight, FontWeight.w400);
     final inactiveLabel = tester.widget<Text>(find.text('探索'));
     expect(inactiveLabel.style?.color, const Color(0xFFC4C4C4));
   });
