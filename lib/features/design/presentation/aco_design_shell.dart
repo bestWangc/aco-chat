@@ -1701,29 +1701,32 @@ class AcoBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = AcoPalette(dark);
-    return SizedBox(
-      // Match the design artboard's bottom navigation baseline.
-      height: 106,
-      child: Transform.translate(
-        offset: const Offset(0, -7),
-        child: Padding(
-          padding: const EdgeInsets.only(top: 0, bottom: 8),
-          child: Row(
-            children: List.generate(
-              _navLabels.length,
-              (index) => Expanded(
-                child: Semantics(
-                  button: true,
-                  selected: selected == index,
-                  label: _navLabels[index],
-                  child: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(44, 44),
-                    onPressed: () => onSelected(index),
-                    child: _NavItem(
-                      index: index,
-                      active: selected == index,
-                      palette: palette,
+    return ColoredBox(
+      color: dark ? const Color(0xFF000000) : palette.background,
+      child: SizedBox(
+        // Match the design artboard's bottom navigation baseline.
+        height: 106,
+        child: Transform.translate(
+          offset: const Offset(0, -7),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 0, bottom: 8),
+            child: Row(
+              children: List.generate(
+                _navLabels.length,
+                (index) => Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: selected == index,
+                    label: _navLabels[index],
+                    child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(44, 44),
+                      onPressed: () => onSelected(index),
+                      child: _NavItem(
+                        index: index,
+                        active: selected == index,
+                        palette: palette,
+                      ),
                     ),
                   ),
                 ),
