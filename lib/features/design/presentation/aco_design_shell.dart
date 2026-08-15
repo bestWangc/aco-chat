@@ -1995,8 +1995,10 @@ class _AcoDesignActionButton extends StatelessWidget {
       onPressed: onPressed,
       child: SvgPicture.asset(
         asset,
-        width: _topActionIconSize,
-        height: _topActionIconSize,
+        // The SVG header icons are not square on the artboard: the scanner
+        // mark is 27.9×34.3pt and the account mark is 25.4×28pt.
+        width: asset.contains('source_scan') ? 27.9 : 25.4,
+        height: asset.contains('source_scan') ? 34.3 : 28,
         colorFilter: ColorFilter.mode(
           palette.dark ? _white : palette.primaryText,
           BlendMode.srcIn,
