@@ -34,6 +34,23 @@ void main() {
     final usdt = balances.where((balance) => balance.symbol == 'USDT').toList();
     expect(usdt, hasLength(6));
     expect(
+      balances
+          .where((balance) => balance.isNative)
+          .map((balance) => balance.tokenAddress),
+      everyElement(isNull),
+    );
+    expect(
+      usdt.map((balance) => balance.tokenAddress),
+      containsAll([
+        '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+        '0x55d398326f99059fF775485246999027B3197955',
+        '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
+        '0xfde4c96c8593536e31f229ea8f37b2ada2699bb2',
+        'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+        'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
+      ]),
+    );
+    expect(
       usdt
           .singleWhere((balance) => balance.chain == 'BNB Smart Chain')
           .decimals,
@@ -84,6 +101,10 @@ void main() {
     );
     expect(solanaUSDC.balance, BigInt.from(3));
     expect(solanaUSDC.decimals, 6);
+    expect(
+      solanaUSDC.tokenAddress,
+      'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    );
     final solanaUSDT = balances.singleWhere(
       (balance) => balance.chain == 'Solana' && balance.symbol == 'USDT',
     );
@@ -120,6 +141,27 @@ void main() {
       balances.map((balance) => balance.balance),
       everyElement(BigInt.zero),
     );
+  });
+
+  test('retries the next public RPC endpoint after a failed request', () async {
+    final serviceClient = _FallbackRpcClient();
+    final service = WalletPortfolioService(client: serviceClient);
+    const identity = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000001',
+    );
+
+    final balances = await service.loadBalances(
+      network: WalletNetwork.polygon,
+      identity: identity,
+      derivedAddresses: const {},
+    );
+
+    expect(
+      balances.map((balance) => balance.balance),
+      everyElement(BigInt.one),
+    );
+    expect(serviceClient.hosts, contains('polygon-bor-rpc.publicnode.com'));
+    expect(serviceClient.hosts, contains('polygon-rpc.com'));
   });
 
   test('uses zero until a non-EVM address has been derived', () async {
@@ -236,4 +278,21 @@ class _FailingRpcClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async =>
       http.StreamedResponse(Stream.value(const []), 503);
+}
+
+class _FallbackRpcClient extends http.BaseClient {
+  final hosts = <String>[];
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    hosts.add(request.url.host);
+    if (request.url.host == 'polygon-bor-rpc.publicnode.com') {
+      return http.StreamedResponse(Stream.value(const []), 503);
+    }
+    return http.StreamedResponse(
+      Stream.value(utf8.encode('{"result":"0x1"}')),
+      200,
+      headers: const {'content-type': 'application/json'},
+    );
+  }
 }
