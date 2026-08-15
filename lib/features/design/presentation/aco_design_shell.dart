@@ -58,6 +58,9 @@ const _loginActionFontSize = 21.0;
 const _walletHeaderMuted = Color(0xFF989798);
 const _walletHeaderLime = Color(0xFFA6DE00);
 const _walletNavInactive = Color(0xFFC2C2C2);
+// The wallet screen is rendered in the 800pt application canvas. These
+// values are the fixed 800 / 595.28 conversion of the SVG artboard.
+const _walletRuntimeRatio = 1.343906;
 const _walletHeaderWalletWidth = 206.0;
 const _walletHeaderNetworkGap = 60.0;
 const _walletHeaderTextSize = 30.0;
@@ -1698,9 +1701,9 @@ class AcoBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
+    builder: (context, _) {
       final palette = AcoPalette(dark);
-      final scale = constraints.maxWidth / _loginArtboardWidth;
+      const scale = _walletRuntimeRatio;
       return ColoredBox(
         color: dark ? const Color(0xFF000000) : palette.background,
         child: SizedBox(
@@ -3214,13 +3217,13 @@ class _WalletHomeState extends State<_WalletHome> {
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
+    builder: (context, _) {
       // The wallet artboard intentionally uses light action cards on black.
       final actionSurface = _walletActionSurface;
       final actionForeground = _walletActionForeground;
-      // Scale the entire wallet page from the design artboard width instead
-      // of treating its point values as device pixels.
-      final scale = constraints.maxWidth / _loginArtboardWidth;
+      // The artboard has already been converted to the 800pt application
+      // canvas; no runtime scaling is applied here.
+      const scale = _walletRuntimeRatio;
       return ColoredBox(
         color: widget.palette.dark
             ? const Color(0xFF000000)
@@ -3242,7 +3245,9 @@ class _WalletHomeState extends State<_WalletHome> {
                     onOpen: widget.onOpen,
                     scale: scale,
                   ),
-                  SizedBox(height: 65 * scale),
+                  // The 44pt control is vertically centered; 59pt places
+                  // the wallet glyph itself at the SVG's y=144 boundary.
+                  SizedBox(height: 59 * scale),
                   Row(
                     children: [
                       Padding(
