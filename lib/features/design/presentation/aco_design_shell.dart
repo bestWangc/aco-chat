@@ -57,6 +57,7 @@ const _loginAgreementToActionsGap = 35.0;
 const _loginActionFontSize = 21.0;
 const _walletHeaderMuted = Color(0xFF989798);
 const _walletHeaderLime = Color(0xFFA6DE00);
+const _walletNavInactive = Color(0xFFC2C2C2);
 const _walletHeaderWalletWidth = 206.0;
 const _walletHeaderNetworkGap = 60.0;
 const _walletHeaderTextSize = 30.0;
@@ -1748,8 +1749,8 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = active
-        ? (palette.dark ? _lime : palette.primaryText)
-        : palette.navInactive;
+        ? (palette.dark ? _walletHeaderLime : palette.primaryText)
+        : (palette.dark ? _walletNavInactive : palette.navInactive);
     if (index == 2) {
       return SizedBox(
         width: 48,
