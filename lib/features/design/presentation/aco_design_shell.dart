@@ -35,7 +35,7 @@ const _black = Color(0xFF000000);
 const _white = Color(0xFFFFFFFF);
 const _transparent = Color(0x00000000);
 const _loginAccent = Color(0xFFA6DE00);
-// #FFFFFF at 20% over the SVG canvas color (#262626).
+// Colors and geometry are sampled from 设计图/钱包页-dark.svg.
 const _loginSecondarySurface = Color(0xFF515151);
 // Coordinates are taken from 设计图/首页-dark.svg (595.28 × 1290.89).
 const _loginArtboardWidth = 595.28;
@@ -55,16 +55,20 @@ const _loginBrandToTitleGap = 15.0;
 const _loginTitleToAgreementGap = 23.0;
 const _loginAgreementToActionsGap = 35.0;
 const _loginActionFontSize = 21.0;
-const _walletHeaderMuted = Color(0xFFB0B3B9);
+const _walletHeaderMuted = Color(0xFF989798);
 const _walletHeaderLime = Color(0xFFA6DE00);
 const _walletHeaderWalletWidth = 206.0;
 const _walletHeaderNetworkGap = 60.0;
 const _walletHeaderTextSize = 30.0;
 const _walletHomeMinimumHeight = 650.0;
 const _walletAssetListHorizontalInset = 28.0;
-const _walletActionSurface = Color(0xFFF0F1F2);
-const _walletActionForeground = Color(0xFF211E1E);
-const _walletActionRadius = 36.5;
+const _walletActionSurface = Color(0xFFEFF0F1);
+const _walletActionForeground = Color(0xFF040000);
+const _walletActionRadius = 11.55;
+const _walletActionHeight = 59.8;
+const _walletActionColumnGap = 58.36;
+const _walletActionRowGap = 32.2;
+const _walletTabsTopGap = 90.8;
 const _topActionIconSize = 24.0;
 const _navLabels = ['钱包', '探索', 'DEX', '广场', '社交'];
 const _navAssets = [
@@ -1697,13 +1701,12 @@ class AcoBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = AcoPalette(dark);
     return SizedBox(
-      // Keep the navigation footprint stable while positioning its visible
-      // controls close to the bottom edge.
+      // Match the design artboard's bottom navigation baseline.
       height: 106,
       child: Transform.translate(
-        offset: const Offset(0, 15),
+        offset: const Offset(0, -7),
         child: Padding(
-          padding: const EdgeInsets.only(top: 22, bottom: 8),
+          padding: const EdgeInsets.only(top: 0, bottom: 8),
           child: Row(
             children: List.generate(
               _navLabels.length,
@@ -1954,7 +1957,7 @@ class AcoTopActions extends StatelessWidget {
         label: '扫描二维码',
         onPressed: () => onOpen(AcoScreen.scan),
       ),
-      const SizedBox(width: 12),
+      const SizedBox(width: 23),
       _AcoDesignActionButton(
         asset: 'assets/icons/source_person.svg',
         palette: palette,
@@ -3185,12 +3188,9 @@ class _WalletHomeState extends State<_WalletHome> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final actionSurface = widget.palette.dark
-          ? const Color(0xFF3A3A3A)
-          : _walletActionSurface;
-      final actionForeground = widget.palette.dark
-          ? _white
-          : _walletActionForeground;
+      // The wallet artboard intentionally uses light action cards on black.
+      final actionSurface = _walletActionSurface;
+      final actionForeground = _walletActionForeground;
       final scale = math.min(
         1.0,
         math.min(
@@ -3198,289 +3198,303 @@ class _WalletHomeState extends State<_WalletHome> {
           constraints.maxHeight / _walletHomeMinimumHeight,
         ),
       );
-      return Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(52 * scale, 34 * scale, 52 * scale, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AcoRootHeader(palette: widget.palette, onOpen: widget.onOpen),
-                SizedBox(height: 24 * scale),
-                Row(
-                  children: [
-                    Padding(
-                      padding: EdgeInsets.only(left: 10 * scale),
-                      child: Semantics(
-                        button: true,
-                        label: '切换钱包',
-                        child: SizedBox(
-                          width: _walletHeaderWalletWidth * scale,
-                          child: CupertinoButton(
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size(0, 44 * scale),
-                            onPressed: () =>
-                                widget.onOpen(AcoScreen.walletSwitcher),
+      return ColoredBox(
+        color: widget.palette.dark
+            ? const Color(0xFF000000)
+            : widget.palette.background,
+        child: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                52 * scale,
+                34 * scale,
+                52 * scale,
+                0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AcoRootHeader(palette: widget.palette, onOpen: widget.onOpen),
+                  SizedBox(height: 65 * scale),
+                  Row(
+                    children: [
+                      Padding(
+                        padding: EdgeInsets.only(left: 10 * scale),
+                        child: Semantics(
+                          button: true,
+                          label: '切换钱包',
+                          child: SizedBox(
+                            width: _walletHeaderWalletWidth * scale,
+                            child: CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size(0, 44 * scale),
+                              onPressed: () =>
+                                  widget.onOpen(AcoScreen.walletSwitcher),
+                              child: Row(
+                                children: [
+                                  SvgPicture.asset(
+                                    'assets/icons/wallet_selector.svg',
+                                    width: 37.9206 * scale,
+                                    height: 33.6409 * scale,
+                                  ),
+                                  SizedBox(width: 20 * scale),
+                                  Flexible(
+                                    child: Text(
+                                      widget.walletName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: _walletHeaderMuted,
+                                        fontSize: _walletHeaderTextSize * scale,
+                                        fontWeight: FontWeight.w300,
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(width: 18 * scale),
+                                  SvgPicture.asset(
+                                    'assets/icons/wallet_selector_chevron.svg',
+                                    width: 15.5 * scale,
+                                    height: 13.42 * scale,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: _walletHeaderNetworkGap * scale),
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          label: '切换网络',
+                          child: GestureDetector(
+                            key: const Key('wallet-network-selector'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => widget.onOpen(AcoScreen.walletChains),
                             child: Row(
                               children: [
-                                SvgPicture.asset(
-                                  'assets/icons/wallet_selector.svg',
-                                  width: 37.9206 * scale,
-                                  height: 33.6409 * scale,
+                                Container(
+                                  width: 20 * scale,
+                                  height: 20 * scale,
+                                  decoration: const BoxDecoration(
+                                    color: _walletHeaderLime,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                                SizedBox(width: 20 * scale),
+                                SizedBox(width: 17 * scale),
                                 Flexible(
                                   child: Text(
-                                    widget.walletName,
+                                    widget.selectedChain.label,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
                                       color: _walletHeaderMuted,
                                       fontSize: _walletHeaderTextSize * scale,
-                                      fontWeight: FontWeight.w300,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                   ),
-                                ),
-                                SizedBox(width: 18 * scale),
-                                SvgPicture.asset(
-                                  'assets/icons/wallet_selector_chevron.svg',
-                                  width: 15.5 * scale,
-                                  height: 13.42 * scale,
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    SizedBox(width: _walletHeaderNetworkGap * scale),
-                    Expanded(
-                      child: Semantics(
-                        button: true,
-                        label: '切换网络',
-                        child: GestureDetector(
-                          key: const Key('wallet-network-selector'),
-                          behavior: HitTestBehavior.opaque,
-                          onTap: () => widget.onOpen(AcoScreen.walletChains),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 20 * scale,
-                                height: 20 * scale,
-                                decoration: const BoxDecoration(
-                                  color: _walletHeaderLime,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              SizedBox(width: 17 * scale),
-                              Flexible(
-                                child: Text(
-                                  widget.selectedChain.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: _walletHeaderMuted,
-                                    fontSize: _walletHeaderTextSize * scale,
-                                    fontWeight: FontWeight.w400,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                    ],
+                  ),
+                  SizedBox(height: 22 * scale),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        'usd',
+                        style: TextStyle(
+                          color: widget.palette.mutedText,
+                          fontSize: 20 * scale,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 22 * scale),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      'usd',
-                      style: TextStyle(
-                        color: widget.palette.mutedText,
-                        fontSize: 20 * scale,
+                      SizedBox(width: 14 * scale),
+                      Text(
+                        '0',
+                        style: TextStyle(
+                          color: widget.palette.primaryText,
+                          fontSize: 64 * scale,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                    SizedBox(width: 14 * scale),
-                    Text(
-                      '0',
-                      style: TextStyle(
-                        color: widget.palette.primaryText,
-                        fontSize: 64 * scale,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 26 * scale),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AcoLimeButton(
-                        label: '发送资产',
-                        height: 73 * scale,
-                        fontSize: 20 * scale,
-                        backgroundColor: _walletHeaderLime,
-                        fontWeight: FontWeight.w600,
-                        onPressed: _showSendTokenPicker,
-                      ),
-                    ),
-                    SizedBox(width: 18 * scale),
-                    Expanded(
-                      child: _OutlineButton(
-                        label: '接收资产',
-                        icon: null,
-                        palette: widget.palette,
-                        height: 73 * scale,
-                        fontSize: 20 * scale,
-                        backgroundColor: actionSurface,
-                        foregroundColor: actionForeground,
-                        radius: _walletActionRadius * scale,
-                        fontWeight: FontWeight.w600,
-                        onPressed: () => widget.onOpen(AcoScreen.receive),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 18 * scale),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _OutlineButton(
-                        label: '闪兑',
-                        icon: CupertinoIcons.bolt_fill,
-                        palette: widget.palette,
-                        height: 73 * scale,
-                        fontSize: 20 * scale,
-                        leadingImageAsset:
-                            'assets/icons/wallet_swap_action.png',
-                        iconSize: 21.5 * scale,
-                        iconGap: 10 * scale,
-                        backgroundColor: actionSurface,
-                        foregroundColor: actionForeground,
-                        radius: _walletActionRadius * scale,
-                        fontWeight: FontWeight.w600,
-                        onPressed: null,
-                      ),
-                    ),
-                    SizedBox(width: 18 * scale),
-                    Expanded(
-                      child: _OutlineButton(
-                        label: '扫码',
-                        icon: CupertinoIcons.qrcode_viewfinder,
-                        palette: widget.palette,
-                        height: 73 * scale,
-                        fontSize: 20 * scale,
-                        leadingAsset: 'assets/icons/source_scan.svg',
-                        iconSize: 20 * scale,
-                        iconGap: 10 * scale,
-                        backgroundColor: actionSurface,
-                        foregroundColor: actionForeground,
-                        radius: _walletActionRadius * scale,
-                        fontWeight: FontWeight.w600,
-                        onPressed: () => widget.onOpen(AcoScreen.scan),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(height: 74 * scale),
-              ],
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.only(
-              left: 67 * scale,
-              right: _walletAssetListHorizontalInset * scale,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SectionTabs(
-                    palette: widget.palette,
-                    scale: scale,
-                    labels: const ['资产', 'NFT', '最近活动'],
-                    selected: _selectedTab,
-                    disabledIndexes: const {1, 2},
-                    onChanged: (index) => setState(() => _selectedTab = index),
+                    ],
                   ),
-                ),
-                Semantics(
-                  button: true,
-                  label: '添加代币',
-                  child: CompositedTransformTarget(
-                    link: _walletActionsLink,
-                    child: Transform.translate(
-                      offset: Offset(0, -6 * scale),
-                      child: SizedBox(
-                        width: 44 * scale,
-                        height: 36 * scale,
-                        child: CupertinoButton(
-                          key: const Key('add-token-button'),
-                          padding: EdgeInsets.zero,
-                          minimumSize: Size(44 * scale, 36 * scale),
-                          onPressed: _showWalletActions,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: SvgPicture.asset(
-                              'assets/icons/wallet_tabs_add.svg',
-                              width: 25.22 * scale,
-                              height: 25.22 * scale,
+                  SizedBox(height: 43 * scale),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '发送资产',
+                          palette: widget.palette,
+                          height: _walletActionHeight * scale,
+                          fontSize: 20 * scale,
+                          backgroundColor: _walletHeaderLime,
+                          foregroundColor: _walletActionForeground,
+                          radius: _walletActionRadius * scale,
+                          fontWeight: FontWeight.w600,
+                          onPressed: _showSendTokenPicker,
+                        ),
+                      ),
+                      SizedBox(width: _walletActionColumnGap * scale),
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '接收资产',
+                          icon: null,
+                          palette: widget.palette,
+                          height: _walletActionHeight * scale,
+                          fontSize: 20 * scale,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: _walletActionRadius * scale,
+                          fontWeight: FontWeight.w600,
+                          onPressed: () => widget.onOpen(AcoScreen.receive),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: _walletActionRowGap * scale),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '闪兑',
+                          icon: CupertinoIcons.bolt_fill,
+                          palette: widget.palette,
+                          height: _walletActionHeight * scale,
+                          fontSize: 20 * scale,
+                          leadingImageAsset:
+                              'assets/icons/wallet_swap_action.png',
+                          iconSize: 21.5 * scale,
+                          iconGap: 10 * scale,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: _walletActionRadius * scale,
+                          fontWeight: FontWeight.w600,
+                          onPressed: null,
+                        ),
+                      ),
+                      SizedBox(width: _walletActionColumnGap * scale),
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '扫码',
+                          icon: CupertinoIcons.qrcode_viewfinder,
+                          palette: widget.palette,
+                          height: _walletActionHeight * scale,
+                          fontSize: 20 * scale,
+                          leadingAsset: 'assets/icons/source_scan.svg',
+                          iconSize: 20 * scale,
+                          iconGap: 10 * scale,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: _walletActionRadius * scale,
+                          fontWeight: FontWeight.w600,
+                          onPressed: () => widget.onOpen(AcoScreen.scan),
+                        ),
+                      ),
+                    ],
+                  ),
+                  SizedBox(height: _walletTabsTopGap * scale),
+                ],
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.only(
+                left: 70.06 * scale,
+                right: _walletAssetListHorizontalInset * scale,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _SectionTabs(
+                      palette: widget.palette,
+                      scale: scale,
+                      labels: const ['资产', 'NFT', '最近活动'],
+                      selected: _selectedTab,
+                      disabledIndexes: const {1, 2},
+                      onChanged: (index) =>
+                          setState(() => _selectedTab = index),
+                    ),
+                  ),
+                  Semantics(
+                    button: true,
+                    label: '添加代币',
+                    child: CompositedTransformTarget(
+                      link: _walletActionsLink,
+                      child: Transform.translate(
+                        offset: Offset(0, -6 * scale),
+                        child: SizedBox(
+                          width: 44 * scale,
+                          height: 36 * scale,
+                          child: CupertinoButton(
+                            key: const Key('add-token-button'),
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size(44 * scale, 36 * scale),
+                            onPressed: _showWalletActions,
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: SvgPicture.asset(
+                                'assets/icons/wallet_tabs_add.svg',
+                                width: 25.22 * scale,
+                                height: 25.22 * scale,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Expanded(
-            child: FutureBuilder<List<WalletBalance>>(
-              key: ValueKey(widget.selectedChain.network),
-              future: _balancesFuture,
-              initialData: _initialBalances,
-              builder: (context, snapshot) {
-                final balances = snapshot.data ?? const <WalletBalance>[];
-                return ListView.builder(
-                  padding: EdgeInsets.fromLTRB(
-                    _walletAssetListHorizontalInset * scale,
-                    17 * scale,
-                    _walletAssetListHorizontalInset * scale,
-                    22,
-                  ),
-                  itemCount: balances.isEmpty ? 1 : balances.length,
-                  itemBuilder: (context, index) {
-                    if (balances.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 24),
-                        child: Text(
-                          '地址派生中，请稍后刷新。',
-                          style: TextStyle(color: widget.palette.mutedText),
-                        ),
+            Expanded(
+              child: FutureBuilder<List<WalletBalance>>(
+                key: ValueKey(widget.selectedChain.network),
+                future: _balancesFuture,
+                initialData: _initialBalances,
+                builder: (context, snapshot) {
+                  final balances = snapshot.data ?? const <WalletBalance>[];
+                  return ListView.builder(
+                    padding: EdgeInsets.fromLTRB(
+                      51.42 * scale,
+                      17 * scale,
+                      _walletAssetListHorizontalInset * scale,
+                      22,
+                    ),
+                    itemCount: balances.isEmpty ? 1 : balances.length,
+                    itemBuilder: (context, index) {
+                      if (balances.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 24),
+                          child: Text(
+                            '地址派生中，请稍后刷新。',
+                            style: TextStyle(color: widget.palette.mutedText),
+                          ),
+                        );
+                      }
+                      final balance = balances[index];
+                      final amount = formatChainAmount(
+                        balance.balance ?? BigInt.zero,
+                        decimals: balance.decimals,
                       );
-                    }
-                    final balance = balances[index];
-                    final amount = formatChainAmount(
-                      balance.balance ?? BigInt.zero,
-                      decimals: balance.decimals,
-                    );
-                    return _WalletAssetRow(
-                      palette: widget.palette,
-                      symbol: balance.symbol,
-                      title: balance.assetName,
-                      amount: amount,
-                      value: '≈0.00 USD',
-                    );
-                  },
-                );
-              },
+                      return _WalletAssetRow(
+                        palette: widget.palette,
+                        symbol: balance.symbol,
+                        title: balance.assetName,
+                        amount: amount,
+                        value: '≈0.00 USD',
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       );
     },
   );
@@ -8654,7 +8668,7 @@ class _SectionTabs extends StatelessWidget {
     children: [
       for (var i = 0; i < labels.length; i++)
         Padding(
-          padding: const EdgeInsets.only(right: 23),
+          padding: const EdgeInsets.only(right: 32),
           child: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: Size(30 * scale, 42 * scale),
@@ -8665,17 +8679,19 @@ class _SectionTabs extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  height: 30 * scale,
+                  height: 28.42 * scale,
                   padding: EdgeInsets.symmetric(horizontal: 10 * scale),
                   decoration: BoxDecoration(
-                    color: i == selected ? _lime : _transparent,
-                    borderRadius: BorderRadius.circular(18),
+                    color: i == selected
+                        ? const Color(0xFF212121)
+                        : _transparent,
+                    borderRadius: BorderRadius.circular(12.11 * scale),
                   ),
                   child: Center(
                     child: Text(
                       labels[i],
                       style: TextStyle(
-                        color: i == selected ? _black : palette.mutedText,
+                        color: _walletHeaderMuted,
                         fontWeight: i == selected
                             ? FontWeight.w700
                             : FontWeight.w400,
@@ -8686,14 +8702,6 @@ class _SectionTabs extends StatelessWidget {
                   ),
                 ),
                 SizedBox(height: 7 * scale),
-                Container(
-                  width: 22 * scale,
-                  height: 5 * scale,
-                  decoration: BoxDecoration(
-                    color: i == selected ? _lime : _transparent,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                ),
               ],
             ),
           ),
@@ -8755,87 +8763,108 @@ class _WalletAssetRow extends StatelessWidget {
         ? null
         : 'assets/icons/crypto/tokens/${normalizedSymbol.toLowerCase()}.svg';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
+    return SizedBox(
+      height: 97.18,
+      child: Stack(
         children: [
-          SizedBox(
-            width: 42,
-            height: 42,
-            child: iconAsset == null
-                ? Container(
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: switch (normalizedSymbol) {
-                        'IOST' => const Color(0xFFE0E0E0),
-                        _ => const Color(0xFF2680D9),
-                      },
-                      shape: BoxShape.circle,
-                    ),
-                    child: Text(
-                      normalizedSymbol.substring(0, 1),
-                      style: const TextStyle(
-                        color: _white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  )
-                : iconAsset.endsWith('.png')
-                ? ClipOval(child: Image.asset(iconAsset, fit: BoxFit.cover))
-                : SvgPicture.asset(iconAsset),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  symbol,
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontWeight: FontWeight.w600,
-                    fontSize: AcoTypography.body,
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 42,
+                    height: 42,
+                    child: iconAsset == null
+                        ? Container(
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: switch (normalizedSymbol) {
+                                'IOST' => const Color(0xFFE0E0E0),
+                                _ => const Color(0xFF2680D9),
+                              },
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              normalizedSymbol.substring(0, 1),
+                              style: const TextStyle(
+                                color: _white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        : iconAsset.endsWith('.png')
+                        ? ClipOval(
+                            child: Image.asset(iconAsset, fit: BoxFit.cover),
+                          )
+                        : SvgPicture.asset(iconAsset),
                   ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.caption,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          symbol,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontWeight: FontWeight.w600,
+                            fontSize: AcoTypography.body,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          title,
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.caption,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                  SizedBox(
+                    width: 112,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          amount,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: AcoTypography.body,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          value,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.bodySmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          SizedBox(
-            width: 112,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  amount,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: AcoTypography.body,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  value,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.bodySmall,
-                  ),
-                ),
-              ],
+          const Positioned(
+            left: 31,
+            right: 0,
+            bottom: 0,
+            child: SizedBox(
+              height: .75,
+              child: ColoredBox(color: Color(0xFF161616)),
             ),
           ),
         ],
