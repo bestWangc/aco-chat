@@ -46,6 +46,7 @@ const _welcomeContentTop = 487.6092;
 const _welcomeButtonHeight = 56.0;
 const _welcomeButtonGap = 12.4513;
 const _welcomeCheckboxSize = 12.0;
+const _welcomeCheckboxTopInset = 3.0;
 const _welcomeAgreementFontSize = 13.0;
 const _welcomeBrandWidth = 215.0;
 const _welcomeBrandHeight = 42.0258;
@@ -380,29 +381,32 @@ class _WalletWelcomeAgreement extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Semantics(
-        label: '同意用户协议和隐私政策',
-        checked: selected,
-        child: CupertinoButton(
-          key: const Key('wallet-terms-checkbox'),
-          padding: EdgeInsets.zero,
-          minimumSize: const Size(_welcomeCheckboxSize, _welcomeCheckboxSize),
-          onPressed: () => onChanged(!selected),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 140),
-            width: _welcomeCheckboxSize,
-            height: _welcomeCheckboxSize,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: selected ? _accentGreen : _transparent,
-              border: Border.all(
-                color: selected ? _accentGreen : palette.primaryText,
-                width: .672,
+      Padding(
+        padding: const EdgeInsets.only(top: _welcomeCheckboxTopInset),
+        child: Semantics(
+          label: '同意用户协议和隐私政策',
+          checked: selected,
+          child: CupertinoButton(
+            key: const Key('wallet-terms-checkbox'),
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(_welcomeCheckboxSize, _welcomeCheckboxSize),
+            onPressed: () => onChanged(!selected),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 140),
+              width: _welcomeCheckboxSize,
+              height: _welcomeCheckboxSize,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? _accentGreen : _transparent,
+                border: Border.all(
+                  color: selected ? _accentGreen : palette.primaryText,
+                  width: .672,
+                ),
               ),
+              child: selected
+                  ? Icon(CupertinoIcons.check_mark, color: _black, size: 10.5)
+                  : null,
             ),
-            child: selected
-                ? Icon(CupertinoIcons.check_mark, color: _black, size: 10.5)
-                : null,
           ),
         ),
       ),
