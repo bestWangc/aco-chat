@@ -16,6 +16,7 @@ class WalletBalance {
     required this.isNative,
     required this.address,
     required this.decimals,
+    this.tokenAddress,
     this.balance,
     this.error,
   });
@@ -26,6 +27,10 @@ class WalletBalance {
   final bool isNative;
   final String address;
   final int decimals;
+
+  /// ERC-20/TRC-20 contract address or SPL mint address. Native assets have
+  /// no token contract and therefore use `null`.
+  final String? tokenAddress;
   final BigInt? balance;
   final Object? error;
 
@@ -113,6 +118,7 @@ class WalletPortfolioService {
       isNative: false,
       address: address,
       decimals: usdt.decimals,
+      tokenAddress: usdt.address,
       request: () async {
         final callData = '0x70a08231${address.substring(2).padLeft(64, '0')}';
         final body = await _postJson(chain, {
@@ -192,6 +198,7 @@ class WalletPortfolioService {
     isNative: false,
     address: address,
     decimals: _tronUsdt.decimals,
+    tokenAddress: _tronUsdt.address,
     request: () async => _tronTrc20Balance(await account, _tronUsdt.address),
   );
 
@@ -318,6 +325,7 @@ class WalletPortfolioService {
       isNative: false,
       address: ownerAddress,
       decimals: decimals.toInt(),
+      tokenAddress: mint,
       balance: BigInt.parse(amount),
     );
   }
@@ -328,7 +336,7 @@ class WalletPortfolioService {
       'Ethereum',
       'ETH',
       'Ethereum',
-      'https://ethereum-rpc.publicnode.com',
+      ['https://ethereum-rpc.publicnode.com', 'https://rpc.flashbots.net'],
       _Token('0xdAC17F958D2ee523a2206206994597C13D831ec7', 6, 'Tether USD'),
     ),
     WalletNetwork.bsc: _Chain.evm(
@@ -336,7 +344,7 @@ class WalletPortfolioService {
       'BNB Smart Chain',
       'BNB',
       'BNB',
-      'https://bsc-rpc.publicnode.com',
+      ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.binance.org'],
       _Token('0x55d398326f99059fF775485246999027B3197955', 18, 'Tether USD'),
     ),
     WalletNetwork.polygon: _Chain.evm(
@@ -344,7 +352,7 @@ class WalletPortfolioService {
       'Polygon',
       'POL',
       'Polygon Ecosystem Token',
-      'https://polygon-bor-rpc.publicnode.com',
+      ['https://polygon-bor-rpc.publicnode.com', 'https://polygon-rpc.com'],
       _Token('0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 6, 'Tether USD'),
     ),
     WalletNetwork.base: _Chain.evm(
@@ -352,7 +360,7 @@ class WalletPortfolioService {
       'Base',
       'ETH',
       'Ethereum',
-      'https://base-rpc.publicnode.com',
+      ['https://base-rpc.publicnode.com', 'https://mainnet.base.org'],
       _Token('0xfde4c96c8593536e31f229ea8f37b2ada2699bb2', 6, 'Tether USD'),
     ),
     WalletNetwork.tron: _Chain.nonEvm(
@@ -360,7 +368,10 @@ class WalletPortfolioService {
       'TRON',
       'TRX',
       'TRON',
-      'https://api.trongrid.io/wallet/getaccount',
+      [
+        'https://api.trongrid.io/wallet/getaccount',
+        'https://api.tronstack.io/wallet/getaccount',
+      ],
       'tron',
       6,
     ),
@@ -369,7 +380,10 @@ class WalletPortfolioService {
       'Solana',
       'SOL',
       'Solana',
-      'https://solana-rpc.publicnode.com',
+      [
+        'https://solana-rpc.publicnode.com',
+        'https://api.mainnet-beta.solana.com',
+      ],
       'solana',
       9,
     ),
@@ -424,6 +438,7 @@ class WalletPortfolioService {
     required bool isNative,
     required String address,
     required int decimals,
+    String? tokenAddress,
     required Future<BigInt> Function() request,
   }) async {
     try {
@@ -434,6 +449,7 @@ class WalletPortfolioService {
         isNative: isNative,
         address: address,
         decimals: decimals,
+        tokenAddress: tokenAddress,
         balance: await request(),
       );
     } catch (error) {
@@ -444,6 +460,7 @@ class WalletPortfolioService {
         isNative: isNative,
         address: address,
         decimals: decimals,
+        tokenAddress: tokenAddress,
         balance: BigInt.zero,
         error: error,
       );
@@ -461,6 +478,7 @@ class WalletPortfolioService {
     isNative: false,
     address: address,
     decimals: token.decimals,
+    tokenAddress: token.address,
     balance: BigInt.zero,
   );
 
@@ -468,9 +486,26 @@ class WalletPortfolioService {
     _Chain chain,
     Map<String, Object> request,
   ) async {
+    if (_useRpcProxy) return _postJsonToUri(_rpcUri(chain), request);
+
+    Object? lastError;
+    for (final rpcUrl in chain.rpcUrls) {
+      try {
+        return await _postJsonToUri(Uri.parse(rpcUrl), request);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError ?? StateError('No RPC endpoints configured');
+  }
+
+  Future<Map<String, dynamic>> _postJsonToUri(
+    Uri uri,
+    Map<String, Object> request,
+  ) async {
     final response = await _client
         .post(
-          _rpcUri(chain),
+          uri,
           headers: const {'content-type': 'application/json'},
           body: jsonEncode(request),
         )
@@ -486,7 +521,6 @@ class WalletPortfolioService {
   }
 
   Uri _rpcUri(_Chain chain) {
-    if (!_useRpcProxy) return Uri.parse(chain.rpcUrl);
     final basePath = _rpcProxyBaseUri.path.endsWith('/')
         ? _rpcProxyBaseUri.path.substring(0, _rpcProxyBaseUri.path.length - 1)
         : _rpcProxyBaseUri.path;
@@ -502,7 +536,7 @@ class _Chain {
     this.name,
     this.symbol,
     this.nativeAssetName,
-    this.rpcUrl,
+    this.rpcUrls,
     this.usdt,
   ) : addressKey = null,
       decimals = 18;
@@ -512,7 +546,7 @@ class _Chain {
     this.name,
     this.symbol,
     this.nativeAssetName,
-    this.rpcUrl,
+    this.rpcUrls,
     this.addressKey,
     this.decimals,
   ) : usdt = null;
@@ -520,7 +554,7 @@ class _Chain {
   final String name;
   final String symbol;
   final String nativeAssetName;
-  final String rpcUrl;
+  final List<String> rpcUrls;
   final _Token? usdt;
   final WalletNetwork network;
   final String? addressKey;
