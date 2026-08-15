@@ -14,6 +14,7 @@ import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
+import 'package:aco_chat/services/wallet_valuation_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:flutter/cupertino.dart';
@@ -3130,7 +3131,9 @@ class _WalletHome extends StatefulWidget {
 
 class _WalletHomeState extends State<_WalletHome> {
   late final WalletPortfolioService _portfolioService;
+  late final WalletValuationService _valuationService;
   late Future<List<WalletBalance>> _balancesFuture;
+  late Future<double?> _totalBalanceFuture;
   late List<WalletBalance> _initialBalances;
   final Map<WalletNetwork, List<WalletBalance>> _balanceCache = {};
   final LayerLink _walletActionsLink = LayerLink();
@@ -3141,8 +3144,10 @@ class _WalletHomeState extends State<_WalletHome> {
   void initState() {
     super.initState();
     _portfolioService = WalletPortfolioService();
+    _valuationService = WalletValuationService();
     _initialBalances = _placeholderBalances();
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
+    _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
   }
 
   @override
@@ -3209,8 +3214,15 @@ class _WalletHomeState extends State<_WalletHome> {
     final balancesFuture = _loadAndCacheBalances(network);
     setState(() {
       _balancesFuture = balancesFuture;
+      _totalBalanceFuture = _loadTotalBalance(balancesFuture);
       _initialBalances = _balanceCache[network] ?? _placeholderBalances();
     });
+  }
+
+  Future<double?> _loadTotalBalance(
+    Future<List<WalletBalance>> balances,
+  ) async {
+    return _valuationService.totalUsd(await balances);
   }
 
   Future<void> _showSendTokenPicker() async {
@@ -3233,6 +3245,7 @@ class _WalletHomeState extends State<_WalletHome> {
   void dispose() {
     _dismissWalletActions();
     _portfolioService.close();
+    _valuationService.dispose();
     super.dispose();
   }
 
@@ -3464,12 +3477,15 @@ class _WalletHomeState extends State<_WalletHome> {
                         ),
                       ),
                       SizedBox(width: 21.45 * scale),
-                      Text(
-                        '3,347.03',
-                        style: TextStyle(
-                          color: widget.palette.primaryText,
-                          fontSize: 64 * scale,
-                          fontWeight: FontWeight.w700,
+                      FutureBuilder<double?>(
+                        future: _totalBalanceFuture,
+                        builder: (context, snapshot) => Text(
+                          (snapshot.data ?? 0).toStringAsFixed(2),
+                          style: TextStyle(
+                            color: widget.palette.primaryText,
+                            fontSize: 64 * scale,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                     ],
