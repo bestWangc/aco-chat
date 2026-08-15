@@ -61,7 +61,6 @@ const _walletNavInactive = Color(0xFFC2C2C2);
 const _walletHeaderWalletWidth = 206.0;
 const _walletHeaderNetworkGap = 60.0;
 const _walletHeaderTextSize = 30.0;
-const _walletHomeMinimumHeight = 650.0;
 const _walletAssetListHorizontalInset = 28.0;
 const _walletActionSurface = Color(0xFFEFF0F1);
 const _walletActionForeground = Color(0xFF040000);
@@ -70,7 +69,6 @@ const _walletActionHeight = 59.8;
 const _walletActionColumnGap = 58.36;
 const _walletActionRowGap = 32.2;
 const _walletTabsTopGap = 90.8;
-const _topActionIconSize = 24.0;
 const _navLabels = ['钱包', '探索', 'DEX', '广场', '社交'];
 const _navAssets = [
   'assets/icons/source_wallet.svg',
@@ -1699,33 +1697,37 @@ class AcoBottomNav extends StatelessWidget {
   final ValueChanged<int> onSelected;
 
   @override
-  Widget build(BuildContext context) {
-    final palette = AcoPalette(dark);
-    return ColoredBox(
-      color: dark ? const Color(0xFF000000) : palette.background,
-      child: SizedBox(
-        // Match the design artboard's bottom navigation baseline.
-        height: 106,
-        child: Transform.translate(
-          offset: const Offset(0, -7),
-          child: Padding(
-            padding: const EdgeInsets.only(top: 0, bottom: 8),
-            child: Row(
-              children: List.generate(
-                _navLabels.length,
-                (index) => Expanded(
-                  child: Semantics(
-                    button: true,
-                    selected: selected == index,
-                    label: _navLabels[index],
-                    child: CupertinoButton(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(44, 44),
-                      onPressed: () => onSelected(index),
-                      child: _NavItem(
-                        index: index,
-                        active: selected == index,
-                        palette: palette,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final palette = AcoPalette(dark);
+      final scale = constraints.maxWidth / _loginArtboardWidth;
+      return ColoredBox(
+        color: dark ? const Color(0xFF000000) : palette.background,
+        child: SizedBox(
+          // Match the design artboard's bottom navigation baseline.
+          height: 106 * scale,
+          child: Transform.translate(
+            offset: Offset(0, -7 * scale),
+            child: Padding(
+              padding: EdgeInsets.only(bottom: 8 * scale),
+              child: Row(
+                children: List.generate(
+                  _navLabels.length,
+                  (index) => Expanded(
+                    child: Semantics(
+                      button: true,
+                      selected: selected == index,
+                      label: _navLabels[index],
+                      child: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size(44 * scale, 44 * scale),
+                        onPressed: () => onSelected(index),
+                        child: _NavItem(
+                          index: index,
+                          active: selected == index,
+                          palette: palette,
+                          scale: scale,
+                        ),
                       ),
                     ),
                   ),
@@ -1734,9 +1736,9 @@ class AcoBottomNav extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
 class _NavItem extends StatelessWidget {
@@ -1744,10 +1746,12 @@ class _NavItem extends StatelessWidget {
     required this.index,
     required this.active,
     required this.palette,
+    this.scale = 1,
   });
   final int index;
   final bool active;
   final AcoPalette palette;
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
@@ -1756,16 +1760,16 @@ class _NavItem extends StatelessWidget {
         : (palette.dark ? _walletNavInactive : palette.navInactive);
     if (index == 2) {
       return SizedBox(
-        width: 48,
-        height: 76,
+        width: 48 * scale,
+        height: 76 * scale,
         child: Stack(
           clipBehavior: Clip.none,
           children: [
             Positioned(
-              top: -8,
-              left: -4,
-              width: 55,
-              height: 52,
+              top: -8 * scale,
+              left: -4 * scale,
+              width: 55 * scale,
+              height: 52 * scale,
               child: active && !palette.dark
                   ? Stack(
                       fit: StackFit.expand,
@@ -1822,26 +1826,29 @@ class _NavItem extends StatelessWidget {
       );
     }
     return SizedBox(
-      width: 48,
-      height: 76,
+      width: 48 * scale,
+      height: 76 * scale,
       child: Column(
         children: [
           SizedBox(
-            width: 32,
-            height: 32,
+            width: 32 * scale,
+            height: 32 * scale,
             child: SvgPicture.asset(
               _navAssets[index],
               fit: BoxFit.contain,
               colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
             ),
           ),
-          const SizedBox(height: 3),
+          SizedBox(height: 3 * scale),
           SizedBox(
-            height: 26,
+            height: 26 * scale,
             child: Text(
               _navLabels[index],
               maxLines: 1,
-              style: TextStyle(color: color, fontSize: AcoTypography.bodySmall),
+              style: TextStyle(
+                color: color,
+                fontSize: AcoTypography.bodySmall * scale,
+              ),
             ),
           ),
         ],
@@ -1947,9 +1954,15 @@ class AcoIconButton extends StatelessWidget {
 }
 
 class AcoTopActions extends StatelessWidget {
-  const AcoTopActions({required this.palette, required this.onOpen, super.key});
+  const AcoTopActions({
+    required this.palette,
+    required this.onOpen,
+    this.scale = 1,
+    super.key,
+  });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+  final double scale;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -1958,13 +1971,15 @@ class AcoTopActions extends StatelessWidget {
       _AcoDesignActionButton(
         asset: 'assets/icons/source_scan.svg',
         palette: palette,
+        scale: scale,
         label: '扫描二维码',
         onPressed: () => onOpen(AcoScreen.scan),
       ),
-      const SizedBox(width: 23),
+      SizedBox(width: 23 * scale),
       _AcoDesignActionButton(
         asset: 'assets/icons/source_person.svg',
         palette: palette,
+        scale: scale,
         label: '账户',
         onPressed: () => onOpen(AcoScreen.profile),
       ),
@@ -1978,12 +1993,14 @@ class _AcoDesignActionButton extends StatelessWidget {
     required this.palette,
     required this.label,
     required this.onPressed,
+    this.scale = 1,
   });
 
   final String asset;
   final AcoPalette palette;
   final String label;
   final VoidCallback onPressed;
+  final double scale;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -1991,14 +2008,14 @@ class _AcoDesignActionButton extends StatelessWidget {
     label: label,
     child: CupertinoButton(
       padding: EdgeInsets.zero,
-      minimumSize: const Size(44, 44),
+      minimumSize: Size(44 * scale, 44 * scale),
       onPressed: onPressed,
       child: SvgPicture.asset(
         asset,
         // The SVG header icons are not square on the artboard: the scanner
         // mark is 27.9×34.3pt and the account mark is 25.4×28pt.
-        width: asset.contains('source_scan') ? 27.9 : 25.4,
-        height: asset.contains('source_scan') ? 34.3 : 28,
+        width: (asset.contains('source_scan') ? 27.9 : 25.4) * scale,
+        height: (asset.contains('source_scan') ? 34.3 : 28) * scale,
         colorFilter: ColorFilter.mode(
           palette.dark ? _white : palette.primaryText,
           BlendMode.srcIn,
@@ -2016,6 +2033,7 @@ class AcoRootHeader extends StatelessWidget {
     this.trailing,
     this.onLeadingPressed,
     this.leadingButtonOffset = Offset.zero,
+    this.scale = 1,
     super.key,
   });
 
@@ -2025,10 +2043,11 @@ class AcoRootHeader extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onLeadingPressed;
   final Offset leadingButtonOffset;
+  final double scale;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 46,
+    height: 46 * scale,
     child: Stack(
       alignment: Alignment.center,
       children: [
@@ -2056,7 +2075,9 @@ class AcoRootHeader extends StatelessWidget {
           ),
         Align(
           alignment: Alignment.centerRight,
-          child: trailing ?? AcoTopActions(palette: palette, onOpen: onOpen),
+          child:
+              trailing ??
+              AcoTopActions(palette: palette, onOpen: onOpen, scale: scale),
         ),
       ],
     ),
@@ -3197,13 +3218,9 @@ class _WalletHomeState extends State<_WalletHome> {
       // The wallet artboard intentionally uses light action cards on black.
       final actionSurface = _walletActionSurface;
       final actionForeground = _walletActionForeground;
-      final scale = math.min(
-        1.0,
-        math.min(
-          constraints.maxWidth / 595.28,
-          constraints.maxHeight / _walletHomeMinimumHeight,
-        ),
-      );
+      // Scale the entire wallet page from the design artboard width instead
+      // of treating its point values as device pixels.
+      final scale = constraints.maxWidth / _loginArtboardWidth;
       return ColoredBox(
         color: widget.palette.dark
             ? const Color(0xFF000000)
@@ -3220,7 +3237,11 @@ class _WalletHomeState extends State<_WalletHome> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  AcoRootHeader(palette: widget.palette, onOpen: widget.onOpen),
+                  AcoRootHeader(
+                    palette: widget.palette,
+                    onOpen: widget.onOpen,
+                    scale: scale,
+                  ),
                   SizedBox(height: 65 * scale),
                   Row(
                     children: [
@@ -3469,13 +3490,13 @@ class _WalletHomeState extends State<_WalletHome> {
                       51.42 * scale,
                       17 * scale,
                       _walletAssetListHorizontalInset * scale,
-                      22,
+                      22 * scale,
                     ),
                     itemCount: balances.isEmpty ? 1 : balances.length,
                     itemBuilder: (context, index) {
                       if (balances.isEmpty) {
                         return Padding(
-                          padding: const EdgeInsets.only(top: 24),
+                          padding: EdgeInsets.only(top: 24 * scale),
                           child: Text(
                             '地址派生中，请稍后刷新。',
                             style: TextStyle(color: widget.palette.mutedText),
@@ -3489,6 +3510,7 @@ class _WalletHomeState extends State<_WalletHome> {
                       );
                       return _WalletAssetRow(
                         palette: widget.palette,
+                        scale: scale,
                         symbol: balance.symbol,
                         title: balance.assetName,
                         amount: amount,
@@ -8753,12 +8775,14 @@ class _TimeRangeSelector extends StatelessWidget {
 class _WalletAssetRow extends StatelessWidget {
   const _WalletAssetRow({
     required this.palette,
+    required this.scale,
     required this.symbol,
     required this.title,
     required this.amount,
     required this.value,
   });
   final AcoPalette palette;
+  final double scale;
   final String symbol, title, amount, value;
   @override
   Widget build(BuildContext context) {
@@ -8770,18 +8794,18 @@ class _WalletAssetRow extends StatelessWidget {
         : 'assets/icons/crypto/tokens/${normalizedSymbol.toLowerCase()}.svg';
 
     return SizedBox(
-      height: 97.18,
+      height: 97.18 * scale,
       child: Stack(
         children: [
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: EdgeInsets.symmetric(vertical: 12 * scale),
               child: Row(
                 children: [
                   SizedBox(
-                    width: 42,
-                    height: 42,
+                    width: 42 * scale,
+                    height: 42 * scale,
                     child: iconAsset == null
                         ? Container(
                             alignment: Alignment.center,
@@ -8806,7 +8830,7 @@ class _WalletAssetRow extends StatelessWidget {
                           )
                         : SvgPicture.asset(iconAsset),
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12 * scale),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -8816,22 +8840,22 @@ class _WalletAssetRow extends StatelessWidget {
                           style: TextStyle(
                             color: palette.primaryText,
                             fontWeight: FontWeight.w600,
-                            fontSize: AcoTypography.body,
+                            fontSize: AcoTypography.body * scale,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        SizedBox(height: 3 * scale),
                         Text(
                           title,
                           style: TextStyle(
                             color: palette.mutedText,
-                            fontSize: AcoTypography.caption,
+                            fontSize: AcoTypography.caption * scale,
                           ),
                         ),
                       ],
                     ),
                   ),
                   SizedBox(
-                    width: 112,
+                    width: 112 * scale,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -8842,11 +8866,11 @@ class _WalletAssetRow extends StatelessWidget {
                           textAlign: TextAlign.right,
                           style: TextStyle(
                             color: palette.primaryText,
-                            fontSize: AcoTypography.body,
+                            fontSize: AcoTypography.body * scale,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        SizedBox(height: 3 * scale),
                         Text(
                           value,
                           maxLines: 1,
@@ -8854,7 +8878,7 @@ class _WalletAssetRow extends StatelessWidget {
                           textAlign: TextAlign.right,
                           style: TextStyle(
                             color: palette.mutedText,
-                            fontSize: AcoTypography.bodySmall,
+                            fontSize: AcoTypography.bodySmall * scale,
                           ),
                         ),
                       ],
@@ -8864,13 +8888,13 @@ class _WalletAssetRow extends StatelessWidget {
               ),
             ),
           ),
-          const Positioned(
-            left: 31,
+          Positioned(
+            left: 31 * scale,
             right: 0,
             bottom: 0,
             child: SizedBox(
-              height: .75,
-              child: ColoredBox(color: Color(0xFF161616)),
+              height: .75 * scale,
+              child: const ColoredBox(color: Color(0xFF161616)),
             ),
           ),
         ],
