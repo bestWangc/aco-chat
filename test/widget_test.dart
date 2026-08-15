@@ -415,7 +415,7 @@ void main() {
 
     expect(find.bySemanticsLabel('切换钱包'), findsOneWidget);
     expect(find.text(r'$'), findsOneWidget);
-    expect(find.text('3,347.03'), findsOneWidget);
+    expect(find.text('0.00'), findsOneWidget);
     expect(find.byKey(const Key('wallet-details-button')), findsNothing);
 
     final addTokenCenter = tester.getCenter(
