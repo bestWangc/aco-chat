@@ -40,8 +40,8 @@ const _loginSecondarySurface = Color(0xFF515151);
 // 首页-dark.svg is a 595.28pt-wide artboard. These are its measurements
 // converted once for the app's 400pt logical canvas, rather than scaled at
 // runtime from the screen width.
-const _welcomeContentLeftInset = 32.0;
-const _welcomeContentRightInset = 24.5990;
+const _welcomeContentInsetMin = 24.0;
+const _welcomeContentInsetMax = 48.0;
 const _welcomeContentTop = 487.6092;
 const _welcomeButtonHeight = 56.0;
 const _welcomeButtonGap = 12.4513;
@@ -231,21 +231,29 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
           ),
         ),
         SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
-              _welcomeContentLeftInset,
-              _welcomeContentTop,
-              _welcomeContentRightInset,
-              24,
-            ),
-            child: _WalletWelcomeContent(
-              palette: palette,
-              hasAcceptedTerms: _hasAcceptedTerms,
-              onTermsChanged: (accepted) =>
-                  setState(() => _hasAcceptedTerms = accepted),
-              onCreate: () => _startWalletSetup(_WalletSetupMode.create),
-              onImport: () => _startWalletSetup(_WalletSetupMode.import),
-            ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalInset = (constraints.maxWidth * 0.08).clamp(
+                _welcomeContentInsetMin,
+                _welcomeContentInsetMax,
+              );
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalInset,
+                  _welcomeContentTop,
+                  horizontalInset,
+                  24,
+                ),
+                child: _WalletWelcomeContent(
+                  palette: palette,
+                  hasAcceptedTerms: _hasAcceptedTerms,
+                  onTermsChanged: (accepted) =>
+                      setState(() => _hasAcceptedTerms = accepted),
+                  onCreate: () => _startWalletSetup(_WalletSetupMode.create),
+                  onImport: () => _startWalletSetup(_WalletSetupMode.import),
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -269,76 +277,90 @@ class _WalletWelcomeContent extends StatelessWidget {
   final VoidCallback onImport;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Image.asset(
-        'assets/images/welcome-brand.png',
-        width: _welcomeBrandWidth,
-        height: _welcomeBrandHeight,
-        filterQuality: FilterQuality.high,
-        semanticLabel: 'Aco Chat 品牌标识',
-      ),
-      const SizedBox(height: _welcomeBrandToTitleGap),
-      Padding(
-        padding: const EdgeInsets.only(left: 5.3756),
-        child: Text(
-          '创建新钱包或导入已有钱包\n开始使用',
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: _welcomeTitleFontSize,
-            fontWeight: FontWeight.w400,
-            height: 1.18,
-          ),
+  Widget build(BuildContext context) {
+    final widthScale = MediaQuery.sizeOf(context).width / 400.0;
+    final titleFontSize = (_welcomeTitleFontSize * widthScale).clamp(
+      26.0,
+      _welcomeTitleFontSize,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Image.asset(
+          'assets/images/welcome-brand.png',
+          width: _welcomeBrandWidth,
+          height: _welcomeBrandHeight,
+          filterQuality: FilterQuality.high,
+          semanticLabel: 'Aco Chat 品牌标识',
         ),
-      ),
-      const SizedBox(height: _welcomeTitleToAgreementGap),
-      Padding(
-        padding: const EdgeInsets.only(left: 5.3756),
-        child: _WalletWelcomeAgreement(
-          palette: palette,
-          selected: hasAcceptedTerms,
-          onChanged: onTermsChanged,
-        ),
-      ),
-      const SizedBox(height: _welcomeAgreementToActionsGap),
-      Row(
-        children: [
-          Expanded(
-            child: _WalletSetupButton(
-              key: const Key('create-wallet-button'),
-              label: '创建钱包',
-              enabled: true,
-              filled: true,
-              palette: palette,
-              backgroundColor: _accentGreen,
-              borderColor: _accentGreen,
-              height: _welcomeButtonHeight,
-              fontSize: _welcomeActionFontSize,
-              fontWeight: FontWeight.w700,
-              onPressed: onCreate,
+        const SizedBox(height: _welcomeBrandToTitleGap),
+        Transform.translate(
+          offset: const Offset(-8, 0),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 5.3756),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                '创建新钱包或导入已有钱包\n开始使用',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: titleFontSize,
+                  fontWeight: FontWeight.w400,
+                  height: 1.18,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: _welcomeButtonGap),
-          Expanded(
-            child: _WalletSetupButton(
-              key: const Key('import-wallet-button'),
-              label: '导入钱包',
-              enabled: true,
-              filled: false,
-              palette: palette,
-              backgroundColor: _loginSecondarySurface,
-              borderColor: _loginSecondarySurface,
-              height: _welcomeButtonHeight,
-              fontSize: _welcomeActionFontSize,
-              fontWeight: FontWeight.w700,
-              onPressed: onImport,
-            ),
+        ),
+        const SizedBox(height: _welcomeTitleToAgreementGap),
+        Padding(
+          padding: const EdgeInsets.only(left: 5.3756),
+          child: _WalletWelcomeAgreement(
+            palette: palette,
+            selected: hasAcceptedTerms,
+            onChanged: onTermsChanged,
           ),
-        ],
-      ),
-    ],
-  );
+        ),
+        const SizedBox(height: _welcomeAgreementToActionsGap),
+        Row(
+          children: [
+            Expanded(
+              child: _WalletSetupButton(
+                key: const Key('create-wallet-button'),
+                label: '创建钱包',
+                enabled: true,
+                filled: true,
+                palette: palette,
+                backgroundColor: _accentGreen,
+                borderColor: _accentGreen,
+                height: _welcomeButtonHeight,
+                fontSize: _welcomeActionFontSize,
+                fontWeight: FontWeight.w700,
+                onPressed: onCreate,
+              ),
+            ),
+            const SizedBox(width: _welcomeButtonGap),
+            Expanded(
+              child: _WalletSetupButton(
+                key: const Key('import-wallet-button'),
+                label: '导入钱包',
+                enabled: true,
+                filled: false,
+                palette: palette,
+                backgroundColor: _loginSecondarySurface,
+                borderColor: _loginSecondarySurface,
+                height: _welcomeButtonHeight,
+                fontSize: _welcomeActionFontSize,
+                fontWeight: FontWeight.w700,
+                onPressed: onImport,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
 
 enum _WalletSetupMode { welcome, create, import }
