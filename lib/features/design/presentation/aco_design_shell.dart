@@ -40,20 +40,20 @@ const _loginSecondarySurface = Color(0xFF515151);
 // 首页-dark.svg is a 595.28pt-wide artboard. These are its measurements
 // converted once for the app's 400pt logical canvas, rather than scaled at
 // runtime from the screen width.
-const _welcomeContentLeftInset = 24.2172;
+const _welcomeContentLeftInset = 32.0;
 const _welcomeContentRightInset = 24.5990;
 const _welcomeContentTop = 487.6092;
-const _welcomeButtonHeight = 49.1264;
+const _welcomeButtonHeight = 56.0;
 const _welcomeButtonGap = 12.4513;
-const _welcomeCheckboxSize = 9.4073;
-const _welcomeAgreementFontSize = 11.0862;
-const _welcomeBrandWidth = 178.7428;
-const _welcomeBrandHeight = 34.9416;
-const _welcomeTitleFontSize = 28.2219;
+const _welcomeCheckboxSize = 12.0;
+const _welcomeAgreementFontSize = 13.0;
+const _welcomeBrandWidth = 215.0;
+const _welcomeBrandHeight = 42.0258;
+const _welcomeTitleFontSize = 30.5;
 const _welcomeBrandToTitleGap = 10.0793;
 const _welcomeTitleToAgreementGap = 15.4549;
 const _welcomeAgreementToActionsGap = 23.5184;
-const _welcomeActionFontSize = 14.1110;
+const _welcomeActionFontSize = 19.0;
 const _walletHeaderMuted = Color(0xFF989798);
 // Wallet artboard uses the same neon accent as the supplied design capture.
 const _walletHeaderLime = _accentGreen;
@@ -356,7 +356,7 @@ class _WalletWelcomeAgreement extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Semantics(
         label: '同意用户协议和隐私政策',
@@ -379,7 +379,7 @@ class _WalletWelcomeAgreement extends StatelessWidget {
               ),
             ),
             child: selected
-                ? Icon(CupertinoIcons.check_mark, color: _black, size: 9.4073)
+                ? Icon(CupertinoIcons.check_mark, color: _black, size: 10.5)
                 : null,
           ),
         ),
@@ -405,6 +405,7 @@ class _WalletWelcomeAgreement extends StatelessWidget {
                 text: '《隐私政策》',
                 style: TextStyle(color: _accentGreen),
               ),
+              TextSpan(text: '\n由 Aladdin Dao Inc 提供'),
             ],
           ),
         ),
