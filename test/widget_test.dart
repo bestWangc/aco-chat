@@ -506,6 +506,7 @@ void main() {
     expect(name.maxLines, 1);
     expect(name.overflow, TextOverflow.ellipsis);
     expect(find.byKey(const Key('wallet-network-selector')), findsOneWidget);
+    expect(find.text('Ethereum'), findsOneWidget);
     expect(find.byKey(const Key('wallet-details-button')), findsNothing);
   });
 
@@ -547,6 +548,8 @@ void main() {
 
     expect(find.text('钱包详情'), findsOneWidget);
     expect(find.text('选择网络'), findsNothing);
+    expect(find.text('Ethereum'), findsOneWidget);
+    expect(find.text('以太坊'), findsNothing);
   });
 
   testWidgets('shows only supported chains in the wallet list', (

@@ -2441,6 +2441,9 @@ class _WalletChain {
   final WalletNetwork network;
   final Color? backgroundColor;
   final String? derivedAddressKey;
+
+  String get displayLabel =>
+      network == WalletNetwork.ethereum ? 'Ethereum' : label;
 }
 
 const _supportedWalletChains = [
@@ -3275,10 +3278,7 @@ class _WalletHomeState extends State<_WalletHome> {
       // The wallet artboard intentionally uses light action cards on black.
       final actionSurface = _walletActionSurface;
       final actionForeground = _walletActionForeground;
-      final networkLabel =
-          widget.selectedChain.network == WalletNetwork.ethereum
-          ? 'Sepolia'
-          : widget.selectedChain.label;
+      final networkLabel = widget.selectedChain.displayLabel;
       // Portrait devices scale from their actual canvas width. On a desktop
       // or landscape preview, retain the 400pt mobile baseline instead.
       final viewport = MediaQuery.sizeOf(context);
@@ -3392,40 +3392,31 @@ class _WalletHomeState extends State<_WalletHome> {
                               behavior: HitTestBehavior.opaque,
                               onTap: () =>
                                   widget.onOpen(AcoScreen.walletChains),
-                              child:
-                                  widget.selectedChain.network ==
-                                      WalletNetwork.ethereum
-                                  ? SvgPicture.asset(
-                                      'assets/icons/wallet_network_status.svg',
-                                      width: _walletHeaderNetworkWidth * scale,
-                                      height:
-                                          _walletHeaderNetworkHeight * scale,
-                                    )
-                                  : Row(
-                                      children: [
-                                        Container(
-                                          width: 7.62 * scale,
-                                          height: 7.62 * scale,
-                                          decoration: const BoxDecoration(
-                                            color: _walletHeaderLime,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        SizedBox(width: 6.52 * scale),
-                                        Flexible(
-                                          child: Text(
-                                            networkLabel,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: TextStyle(
-                                              color: _walletHeaderMuted,
-                                              fontSize: 20.16 * scale,
-                                              fontWeight: FontWeight.w400,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 7.62 * scale,
+                                    height: 7.62 * scale,
+                                    decoration: const BoxDecoration(
+                                      color: _walletHeaderLime,
+                                      shape: BoxShape.circle,
                                     ),
+                                  ),
+                                  SizedBox(width: 6.52 * scale),
+                                  Flexible(
+                                    child: Text(
+                                      networkLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: _walletHeaderMuted,
+                                        fontSize: 20.16 * scale,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
@@ -3868,7 +3859,7 @@ class _WalletChainsState extends State<_WalletChains> {
               child: Row(
                 children: [
                   Text(
-                    _supportedWalletChains[_selectedChain].label,
+                    _supportedWalletChains[_selectedChain].displayLabel,
                     style: TextStyle(
                       color: widget.palette.primaryText,
                       fontSize: AcoTypography.title,
