@@ -415,7 +415,7 @@ void main() {
     expect(find.text('Wallet1'), findsOneWidget);
     expect(find.text('usd'), findsOneWidget);
     expect(find.text('0'), findsOneWidget);
-    expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
+    expect(find.byKey(const Key('wallet-details-button')), findsNothing);
 
     final addTokenCenter = tester.getCenter(
       find.byKey(const Key('add-token-button')),
@@ -440,19 +440,6 @@ void main() {
       );
       expect(tab.onPressed, isNull, reason: '$label 暂未开放');
     }
-
-    await tester.tap(find.byKey(const Key('wallet-details-button')));
-    await tester.pumpAndSettle();
-    expect(find.text('钱包详情'), findsOneWidget);
-    expect(tester.getSize(find.bySemanticsLabel('返回')), const Size(44, 44));
-    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(28, 1));
-    expect(find.text('GRANDVEAGS'), findsNothing);
-    expect(find.text('Wallet1'), findsOneWidget);
-    expect(find.byKey(const Key('wallet-detail-chain-logo')), findsOneWidget);
-    expect(find.text('导出助记词'), findsOneWidget);
-    expect(find.text('导出私钥'), findsOneWidget);
-    expect(find.text('删除钱包'), findsOneWidget);
-    expect(find.byKey(const Key('wallet-detail-copy-address')), findsOneWidget);
   });
 
   testWidgets('uses a consistent 44 point back button on detail pages', (
@@ -503,7 +490,7 @@ void main() {
     expect(name.maxLines, 1);
     expect(name.overflow, TextOverflow.ellipsis);
     expect(find.byKey(const Key('wallet-network-selector')), findsOneWidget);
-    expect(find.byKey(const Key('wallet-details-button')), findsOneWidget);
+    expect(find.byKey(const Key('wallet-details-button')), findsNothing);
   });
 
   testWidgets('uses dark active bottom navigation in light mode', (
@@ -540,7 +527,7 @@ void main() {
     await tester.tap(find.byKey(const Key('wallet-network-selector')));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包列表'), findsOneWidget);
+    expect(find.text('钱包详情'), findsOneWidget);
     expect(find.text('选择网络'), findsNothing);
   });
 
@@ -561,15 +548,25 @@ void main() {
     expect(find.text('Avalanche'), findsNothing);
     expect(find.text('Bitcoin'), findsNothing);
     expect(find.text('Cosmos'), findsNothing);
-    expect(find.text('当前'), findsNothing);
-    expect(find.byIcon(CupertinoIcons.chevron_right), findsNothing);
-    expect(find.byIcon(CupertinoIcons.checkmark), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.chevron_right), findsOneWidget);
+    expect(find.text('当前'), findsOneWidget);
     expect(find.text('ETH 0'), findsNothing);
     expect(find.text(r'$ 0.00'), findsNothing);
 
     final addressRect = tester.getRect(find.text('0x9858effd...aeda94'));
     final copyIconRect = tester.getRect(find.byIcon(CupertinoIcons.doc_on_doc));
-    expect(copyIconRect.left, closeTo(addressRect.right + 5, 1));
+    expect(copyIconRect.left, closeTo(addressRect.right + 4, 1));
+
+    await tester.tap(find.text('Wallet1'));
+    await tester.pumpAndSettle();
+
+    expect(tester.getSize(find.bySemanticsLabel('返回')), const Size(44, 44));
+    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(28, 1));
+    expect(find.byKey(const Key('wallet-detail-chain-logo')), findsOneWidget);
+    expect(find.text('导出助记词'), findsOneWidget);
+    expect(find.text('导出私钥'), findsOneWidget);
+    expect(find.text('删除钱包'), findsOneWidget);
+    expect(find.byKey(const Key('wallet-detail-copy-address')), findsOneWidget);
   });
 
   testWidgets('switches the wallet network from the chain rail', (
@@ -598,7 +595,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('切换钱包'));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包列表'), findsOneWidget);
+    expect(find.text('钱包详情'), findsOneWidget);
     expect(find.text('暂无钱包'), findsOneWidget);
     expect(find.text('BSC-1'), findsNothing);
     expect(find.text('TASDFSk...FAGSGS2324t'), findsNothing);
