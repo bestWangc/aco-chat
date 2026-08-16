@@ -2399,7 +2399,7 @@ class AcoSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSquareComposer = variant == AcoSearchVariant.squareComposer;
-    final submitWidth = isSquareComposer ? 56.0 : height;
+    final submitWidth = isSquareComposer ? 64.0 : height;
     final borderColor = _borderColor(isSquareComposer);
     final iconColor = palette.dark
         ? (isSquareComposer ? const Color(0xFF191919) : const Color(0xFFF7F7F7))
@@ -2407,20 +2407,7 @@ class AcoSearch extends StatelessWidget {
     final hintColor = palette.dark
         ? (isSquareComposer ? const Color(0xFFF2F2F2) : const Color(0xFF888888))
         : palette.mutedText;
-    final submitChild = submitIcon == CupertinoIcons.add
-        ? Center(
-            child: SizedBox(
-              width: isSquareComposer ? 20 : 32,
-              height: isSquareComposer ? 20 : 32,
-              child: Image.asset(
-                palette.dark
-                    ? 'assets/icons/design_plus_dark.png'
-                    : 'assets/icons/design_plus_light.png',
-                filterQuality: FilterQuality.high,
-              ),
-            ),
-          )
-        : Icon(submitIcon, color: _black, size: height > 48 ? 30 : 24);
+    final submitChild = _buildSubmitChild(isSquareComposer);
 
     return Container(
       height: height,
@@ -2458,7 +2445,7 @@ class AcoSearch extends StatelessWidget {
                 width: submitWidth,
                 height: height,
                 decoration: BoxDecoration(
-                  color: _lime,
+                  color: isSquareComposer ? const Color(0xFFD7D7D7) : _lime,
                   borderRadius: BorderRadius.circular(height / 2),
                 ),
                 child: submitChild,
@@ -2472,6 +2459,36 @@ class AcoSearch extends StatelessWidget {
   Color _borderColor(bool isSquareComposer) {
     if (!palette.dark) return palette.border;
     return isSquareComposer ? const Color(0xFFD7D7D7) : const Color(0xFFC1C1C1);
+  }
+
+  Widget _buildSubmitChild(bool isSquareComposer) {
+    if (submitIcon != CupertinoIcons.add) {
+      return Icon(submitIcon, color: _black, size: height > 48 ? 30 : 24);
+    }
+
+    if (isSquareComposer) {
+      return Center(
+        child: SizedBox(
+          width: 19,
+          height: 19,
+          child: Image.asset(
+            'assets/icons/square_search_add.png',
+            filterQuality: FilterQuality.high,
+          ),
+        ),
+      );
+    }
+
+    final plusAsset = palette.dark
+        ? 'assets/icons/design_plus_dark.png'
+        : 'assets/icons/design_plus_light.png';
+    return Center(
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: Image.asset(plusAsset, filterQuality: FilterQuality.high),
+      ),
+    );
   }
 }
 
@@ -6723,32 +6740,48 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   Widget build(BuildContext context) {
     final palette = widget.palette;
     final onOpen = widget.onOpen;
+    final viewport = MediaQuery.sizeOf(context);
+    final canvasWidth = viewport.height >= viewport.width
+        ? viewport.width
+        : math.min(viewport.width, 400.0);
+    final headerScale = canvasWidth / _walletDesignWidth;
+    final headerRightInset = math.max(0.0, 53.5 * headerScale - 35);
 
     return Stack(
       children: [
         ListView(
-          padding: const EdgeInsets.fromLTRB(35, 16, 35, 96),
+          padding: EdgeInsets.fromLTRB(35, 40 * headerScale, 35, 96),
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: AcoTopActions(palette: palette, onOpen: onOpen),
+            SizedBox(
+              height: 46 * headerScale,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: EdgeInsets.only(right: headerRightInset),
+                  child: AcoTopActions(
+                    palette: palette,
+                    onOpen: onOpen,
+                    scale: headerScale,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                const AcoAvatar(size: 42),
-                const SizedBox(width: 16),
+                const AcoAvatar(size: 48),
+                const SizedBox(width: 6),
                 Expanded(
-                  child: AcoSearch(
-                    palette: palette,
-                    hint: '搜索帖文或消息',
-                    height: 40,
-                    variant: AcoSearchVariant.squareComposer,
-                    submitIcon: CupertinoIcons.add,
-                    onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
+                  child: Transform.translate(
+                    offset: const Offset(10, 0),
+                    child: AcoSearch(
+                      palette: palette,
+                      hint: '搜索帖文或消息',
+                      height: 44,
+                      variant: AcoSearchVariant.squareComposer,
+                      submitIcon: CupertinoIcons.add,
+                      onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
+                    ),
                   ),
                 ),
               ],
@@ -6761,11 +6794,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   '推荐',
                   style: TextStyle(
                     color: _showLive ? palette.mutedText : palette.primaryText,
-                    fontSize: AcoTypography.bodyEmphasis,
+                    fontSize: AcoTypography.title,
                     fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
                   ),
                 ),
-                const SizedBox(width: 40),
+                const SizedBox(width: 54),
                 Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -6773,7 +6806,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                       '好友',
                       style: TextStyle(
                         color: palette.mutedText,
-                        fontSize: AcoTypography.bodyEmphasis,
+                        fontSize: AcoTypography.title,
                       ),
                     ),
                     const Positioned(
@@ -6783,18 +6816,18 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                     ),
                   ],
                 ),
-                const SizedBox(width: 40),
+                const SizedBox(width: 54),
                 Text(
                   '直播',
                   style: TextStyle(
                     color: _showLive ? palette.primaryText : palette.mutedText,
-                    fontSize: AcoTypography.bodyEmphasis,
+                    fontSize: AcoTypography.title,
                     fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             Container(height: 1, color: palette.border),
             if (_showLive)
               ..._buildLiveContent(palette)
@@ -8438,6 +8471,7 @@ class _ProfileHeaderButton extends StatelessWidget {
   );
 }
 
+// ignore: unused_element
 class _ProfileOverviewSection extends StatelessWidget {
   const _ProfileOverviewSection({required this.palette});
 

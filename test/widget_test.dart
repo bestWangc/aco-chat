@@ -1054,11 +1054,12 @@ void main() {
 
     final submit = find.byKey(const Key('square-search-submit'));
     expect(submit, findsOneWidget);
-    expect(tester.getSize(submit), const Size(56, 38));
+    expect(tester.getSize(submit), const Size(64, 42));
 
     final decoration =
         tester.widget<Container>(submit).decoration! as BoxDecoration;
     expect(decoration.borderRadius, isA<BorderRadius>());
+    expect(decoration.color, const Color(0xFFD7D7D7));
   });
 
   testWidgets('shows the live album cover upload control', (
