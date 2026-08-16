@@ -135,14 +135,26 @@ class _AcoAppState extends State<AcoApp> {
     final client = AccountApiClient();
     AccountProfile? profile;
     try {
-      profile =
-          (await AccountSession(client)
-                  .signInForWallet(
-                    walletAddress: identity.address,
-                    mnemonic: mnemonic,
-                  )
-                  .timeout(const Duration(seconds: 10)))
-              .user;
+      final session = AccountSession(client);
+      // An added wallet must join the account that is already active on this
+      // device. Logging it in as a new wallet here would create a separate
+      // account, making the account impossible to recover from that wallet.
+      final activeProfile = await session.activeProfile();
+      if (activeProfile != null) {
+        await session
+            .addWallet(identity.address)
+            .timeout(const Duration(seconds: 10));
+        profile = activeProfile;
+      } else {
+        profile =
+            (await session
+                    .signInForWallet(
+                      walletAddress: identity.address,
+                      mnemonic: mnemonic,
+                    )
+                    .timeout(const Duration(seconds: 10)))
+                .user;
+      }
     } catch (_) {
       // The local wallet remains usable while the account login is retried later.
     } finally {
@@ -198,6 +210,7 @@ class _AcoAppState extends State<AcoApp> {
               ? AcoDesignShell(
                   themeNotifier: _isDark,
                   onThemeChanged: _onThemeChanged,
+                  onWalletReady: _completeWalletSetup,
                   accountProfile: _accountProfile,
                   walletIdentity: _walletIdentity,
                 )

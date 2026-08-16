@@ -108,6 +108,7 @@ class WalletSecurity {
   WalletSecurity({Random? random}) : _random = random ?? Random.secure();
 
   static const _vaultPrefix = 'wallet.vault.';
+  static const _devicePasswordPrefix = 'wallet.device-password.';
   static const _saltLength = 32;
   static const _pbkdf2Iterations = 210000;
   static final _cipher = AesGcm.with256bits();
@@ -151,6 +152,25 @@ class WalletSecurity {
     }
     final record = await _encrypt(normalized, password);
     await store.write(_vaultKey(walletAddress), jsonEncode(record.toJson()));
+  }
+
+  /// Stores a wallet using a device-protected key when the user has already
+  /// completed the account-level security setup.
+  Future<void> saveMnemonicWithDeviceProtection({
+    required WalletSecretStore store,
+    required String walletAddress,
+    required String mnemonic,
+  }) async {
+    final devicePassword = base64UrlEncode(
+      List<int>.generate(32, (_) => _random.nextInt(256)),
+    );
+    await saveMnemonic(
+      store: store,
+      walletAddress: walletAddress,
+      mnemonic: mnemonic,
+      password: devicePassword,
+    );
+    await store.write(_devicePasswordKey(walletAddress), devicePassword);
   }
 
   Future<String> unlockMnemonic({
@@ -220,6 +240,9 @@ class WalletSecurity {
 
   String _vaultKey(String walletAddress) =>
       '$_vaultPrefix${walletAddress.toLowerCase()}';
+
+  String _devicePasswordKey(String walletAddress) =>
+      '$_devicePasswordPrefix${walletAddress.toLowerCase()}';
 
   void _validatePassword(String password) {
     if (password.length < 8) {
