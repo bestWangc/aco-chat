@@ -98,12 +98,14 @@ class _AcoAppState extends State<AcoApp> {
   late bool _walletConfigured = widget.initialWalletConfigured;
   late WalletIdentity? _walletIdentity = widget.initialWalletIdentity;
   AccountProfile? _accountProfile;
+  Future<AccountProfile?>? _walletLoginFuture;
 
   @override
   void initState() {
     super.initState();
     _accountProfile = null;
     final profileFuture = widget.accountProfileFuture;
+    _walletLoginFuture = profileFuture;
     if (profileFuture != null) {
       unawaited(_resolveAccountProfile(profileFuture));
     }
@@ -127,15 +129,20 @@ class _AcoAppState extends State<AcoApp> {
     String mnemonic,
   ) async {
     await WalletPreferences.saveWalletIdentity(identity);
+    final profileFuture = _syncWalletAccount(identity, mnemonic);
     setState(() {
       _walletConfigured = true;
       _walletIdentity = identity;
+      _walletLoginFuture = profileFuture;
     });
     widget.onWalletConfigured?.call(true);
-    unawaited(_syncWalletAccount(identity, mnemonic));
+    final profile = await profileFuture;
+    if (profile != null && mounted) {
+      setState(() => _accountProfile = profile);
+    }
   }
 
-  Future<void> _syncWalletAccount(
+  Future<AccountProfile?> _syncWalletAccount(
     WalletIdentity identity,
     String mnemonic,
   ) async {
@@ -167,9 +174,7 @@ class _AcoAppState extends State<AcoApp> {
     } finally {
       client.close();
     }
-    if (profile != null && mounted) {
-      setState(() => _accountProfile = profile);
-    }
+    return profile;
   }
 
   Future<void> _selectWallet(WalletIdentity identity) async {
@@ -225,6 +230,7 @@ class _AcoAppState extends State<AcoApp> {
                   onWalletReady: _completeWalletSetup,
                   onWalletSelected: _selectWallet,
                   accountProfile: _accountProfile,
+                  walletLoginFuture: _walletLoginFuture,
                   walletIdentity: _walletIdentity,
                 )
               : AcoWalletWelcomePage(

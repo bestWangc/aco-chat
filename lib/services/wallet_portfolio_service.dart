@@ -66,17 +66,19 @@ class WalletPortfolioService {
     required WalletNetwork network,
     required WalletIdentity identity,
     required Map<String, String> derivedAddresses,
-  }) {
+    required String accessToken,
+  }) async {
     final chain = _chains[network]!;
     if (chain.isEvm) {
       return Future.wait([
-        _loadNativeBalance(chain, identity.address),
-        if (chain.usdt != null) _loadUsdtBalance(chain, identity.address),
+        _loadNativeBalance(chain, identity.address, accessToken),
+        if (chain.usdt != null)
+          _loadUsdtBalance(chain, identity.address, accessToken),
       ]);
     }
     final address = derivedAddresses[chain.addressKey];
     if (address == null) {
-      return Future.value([
+      return [
         WalletBalance(
           chain: chain.name,
           symbol: chain.symbol,
@@ -89,18 +91,22 @@ class WalletPortfolioService {
         if (network == WalletNetwork.tron) _zeroTokenBalance(chain, _tronUsdt),
         if (network == WalletNetwork.solana)
           _zeroTokenBalance(chain, _solanaUsdt),
-      ]);
+      ];
     }
     if (network == WalletNetwork.solana) {
-      return _loadSolanaBalances(chain, address);
+      return _loadSolanaBalances(chain, address, accessToken);
     }
     if (network == WalletNetwork.tron) {
-      return _loadTronBalances(chain, address);
+      return _loadTronBalances(chain, address, accessToken);
     }
-    return Future.wait([_loadNonEvmBalance(chain, address)]);
+    return Future.wait([_loadNonEvmBalance(chain, address, accessToken)]);
   }
 
-  Future<WalletBalance> _loadNativeBalance(_Chain chain, String address) =>
+  Future<WalletBalance> _loadNativeBalance(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) =>
       _load(
         chain: chain.name,
         symbol: chain.symbol,
@@ -108,10 +114,14 @@ class WalletPortfolioService {
         isNative: true,
         address: address,
         decimals: 18,
-        request: () => _nativeBalance(chain, address),
+        request: () => _nativeBalance(chain, address, accessToken),
       );
 
-  Future<WalletBalance> _loadUsdtBalance(_Chain chain, String address) {
+  Future<WalletBalance> _loadUsdtBalance(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) {
     final usdt = chain.usdt!;
     return _load(
       chain: chain.name,
@@ -131,23 +141,31 @@ class WalletPortfolioService {
             {'to': usdt.address, 'data': callData},
             'latest',
           ],
-        });
+        }, accessToken);
         return _hexBalance(body);
       },
     );
   }
 
-  Future<BigInt> _nativeBalance(_Chain chain, String address) async {
+  Future<BigInt> _nativeBalance(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) async {
     final body = await _postJson(chain, {
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'eth_getBalance',
       'params': [address, 'latest'],
-    });
+    }, accessToken);
     return _hexBalance(body);
   }
 
-  Future<WalletBalance> _loadNonEvmBalance(_Chain chain, String address) =>
+  Future<WalletBalance> _loadNonEvmBalance(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) =>
       _load(
         chain: chain.name,
         symbol: chain.symbol,
@@ -156,25 +174,36 @@ class WalletPortfolioService {
         address: address,
         decimals: chain.decimals,
         request: () => switch (chain.network) {
-          WalletNetwork.tron => _tronBalance(chain, address),
-          WalletNetwork.solana => _solanaBalance(chain, address),
+          WalletNetwork.tron => _tronBalance(chain, address, accessToken),
+          WalletNetwork.solana => _solanaBalance(chain, address, accessToken),
           _ => throw StateError('Unsupported non-EVM network'),
         },
       );
 
-  Future<BigInt> _tronBalance(_Chain chain, String address) async {
-    final body = await _tronAccount(chain, address);
+  Future<BigInt> _tronBalance(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) async {
+    final body = await _tronAccount(chain, address, accessToken);
     return _tronNativeBalance(body);
   }
 
-  Future<Map<String, dynamic>> _tronAccount(_Chain chain, String address) =>
-      _postJson(chain, {'address': address, 'visible': true});
+  Future<Map<String, dynamic>> _tronAccount(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) => _postJson(chain, {'address': address, 'visible': true}, accessToken);
 
   BigInt _tronNativeBalance(Map<String, dynamic> body) =>
       BigInt.from((body['balance'] as num?) ?? 0);
 
-  Future<List<WalletBalance>> _loadTronBalances(_Chain chain, String address) {
-    final account = _tronAccount(chain, address);
+  Future<List<WalletBalance>> _loadTronBalances(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) {
+    final account = _tronAccount(chain, address, accessToken);
     return Future.wait([
       _load(
         chain: chain.name,
@@ -216,13 +245,17 @@ class WalletPortfolioService {
     return BigInt.zero;
   }
 
-  Future<BigInt> _solanaBalance(_Chain chain, String address) async {
+  Future<BigInt> _solanaBalance(
+    _Chain chain,
+    String address,
+    String accessToken,
+  ) async {
     final body = await _postJson(chain, {
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'getBalance',
       'params': [address],
-    });
+    }, accessToken);
     final result = body['result'];
     if (result is! Map || result['value'] is! num) {
       throw const FormatException('Missing RPC result');
@@ -233,9 +266,10 @@ class WalletPortfolioService {
   Future<List<WalletBalance>> _loadSolanaBalances(
     _Chain chain,
     String address,
+    String accessToken,
   ) async {
-    final nativeBalance = _loadNonEvmBalance(chain, address);
-    final tokenBalances = _loadSolanaTokenBalances(chain, address);
+    final nativeBalance = _loadNonEvmBalance(chain, address, accessToken);
+    final tokenBalances = _loadSolanaTokenBalances(chain, address, accessToken);
     final loadedTokens = await tokenBalances;
     return [
       await nativeBalance,
@@ -248,6 +282,7 @@ class WalletPortfolioService {
   Future<List<WalletBalance>> _loadSolanaTokenBalances(
     _Chain chain,
     String address,
+    String accessToken,
   ) async {
     try {
       final responses = await Future.wait([
@@ -261,7 +296,7 @@ class WalletPortfolioService {
               {'programId': programID},
               {'encoding': 'jsonParsed'},
             ],
-          }),
+          }, accessToken),
       ]);
       return [
         for (final response in responses)
@@ -489,18 +524,23 @@ class WalletPortfolioService {
   Future<Map<String, dynamic>> _postJson(
     _Chain chain,
     Map<String, Object> request,
+    String accessToken,
   ) async {
-    return _postJsonToUri(_rpcUri(chain), request);
+    return _postJsonToUri(_rpcUri(chain), request, accessToken);
   }
 
   Future<Map<String, dynamic>> _postJsonToUri(
     Uri uri,
     Map<String, Object> request,
+    String accessToken,
   ) async {
     final response = await _client
         .post(
           uri,
-          headers: const {'content-type': 'application/json'},
+          headers: {
+            'content-type': 'application/json',
+            'authorization': 'Bearer $accessToken',
+          },
           body: jsonEncode(request),
         )
         .timeout(_requestTimeout);

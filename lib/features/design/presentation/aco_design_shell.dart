@@ -7,6 +7,7 @@ import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
+import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/wallet_chain_identity_service.dart';
@@ -1244,6 +1245,7 @@ class AcoDesignShell extends StatefulWidget {
     this.onWalletSelected,
     this.walletIdentity,
     this.accountProfile,
+    this.walletLoginFuture,
     super.key,
   });
 
@@ -1254,6 +1256,7 @@ class AcoDesignShell extends StatefulWidget {
   final Future<void> Function(WalletIdentity)? onWalletSelected;
   final WalletIdentity? walletIdentity;
   final AccountProfile? accountProfile;
+  final Future<AccountProfile?>? walletLoginFuture;
 
   @override
   State<AcoDesignShell> createState() => _AcoDesignShellState();
@@ -1431,6 +1434,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       transferToken: _selectedTransferToken,
       onSendTokenSelected: _sendToken,
       accountId: _accountId,
+      walletLoginFuture: widget.walletLoginFuture,
       username: _username.value,
       displayName: _displayName.value,
       onDisplayNameChanged: (name) => _displayName.value = name,
@@ -1478,6 +1482,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       transferToken: _selectedTransferToken,
                       onSendTokenSelected: _sendToken,
                       accountId: _accountId,
+                      walletLoginFuture: widget.walletLoginFuture,
                       username: _username.value,
                       displayName: _displayName.value,
                       onDisplayNameChanged: (name) => _displayName.value = name,
@@ -1553,6 +1558,7 @@ class AcoScreenPage extends StatelessWidget {
     this.onWalletSelected,
     this.displayName,
     this.accountId,
+    this.walletLoginFuture,
     this.username,
     this.walletIdentity,
     this.walletSecretStore,
@@ -1581,6 +1587,7 @@ class AcoScreenPage extends StatelessWidget {
   final Future<void> Function(WalletIdentity)? onWalletSelected;
   final String? displayName;
   final String? accountId;
+  final Future<AccountProfile?>? walletLoginFuture;
   final String? username;
   final WalletIdentity? walletIdentity;
   final WalletSecretStore? walletSecretStore;
@@ -1609,6 +1616,7 @@ class AcoScreenPage extends StatelessWidget {
         palette: palette,
         onOpen: onOpen,
         walletIdentity: walletIdentity,
+        walletLoginFuture: walletLoginFuture,
         walletName: walletName,
         selectedChain: _supportedWalletChains[walletChainIndex],
         onSendTokenSelected: onSendTokenSelected ?? (_) {},
@@ -3205,6 +3213,7 @@ class _WalletHome extends StatefulWidget {
     required this.onSendTokenSelected,
     required this.walletName,
     this.walletIdentity,
+    this.walletLoginFuture,
   });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
@@ -3212,6 +3221,7 @@ class _WalletHome extends StatefulWidget {
   final ValueChanged<TransferToken> onSendTokenSelected;
   final String walletName;
   final WalletIdentity? walletIdentity;
+  final Future<AccountProfile?>? walletLoginFuture;
 
   @override
   State<_WalletHome> createState() => _WalletHomeState();
@@ -3220,6 +3230,7 @@ class _WalletHome extends StatefulWidget {
 class _WalletHomeState extends State<_WalletHome> {
   late final WalletPortfolioService _portfolioService;
   late final WalletValuationService _valuationService;
+  late final AccountTokenStore _tokenStore;
   late Future<List<WalletBalance>> _balancesFuture;
   late Future<double?> _totalBalanceFuture;
   late List<WalletBalance> _initialBalances;
@@ -3233,6 +3244,7 @@ class _WalletHomeState extends State<_WalletHome> {
     super.initState();
     _portfolioService = WalletPortfolioService();
     _valuationService = WalletValuationService();
+    _tokenStore = SecureAccountTokenStore();
     _initialBalances = _placeholderBalances();
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
     _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
@@ -3250,11 +3262,15 @@ class _WalletHomeState extends State<_WalletHome> {
   Future<List<WalletBalance>> _loadBalances(WalletNetwork network) async {
     final identity = widget.walletIdentity;
     if (identity == null) return const [];
+    await widget.walletLoginFuture;
+    final tokens = await _tokenStore.read();
+    if (tokens == null) return _placeholderBalances();
     final addresses = await WalletPreferences.derivedAddresses(identity);
     return _portfolioService.loadBalances(
       network: network,
       identity: identity,
       derivedAddresses: addresses,
+      accessToken: tokens.accessToken,
     );
   }
 
