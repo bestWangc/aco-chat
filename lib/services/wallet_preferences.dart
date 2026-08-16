@@ -4,6 +4,13 @@ import 'dart:convert';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+class StoredWallet {
+  const StoredWallet({required this.identity, required this.name});
+
+  final WalletIdentity identity;
+  final String name;
+}
+
 class WalletPreferences {
   static const walletNameMaxLength = 12;
   static const configuredKey = 'wallet.configured';
@@ -37,19 +44,50 @@ class WalletPreferences {
     }
   }
 
-  /// Returns every wallet saved on this device, with the active wallet first.
+  /// Returns every wallet saved on this device in its original order.
   /// The single-wallet key is retained for backwards compatibility.
   static Future<List<WalletIdentity>> walletIdentities({
     WalletIdentity? fallback,
   }) async {
-    late SharedPreferences preferences;
+    final preferences = await _loadPreferences();
+    if (preferences == null) return fallback == null ? const [] : [fallback];
+    return _readWalletIdentities(preferences);
+  }
+
+  /// Reads wallet identities and their saved display names from one preference
+  /// snapshot, keeping list updates consistent while the active wallet changes.
+  static Future<List<StoredWallet>> storedWallets({
+    WalletIdentity? fallback,
+  }) async {
+    final preferences = await _loadPreferences();
+    if (preferences == null) {
+      if (fallback == null) return const [];
+      return [StoredWallet(identity: fallback, name: 'Wallet1')];
+    }
+    final identities = _readWalletIdentities(preferences);
+    return List.generate(identities.length, (index) {
+      final identity = identities[index];
+      final name = preferences.getString(_walletNameKey(identity));
+      return StoredWallet(
+        identity: identity,
+        name: _normalizeWalletName(name ?? 'Wallet${index + 1}'),
+      );
+    });
+  }
+
+  static Future<SharedPreferences?> _loadPreferences() async {
     try {
-      preferences = await SharedPreferences.getInstance().timeout(
+      return await SharedPreferences.getInstance().timeout(
         const Duration(seconds: 2),
       );
     } on TimeoutException {
-      return fallback == null ? const [] : [fallback];
+      return null;
     }
+  }
+
+  static List<WalletIdentity> _readWalletIdentities(
+    SharedPreferences preferences,
+  ) {
     final encoded = preferences.getString(walletIdentitiesKey);
     WalletIdentity? current;
     final currentEncoded = preferences.getString(walletIdentityKey);
@@ -84,19 +122,12 @@ class WalletPreferences {
         !identities.any((item) => _sameAddress(item, active))) {
       identities.insert(0, active);
     }
-    if (active != null) {
-      identities.sort((a, b) {
-        if (_sameAddress(a, active)) return -1;
-        if (_sameAddress(b, active)) return 1;
-        return 0;
-      });
-    }
     return identities;
   }
 
   static Future<void> saveWalletIdentity(WalletIdentity identity) async {
     final preferences = await SharedPreferences.getInstance();
-    final identities = await walletIdentities();
+    final identities = _readWalletIdentities(preferences);
     final existingIndex = identities.indexWhere(
       (item) => _sameAddress(item, identity),
     );

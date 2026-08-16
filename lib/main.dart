@@ -165,6 +165,11 @@ class _AcoAppState extends State<AcoApp> {
     }
   }
 
+  Future<void> _selectWallet(WalletIdentity identity) async {
+    await WalletPreferences.saveWalletIdentity(identity);
+    if (mounted) setState(() => _walletIdentity = identity);
+  }
+
   @override
   void dispose() {
     _isDark.dispose();
@@ -211,6 +216,7 @@ class _AcoAppState extends State<AcoApp> {
                   themeNotifier: _isDark,
                   onThemeChanged: _onThemeChanged,
                   onWalletReady: _completeWalletSetup,
+                  onWalletSelected: _selectWallet,
                   accountProfile: _accountProfile,
                   walletIdentity: _walletIdentity,
                 )
