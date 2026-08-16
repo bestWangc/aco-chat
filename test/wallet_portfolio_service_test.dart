@@ -8,7 +8,7 @@ import 'package:http/http.dart' as http;
 void main() {
   test('loads balances from each supported network', () async {
     final serviceClient = _RpcClient();
-    final service = WalletPortfolioService(client: serviceClient);
+    final service = _service(serviceClient);
     const identity = WalletIdentity(
       address: '0x0000000000000000000000000000000000000001',
     );
@@ -26,13 +26,13 @@ void main() {
     ]);
     final balances = loads.expand((balances) => balances).toList();
 
-    expect(balances, hasLength(13));
+    expect(balances, hasLength(17));
     expect(balances.every((balance) => balance.isAvailable), isTrue);
     expect(balances.where((balance) => balance.symbol == 'BNB'), hasLength(1));
     expect(balances.where((balance) => balance.symbol == 'TRX'), hasLength(1));
     expect(balances.where((balance) => balance.symbol == 'SOL'), hasLength(1));
     final usdt = balances.where((balance) => balance.symbol == 'USDT').toList();
-    expect(usdt, hasLength(6));
+    expect(usdt, hasLength(8));
     expect(
       balances
           .where((balance) => balance.isNative)
@@ -46,6 +46,8 @@ void main() {
         '0x55d398326f99059fF775485246999027B3197955',
         '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
         '0xfde4c96c8593536e31f229ea8f37b2ada2699bb2',
+        '0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9',
+        '0x94b008aA00579c1307B0EF2C499aD98a8ce58e58',
         'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
         'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
       ]),
@@ -62,19 +64,9 @@ void main() {
           .map((balance) => balance.decimals),
       everyElement(6),
     );
+    expect(serviceClient.hosts, everyElement('rpc.test'));
     expect(
-      serviceClient.hosts,
-      containsAll([
-        'ethereum-rpc.publicnode.com',
-        'bsc-rpc.publicnode.com',
-        'polygon-bor-rpc.publicnode.com',
-        'base-rpc.publicnode.com',
-        'api.trongrid.io',
-        'solana-rpc.publicnode.com',
-      ]),
-    );
-    expect(
-      serviceClient.requestBodies['api.trongrid.io']?.map(
+      serviceClient.requestBodies['/api/v1/wallets/rpc/tron']?.map(
         (body) => body['address'],
       ),
       everyElement('TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH'),
@@ -85,13 +77,13 @@ void main() {
     expect(tronUSDT.balance, BigInt.from(4));
     expect(tronUSDT.decimals, 6);
     expect(
-      serviceClient.requestBodies['solana-rpc.publicnode.com']?.map(
+      serviceClient.requestBodies['/api/v1/wallets/rpc/solana']?.map(
         (body) => body['method'],
       ),
       containsAll(['getBalance', 'getTokenAccountsByOwner']),
     );
     expect(
-      serviceClient.requestBodies['solana-rpc.publicnode.com']
+      serviceClient.requestBodies['/api/v1/wallets/rpc/solana']
           ?.where((body) => body['method'] == 'getTokenAccountsByOwner')
           .map((body) => body['params'].first),
       everyElement('GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL'),
@@ -111,13 +103,13 @@ void main() {
     expect(solanaUSDT.balance, BigInt.from(5));
     expect(solanaUSDT.decimals, 6);
     expect(
-      serviceClient.requestBodies['polygon-bor-rpc.publicnode.com']?.map(
+      serviceClient.requestBodies['/api/v1/wallets/rpc/polygon']?.map(
         _erc20ContractAddress,
       ),
       contains('0xc2132D05D31c914a87C6611C10748AEb04B58e8F'),
     );
     expect(
-      serviceClient.requestBodies['base-rpc.publicnode.com']?.map(
+      serviceClient.requestBodies['/api/v1/wallets/rpc/base']?.map(
         _erc20ContractAddress,
       ),
       contains('0xfde4c96c8593536e31f229ea8f37b2ada2699bb2'),
@@ -125,7 +117,7 @@ void main() {
   });
 
   test('uses zero when an RPC request fails', () async {
-    final service = WalletPortfolioService(client: _FailingRpcClient());
+    final service = _service(_FailingRpcClient());
     const identity = WalletIdentity(
       address: '0x0000000000000000000000000000000000000001',
     );
@@ -143,29 +135,32 @@ void main() {
     );
   });
 
-  test('retries the next public RPC endpoint after a failed request', () async {
-    final serviceClient = _FallbackRpcClient();
-    final service = WalletPortfolioService(client: serviceClient);
-    const identity = WalletIdentity(
-      address: '0x0000000000000000000000000000000000000001',
-    );
+  test(
+    'uses the backend RPC proxy without a local endpoint fallback',
+    () async {
+      final serviceClient = _UnavailableRpcClient();
+      final service = _service(serviceClient);
+      const identity = WalletIdentity(
+        address: '0x0000000000000000000000000000000000000001',
+      );
 
-    final balances = await service.loadBalances(
-      network: WalletNetwork.polygon,
-      identity: identity,
-      derivedAddresses: const {},
-    );
+      final balances = await service.loadBalances(
+        network: WalletNetwork.polygon,
+        identity: identity,
+        derivedAddresses: const {},
+      );
 
-    expect(
-      balances.map((balance) => balance.balance),
-      everyElement(BigInt.one),
-    );
-    expect(serviceClient.hosts, contains('polygon-bor-rpc.publicnode.com'));
-    expect(serviceClient.hosts, contains('polygon-rpc.com'));
-  });
+      expect(
+        balances.map((balance) => balance.balance),
+        everyElement(BigInt.zero),
+      );
+      expect(serviceClient.hosts, everyElement('rpc.test'));
+      expect(serviceClient.paths, everyElement('/api/v1/wallets/rpc/polygon'));
+    },
+  );
 
   test('uses zero until a non-EVM address has been derived', () async {
-    final service = WalletPortfolioService(client: _RpcClient());
+    final service = _service(_RpcClient());
     const identity = WalletIdentity(
       address: '0x0000000000000000000000000000000000000001',
     );
@@ -183,12 +178,11 @@ void main() {
     );
   });
 
-  test('uses the API RPC proxy when requested', () async {
+  test('uses the API RPC proxy', () async {
     final serviceClient = _RpcClient();
     final service = WalletPortfolioService(
       client: serviceClient,
       rpcProxyBaseUri: Uri.parse('http://localhost:8082/api/v1'),
-      useRpcProxy: true,
     );
     const identity = WalletIdentity(
       address: '0x0000000000000000000000000000000000000001',
@@ -211,6 +205,11 @@ String? _erc20ContractAddress(Map body) {
   return (params.first as Map)['to'] as String?;
 }
 
+WalletPortfolioService _service(http.Client client) => WalletPortfolioService(
+  client: client,
+  rpcProxyBaseUri: Uri.parse('https://rpc.test/api/v1'),
+);
+
 class _RpcClient extends http.BaseClient {
   final hosts = <String>[];
   final paths = <String>[];
@@ -221,18 +220,18 @@ class _RpcClient extends http.BaseClient {
     final body = jsonDecode(await request.finalize().bytesToString()) as Map;
     hosts.add(request.url.host);
     paths.add(request.url.path);
-    requestBodies.putIfAbsent(request.url.host, () => []).add(body);
-    final response = switch (request.url.host) {
-      'api.trongrid.io' => {
+    requestBodies.putIfAbsent(request.url.path, () => []).add(body);
+    final response = switch (request.url.path) {
+      '/api/v1/wallets/rpc/tron' => {
         'balance': 3,
         'trc20': [
           {'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t': '4'},
         ],
       },
-      'solana-rpc.publicnode.com' when body['method'] == 'getBalance' => {
+      '/api/v1/wallets/rpc/solana' when body['method'] == 'getBalance' => {
         'result': {'value': 2},
       },
-      'solana-rpc.publicnode.com'
+      '/api/v1/wallets/rpc/solana'
           when body['method'] == 'getTokenAccountsByOwner' =>
         {
           'result': {
@@ -280,19 +279,14 @@ class _FailingRpcClient extends http.BaseClient {
       http.StreamedResponse(Stream.value(const []), 503);
 }
 
-class _FallbackRpcClient extends http.BaseClient {
+class _UnavailableRpcClient extends http.BaseClient {
   final hosts = <String>[];
+  final paths = <String>[];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     hosts.add(request.url.host);
-    if (request.url.host == 'polygon-bor-rpc.publicnode.com') {
-      return http.StreamedResponse(Stream.value(const []), 503);
-    }
-    return http.StreamedResponse(
-      Stream.value(utf8.encode('{"result":"0x1"}')),
-      200,
-      headers: const {'content-type': 'application/json'},
-    );
+    paths.add(request.url.path);
+    return http.StreamedResponse(Stream.value(const []), 503);
   }
 }

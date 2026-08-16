@@ -78,7 +78,10 @@ const _walletHeaderWalletArrowLeft = 210.0;
 const _walletHeaderWalletArrowTop = 16.82;
 const _walletHeaderWalletArrowWidth = 15.50;
 const _walletHeaderWalletArrowHeight = 13.42;
-const _walletChainRailWidth = 90.0;
+const _walletChainRailWidth = 82.0;
+const _walletChainRailItemHeight = 75.0;
+const _walletChainRailIndicatorWidth = 6.0;
+const _walletChainCardHorizontalPadding = 14.0;
 const _walletCurrentCardColor = Color(0xFF171717);
 const _walletInactiveCardBorderColor = Color(0xFF1C1C1C);
 // Figma node 7:159, relative to the same content inset.
@@ -949,8 +952,8 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         mnemonic: mnemonic,
       );
     }
-    await _cacheNonEvmAddresses(mnemonic, identity);
     await widget.onComplete(identity, mnemonic);
+    _cacheNonEvmAddressesInBackground(mnemonic, identity);
   }
 
   Future<void> _cacheNonEvmAddresses(
@@ -960,6 +963,13 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     mnemonic: mnemonic,
     identity: identity,
   );
+
+  void _cacheNonEvmAddressesInBackground(
+    String mnemonic,
+    WalletIdentity identity,
+  ) {
+    unawaited(_cacheNonEvmAddresses(mnemonic, identity).catchError((_) {}));
+  }
 
   Future<void> _goBack() async {
     if (_step == 0 || (_isCreating && _step == 1)) {
@@ -2558,6 +2568,18 @@ const _supportedWalletChains = [
     network: WalletNetwork.polygon,
   ),
   _WalletChain(
+    asset: 'assets/icons/crypto/domi/chains/network-arbitrum.png',
+    label: 'Arbitrum',
+    nativeToken: _WalletToken('ETH', 'Ethereum'),
+    network: WalletNetwork.arbitrum,
+  ),
+  _WalletChain(
+    asset: 'assets/icons/crypto/domi/chains/network-optimism.png',
+    label: 'Optimism',
+    nativeToken: _WalletToken('ETH', 'Ethereum'),
+    network: WalletNetwork.optimism,
+  ),
+  _WalletChain(
     asset: 'assets/icons/crypto/domi/chains/tron.svg',
     label: 'Tron',
     nativeToken: _WalletToken('TRX', 'TRON'),
@@ -2618,7 +2640,9 @@ List<TransferToken> _transferTokensForChain(_WalletChain chain) {
     feeSymbol: chain.nativeToken.symbol,
     iconAsset: switch (chain.network) {
       WalletNetwork.ethereum ||
-      WalletNetwork.base => 'assets/icons/crypto/tokens/eth.svg',
+      WalletNetwork.base ||
+      WalletNetwork.arbitrum ||
+      WalletNetwork.optimism => 'assets/icons/crypto/tokens/eth.svg',
       WalletNetwork.bsc => 'assets/icons/crypto/tokens/bnb.svg',
       WalletNetwork.polygon => 'assets/icons/crypto/tokens/matic.svg',
       WalletNetwork.tron => 'assets/icons/crypto/tokens/trx.svg',
@@ -2798,7 +2822,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                                           style: TextStyle(
                                             color: widget.palette.primaryText,
                                             fontSize: AcoTypography.title,
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                         const SizedBox(height: 3),
@@ -4035,7 +4059,7 @@ class _WalletChainsState extends State<_WalletChains> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                _walletChainRailWidth + 18,
+                _walletChainRailWidth + 18 + 5,
                 8,
                 20,
                 8,
@@ -4203,7 +4227,7 @@ class _WalletChainRail extends StatelessWidget {
         final active = index == selected;
         final chain = chains[index];
         return SizedBox(
-          height: 74,
+          height: _walletChainRailItemHeight,
           child: Stack(
             children: [
               if (active)
@@ -4236,7 +4260,11 @@ class _WalletChainRail extends StatelessWidget {
                 Positioned(
                   top: 0,
                   right: 0,
-                  child: Container(width: 5, height: 74, color: palette.accent),
+                  child: Container(
+                    width: _walletChainRailIndicatorWidth,
+                    height: _walletChainRailItemHeight,
+                    color: palette.accent,
+                  ),
                 ),
             ],
           ),
@@ -4310,7 +4338,12 @@ class _WalletChainCard extends StatelessWidget {
             behavior: HitTestBehavior.opaque,
             onTap: onSelect,
             child: Container(
-              padding: const EdgeInsets.fromLTRB(14, 11, 12, 10),
+              padding: const EdgeInsets.fromLTRB(
+                _walletChainCardHorizontalPadding,
+                11,
+                12,
+                10,
+              ),
               decoration: current
                   ? BoxDecoration(
                       color: _walletCurrentCardColor,
@@ -5461,6 +5494,8 @@ class _ReceivePageState extends State<_ReceivePage> {
     WalletNetwork.ethereum => '仅向该地址转入 Ethereum/ERC20 相关资产',
     WalletNetwork.bsc => '仅向该地址转入 BSC/BEP20 相关资产',
     WalletNetwork.polygon => '仅向该地址转入 Polygon 相关资产',
+    WalletNetwork.arbitrum => '仅向该地址转入 Arbitrum One 相关资产',
+    WalletNetwork.optimism => '仅向该地址转入 Optimism 相关资产',
     WalletNetwork.tron => '仅向该地址转入 TRON/TRC20 相关资产',
     WalletNetwork.solana => '仅向该地址转入 Solana 相关资产',
     WalletNetwork.base => '仅向该地址转入 Base 相关资产',
