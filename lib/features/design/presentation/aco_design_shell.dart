@@ -79,6 +79,8 @@ const _walletHeaderWalletArrowTop = 16.82;
 const _walletHeaderWalletArrowWidth = 15.50;
 const _walletHeaderWalletArrowHeight = 13.42;
 const _walletChainRailWidth = 90.0;
+const _walletCurrentCardColor = Color(0xFF171717);
+const _walletInactiveCardBorderColor = Color(0xFF1C1C1C);
 // Figma node 7:159, relative to the same content inset.
 const _walletHeaderNetworkLeft = 406.43;
 const _walletHeaderNetworkTop = 2.21;
@@ -1229,6 +1231,7 @@ class AcoDesignShell extends StatefulWidget {
     this.themeNotifier,
     this.onThemeChanged,
     this.onWalletReady,
+    this.onWalletSelected,
     this.walletIdentity,
     this.accountProfile,
     super.key,
@@ -1238,6 +1241,7 @@ class AcoDesignShell extends StatefulWidget {
   final ValueNotifier<bool>? themeNotifier;
   final ValueChanged<bool>? onThemeChanged;
   final Future<void> Function(WalletIdentity, String)? onWalletReady;
+  final Future<void> Function(WalletIdentity)? onWalletSelected;
   final WalletIdentity? walletIdentity;
   final AccountProfile? accountProfile;
 
@@ -1342,6 +1346,10 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     }
   }
 
+  Future<void> _selectWallet(WalletIdentity identity) async {
+    await widget.onWalletSelected?.call(identity);
+  }
+
   void _open(AcoScreen screen) {
     if (screen == AcoScreen.walletHome) {
       setState(() {
@@ -1404,6 +1412,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       onOpen: _open,
       onThemeToggle: _toggleTheme,
       onWalletReady: _completeAddedWallet,
+      onWalletSelected: _selectWallet,
       walletIdentity: widget.walletIdentity,
       walletName: _walletName.value,
       onWalletNameChanged: _saveWalletName,
@@ -1531,6 +1540,7 @@ class AcoScreenPage extends StatelessWidget {
     required this.onOpen,
     required this.onThemeToggle,
     this.onWalletReady,
+    this.onWalletSelected,
     this.displayName,
     this.accountId,
     this.username,
@@ -1558,6 +1568,7 @@ class AcoScreenPage extends StatelessWidget {
   final ValueChanged<AcoScreen> onOpen;
   final VoidCallback onThemeToggle;
   final Future<void> Function(WalletIdentity, String)? onWalletReady;
+  final Future<void> Function(WalletIdentity)? onWalletSelected;
   final String? displayName;
   final String? accountId;
   final String? username;
@@ -1599,6 +1610,7 @@ class AcoScreenPage extends StatelessWidget {
         walletName: walletName,
         selectedChain: walletChainIndex,
         onChainSelected: onWalletChainSelected ?? (_) {},
+        onWalletSelected: onWalletSelected ?? (_) async {},
       ),
       AcoScreen.walletSwitcher => _WalletChains(
         palette: palette,
@@ -1607,6 +1619,7 @@ class AcoScreenPage extends StatelessWidget {
         walletName: walletName,
         selectedChain: walletChainIndex,
         onChainSelected: onWalletChainSelected ?? (_) {},
+        onWalletSelected: onWalletSelected ?? (_) async {},
       ),
       AcoScreen.walletSetupCreate => _WalletSetupFlow(
         dark: dark,
@@ -3888,6 +3901,7 @@ class _WalletChains extends StatefulWidget {
     required this.onOpen,
     required this.selectedChain,
     required this.onChainSelected,
+    required this.onWalletSelected,
     required this.walletName,
     this.walletIdentity,
   });
@@ -3895,6 +3909,7 @@ class _WalletChains extends StatefulWidget {
   final ValueChanged<AcoScreen> onOpen;
   final int selectedChain;
   final ValueChanged<int> onChainSelected;
+  final Future<void> Function(WalletIdentity) onWalletSelected;
   final String walletName;
   final WalletIdentity? walletIdentity;
 
@@ -3917,7 +3932,8 @@ class _WalletChainsState extends State<_WalletChains> {
   void didUpdateWidget(covariant _WalletChains oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedChain != widget.selectedChain ||
-        oldWidget.walletIdentity?.address != widget.walletIdentity?.address) {
+        oldWidget.walletIdentity?.address != widget.walletIdentity?.address ||
+        oldWidget.walletName != widget.walletName) {
       _selectedChain = widget.selectedChain;
       _walletsFuture = _loadWallets(widget.selectedChain);
     }
@@ -3987,20 +4003,21 @@ class _WalletChainsState extends State<_WalletChains> {
 
   Future<List<_WalletListItem>> _loadWallets([int? chainIndex]) async {
     if (widget.walletIdentity == null) return const [];
-    final identities = await WalletPreferences.walletIdentities(
+    final storedWallets = await WalletPreferences.storedWallets(
       fallback: widget.walletIdentity,
     );
     final selectedChain = _supportedWalletChains[chainIndex ?? _selectedChain];
     final currentAddress = widget.walletIdentity!.address.toLowerCase();
     final wallets = <_WalletListItem>[];
-    for (var index = 0; index < identities.length; index++) {
-      final identity = identities[index];
+    for (final storedWallet in storedWallets) {
+      final identity = storedWallet.identity;
       final address = await _addressForChain(identity, selectedChain);
       if (address == null || address.isEmpty) continue;
       wallets.add(
         _WalletListItem(
+          identity: identity,
           address: address,
-          name: index == 0 ? widget.walletName : 'Wallet${index + 1}',
+          name: storedWallet.name,
           current: identity.address.toLowerCase() == currentAddress,
         ),
       );
@@ -4017,7 +4034,12 @@ class _WalletChainsState extends State<_WalletChains> {
         Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(104, 8, 20, 8),
+              padding: const EdgeInsets.fromLTRB(
+                _walletChainRailWidth + 18,
+                8,
+                20,
+                8,
+              ),
               child: Row(
                 children: [
                   Text(
@@ -4111,7 +4133,10 @@ class _WalletChainsState extends State<_WalletChains> {
                                     name: wallet.name,
                                     address: wallet.address,
                                     current: wallet.current,
-                                    onTap: () =>
+                                    onSelect: () => widget.onWalletSelected(
+                                      wallet.identity,
+                                    ),
+                                    onOpenDetails: () =>
                                         widget.onOpen(AcoScreen.assetDetail),
                                   );
                                 },
@@ -4143,11 +4168,13 @@ class _WalletChainsState extends State<_WalletChains> {
 
 class _WalletListItem {
   const _WalletListItem({
+    required this.identity,
     required this.address,
     required this.name,
     required this.current,
   });
 
+  final WalletIdentity identity;
   final String address;
   final String name;
   final bool current;
@@ -4255,13 +4282,15 @@ class _WalletChainCard extends StatelessWidget {
     required this.name,
     required this.address,
     required this.current,
-    required this.onTap,
+    required this.onSelect,
+    required this.onOpenDetails,
   });
   final AcoPalette palette;
   final String name;
   final String address;
   final bool current;
-  final VoidCallback onTap;
+  final VoidCallback onSelect;
+  final VoidCallback onOpenDetails;
 
   String _displayAddress() {
     if (address.length <= 19) return address;
@@ -4269,98 +4298,122 @@ class _WalletChainCard extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: EdgeInsets.zero,
-    onPressed: onTap,
-    child: AspectRatio(
-      aspectRatio: 2.8,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 11, 12, 10),
-        decoration: BoxDecoration(
-          color: current ? const Color(0xFF080808) : palette.surface,
-          borderRadius: BorderRadius.circular(8),
-          border: current
-              ? null
-              : Border.all(color: palette.border.withValues(alpha: .6)),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  name,
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: AcoTypography.titleLarge,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                if (current)
-                  Container(
-                    margin: const EdgeInsets.only(left: 14),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 1,
+  Widget build(BuildContext context) => AspectRatio(
+    aspectRatio: 2.8,
+    child: Stack(
+      children: [
+        Semantics(
+          button: true,
+          selected: current,
+          label: '选择$name',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onSelect,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(14, 11, 12, 10),
+              decoration: current
+                  ? BoxDecoration(
+                      color: _walletCurrentCardColor,
+                      borderRadius: BorderRadius.circular(8),
+                    )
+                  : BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _walletInactiveCardBorderColor),
                     ),
-                    decoration: BoxDecoration(
-                      color: palette.accent,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Text(
-                      '当前',
-                      style: TextStyle(
-                        color: _black,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: AcoTypography.titleLarge,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
+                      if (current)
+                        Container(
+                          margin: const EdgeInsets.only(left: 14),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: palette.accent,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            '当前',
+                            style: TextStyle(
+                              color: _black,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      const Spacer(),
+                    ],
                   ),
-                const Spacer(),
-                Transform.scale(
-                  scaleX: 1.35,
-                  scaleY: 1.18,
-                  child: Icon(
-                    CupertinoIcons.chevron_right,
-                    color: palette.accent,
-                    size: 16,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _displayAddress(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.body,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        CupertinoIcons.doc_on_doc,
+                        color: palette.mutedText,
+                        size: 14,
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
-            Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    _displayAddress(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Text(
+                    r'$0.00',
                     style: TextStyle(
-                      color: palette.mutedText,
-                      fontSize: AcoTypography.body,
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.bodyEmphasis,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                ),
-                const SizedBox(width: 4),
-                Icon(
-                  CupertinoIcons.doc_on_doc,
-                  color: palette.mutedText,
-                  size: 14,
-                ),
-              ],
-            ),
-            Text(
-              r'$0.00',
-              style: TextStyle(
-                color: palette.primaryText,
-                fontSize: AcoTypography.bodyEmphasis,
-                fontWeight: FontWeight.w700,
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      ),
+        Positioned(
+          top: 6,
+          right: 4,
+          child: Semantics(
+            button: true,
+            label: '查看$name详情',
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(44, 44),
+              onPressed: onOpenDetails,
+              child: Transform.scale(
+                scaleX: 1.35,
+                scaleY: 1.18,
+                child: Icon(
+                  CupertinoIcons.chevron_right,
+                  color: palette.accent,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     ),
   );
 }

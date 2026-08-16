@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
@@ -51,6 +52,26 @@ void main() {
     expect(await WalletPreferences.walletName(identity), '主钱包');
     await WalletPreferences.saveWalletName(identity, 'Wallet1234567890');
     expect(await WalletPreferences.walletName(identity), 'Wallet123456');
+  });
+
+  test('keeps the previous wallet when saving another wallet', () async {
+    const first = WalletIdentity(
+      address: '0x1111111111111111111111111111111111111111',
+    );
+    const second = WalletIdentity(
+      address: '0x2222222222222222222222222222222222222222',
+    );
+    SharedPreferences.setMockInitialValues({
+      WalletPreferences.walletIdentityKey: jsonEncode(first.toJson()),
+    });
+
+    await WalletPreferences.saveWalletIdentity(second);
+
+    final identities = await WalletPreferences.walletIdentities();
+    expect(identities.map((identity) => identity.address), <String>[
+      first.address,
+      second.address,
+    ]);
   });
 
   test('removes legacy placeholder wallet data', () async {
@@ -578,7 +599,7 @@ void main() {
     final copyIconRect = tester.getRect(find.byIcon(CupertinoIcons.doc_on_doc));
     expect(copyIconRect.left, closeTo(addressRect.right + 4, 1));
 
-    await tester.tap(find.text('Wallet1'));
+    await tester.tap(find.bySemanticsLabel('查看Wallet1详情'));
     await tester.pumpAndSettle();
 
     expect(tester.getSize(find.bySemanticsLabel('返回')), const Size(44, 44));
