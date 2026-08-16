@@ -5,6 +5,7 @@ import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists the server account currently associated with this device.
@@ -23,12 +24,16 @@ class AccountSession {
     required String mnemonic,
   }) async {
     final challenge = await _apiClient.walletChallenge(walletAddress);
+    final request = _WalletLoginProofRequest(
+      mnemonic: mnemonic,
+      challenge: challenge,
+    );
+    final proof = kIsWeb
+        ? _signWalletLoginChallenge(request)
+        : await compute(_signWalletLoginChallenge, request);
     final result = await _apiClient.walletLogin(
       walletAddress: walletAddress,
-      proof: WalletIdentity.signLoginChallenge(
-        mnemonic: mnemonic,
-        challenge: challenge,
-      ),
+      proof: proof,
     );
     await _tokenStore.write(result.tokens);
     final preferences = await SharedPreferences.getInstance();
@@ -224,3 +229,19 @@ class AccountSession {
     return tokens.accessToken;
   }
 }
+
+class _WalletLoginProofRequest {
+  const _WalletLoginProofRequest({
+    required this.mnemonic,
+    required this.challenge,
+  });
+
+  final String mnemonic;
+  final String challenge;
+}
+
+WalletLoginProof _signWalletLoginChallenge(_WalletLoginProofRequest request) =>
+    WalletIdentity.signLoginChallenge(
+      mnemonic: request.mnemonic,
+      challenge: request.challenge,
+    );

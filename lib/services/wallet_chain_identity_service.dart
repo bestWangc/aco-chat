@@ -12,10 +12,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 /// storage and is never written to preferences.
 class WalletChainIdentityService {
   static const _nonEvmChains = <String, Bip44Coins>{
-    'bitcoin': Bip44Coins.bitcoin,
     'solana': Bip44Coins.solana,
     'tron': Bip44Coins.tron,
-    'cosmos': Bip44Coins.cosmos,
   };
 
   /// Caches the first account for supported non-EVM chains.

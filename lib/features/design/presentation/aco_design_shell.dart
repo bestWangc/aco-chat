@@ -10,7 +10,6 @@ import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
-import 'package:aco_chat/services/wallet_chain_identity_service.dart';
 import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
@@ -44,39 +43,31 @@ const _loginSecondarySurface = Color(0xFF515151);
 // runtime from the screen width.
 const _welcomeContentInsetMin = 24.0;
 const _welcomeContentInsetMax = 48.0;
+const _welcomeDesignWidth = 400.0;
 const _welcomeContentTop = 487.6092;
-const _welcomeButtonHeight = 56.0;
+const _welcomeContentEstimatedHeight = 240.0;
+const _welcomeContentBottomInset = 56.0;
+const _welcomeButtonHeight = 48.0;
 const _welcomeButtonGap = 12.4513;
 const _welcomeCheckboxSize = 12.0;
 const _welcomeCheckboxTopInset = 3.0;
 const _welcomeAgreementFontSize = 13.0;
 const _welcomeBrandWidth = 215.0;
 const _welcomeBrandHeight = 42.0258;
-const _welcomeTitleFontSize = 30.5;
+const _welcomeTitleFontSize = 26.0;
 const _welcomeBrandToTitleGap = 10.0793;
 const _welcomeTitleToAgreementGap = 15.4549;
 const _welcomeAgreementToActionsGap = 23.5184;
-const _welcomeActionFontSize = 19.0;
+const _welcomeActionFontSize = 17.0;
 const _walletHeaderMuted = Color(0xFF989798);
 // Wallet artboard uses the same neon accent as the supplied design capture.
 const _walletHeaderLime = _accentGreen;
 const _walletNavInactive = Color(0xFFC2C2C2);
-// Wallet Figma artboard width. Every wallet measurement is expressed against
-// this baseline and converted once per layout pass for the current device.
-const _walletDesignWidth = 595.28;
-// Figma wallet selector nodes 7:78, 7:133 and 7:79, relative to the
-// 49pt-wide wallet content inset on the 595.28pt artboard.
-const _walletHeaderWalletControlWidth = 226.0;
-const _walletHeaderWalletIconLeft = 10.9;
-const _walletHeaderWalletIconTop = 0.88;
-const _walletHeaderWalletIconWidth = 43.0;
-const _walletHeaderWalletIconHeight = 38.15;
-const _walletHeaderWalletNameLeft = 72.75;
-const _walletHeaderWalletNameTop = 0.0;
-const _walletHeaderWalletNameWidth = 130.0;
-const _walletHeaderWalletNameHeight = 39.03;
-const _walletHeaderWalletArrowLeft = 210.0;
-const _walletHeaderWalletArrowTop = 16.82;
+// Root pages already sit inside the shell's SafeArea. Keep only a compact
+// visual breathing room below the status bar instead of duplicating it.
+const _rootPageTopInset = 0.0;
+const _walletHeaderWalletIconWidth = 36.0;
+const _walletHeaderWalletIconHeight = 32.0;
 const _walletHeaderWalletArrowWidth = 15.50;
 const _walletHeaderWalletArrowHeight = 13.42;
 const _walletChainRailWidth = 82.0;
@@ -85,31 +76,16 @@ const _walletChainRailIndicatorWidth = 6.0;
 const _walletChainCardHorizontalPadding = 14.0;
 const _walletCurrentCardColor = Color(0xFF171717);
 const _walletInactiveCardBorderColor = Color(0xFF1C1C1C);
-// Figma node 7:159, relative to the same content inset.
-const _walletHeaderNetworkLeft = 406.43;
-const _walletHeaderNetworkTop = 2.21;
 const _walletHeaderNetworkWidth = 88.81;
-const _walletHeaderNetworkHeight = 21.66;
-const _walletAssetListHorizontalInset = 24.04;
-const _walletAssetListLeftInset = 24.04;
-const _walletAssetDividerInset = 58.93;
-const _walletAssetIconSize = 36.44;
-const _walletAssetIconGap = 20.37;
 const _walletActionSurface = Color(0xFFEFF0F1);
 const _walletActionForeground = Color(0xFF040000);
-const _walletActionRadius = 11.55;
-const _walletActionHeight = 59.8;
-const _walletActionColumnGap = 58.36;
-const _walletActionRowGap = 32.2;
-const _walletActionSideInset = 12.0;
-const _walletTabsTopGap = 90.8;
 const _navLabels = ['钱包', '探索', 'DEX', '广场', '社交'];
 const _navAssets = [
-  'assets/icons/source_wallet.svg',
-  'assets/icons/source_explore.svg',
+  'assets/icons/source_wallet.png',
+  'assets/icons/source_explore.png',
   'assets/icons/source_dex.svg',
-  'assets/icons/source_square.svg',
-  'assets/icons/source_social.svg',
+  'assets/icons/source_square.png',
+  'assets/icons/source_social.png',
 ];
 
 enum AcoScreen {
@@ -164,6 +140,7 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
   _WalletSetupMode _mode = _WalletSetupMode.welcome;
   late final VideoPlayerController _backgroundVideo;
   bool _backgroundVideoReady = false;
+  bool _backgroundVideoDisposed = false;
   bool _hasAcceptedTerms = false;
 
   @override
@@ -205,12 +182,28 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
     }
 
     setState(() => _mode = mode);
+    // The welcome widget stays mounted while the setup flow is displayed, so
+    // release its decoder now instead of keeping it active through wallet
+    // creation and biometric authentication.
+    unawaited(_disposeBackgroundVideo());
   }
 
   @override
   void dispose() {
-    _backgroundVideo.dispose();
+    unawaited(_disposeBackgroundVideo());
     super.dispose();
+  }
+
+  Future<void> _disposeBackgroundVideo() async {
+    if (_backgroundVideoDisposed) return;
+    _backgroundVideoDisposed = true;
+    try {
+      await _backgroundVideo.pause();
+      await _backgroundVideo.dispose();
+    } catch (_) {
+      // The page can still be replaced if the platform decoder is already
+      // being torn down by Android.
+    }
   }
 
   @override
@@ -222,19 +215,33 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
         mode: _mode,
         requireSecuritySetup: true,
         onBack: () => setState(() => _mode = _WalletSetupMode.welcome),
-        onComplete: widget.onWalletReady,
+        onComplete: (identity, mnemonic) async {
+          // Release the Android decoder before constructing the wallet home.
+          // This avoids a surface migration and a new first-frame render in
+          // the same lifecycle turn.
+          await _disposeBackgroundVideo();
+          await widget.onWalletReady(identity, mnemonic);
+        },
       );
     }
     return Stack(
       fit: StackFit.expand,
       children: [
         if (_backgroundVideoReady)
-          FittedBox(
-            fit: BoxFit.cover,
-            child: SizedBox(
-              width: _backgroundVideo.value.size.width,
-              height: _backgroundVideo.value.size.height,
-              child: VideoPlayer(_backgroundVideo),
+          ClipRect(
+            child: FittedBox(
+              // Preserve the whole portrait scene on tall phones. The video
+              // has pillarbox pixels baked into both sides, so crop only that
+              // narrow edge area after it is fitted to the viewport.
+              fit: BoxFit.fill,
+              child: Transform.scale(
+                scaleX: 1.22,
+                child: SizedBox(
+                  width: _backgroundVideo.value.size.width,
+                  height: _backgroundVideo.value.size.height,
+                  child: VideoPlayer(_backgroundVideo),
+                ),
+              ),
             ),
           ),
         ColoredBox(
@@ -249,10 +256,30 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
                 _welcomeContentInsetMin,
                 _welcomeContentInsetMax,
               );
+              // The supplied mobile artboard anchors the onboarding block in
+              // the lower half. Scale that anchor by width so it retains the
+              // same composition across phone sizes. The available height also
+              // constrains the block, so tall screens do not push it too close
+              // to the gesture area and short screens keep the actions visible.
+              final designContentTop =
+                  _welcomeContentTop *
+                  constraints.maxWidth /
+                  _welcomeDesignWidth;
+              final heightBasedContentTop = constraints.maxHeight * .5;
+              final safeContentTop = math.max(
+                0.0,
+                constraints.maxHeight -
+                    _welcomeContentEstimatedHeight -
+                    _welcomeContentBottomInset,
+              );
+              final contentTop = math.min(
+                designContentTop,
+                math.min(heightBasedContentTop, safeContentTop),
+              );
               return SingleChildScrollView(
                 padding: EdgeInsets.fromLTRB(
                   horizontalInset,
-                  _welcomeContentTop,
+                  contentTop,
                   horizontalInset,
                   24,
                 ),
@@ -307,7 +334,7 @@ class _WalletWelcomeContent extends StatelessWidget {
         ),
         const SizedBox(height: _welcomeBrandToTitleGap),
         Transform.translate(
-          offset: const Offset(-8, 0),
+          offset: const Offset(-2, 0),
           child: Padding(
             padding: const EdgeInsets.only(left: 5.3756),
             child: FittedBox(
@@ -423,27 +450,33 @@ class _WalletWelcomeAgreement extends StatelessWidget {
       ),
       const SizedBox(width: _welcomeCheckboxSize),
       Expanded(
-        child: Text.rich(
-          TextSpan(
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: _welcomeAgreementFontSize,
-              fontWeight: FontWeight.w400,
-              height: 1.25,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text.rich(
+            TextSpan(
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: _welcomeAgreementFontSize,
+                fontWeight: FontWeight.w400,
+                height: 1.25,
+              ),
+              children: const [
+                TextSpan(text: '我已阅读并同意 '),
+                TextSpan(
+                  text: '《用户协议》',
+                  style: TextStyle(color: _accentGreen),
+                ),
+                TextSpan(text: ' 和 '),
+                TextSpan(
+                  text: '《隐私政策》',
+                  style: TextStyle(color: _accentGreen),
+                ),
+                TextSpan(text: '\n由 Aladdin Dao Inc 提供'),
+              ],
             ),
-            children: const [
-              TextSpan(text: '我已阅读并同意 '),
-              TextSpan(
-                text: '《用户协议》',
-                style: TextStyle(color: _accentGreen),
-              ),
-              TextSpan(text: ' 和 '),
-              TextSpan(
-                text: '《隐私政策》',
-                style: TextStyle(color: _accentGreen),
-              ),
-              TextSpan(text: '\n由 Aladdin Dao Inc 提供'),
-            ],
+            softWrap: false,
+            textScaler: TextScaler.noScaling,
           ),
         ),
       ),
@@ -472,7 +505,6 @@ class _WalletSetupFlow extends StatefulWidget {
 
 class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   final _walletSecurity = WalletSecurity();
-  final _chainIdentityService = WalletChainIdentityService();
   final _secretStore = SecureWalletSecretStore();
   final _phraseController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -480,6 +512,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   var _step = 0;
   var _backedUp = false;
   var _isCompletingWalletSetup = false;
+  String? _completionStatus;
   var _mnemonicCopied = false;
   late final String _createdMnemonic = _walletSecurity.createMnemonic();
   late final List<String> _createdWords = _createdMnemonic.split(' ');
@@ -514,7 +547,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       color: palette.background,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 14, 28, 28),
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -569,7 +602,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                       ? 'continue-create-wallet-button'
                       : 'confirm-import-wallet-button',
                 ),
-                label: _isCompletingWalletSetup ? '正在创建钱包...' : _continueLabel,
+                label: _isCompletingWalletSetup
+                    ? (_completionStatus ?? '正在创建钱包...')
+                    : _continueLabel,
                 enabled: _canContinue,
                 loading: _isCompletingWalletSetup,
                 filled: true,
@@ -920,56 +955,91 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   Future<void> _completeWalletSetup() async {
     if (_isCompletingWalletSetup) return;
-    setState(() => _isCompletingWalletSetup = true);
+    setState(() {
+      _isCompletingWalletSetup = true;
+      _completionStatus = '正在验证身份...';
+    });
 
     // Render the loading state before starting platform authentication.
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
 
-    if (widget.requireSecuritySetup) {
-      final authenticated = await BiometricAuthentication.authenticateOrSkip();
-      if (!authenticated) {
-        if (mounted) setState(() => _isCompletingWalletSetup = false);
-        return;
+    try {
+      if (widget.requireSecuritySetup) {
+        final authenticated = await BiometricAuthentication.authenticateOrSkip()
+            .timeout(const Duration(seconds: 30), onTimeout: () => false);
+        if (!authenticated) {
+          if (mounted) {
+            setState(() {
+              _isCompletingWalletSetup = false;
+              _completionStatus = null;
+            });
+          }
+          return;
+        }
       }
-    }
 
-    await SensitiveScreenProtection.setEnabled(false);
-    final mnemonic = _isCreating
-        ? _createdMnemonic
-        : _walletSecurity.normalizeMnemonic(_phraseController.text);
-    final identity = WalletIdentity.fromMnemonic(mnemonic);
-    if (widget.requireSecuritySetup) {
-      await _walletSecurity.saveMnemonic(
-        store: _secretStore,
-        walletAddress: identity.address,
-        mnemonic: mnemonic,
-        password: _passwordController.text,
-      );
-    } else {
-      await _walletSecurity.saveMnemonicWithDeviceProtection(
-        store: _secretStore,
-        walletAddress: identity.address,
-        mnemonic: mnemonic,
-      );
+      await SensitiveScreenProtection.setEnabled(false);
+      _setCompletionStatus('正在生成钱包...');
+      final mnemonic = _isCreating
+          ? _createdMnemonic
+          : _walletSecurity.normalizeMnemonic(_phraseController.text);
+      final identity = kIsWeb
+          ? WalletIdentity.fromMnemonic(mnemonic)
+          : await compute(
+              _walletIdentityFromMnemonic,
+              mnemonic,
+            ).timeout(const Duration(seconds: 60));
+      _setCompletionStatus('正在加密保存...');
+      final saveMnemonic = widget.requireSecuritySetup
+          ? _walletSecurity.saveMnemonic(
+              store: _secretStore,
+              walletAddress: identity.address,
+              mnemonic: mnemonic,
+              password: _passwordController.text,
+            )
+          : _walletSecurity.saveMnemonicWithDeviceProtection(
+              store: _secretStore,
+              walletAddress: identity.address,
+              mnemonic: mnemonic,
+            );
+      await saveMnemonic.timeout(const Duration(seconds: 20));
+      _setCompletionStatus('正在完成设置...');
+      await widget
+          .onComplete(identity, mnemonic)
+          .timeout(const Duration(seconds: 15));
+      // Non-EVM address derivation allocates a large native crypto workspace.
+      // Derive those addresses lazily when their respective chain is opened.
+    } on TimeoutException {
+      _showCompletionError('创建超时，请重试');
+    } catch (error) {
+      debugPrint('Wallet setup failed: $error');
+      _showCompletionError('创建失败，请重试');
     }
-    await widget.onComplete(identity, mnemonic);
-    _cacheNonEvmAddressesInBackground(mnemonic, identity);
   }
 
-  Future<void> _cacheNonEvmAddresses(
-    String mnemonic,
-    WalletIdentity identity,
-  ) => _chainIdentityService.cacheNonEvmAddresses(
-    mnemonic: mnemonic,
-    identity: identity,
-  );
+  void _setCompletionStatus(String status) {
+    if (mounted) setState(() => _completionStatus = status);
+  }
 
-  void _cacheNonEvmAddressesInBackground(
-    String mnemonic,
-    WalletIdentity identity,
-  ) {
-    unawaited(_cacheNonEvmAddresses(mnemonic, identity).catchError((_) {}));
+  void _showCompletionError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _isCompletingWalletSetup = false;
+      _completionStatus = null;
+    });
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _goBack() async {
@@ -984,6 +1054,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     );
   }
 }
+
+WalletIdentity _walletIdentityFromMnemonic(String mnemonic) =>
+    WalletIdentity.fromMnemonic(mnemonic);
 
 class _WalletSetupButton extends StatelessWidget {
   const _WalletSetupButton({
@@ -1808,129 +1881,46 @@ class AcoBottomNav extends StatelessWidget {
   final Color? backgroundColor;
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final palette = AcoPalette(dark);
-      final viewport = MediaQuery.sizeOf(context);
-      final canvasWidth = viewport.height >= viewport.width
-          ? constraints.maxWidth
-          : math.min(constraints.maxWidth, 400.0);
-      final positionScale = canvasWidth / _walletDesignWidth;
-      // Keep the icon and label visual scale unchanged; the label's own
-      // position below is tuned independently to match the design spacing.
-      final visualScale = canvasWidth / 400.0;
-      // Keep the artboard's nav geometry intact.  The Figma nav is a 525.15pt
-      // group positioned inside the 595.28pt artboard; a Row distributes its
-      // children by the browser width and changes those relationships.
-      const groupWidth = 525.15;
-      const groupHeight = 71.85;
-      return ColoredBox(
-        color:
-            backgroundColor ??
-            (dark ? const Color(0xFF000000) : palette.background),
-        child: SafeArea(
-          top: false,
-          left: false,
-          right: false,
-          child: SizedBox(
-            // Leave the same 120.48pt artboard tail below the 71.85pt group.
-            height: 120.48 * positionScale,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: SizedBox(
-                    width: groupWidth * positionScale,
-                    height: groupHeight * positionScale,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        _FigmaNavItem(
-                          index: 0,
-                          selected: selected == 0,
+  Widget build(BuildContext context) {
+    final palette = AcoPalette(dark);
+    return ColoredBox(
+      color:
+          backgroundColor ??
+          (dark ? const Color(0xFF000000) : palette.background),
+      child: SafeArea(
+        top: false,
+        left: false,
+        right: false,
+        child: SizedBox(
+          height: 82,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var index = 0; index < _navLabels.length; index++)
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: selected == index,
+                    label: _navLabels[index],
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onSelected(index),
+                      child: SizedBox.expand(
+                        child: _FigmaNavItem(
+                          index: index,
+                          selected: selected == index,
                           palette: palette,
-                          positionScale: positionScale,
-                          visualScale: visualScale,
-                          x: 0,
-                          y: 12.06,
-                          width: 74,
-                          height: 59.39,
                         ),
-                        _FigmaNavItem(
-                          index: 1,
-                          selected: selected == 1,
-                          palette: palette,
-                          positionScale: positionScale,
-                          visualScale: visualScale,
-                          x: 105.89,
-                          y: -0.56,
-                          width: 47,
-                          height: 63.72,
-                        ),
-                        _FigmaNavItem(
-                          index: 2,
-                          selected: selected == 2,
-                          palette: palette,
-                          positionScale: positionScale,
-                          visualScale: visualScale,
-                          x: 224.27,
-                          y: 0,
-                          width: 76,
-                          height: 72,
-                        ),
-                        _FigmaNavItem(
-                          index: 3,
-                          selected: selected == 3,
-                          palette: palette,
-                          positionScale: positionScale,
-                          visualScale: visualScale,
-                          x: 379.77,
-                          y: 10.61,
-                          width: 52,
-                          height: 60.99,
-                        ),
-                        _FigmaNavItem(
-                          index: 4,
-                          selected: selected == 4,
-                          palette: palette,
-                          positionScale: positionScale,
-                          visualScale: visualScale,
-                          x: 484.21,
-                          y: 3.38,
-                          width: 46,
-                          height: 60.01,
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
-                Positioned.fill(
-                  child: Row(
-                    children: [
-                      for (var index = 0; index < _navLabels.length; index++)
-                        Expanded(
-                          child: Semantics(
-                            button: true,
-                            selected: selected == index,
-                            label: _navLabels[index],
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () => onSelected(index),
-                              child: const SizedBox.expand(),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            ],
           ),
         ),
-      );
-    },
-  );
+      ),
+    );
+  }
 }
 
 class _FigmaNavItem extends StatelessWidget {
@@ -1938,23 +1928,11 @@ class _FigmaNavItem extends StatelessWidget {
     required this.index,
     required this.selected,
     required this.palette,
-    required this.positionScale,
-    required this.visualScale,
-    required this.x,
-    required this.y,
-    required this.width,
-    required this.height,
   });
 
   final int index;
   final bool selected;
   final AcoPalette palette;
-  final double positionScale;
-  final double visualScale;
-  final double x;
-  final double y;
-  final double width;
-  final double height;
 
   @override
   Widget build(BuildContext context) {
@@ -1964,74 +1942,93 @@ class _FigmaNavItem extends StatelessWidget {
     } else {
       color = palette.dark ? _walletNavInactive : palette.navInactive;
     }
+    if (index == 2) {
+      return ExcludeSemantics(child: _DexBottomNavIcon(selected: selected));
+    }
+    // Normal navigation icons share one visual scale. DEX keeps a restrained
+    // emphasis as the central action, without overwhelming its neighbours.
     final iconSize = switch (index) {
-      0 => const Size(34.17, 27.84),
-      1 => const Size(47, 42),
-      3 => const Size(32.52, 30.72),
-      4 => const Size(46, 39.43),
-      2 => const Size(76, 72),
-      _ => const Size(63.58, 55.06),
+      0 => const Size(22, 18),
+      1 => const Size(24, 21),
+      3 => const Size(20, 19),
+      4 => const Size(24, 20),
+      _ => const Size(26, 24),
     };
-    final renderedIconWidth = math.min(
-      iconSize.width * visualScale,
-      width * positionScale,
+    final icon = ColorFiltered(
+      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: Image.asset(_navAssets[index], fit: BoxFit.contain),
     );
-    final renderedIconHeight = math.min(
-      iconSize.height * visualScale,
-      height * positionScale,
-    );
-    final icon = index == 2
-        ? SvgPicture.asset(
-            selected
-                ? 'assets/icons/source_dex_active.svg'
-                : 'assets/icons/source_dex_inactive.svg',
-            fit: BoxFit.contain,
-          )
-        : SvgPicture.asset(
-            _navAssets[index],
-            fit: BoxFit.contain,
-            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-          );
-    const labelBaseline = 66.0;
-    return Positioned(
-      left: x * positionScale,
-      top: y * positionScale,
-      width: width * positionScale,
-      height: height * positionScale,
-      child: ExcludeSemantics(
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.topLeft,
-          children: [
-            SizedBox(
-              width: renderedIconWidth,
-              height: renderedIconHeight,
-              child: icon,
-            ),
-            if (index != 2)
-              Positioned(
-                left: 0,
-                top: (labelBaseline - y) * positionScale,
-                width: renderedIconWidth,
-                child: Align(
-                  alignment: Alignment.center,
-                  child: Text(
+    return ExcludeSemantics(
+      child: Padding(
+        padding: const EdgeInsets.only(top: 18),
+        child: index == 2
+            ? SizedBox(
+                width: iconSize.width,
+                height: iconSize.height,
+                child: icon,
+              )
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // All icons share the same bottom edge, then the label
+                  // follows immediately. This avoids SVG-specific offsets.
+                  SizedBox(
+                    height: 30,
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Transform.translate(
+                        offset: const Offset(0, 4),
+                        child: SizedBox(
+                          width: iconSize.width,
+                          height: iconSize.height,
+                          child: icon,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
                     _navLabels[index],
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: color,
-                      fontSize: 13 * visualScale,
+                      fontSize: 13,
                       fontWeight: FontWeight.w400,
                       height: 1,
                     ),
                   ),
-                ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }
+}
+
+class _DexBottomNavIcon extends StatelessWidget {
+  const _DexBottomNavIcon({required this.selected});
+
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    // DEX is a two-part mark (wordmark + triangle), not an icon with a label.
+    // Its visual bounds are intentionally taller and sit slightly higher than
+    // the four regular navigation destinations.
+    padding: const EdgeInsets.only(top: 8),
+    child: SizedBox(
+      width: 40,
+      height: 38,
+      child: Transform.scale(
+        scale: .65,
+        child: SvgPicture.asset(
+          selected
+              ? 'assets/icons/source_dex_active.svg'
+              : 'assets/icons/source_dex_inactive.svg',
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
+  );
 }
 
 class AcoPageHeader extends StatelessWidget {
@@ -2152,7 +2149,7 @@ class AcoTopActions extends StatelessWidget {
         label: '扫描二维码',
         onPressed: () => onOpen(AcoScreen.scan),
       ),
-      SizedBox(width: 23 * scale),
+      SizedBox(width: 6 * scale),
       _AcoDesignActionButton(
         asset: 'assets/icons/source_person.svg',
         palette: palette,
@@ -2189,10 +2186,10 @@ class _AcoDesignActionButton extends StatelessWidget {
       onPressed: onPressed,
       child: SvgPicture.asset(
         asset,
-        // The SVG header icons are not square on the artboard: the scanner
-        // mark is 27.9×34.3pt and the account mark is 25.4×28pt.
-        width: (asset.contains('source_scan') ? 27.9 : 28.45) * scale,
-        height: (asset.contains('source_scan') ? 34.3 : 31.36) * scale,
+        // Keep the original aspect ratios while reducing the visual weight;
+        // the surrounding 44pt button remains the touch target.
+        width: (asset.contains('source_scan') ? 22 : 22.5) * scale,
+        height: (asset.contains('source_scan') ? 27 : 25) * scale,
         colorFilter: ColorFilter.mode(
           palette.dark ? _white : palette.primaryText,
           BlendMode.srcIn,
@@ -3451,137 +3448,134 @@ class _WalletHomeState extends State<_WalletHome> {
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      // The wallet artboard intentionally uses light action cards on black.
-      final actionSurface = _walletActionSurface;
-      final actionForeground = _walletActionForeground;
-      final networkLabel = widget.selectedChain.displayLabel;
-      // Portrait devices scale from their actual canvas width. On a desktop
-      // or landscape preview, retain the 400pt mobile baseline instead.
-      final viewport = MediaQuery.sizeOf(context);
-      final canvasWidth = viewport.height >= viewport.width
-          ? constraints.maxWidth
-          : math.min(constraints.maxWidth, 400.0);
-      final scale = canvasWidth / _walletDesignWidth;
-      return ColoredBox(
-        color: widget.palette.dark
-            ? const Color(0xFF000000)
-            : widget.palette.background,
-        child: Column(
-          children: [
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                49 * scale,
-                40 * scale,
-                53.5 * scale,
-                0,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AcoRootHeader(
-                    palette: widget.palette,
-                    onOpen: widget.onOpen,
-                    scale: scale,
-                  ),
-                  // The 44pt control is vertically centered; 59pt places
-                  // the wallet glyph itself at the SVG's y=144 boundary.
-                  SizedBox(height: 59 * scale),
-                  SizedBox(
-                    height: 44 * scale,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        SizedBox(
-                          width: _walletHeaderWalletControlWidth * scale,
-                          height: 44 * scale,
-                          child: Semantics(
-                            button: true,
-                            label: '切换钱包',
-                            child: CupertinoButton(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                              onPressed: () =>
-                                  widget.onOpen(AcoScreen.walletSwitcher),
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Positioned(
-                                    left: _walletHeaderWalletIconLeft * scale,
-                                    top: _walletHeaderWalletIconTop * scale,
-                                    width: _walletHeaderWalletIconWidth * scale,
-                                    height:
-                                        _walletHeaderWalletIconHeight * scale,
-                                    child: SvgPicture.asset(
-                                      'assets/icons/wallet_selector_figma.svg',
+  Widget build(BuildContext context) {
+    // The wallet artboard intentionally uses light action cards on black.
+    final actionSurface = _walletActionSurface;
+    final actionForeground = _walletActionForeground;
+    final networkLabel = widget.selectedChain.displayLabel;
+    // Wallet dimensions are fixed logical pixels. Flex layouts below
+    // provide adaptation without scaling an entire artboard at runtime.
+    const scale = .672;
+    final totalBalanceTextStyle = TextStyle(
+      color: widget.palette.primaryText,
+      fontSize: 56 * scale,
+      fontWeight: FontWeight.w700,
+    );
+    return ColoredBox(
+      color: widget.palette.dark
+          ? const Color(0xFF000000)
+          : widget.palette.background,
+      child: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              49 * scale,
+              _rootPageTopInset * scale,
+              53.5 * scale,
+              0,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AcoRootHeader(
+                  palette: widget.palette,
+                  onOpen: widget.onOpen,
+                  scale: scale,
+                ),
+                // Keep the wallet selector close to the top action row while
+                // preserving a clear separation between the two controls.
+                SizedBox(height: 40 * scale),
+                SizedBox(
+                  height: 44 * scale,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          label: '切换钱包',
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            onPressed: () =>
+                                widget.onOpen(AcoScreen.walletSwitcher),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                SizedBox(width: 10.9 * scale),
+                                SizedBox(
+                                  width: _walletHeaderWalletIconWidth * scale,
+                                  height: _walletHeaderWalletIconHeight * scale,
+                                  child: SvgPicture.asset(
+                                    'assets/icons/wallet_selector_figma.svg',
+                                  ),
+                                ),
+                                SizedBox(width: 28.85 * scale),
+                                Flexible(
+                                  child: Transform.translate(
+                                    offset: Offset(0, 6 * scale),
+                                    child: Text(
+                                      widget.walletName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: _walletHeaderMuted,
+                                        fontSize: 32 * scale,
+                                        fontWeight: FontWeight.w300,
+                                        height: 1,
+                                      ),
                                     ),
                                   ),
-                                  Positioned(
-                                    left: _walletHeaderWalletNameLeft * scale,
-                                    top: _walletHeaderWalletNameTop * scale,
-                                    width: _walletHeaderWalletNameWidth * scale,
-                                    height:
-                                        _walletHeaderWalletNameHeight * scale,
-                                    child: Align(
-                                      alignment: Alignment.bottomLeft,
-                                      child: Transform.translate(
-                                        offset: Offset(0, 4 * scale),
-                                        child: Text(
-                                          widget.walletName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: _walletHeaderMuted,
-                                            fontSize: 38 * scale,
-                                            fontWeight: FontWeight.w300,
-                                            height: 1,
-                                          ),
+                                ),
+                                SizedBox(width: 8 * scale),
+                                SizedBox(
+                                  height: _walletHeaderWalletIconHeight * scale,
+                                  child: Align(
+                                    alignment: Alignment.center,
+                                    child: Transform.translate(
+                                      offset: Offset(0, 6 * scale),
+                                      child: SizedBox(
+                                        width:
+                                            _walletHeaderWalletArrowWidth *
+                                            scale,
+                                        height:
+                                            _walletHeaderWalletArrowHeight *
+                                            scale,
+                                        child: SvgPicture.asset(
+                                          'assets/icons/wallet_selector_chevron_figma.svg',
                                         ),
                                       ),
                                     ),
                                   ),
-                                  Positioned(
-                                    left: _walletHeaderWalletArrowLeft * scale,
-                                    top: _walletHeaderWalletArrowTop * scale,
-                                    width:
-                                        _walletHeaderWalletArrowWidth * scale,
-                                    height:
-                                        _walletHeaderWalletArrowHeight * scale,
-                                    child: SvgPicture.asset(
-                                      'assets/icons/wallet_selector_chevron_figma.svg',
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        Positioned(
-                          left: _walletHeaderNetworkLeft * scale,
-                          top: _walletHeaderNetworkTop * scale,
-                          width: _walletHeaderNetworkWidth * scale,
-                          height: _walletHeaderNetworkHeight * scale,
-                          child: Semantics(
-                            button: true,
-                            label: '切换网络',
-                            child: GestureDetector(
-                              key: const Key('wallet-network-selector'),
-                              behavior: HitTestBehavior.opaque,
-                              onTap: () =>
-                                  widget.onOpen(AcoScreen.walletChains),
+                      ),
+                      SizedBox(width: 12 * scale),
+                      Semantics(
+                        button: true,
+                        label: '切换网络',
+                        child: GestureDetector(
+                          key: const Key('wallet-network-selector'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => widget.onOpen(AcoScreen.walletChains),
+                          child: Transform.translate(
+                            offset: Offset(0, -4 * scale),
+                            child: SizedBox(
+                              width: _walletHeaderNetworkWidth * scale,
                               child: Row(
                                 children: [
                                   Container(
-                                    width: 7.62 * scale,
-                                    height: 7.62 * scale,
+                                    width: 11 * scale,
+                                    height: 11 * scale,
                                     decoration: const BoxDecoration(
                                       color: _walletHeaderLime,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   SizedBox(width: 6.52 * scale),
-                                  Flexible(
+                                  Expanded(
                                     child: Text(
                                       networkLabel,
                                       maxLines: 1,
@@ -3598,230 +3592,166 @@ class _WalletHomeState extends State<_WalletHome> {
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  SizedBox(height: 29 * scale),
-                  Row(
+                ),
+                SizedBox(height: 18 * scale),
+                Transform.translate(
+                  offset: Offset(6 * scale, 0),
+                  child: Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(
-                        '\$',
-                        style: TextStyle(
-                          color: widget.palette.primaryText,
-                          fontSize: 64 * scale,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
+                      Text('\$', style: totalBalanceTextStyle),
                       SizedBox(width: 21.45 * scale),
                       FutureBuilder<double?>(
                         future: _totalBalanceFuture,
                         builder: (context, snapshot) => Text(
                           (snapshot.data ?? 0).toStringAsFixed(2),
-                          style: TextStyle(
-                            color: widget.palette.primaryText,
-                            fontSize: 64 * scale,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: totalBalanceTextStyle,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 43 * scale),
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _walletActionSideInset * scale,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _OutlineButton(
-                            label: '发送资产',
-                            palette: widget.palette,
-                            height: _walletActionHeight * scale,
-                            fontSize: 22 * scale,
-                            backgroundColor: _accentGreen,
-                            foregroundColor: _walletActionForeground,
-                            radius: _walletActionRadius * scale,
-                            fontWeight: FontWeight.w500,
-                            onPressed: _showSendTokenPicker,
-                          ),
-                        ),
-                        SizedBox(width: _walletActionColumnGap * scale),
-                        Expanded(
-                          child: _OutlineButton(
-                            label: '接收资产',
-                            icon: null,
-                            palette: widget.palette,
-                            height: _walletActionHeight * scale,
-                            fontSize: 22 * scale,
-                            backgroundColor: actionSurface,
-                            foregroundColor: actionForeground,
-                            radius: _walletActionRadius * scale,
-                            fontWeight: FontWeight.w500,
-                            onPressed: () => widget.onOpen(AcoScreen.receive),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: _walletActionRowGap * scale),
-                  Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: _walletActionSideInset * scale,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _OutlineButton(
-                            label: '闪兑',
-                            icon: CupertinoIcons.bolt_fill,
-                            palette: widget.palette,
-                            height: _walletActionHeight * scale,
-                            fontSize: 22 * scale,
-                            leadingImageAsset:
-                                'assets/icons/wallet_swap_action.png',
-                            iconSize: 21.5 * scale,
-                            iconGap: 18 * scale,
-                            backgroundColor: actionSurface,
-                            foregroundColor: actionForeground,
-                            radius: _walletActionRadius * scale,
-                            fontWeight: FontWeight.w500,
-                            onPressed: null,
-                          ),
-                        ),
-                        SizedBox(width: _walletActionColumnGap * scale),
-                        Expanded(
-                          child: _OutlineButton(
-                            label: '扫码',
-                            icon: CupertinoIcons.qrcode_viewfinder,
-                            palette: widget.palette,
-                            height: _walletActionHeight * scale,
-                            fontSize: 22 * scale,
-                            leadingAsset: 'assets/icons/source_scan.svg',
-                            iconSize: 20 * scale,
-                            iconGap: 18 * scale,
-                            backgroundColor: actionSurface,
-                            foregroundColor: actionForeground,
-                            radius: _walletActionRadius * scale,
-                            fontWeight: FontWeight.w500,
-                            onPressed: () => widget.onOpen(AcoScreen.scan),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: _walletTabsTopGap * scale),
-                ],
-              ),
-            ),
-            Padding(
-              padding: EdgeInsets.only(
-                left: 70.06 * scale,
-                right: _walletAssetListHorizontalInset * scale,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _SectionTabs(
-                      palette: widget.palette,
-                      scale: scale,
-                      labels: const ['资产', 'NFT', '最近活动'],
-                      selected: _selectedTab,
-                      disabledIndexes: const {1, 2},
-                      showSelectionIndicator: true,
-                      selectionIndicatorColor: _walletHeaderLime,
-                      onChanged: (index) =>
-                          setState(() => _selectedTab = index),
-                    ),
-                  ),
-                  Semantics(
-                    button: true,
-                    label: '添加代币',
-                    child: CompositedTransformTarget(
-                      link: _walletActionsLink,
-                      child: Transform.translate(
-                        offset: Offset(0, -9 * scale),
-                        child: SizedBox(
-                          width: 44 * scale,
-                          height: 36 * scale,
-                          child: CupertinoButton(
-                            key: const Key('add-token-button'),
-                            padding: EdgeInsets.zero,
-                            minimumSize: Size(44 * scale, 36 * scale),
-                            onPressed: _showWalletActions,
-                            child: Align(
-                              alignment: Alignment.centerRight,
-                              child: SvgPicture.asset(
-                                'assets/icons/wallet_tabs_add.svg',
-                                width: 27 * scale,
-                                height: 27 * scale,
-                                colorFilter: const ColorFilter.mode(
-                                  _walletHeaderLime,
-                                  BlendMode.srcIn,
-                                ),
-                              ),
-                            ),
-                          ),
+                ),
+                SizedBox(height: 43 * scale),
+                Padding(
+                  padding: EdgeInsets.zero,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '发送资产',
+                          palette: widget.palette,
+                          height: 36,
+                          fontSize: 15,
+                          backgroundColor: _accentGreen,
+                          foregroundColor: _walletActionForeground,
+                          radius: 8,
+                          fontWeight: FontWeight.w500,
+                          onPressed: _showSendTokenPicker,
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 39),
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '接收资产',
+                          icon: null,
+                          palette: widget.palette,
+                          height: 36,
+                          fontSize: 15,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: 8,
+                          fontWeight: FontWeight.w500,
+                          onPressed: () => widget.onOpen(AcoScreen.receive),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 22),
+                Padding(
+                  padding: EdgeInsets.zero,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '闪兑',
+                          icon: CupertinoIcons.bolt_fill,
+                          palette: widget.palette,
+                          height: 36,
+                          fontSize: 15,
+                          leadingImageAsset:
+                              'assets/icons/wallet_swap_action.png',
+                          iconSize: 14.5,
+                          iconGap: 12,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: 8,
+                          fontWeight: FontWeight.w500,
+                          onPressed: null,
+                        ),
+                      ),
+                      const SizedBox(width: 39),
+                      Expanded(
+                        child: _OutlineButton(
+                          label: '扫码',
+                          icon: CupertinoIcons.qrcode_viewfinder,
+                          palette: widget.palette,
+                          height: 36,
+                          fontSize: 15,
+                          leadingAsset: 'assets/icons/source_scan.svg',
+                          iconSize: 13.5,
+                          iconGap: 12,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: 8,
+                          fontWeight: FontWeight.w500,
+                          onPressed: () => widget.onOpen(AcoScreen.scan),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 45),
+              ],
             ),
-            Expanded(
-              child: FutureBuilder<List<WalletBalance>>(
-                key: ValueKey(widget.selectedChain.network),
-                future: _balancesFuture,
-                initialData: _initialBalances,
-                builder: (context, snapshot) {
-                  final balances = snapshot.data ?? const <WalletBalance>[];
-                  return ListView.builder(
-                    padding: EdgeInsets.fromLTRB(
-                      _walletAssetListLeftInset * scale,
-                      17 * scale,
-                      _walletAssetListHorizontalInset * scale,
-                      22 * scale,
-                    ),
-                    itemCount: balances.isEmpty ? 1 : balances.length,
-                    itemBuilder: (context, index) {
-                      if (balances.isEmpty) {
-                        return Padding(
-                          padding: EdgeInsets.only(top: 24 * scale),
-                          child: Text(
-                            '地址派生中，请稍后刷新。',
-                            style: TextStyle(color: widget.palette.mutedText),
-                          ),
-                        );
-                      }
-                      final balance = balances[index];
-                      final rawAmount = balance.balance ?? BigInt.zero;
-                      final amount = rawAmount == BigInt.zero
-                          ? '0.00'
-                          : formatChainAmount(
-                              rawAmount,
-                              decimals: balance.decimals,
-                            );
-                      return _WalletAssetRow(
-                        palette: widget.palette,
-                        scale: scale,
-                        symbol: balance.symbol,
-                        title: balance.assetName,
-                        amount: amount,
-                        value: '≈0.00 USD',
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 47, right: 16),
+            child: _WalletTabs(
+              selected: _selectedTab,
+              onChanged: (index) => setState(() => _selectedTab = index),
+              addButtonLink: _walletActionsLink,
+              onAddToken: _showWalletActions,
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<WalletBalance>>(
+              key: ValueKey(widget.selectedChain.network),
+              future: _balancesFuture,
+              initialData: _initialBalances,
+              builder: (context, snapshot) {
+                final balances = snapshot.data ?? const <WalletBalance>[];
+                return ListView.builder(
+                  padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
+                  itemCount: balances.isEmpty ? 1 : balances.length,
+                  itemBuilder: (context, index) {
+                    if (balances.isEmpty) {
+                      return Padding(
+                        padding: EdgeInsets.only(top: 24 * scale),
+                        child: Text(
+                          '地址派生中，请稍后刷新。',
+                          style: TextStyle(color: widget.palette.mutedText),
+                        ),
                       );
-                    },
-                  );
-                },
-              ),
+                    }
+                    final balance = balances[index];
+                    final rawAmount = balance.balance ?? BigInt.zero;
+                    final amount = rawAmount == BigInt.zero
+                        ? '0.00'
+                        : formatChainAmount(
+                            rawAmount,
+                            decimals: balance.decimals,
+                          );
+                    return _WalletAssetRow(
+                      palette: widget.palette,
+                      symbol: balance.symbol,
+                      title: balance.assetName,
+                      amount: amount,
+                      value: '≈0.00 USD',
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        ),
-      );
-    },
-  );
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _WalletDetailAction extends StatelessWidget {
@@ -4143,7 +4073,7 @@ class _WalletChainsState extends State<_WalletChains> {
                               child: Icon(
                                 CupertinoIcons.add_circled,
                                 color: widget.palette.accent,
-                                size: 20,
+                                size: 19,
                               ),
                             ),
                             Transform.translate(
@@ -4151,7 +4081,7 @@ class _WalletChainsState extends State<_WalletChains> {
                               child: Icon(
                                 CupertinoIcons.add_circled,
                                 color: widget.palette.accent,
-                                size: 20,
+                                size: 19,
                               ),
                             ),
                           ],
@@ -4377,7 +4307,9 @@ class _WalletChainCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AspectRatio(
-    aspectRatio: 2.8,
+    // Leave a little more vertical room for the amount row and card padding
+    // on narrow Android screens.
+    aspectRatio: 2.72,
     child: Stack(
       children: [
         Semantics(
@@ -4716,7 +4648,7 @@ class _AssetDetailState extends State<_AssetDetail> {
                                 width: 24,
                                 height: 22,
                                 color: widget.palette.primaryText,
-                                errorBuilder: (_, __, ___) => Icon(
+                                errorBuilder: (_, _, _) => Icon(
                                   CupertinoIcons.pencil,
                                   color: widget.palette.primaryText,
                                   size: 20,
@@ -6740,17 +6672,20 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   Widget build(BuildContext context) {
     final palette = widget.palette;
     final onOpen = widget.onOpen;
-    final viewport = MediaQuery.sizeOf(context);
-    final canvasWidth = viewport.height >= viewport.width
-        ? viewport.width
-        : math.min(viewport.width, 400.0);
-    final headerScale = canvasWidth / _walletDesignWidth;
-    final headerRightInset = math.max(0.0, 53.5 * headerScale - 35);
+    // Keep the header in Flutter logical pixels. The surrounding flex layout
+    // adapts its width; it does not scale a full design artboard at runtime.
+    const headerScale = .672;
+    const headerRightInset = 0.0;
 
     return Stack(
       children: [
         ListView(
-          padding: EdgeInsets.fromLTRB(35, 40 * headerScale, 35, 96),
+          padding: EdgeInsets.fromLTRB(
+            35,
+            _rootPageTopInset * headerScale,
+            35,
+            96,
+          ),
           children: [
             SizedBox(
               height: 46 * headerScale,
@@ -9314,48 +9249,151 @@ class _OutlineButton extends StatelessWidget {
   }
 }
 
+class _WalletTabs extends StatelessWidget {
+  const _WalletTabs({
+    required this.selected,
+    required this.onChanged,
+    required this.addButtonLink,
+    required this.onAddToken,
+  });
+
+  final int selected;
+  final ValueChanged<int> onChanged;
+  final LayerLink addButtonLink;
+  final VoidCallback onAddToken;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Row(
+          children: [
+            _WalletTab(
+              label: '资产',
+              selected: selected == 0,
+              onPressed: () => onChanged(0),
+            ),
+            const SizedBox(width: 22),
+            _WalletTab(label: 'NFT', selected: selected == 1, onPressed: null),
+            const SizedBox(width: 22),
+            _WalletTab(label: '最近活动', selected: selected == 2, onPressed: null),
+          ],
+        ),
+      ),
+      Semantics(
+        button: true,
+        label: '添加代币',
+        child: Transform.translate(
+          offset: const Offset(0, -5.5),
+          child: CompositedTransformTarget(
+            link: addButtonLink,
+            child: CupertinoButton(
+              key: const Key('add-token-button'),
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: onAddToken,
+              child: SvgPicture.asset(
+                'assets/icons/wallet_tabs_add.svg',
+                width: 16,
+                height: 16,
+                colorFilter: const ColorFilter.mode(
+                  _walletHeaderLime,
+                  BlendMode.srcIn,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _WalletTab extends StatelessWidget {
+  const _WalletTab({
+    required this.label,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: Size.zero,
+    onPressed: onPressed,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFF212121) : _transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: selected ? _white : _walletHeaderMuted,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                fontSize: selected ? 14 : 15,
+                height: 1,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        AnimatedContainer(
+          key: selected ? const Key('wallet-tab-selection-indicator') : null,
+          duration: const Duration(milliseconds: 160),
+          width: selected ? 16 : 0,
+          height: 3,
+          decoration: BoxDecoration(
+            color: selected ? _walletHeaderLime : _transparent,
+            borderRadius: BorderRadius.circular(3),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _SectionTabs extends StatelessWidget {
   const _SectionTabs({
     required this.palette,
     required this.labels,
     required this.selected,
-    this.scale = 1,
-    this.disabledIndexes = const {},
-    this.showSelectionIndicator = false,
-    this.selectionIndicatorColor = _lime,
     this.onChanged,
   });
   final AcoPalette palette;
-  final double scale;
   final List<String> labels;
   final int selected;
-  final Set<int> disabledIndexes;
-  final bool showSelectionIndicator;
-  final Color selectionIndicatorColor;
   final ValueChanged<int>? onChanged;
   @override
   Widget build(BuildContext context) => Row(
     children: [
       for (var i = 0; i < labels.length; i++)
         Padding(
-          padding: EdgeInsets.only(right: 32 * scale),
+          padding: const EdgeInsets.only(right: 32),
           child: CupertinoButton(
             padding: EdgeInsets.zero,
-            minimumSize: Size(30 * scale, 42 * scale),
-            onPressed: onChanged == null || disabledIndexes.contains(i)
-                ? null
-                : () => onChanged!(i),
+            minimumSize: const Size(30, 42),
+            onPressed: onChanged == null ? null : () => onChanged!(i),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  height: 28.42 * scale,
-                  padding: EdgeInsets.symmetric(horizontal: 10 * scale),
+                  height: 28.42,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
                     color: i == selected
                         ? const Color(0xFF212121)
                         : _transparent,
-                    borderRadius: BorderRadius.circular(12.11 * scale),
+                    borderRadius: BorderRadius.circular(12.11),
                   ),
                   child: Center(
                     child: Text(
@@ -9365,32 +9403,12 @@ class _SectionTabs extends StatelessWidget {
                         fontWeight: i == selected
                             ? FontWeight.w700
                             : FontWeight.w400,
-                        fontSize: (i == selected ? 24 : 26) * scale,
+                        fontSize: i == selected ? 24 : 26,
                         height: 1,
                       ),
                     ),
                   ),
                 ),
-                // The design leaves a deliberate 8.4 logical-point gap from
-                // the selected pill to its 3-point lime indicator.
-                SizedBox(height: 12.5 * scale),
-                if (showSelectionIndicator)
-                  AnimatedContainer(
-                    key: i == selected
-                        ? const Key('wallet-tab-selection-indicator')
-                        : null,
-                    duration: const Duration(milliseconds: 160),
-                    width: i == selected ? 24 * scale : 0,
-                    height: 4.48 * scale,
-                    decoration: BoxDecoration(
-                      color: i == selected
-                          ? selectionIndicatorColor
-                          : _transparent,
-                      borderRadius: BorderRadius.circular(4 * scale),
-                    ),
-                  )
-                else
-                  SizedBox(height: 4.48 * scale),
               ],
             ),
           ),
@@ -9436,14 +9454,12 @@ class _TimeRangeSelector extends StatelessWidget {
 class _WalletAssetRow extends StatelessWidget {
   const _WalletAssetRow({
     required this.palette,
-    required this.scale,
     required this.symbol,
     required this.title,
     required this.amount,
     required this.value,
   });
   final AcoPalette palette;
-  final double scale;
   final String symbol, title, amount, value;
   @override
   Widget build(BuildContext context) {
@@ -9455,27 +9471,27 @@ class _WalletAssetRow extends StatelessWidget {
     };
     final primaryTextStyle = TextStyle(
       color: palette.primaryText,
-      fontSize: 28 * scale,
+      fontSize: AcoTypography.body,
       fontWeight: FontWeight.w400,
     );
     final secondaryTextStyle = TextStyle(
       color: palette.mutedText,
-      fontSize: 18 * scale,
+      fontSize: AcoTypography.caption,
     );
 
     return SizedBox(
-      height: 97.18 * scale,
+      height: 65,
       child: Stack(
         children: [
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 12 * scale),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 children: [
                   SizedBox(
-                    width: _walletAssetIconSize * scale,
-                    height: _walletAssetIconSize * scale,
+                    width: 24,
+                    height: 24,
                     child: iconAsset == null
                         ? Container(
                             alignment: Alignment.center,
@@ -9500,20 +9516,20 @@ class _WalletAssetRow extends StatelessWidget {
                           )
                         : SvgPicture.asset(iconAsset),
                   ),
-                  SizedBox(width: _walletAssetIconGap * scale),
+                  const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(symbol, style: primaryTextStyle),
-                        SizedBox(height: 3 * scale),
+                        const SizedBox(height: 3),
                         Text(title, style: secondaryTextStyle),
                       ],
                     ),
                   ),
                   SizedBox(
-                    width: 112 * scale,
+                    width: 76,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.end,
@@ -9525,7 +9541,7 @@ class _WalletAssetRow extends StatelessWidget {
                           textAlign: TextAlign.right,
                           style: primaryTextStyle,
                         ),
-                        SizedBox(height: 3 * scale),
+                        const SizedBox(height: 3),
                         Text(
                           value,
                           maxLines: 1,
@@ -9541,11 +9557,11 @@ class _WalletAssetRow extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: _walletAssetDividerInset * scale,
+            left: 40,
             right: 0,
             bottom: 0,
             child: SizedBox(
-              height: .75 * scale,
+              height: 1,
               child: const ColoredBox(color: Color(0xFF161616)),
             ),
           ),

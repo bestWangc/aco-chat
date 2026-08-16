@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:bip39/bip39.dart' as bip39;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 
 /// Stores encrypted wallet material. Implementations must never expose the
 /// underlying value to application logs or analytics.
@@ -150,7 +151,15 @@ class WalletSecurity {
     if (!isValidMnemonic(normalized)) {
       throw const WalletSecurityException('助记词无效');
     }
-    final record = await _encrypt(normalized, password);
+    final salt = _randomBytes(_saltLength);
+    final request = _VaultEncryptionRequest(
+      mnemonic: normalized,
+      password: password,
+      salt: salt,
+    );
+    final record = kIsWeb
+        ? await _encryptVault(request)
+        : await compute(_encryptVault, request);
     await store.write(_vaultKey(walletAddress), jsonEncode(record.toJson()));
   }
 
@@ -213,22 +222,6 @@ class WalletSecurity {
     return store.delete(_vaultKey(walletAddress));
   }
 
-  Future<WalletVaultRecord> _encrypt(String mnemonic, String password) async {
-    final salt = _randomBytes(_saltLength);
-    final key = await _deriveKey(password, salt);
-    final secretBox = await _cipher.encrypt(
-      utf8.encode(mnemonic),
-      secretKey: key,
-    );
-    return WalletVaultRecord(
-      version: 1,
-      salt: salt,
-      nonce: secretBox.nonce,
-      cipherText: secretBox.cipherText,
-      mac: secretBox.mac.bytes,
-    );
-  }
-
   Future<SecretKey> _deriveKey(String password, List<int> salt) => Pbkdf2(
     macAlgorithm: Hmac.sha256(),
     iterations: _pbkdf2Iterations,
@@ -255,4 +248,40 @@ class WalletSecurity {
       throw const WalletSecurityException('钱包地址不能为空');
     }
   }
+}
+
+class _VaultEncryptionRequest {
+  const _VaultEncryptionRequest({
+    required this.mnemonic,
+    required this.password,
+    required this.salt,
+  });
+
+  final String mnemonic;
+  final String password;
+  final List<int> salt;
+}
+
+Future<WalletVaultRecord> _encryptVault(
+  _VaultEncryptionRequest request,
+) async {
+  final key = await Pbkdf2(
+    macAlgorithm: Hmac.sha256(),
+    iterations: 210000,
+    bits: 256,
+  ).deriveKey(
+    secretKey: SecretKey(utf8.encode(request.password)),
+    nonce: request.salt,
+  );
+  final secretBox = await AesGcm.with256bits().encrypt(
+    utf8.encode(request.mnemonic),
+    secretKey: key,
+  );
+  return WalletVaultRecord(
+    version: 1,
+    salt: request.salt,
+    nonce: secretBox.nonce,
+    cipherText: secretBox.cipherText,
+    mac: secretBox.mac.bytes,
+  );
 }

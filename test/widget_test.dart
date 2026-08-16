@@ -238,7 +238,7 @@ void main() {
     await tester.tap(find.byKey(const Key('continue-create-wallet-button')));
     await tester.pump();
     expect(biometricPrompted, isTrue);
-    expect(find.text('正在创建钱包...'), findsOneWidget);
+    expect(find.text('正在验证身份...'), findsOneWidget);
     biometricResponse.complete(false);
     await tester.pump();
     expect(find.byKey(const Key('wallet-password-field')), findsOneWidget);
@@ -247,23 +247,31 @@ void main() {
     expect(walletConfigured, isFalse);
   });
 
-  testWidgets('uses the login Figma button proportions', (tester) async {
-    tester.view.physicalSize = const Size(793.701, 1186);
+  testWidgets('adapts wallet onboarding across phone sizes', (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const AcoApp(initialWalletConfigured: false));
+    for (final screenSize in <Size>[
+      const Size(320, 568),
+      const Size(412, 915),
+      const Size(430, 932),
+    ]) {
+      tester.view.physicalSize = screenSize;
+      await tester.pumpWidget(const AcoApp(initialWalletConfigured: false));
 
-    final createButtonSize = tester.getSize(
-      find.byKey(const Key('create-wallet-button')),
-    );
-    expect(createButtonSize.width, closeTo(336.8, .2));
-    expect(createButtonSize.height, 98);
-    expect(
-      tester.getTopLeft(find.byKey(const Key('import-wallet-button'))).dx -
-          tester.getTopRight(find.byKey(const Key('create-wallet-button'))).dx,
-      24,
-    );
+      final createButton = find.byKey(const Key('create-wallet-button'));
+      final importButton = find.byKey(const Key('import-wallet-button'));
+      expect(tester.getSize(createButton).height, 48);
+      expect(
+        tester.getBottomLeft(importButton).dy,
+        lessThan(screenSize.height - 32),
+      );
+      expect(
+        tester.getTopLeft(importButton).dx -
+            tester.getTopRight(createButton).dx,
+        closeTo(12.4513, .1),
+      );
+    }
   });
 
   testWidgets('does not show mock live sessions on the square tab', (
