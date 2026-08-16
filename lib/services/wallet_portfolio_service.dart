@@ -48,19 +48,19 @@ class WalletBalance {
 /// Fetches wallet balances from public JSON-RPC nodes.
 ///
 /// Fiat valuation and token metadata need an indexer or price feed. Every
-/// reported balance remains authoritative on-chain. The app API proxies every
-/// request, so endpoint selection and failover stay server-side.
+/// reported balance remains authoritative on-chain. The app API authenticates
+/// requests for node URLs; the client then queries those public nodes directly.
 class WalletPortfolioService {
-  WalletPortfolioService({http.Client? client, Uri? rpcProxyBaseUri})
-    : _rpcProxyBaseUri =
-          rpcProxyBaseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
+  WalletPortfolioService({http.Client? client, Uri? rpcDirectoryBaseUri})
+    : _rpcDirectoryBaseUri =
+          rpcDirectoryBaseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
       _client = client ?? http.Client(),
       _ownsClient = client == null;
 
   static const _requestTimeout = Duration(seconds: 5);
   final http.Client _client;
   final bool _ownsClient;
-  final Uri _rpcProxyBaseUri;
+  final Uri _rpcDirectoryBaseUri;
 
   Future<List<WalletBalance>> loadBalances({
     required WalletNetwork network,
@@ -69,11 +69,12 @@ class WalletPortfolioService {
     required String accessToken,
   }) async {
     final chain = _chains[network]!;
+    final rpcEndpoints = await _loadRPCEndpoints(chain, accessToken);
     if (chain.isEvm) {
       return Future.wait([
-        _loadNativeBalance(chain, identity.address, accessToken),
+        _loadNativeBalance(chain, identity.address, rpcEndpoints),
         if (chain.usdt != null)
-          _loadUsdtBalance(chain, identity.address, accessToken),
+          _loadUsdtBalance(chain, identity.address, rpcEndpoints),
       ]);
     }
     final address = derivedAddresses[chain.addressKey];
@@ -94,33 +95,32 @@ class WalletPortfolioService {
       ];
     }
     if (network == WalletNetwork.solana) {
-      return _loadSolanaBalances(chain, address, accessToken);
+      return _loadSolanaBalances(chain, address, rpcEndpoints);
     }
     if (network == WalletNetwork.tron) {
-      return _loadTronBalances(chain, address, accessToken);
+      return _loadTronBalances(chain, address, rpcEndpoints);
     }
-    return Future.wait([_loadNonEvmBalance(chain, address, accessToken)]);
+    return Future.wait([_loadNonEvmBalance(chain, address, rpcEndpoints)]);
   }
 
   Future<WalletBalance> _loadNativeBalance(
     _Chain chain,
     String address,
-    String accessToken,
-  ) =>
-      _load(
-        chain: chain.name,
-        symbol: chain.symbol,
-        assetName: chain.nativeAssetName,
-        isNative: true,
-        address: address,
-        decimals: 18,
-        request: () => _nativeBalance(chain, address, accessToken),
-      );
+    List<Uri> rpcEndpoints,
+  ) => _load(
+    chain: chain.name,
+    symbol: chain.symbol,
+    assetName: chain.nativeAssetName,
+    isNative: true,
+    address: address,
+    decimals: 18,
+    request: () => _nativeBalance(chain, address, rpcEndpoints),
+  );
 
   Future<WalletBalance> _loadUsdtBalance(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) {
     final usdt = chain.usdt!;
     return _load(
@@ -133,7 +133,7 @@ class WalletPortfolioService {
       tokenAddress: usdt.address,
       request: () async {
         final callData = '0x70a08231${address.substring(2).padLeft(64, '0')}';
-        final body = await _postJson(chain, {
+        final body = await _postJson(rpcEndpoints, {
           'jsonrpc': '2.0',
           'id': 2,
           'method': 'eth_call',
@@ -141,7 +141,7 @@ class WalletPortfolioService {
             {'to': usdt.address, 'data': callData},
             'latest',
           ],
-        }, accessToken);
+        });
         return _hexBalance(body);
       },
     );
@@ -150,50 +150,49 @@ class WalletPortfolioService {
   Future<BigInt> _nativeBalance(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) async {
-    final body = await _postJson(chain, {
+    final body = await _postJson(rpcEndpoints, {
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'eth_getBalance',
       'params': [address, 'latest'],
-    }, accessToken);
+    });
     return _hexBalance(body);
   }
 
   Future<WalletBalance> _loadNonEvmBalance(
     _Chain chain,
     String address,
-    String accessToken,
-  ) =>
-      _load(
-        chain: chain.name,
-        symbol: chain.symbol,
-        assetName: chain.nativeAssetName,
-        isNative: true,
-        address: address,
-        decimals: chain.decimals,
-        request: () => switch (chain.network) {
-          WalletNetwork.tron => _tronBalance(chain, address, accessToken),
-          WalletNetwork.solana => _solanaBalance(chain, address, accessToken),
-          _ => throw StateError('Unsupported non-EVM network'),
-        },
-      );
+    List<Uri> rpcEndpoints,
+  ) => _load(
+    chain: chain.name,
+    symbol: chain.symbol,
+    assetName: chain.nativeAssetName,
+    isNative: true,
+    address: address,
+    decimals: chain.decimals,
+    request: () => switch (chain.network) {
+      WalletNetwork.tron => _tronBalance(chain, address, rpcEndpoints),
+      WalletNetwork.solana => _solanaBalance(chain, address, rpcEndpoints),
+      _ => throw StateError('Unsupported non-EVM network'),
+    },
+  );
 
   Future<BigInt> _tronBalance(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) async {
-    final body = await _tronAccount(chain, address, accessToken);
+    final body = await _tronAccount(chain, address, rpcEndpoints);
     return _tronNativeBalance(body);
   }
 
   Future<Map<String, dynamic>> _tronAccount(
     _Chain chain,
     String address,
-    String accessToken,
-  ) => _postJson(chain, {'address': address, 'visible': true}, accessToken);
+    List<Uri> rpcEndpoints,
+  ) => _postJson(rpcEndpoints, {'address': address, 'visible': true});
 
   BigInt _tronNativeBalance(Map<String, dynamic> body) =>
       BigInt.from((body['balance'] as num?) ?? 0);
@@ -201,9 +200,9 @@ class WalletPortfolioService {
   Future<List<WalletBalance>> _loadTronBalances(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) {
-    final account = _tronAccount(chain, address, accessToken);
+    final account = _tronAccount(chain, address, rpcEndpoints);
     return Future.wait([
       _load(
         chain: chain.name,
@@ -248,14 +247,14 @@ class WalletPortfolioService {
   Future<BigInt> _solanaBalance(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) async {
-    final body = await _postJson(chain, {
+    final body = await _postJson(rpcEndpoints, {
       'jsonrpc': '2.0',
       'id': 1,
       'method': 'getBalance',
       'params': [address],
-    }, accessToken);
+    });
     final result = body['result'];
     if (result is! Map || result['value'] is! num) {
       throw const FormatException('Missing RPC result');
@@ -266,10 +265,14 @@ class WalletPortfolioService {
   Future<List<WalletBalance>> _loadSolanaBalances(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) async {
-    final nativeBalance = _loadNonEvmBalance(chain, address, accessToken);
-    final tokenBalances = _loadSolanaTokenBalances(chain, address, accessToken);
+    final nativeBalance = _loadNonEvmBalance(chain, address, rpcEndpoints);
+    final tokenBalances = _loadSolanaTokenBalances(
+      chain,
+      address,
+      rpcEndpoints,
+    );
     final loadedTokens = await tokenBalances;
     return [
       await nativeBalance,
@@ -282,12 +285,12 @@ class WalletPortfolioService {
   Future<List<WalletBalance>> _loadSolanaTokenBalances(
     _Chain chain,
     String address,
-    String accessToken,
+    List<Uri> rpcEndpoints,
   ) async {
     try {
       final responses = await Future.wait([
         for (final programID in _solanaTokenProgramIDs)
-          _postJson(chain, {
+          _postJson(rpcEndpoints, {
             'jsonrpc': '2.0',
             'id': 2,
             'method': 'getTokenAccountsByOwner',
@@ -296,7 +299,7 @@ class WalletPortfolioService {
               {'programId': programID},
               {'encoding': 'jsonParsed'},
             ],
-          }, accessToken),
+          }),
       ]);
       return [
         for (final response in responses)
@@ -522,25 +525,28 @@ class WalletPortfolioService {
   );
 
   Future<Map<String, dynamic>> _postJson(
-    _Chain chain,
+    List<Uri> rpcEndpoints,
     Map<String, Object> request,
-    String accessToken,
   ) async {
-    return _postJsonToUri(_rpcUri(chain), request, accessToken);
+    Object? lastError;
+    for (final uri in rpcEndpoints) {
+      try {
+        return await _postJsonToUri(uri, request);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw HttpException('All wallet RPC endpoints failed: $lastError');
   }
 
   Future<Map<String, dynamic>> _postJsonToUri(
     Uri uri,
     Map<String, Object> request,
-    String accessToken,
   ) async {
     final response = await _client
         .post(
           uri,
-          headers: {
-            'content-type': 'application/json',
-            'authorization': 'Bearer $accessToken',
-          },
+          headers: const {'content-type': 'application/json'},
           body: jsonEncode(request),
         )
         .timeout(_requestTimeout);
@@ -554,11 +560,44 @@ class WalletPortfolioService {
     return body;
   }
 
-  Uri _rpcUri(_Chain chain) {
-    final basePath = _rpcProxyBaseUri.path.endsWith('/')
-        ? _rpcProxyBaseUri.path.substring(0, _rpcProxyBaseUri.path.length - 1)
-        : _rpcProxyBaseUri.path;
-    return _rpcProxyBaseUri.replace(
+  Future<List<Uri>> _loadRPCEndpoints(_Chain chain, String accessToken) async {
+    final response = await _client
+        .get(
+          _rpcDirectoryUri(chain),
+          headers: {'authorization': 'Bearer $accessToken'},
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw HttpException(
+        'RPC directory request failed: ${response.statusCode}',
+      );
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic> || body['data'] is! List) {
+      throw const FormatException('Invalid RPC directory response');
+    }
+    final endpoints = <Uri>[];
+    for (final value in body['data'] as List) {
+      if (value is! String) continue;
+      final uri = Uri.tryParse(value);
+      if (uri != null && uri.hasScheme && uri.host.isNotEmpty) {
+        endpoints.add(uri);
+      }
+    }
+    if (endpoints.isEmpty) {
+      throw const FormatException('RPC directory did not return any endpoints');
+    }
+    return endpoints;
+  }
+
+  Uri _rpcDirectoryUri(_Chain chain) {
+    final basePath = _rpcDirectoryBaseUri.path.endsWith('/')
+        ? _rpcDirectoryBaseUri.path.substring(
+            0,
+            _rpcDirectoryBaseUri.path.length - 1,
+          )
+        : _rpcDirectoryBaseUri.path;
+    return _rpcDirectoryBaseUri.replace(
       path: '$basePath/wallets/rpc/${chain.network.name}',
     );
   }

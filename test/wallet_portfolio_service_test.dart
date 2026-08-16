@@ -65,13 +65,12 @@ void main() {
           .map((balance) => balance.decimals),
       everyElement(6),
     );
-    expect(serviceClient.hosts, everyElement('rpc.test'));
     expect(
-      serviceClient.authorizationHeaders,
+      serviceClient.directoryAuthorizationHeaders,
       everyElement('Bearer test-access-token'),
     );
     expect(
-      serviceClient.requestBodies['/api/v1/wallets/rpc/tron']?.map(
+      serviceClient.requestBodies['tron.rpc.test']?.map(
         (body) => body['address'],
       ),
       everyElement('TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH'),
@@ -82,13 +81,13 @@ void main() {
     expect(tronUSDT.balance, BigInt.from(4));
     expect(tronUSDT.decimals, 6);
     expect(
-      serviceClient.requestBodies['/api/v1/wallets/rpc/solana']?.map(
+      serviceClient.requestBodies['solana.rpc.test']?.map(
         (body) => body['method'],
       ),
       containsAll(['getBalance', 'getTokenAccountsByOwner']),
     );
     expect(
-      serviceClient.requestBodies['/api/v1/wallets/rpc/solana']
+      serviceClient.requestBodies['solana.rpc.test']
           ?.where((body) => body['method'] == 'getTokenAccountsByOwner')
           .map((body) => body['params'].first),
       everyElement('GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL'),
@@ -108,15 +107,13 @@ void main() {
     expect(solanaUSDT.balance, BigInt.from(5));
     expect(solanaUSDT.decimals, 6);
     expect(
-      serviceClient.requestBodies['/api/v1/wallets/rpc/polygon']?.map(
+      serviceClient.requestBodies['polygon.rpc.test']?.map(
         _erc20ContractAddress,
       ),
       contains('0xc2132D05D31c914a87C6611C10748AEb04B58e8F'),
     );
     expect(
-      serviceClient.requestBodies['/api/v1/wallets/rpc/base']?.map(
-        _erc20ContractAddress,
-      ),
+      serviceClient.requestBodies['base.rpc.test']?.map(_erc20ContractAddress),
       contains('0xfde4c96c8593536e31f229ea8f37b2ada2699bb2'),
     );
   });
@@ -141,30 +138,27 @@ void main() {
     );
   });
 
-  test(
-    'uses the backend RPC proxy without a local endpoint fallback',
-    () async {
-      final serviceClient = _UnavailableRpcClient();
-      final service = _service(serviceClient);
-      const identity = WalletIdentity(
-        address: '0x0000000000000000000000000000000000000001',
-      );
+  test('uses public RPC URLs without a local endpoint fallback', () async {
+    final serviceClient = _UnavailableRpcClient();
+    final service = _service(serviceClient);
+    const identity = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000001',
+    );
 
-      final balances = await service.loadBalances(
-        network: WalletNetwork.polygon,
-        identity: identity,
-        derivedAddresses: const {},
-        accessToken: 'test-access-token',
-      );
+    final balances = await service.loadBalances(
+      network: WalletNetwork.polygon,
+      identity: identity,
+      derivedAddresses: const {},
+      accessToken: 'test-access-token',
+    );
 
-      expect(
-        balances.map((balance) => balance.balance),
-        everyElement(BigInt.zero),
-      );
-      expect(serviceClient.hosts, everyElement('rpc.test'));
-      expect(serviceClient.paths, everyElement('/api/v1/wallets/rpc/polygon'));
-    },
-  );
+    expect(
+      balances.map((balance) => balance.balance),
+      everyElement(BigInt.zero),
+    );
+    expect(serviceClient.directoryHosts, everyElement('rpc.test'));
+    expect(serviceClient.rpcHosts, everyElement('polygon.rpc.test'));
+  });
 
   test('uses zero until a non-EVM address has been derived', () async {
     final service = _service(_RpcClient());
@@ -186,11 +180,11 @@ void main() {
     );
   });
 
-  test('uses the API RPC proxy', () async {
+  test('gets RPC URLs from the API before querying the public node', () async {
     final serviceClient = _RpcClient();
     final service = WalletPortfolioService(
       client: serviceClient,
-      rpcProxyBaseUri: Uri.parse('http://localhost:8082/api/v1'),
+      rpcDirectoryBaseUri: Uri.parse('http://localhost:8082/api/v1'),
     );
     const identity = WalletIdentity(
       address: '0x0000000000000000000000000000000000000001',
@@ -203,8 +197,8 @@ void main() {
       accessToken: 'test-access-token',
     );
 
-    expect(serviceClient.hosts, everyElement('localhost'));
-    expect(serviceClient.paths, everyElement('/api/v1/wallets/rpc/ethereum'));
+    expect(serviceClient.directoryHosts, everyElement('localhost'));
+    expect(serviceClient.rpcHosts, everyElement('ethereum.rpc.test'));
   });
 }
 
@@ -216,88 +210,104 @@ String? _erc20ContractAddress(Map body) {
 
 WalletPortfolioService _service(http.Client client) => WalletPortfolioService(
   client: client,
-  rpcProxyBaseUri: Uri.parse('https://rpc.test/api/v1'),
+  rpcDirectoryBaseUri: Uri.parse('https://rpc.test/api/v1'),
 );
 
 class _RpcClient extends http.BaseClient {
-  final hosts = <String>[];
-  final paths = <String>[];
-  final authorizationHeaders = <String?>[];
+  final directoryHosts = <String>[];
+  final directoryAuthorizationHeaders = <String?>[];
+  final rpcHosts = <String>[];
   final requestBodies = <String, List<Map>>{};
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'GET') {
+      final network = request.url.pathSegments.last;
+      directoryHosts.add(request.url.host);
+      directoryAuthorizationHeaders.add(request.headers['authorization']);
+      return _response({
+        'data': ['https://$network.rpc.test'],
+      });
+    }
     final body = jsonDecode(await request.finalize().bytesToString()) as Map;
-    hosts.add(request.url.host);
-    paths.add(request.url.path);
-    authorizationHeaders.add(request.headers['authorization']);
-    requestBodies.putIfAbsent(request.url.path, () => []).add(body);
-    final response = switch (request.url.path) {
-      '/api/v1/wallets/rpc/tron' => {
+    rpcHosts.add(request.url.host);
+    requestBodies.putIfAbsent(request.url.host, () => []).add(body);
+    final response = switch (request.url.host) {
+      'tron.rpc.test' => {
         'balance': 3,
         'trc20': [
           {'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t': '4'},
         ],
       },
-      '/api/v1/wallets/rpc/solana' when body['method'] == 'getBalance' => {
+      'solana.rpc.test' when body['method'] == 'getBalance' => {
         'result': {'value': 2},
       },
-      '/api/v1/wallets/rpc/solana'
-          when body['method'] == 'getTokenAccountsByOwner' =>
-        {
-          'result': {
-            'value':
-                body['params'][1]['programId'] ==
-                    'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
-                ? [
-                    for (final token in const [
-                      ('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', '3'),
-                      ('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', '5'),
-                    ])
-                      {
-                        'account': {
-                          'data': {
-                            'parsed': {
-                              'info': {
-                                'mint': token.$1,
-                                'tokenAmount': {
-                                  'amount': token.$2,
-                                  'decimals': 6,
-                                },
+      'solana.rpc.test' when body['method'] == 'getTokenAccountsByOwner' => {
+        'result': {
+          'value':
+              body['params'][1]['programId'] ==
+                  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+              ? [
+                  for (final token in const [
+                    ('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', '3'),
+                    ('Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', '5'),
+                  ])
+                    {
+                      'account': {
+                        'data': {
+                          'parsed': {
+                            'info': {
+                              'mint': token.$1,
+                              'tokenAmount': {
+                                'amount': token.$2,
+                                'decimals': 6,
                               },
                             },
                           },
                         },
                       },
-                  ]
-                : [],
-          },
+                    },
+                ]
+              : [],
         },
+      },
       _ when body['method'] == 'eth_call' => {'result': '0x2'},
       _ => {'result': '0x1'},
     };
-    return http.StreamedResponse(
-      Stream.value(utf8.encode(jsonEncode(response))),
-      200,
-      headers: const {'content-type': 'application/json'},
-    );
+    return _response(response);
   }
 }
 
 class _FailingRpcClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async =>
-      http.StreamedResponse(Stream.value(const []), 503);
+      request.method == 'GET'
+      ? _response({
+          'data': ['https://polygon.rpc.test'],
+        })
+      : http.StreamedResponse(Stream.value(const []), 503);
 }
 
 class _UnavailableRpcClient extends http.BaseClient {
-  final hosts = <String>[];
-  final paths = <String>[];
+  final directoryHosts = <String>[];
+  final rpcHosts = <String>[];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
-    hosts.add(request.url.host);
-    paths.add(request.url.path);
+    if (request.method == 'GET') {
+      directoryHosts.add(request.url.host);
+      return _response({
+        'data': ['https://polygon.rpc.test'],
+      });
+    }
+    rpcHosts.add(request.url.host);
     return http.StreamedResponse(Stream.value(const []), 503);
   }
 }
+
+http.StreamedResponse _response(Map<String, Object> body) =>
+    http.StreamedResponse(
+      Stream.value(utf8.encode(jsonEncode(body))),
+      200,
+      headers: const {'content-type': 'application/json'},
+    );
