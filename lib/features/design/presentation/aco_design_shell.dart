@@ -1828,85 +1828,104 @@ class AcoBottomNav extends StatelessWidget {
         color:
             backgroundColor ??
             (dark ? const Color(0xFF000000) : palette.background),
-        child: SizedBox(
-          // Leave the same 120.48pt artboard tail below the 71.85pt group.
-          height: 120.48 * positionScale,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Align(
-                alignment: Alignment.topCenter,
-                child: SizedBox(
-                  width: groupWidth * positionScale,
-                  height: groupHeight * positionScale,
-                  child: Stack(
-                    clipBehavior: Clip.none,
+        child: SafeArea(
+          top: false,
+          left: false,
+          right: false,
+          child: SizedBox(
+            // Leave the same 120.48pt artboard tail below the 71.85pt group.
+            height: 120.48 * positionScale,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: SizedBox(
+                    width: groupWidth * positionScale,
+                    height: groupHeight * positionScale,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        _FigmaNavItem(
+                          index: 0,
+                          selected: selected == 0,
+                          palette: palette,
+                          positionScale: positionScale,
+                          visualScale: visualScale,
+                          x: 0,
+                          y: 12.06,
+                          width: 74,
+                          height: 59.39,
+                        ),
+                        _FigmaNavItem(
+                          index: 1,
+                          selected: selected == 1,
+                          palette: palette,
+                          positionScale: positionScale,
+                          visualScale: visualScale,
+                          x: 105.89,
+                          y: -0.56,
+                          width: 47,
+                          height: 63.72,
+                        ),
+                        _FigmaNavItem(
+                          index: 2,
+                          selected: selected == 2,
+                          palette: palette,
+                          positionScale: positionScale,
+                          visualScale: visualScale,
+                          x: 224.27,
+                          y: 0,
+                          width: 76,
+                          height: 72,
+                        ),
+                        _FigmaNavItem(
+                          index: 3,
+                          selected: selected == 3,
+                          palette: palette,
+                          positionScale: positionScale,
+                          visualScale: visualScale,
+                          x: 379.77,
+                          y: 10.61,
+                          width: 52,
+                          height: 60.99,
+                        ),
+                        _FigmaNavItem(
+                          index: 4,
+                          selected: selected == 4,
+                          palette: palette,
+                          positionScale: positionScale,
+                          visualScale: visualScale,
+                          x: 484.21,
+                          y: 3.38,
+                          width: 46,
+                          height: 60.01,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned.fill(
+                  child: Row(
                     children: [
-                      _FigmaNavItem(
-                        index: 0,
-                        selected: selected == 0,
-                        palette: palette,
-                        positionScale: positionScale,
-                        visualScale: visualScale,
-                        x: 0,
-                        y: 12.06,
-                        width: 74,
-                        height: 59.39,
-                        onPressed: () => onSelected(0),
-                      ),
-                      _FigmaNavItem(
-                        index: 1,
-                        selected: selected == 1,
-                        palette: palette,
-                        positionScale: positionScale,
-                        visualScale: visualScale,
-                        x: 105.89,
-                        y: -0.56,
-                        width: 47,
-                        height: 63.72,
-                        onPressed: () => onSelected(1),
-                      ),
-                      _FigmaNavItem(
-                        index: 2,
-                        selected: selected == 2,
-                        palette: palette,
-                        positionScale: positionScale,
-                        visualScale: visualScale,
-                        x: 224.27,
-                        y: 0,
-                        width: 76,
-                        height: 72,
-                        onPressed: () => onSelected(2),
-                      ),
-                      _FigmaNavItem(
-                        index: 3,
-                        selected: selected == 3,
-                        palette: palette,
-                        positionScale: positionScale,
-                        visualScale: visualScale,
-                        x: 379.77,
-                        y: 10.61,
-                        width: 52,
-                        height: 60.99,
-                        onPressed: () => onSelected(3),
-                      ),
-                      _FigmaNavItem(
-                        index: 4,
-                        selected: selected == 4,
-                        palette: palette,
-                        positionScale: positionScale,
-                        visualScale: visualScale,
-                        x: 484.21,
-                        y: 3.38,
-                        width: 46,
-                        height: 60.01,
-                        onPressed: () => onSelected(4),
-                      ),
+                      for (var index = 0; index < _navLabels.length; index++)
+                        Expanded(
+                          child: Semantics(
+                            button: true,
+                            selected: selected == index,
+                            label: _navLabels[index],
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => onSelected(index),
+                              child: const SizedBox.expand(),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
@@ -1925,7 +1944,6 @@ class _FigmaNavItem extends StatelessWidget {
     required this.y,
     required this.width,
     required this.height,
-    required this.onPressed,
   });
 
   final int index;
@@ -1937,7 +1955,6 @@ class _FigmaNavItem extends StatelessWidget {
   final double y;
   final double width;
   final double height;
-  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -1981,43 +1998,36 @@ class _FigmaNavItem extends StatelessWidget {
       top: y * positionScale,
       width: width * positionScale,
       height: height * positionScale,
-      child: Semantics(
-        button: true,
-        selected: selected,
-        label: _navLabels[index],
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: onPressed,
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.topLeft,
-            children: [
-              SizedBox(
+      child: ExcludeSemantics(
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.topLeft,
+          children: [
+            SizedBox(
+              width: renderedIconWidth,
+              height: renderedIconHeight,
+              child: icon,
+            ),
+            if (index != 2)
+              Positioned(
+                left: 0,
+                top: (labelBaseline - y) * positionScale,
                 width: renderedIconWidth,
-                height: renderedIconHeight,
-                child: icon,
-              ),
-              if (index != 2)
-                Positioned(
-                  left: 0,
-                  top: (labelBaseline - y) * positionScale,
-                  width: renderedIconWidth,
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: Text(
-                      _navLabels[index],
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 13 * visualScale,
-                        fontWeight: FontWeight.w400,
-                        height: 1,
-                      ),
+                child: Align(
+                  alignment: Alignment.center,
+                  child: Text(
+                    _navLabels[index],
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 13 * visualScale,
+                      fontWeight: FontWeight.w400,
+                      height: 1,
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );
@@ -6602,9 +6612,18 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   }
 
   void _openLiveRoom(LiveSession session) {
-    if (session.status != 'live') {
-      showAcoAlertNotice(context, '预约直播', '该直播尚未开始。');
-      return;
+    switch (session.status) {
+      case 'scheduled':
+        showAcoAlertNotice(context, '预约直播', '该直播尚未开始。');
+        return;
+      case 'ended':
+        showAcoAlertNotice(context, '直播已结束', '该直播已经结束。');
+        return;
+      case 'live':
+        break;
+      default:
+        showAcoAlertNotice(context, '直播不可用', '该直播暂时无法进入。');
+        return;
     }
     Navigator.of(context)
         .push<bool>(

@@ -359,6 +359,45 @@ void main() {
     expect(find.text('该直播尚未开始。'), findsOneWidget);
   });
 
+  testWidgets('shows an ended notice when opening an ended live', (
+    WidgetTester tester,
+  ) async {
+    final live = LiveSession(
+      id: 8,
+      title: '已结束的直播',
+      coverUrl: '/uploads/live-cover-8.jpg',
+      access: 'open',
+      status: 'ended',
+      createdAt: DateTime(2026, 8, 12, 20),
+    );
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.squareFeed,
+            dark: true,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+            initialLives: [live],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('已结束的直播'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('直播已结束'), findsOneWidget);
+    expect(find.text('该直播已经结束。'), findsOneWidget);
+    expect(find.text('该直播尚未开始。'), findsNothing);
+  });
+
   testWidgets('shows an edit entry for editable scheduled lives', (
     WidgetTester tester,
   ) async {
@@ -546,6 +585,32 @@ void main() {
     expect(label.style?.fontWeight, FontWeight.w400);
     final inactiveLabel = tester.widget<Text>(find.text('探索'));
     expect(inactiveLabel.style?.color, const Color(0xFFC4C4C4));
+  });
+
+  testWidgets('bottom navigation has full-width tappable destinations', (
+    WidgetTester tester,
+  ) async {
+    var selected = -1;
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoBottomNav(
+          selected: 0,
+          dark: true,
+          onSelected: (index) => selected = index,
+        ),
+      ),
+    );
+
+    final navRect = tester.getRect(find.byType(AcoBottomNav));
+    for (var index = 0; index < 5; index++) {
+      await tester.tapAt(
+        Offset(
+          navRect.left + navRect.width * (index + .5) / 5,
+          navRect.top + navRect.height / 2,
+        ),
+      );
+      expect(selected, index);
+    }
   });
 
   testWidgets('does not make wallet assets tappable', (
