@@ -22,6 +22,7 @@ void main() {
             'tron': 'TUEZSdKsoDHQMeZwihtdoBiN46zxhGWYdH',
             'solana': 'GjJyeC1r2RgkuoCWMyPYkCWSGSGLcz266EaAkLA27AhL',
           },
+          accessToken: 'test-access-token',
         ),
     ]);
     final balances = loads.expand((balances) => balances).toList();
@@ -65,6 +66,10 @@ void main() {
       everyElement(6),
     );
     expect(serviceClient.hosts, everyElement('rpc.test'));
+    expect(
+      serviceClient.authorizationHeaders,
+      everyElement('Bearer test-access-token'),
+    );
     expect(
       serviceClient.requestBodies['/api/v1/wallets/rpc/tron']?.map(
         (body) => body['address'],
@@ -126,6 +131,7 @@ void main() {
       network: WalletNetwork.polygon,
       identity: identity,
       derivedAddresses: const {},
+      accessToken: 'test-access-token',
     );
 
     expect(balances, hasLength(2));
@@ -148,6 +154,7 @@ void main() {
         network: WalletNetwork.polygon,
         identity: identity,
         derivedAddresses: const {},
+        accessToken: 'test-access-token',
       );
 
       expect(
@@ -169,6 +176,7 @@ void main() {
       network: WalletNetwork.tron,
       identity: identity,
       derivedAddresses: const {},
+      accessToken: 'test-access-token',
     );
 
     expect(balances.map((balance) => balance.symbol), ['TRX', 'USDT']);
@@ -192,6 +200,7 @@ void main() {
       network: WalletNetwork.ethereum,
       identity: identity,
       derivedAddresses: const {},
+      accessToken: 'test-access-token',
     );
 
     expect(serviceClient.hosts, everyElement('localhost'));
@@ -213,6 +222,7 @@ WalletPortfolioService _service(http.Client client) => WalletPortfolioService(
 class _RpcClient extends http.BaseClient {
   final hosts = <String>[];
   final paths = <String>[];
+  final authorizationHeaders = <String?>[];
   final requestBodies = <String, List<Map>>{};
 
   @override
@@ -220,6 +230,7 @@ class _RpcClient extends http.BaseClient {
     final body = jsonDecode(await request.finalize().bytesToString()) as Map;
     hosts.add(request.url.host);
     paths.add(request.url.path);
+    authorizationHeaders.add(request.headers['authorization']);
     requestBodies.putIfAbsent(request.url.path, () => []).add(body);
     final response = switch (request.url.path) {
       '/api/v1/wallets/rpc/tron' => {
