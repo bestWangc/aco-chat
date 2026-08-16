@@ -584,8 +584,23 @@ void main() {
     await tester.tap(find.byKey(const Key('wallet-network-selector')));
     await tester.pumpAndSettle();
 
-    for (final chain in ['以太坊', 'BSC', 'Polygon', 'Tron', 'Solana', 'Base']) {
-      expect(find.bySemanticsLabel('选择公链 $chain'), findsOneWidget);
+    for (final chain in [
+      '以太坊',
+      'BSC',
+      'Polygon',
+      'Arbitrum',
+      'Optimism',
+      'Tron',
+      'Solana',
+      'Base',
+    ]) {
+      final chainFinder = find.bySemanticsLabel('选择公链 $chain');
+      await tester.scrollUntilVisible(
+        chainFinder,
+        100,
+        scrollable: find.byType(Scrollable).last,
+      );
+      expect(chainFinder, findsOneWidget);
     }
     expect(find.text('Avalanche'), findsNothing);
     expect(find.text('Bitcoin'), findsNothing);

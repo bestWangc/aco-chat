@@ -132,6 +132,13 @@ class _AcoAppState extends State<AcoApp> {
       _walletIdentity = identity;
     });
     widget.onWalletConfigured?.call(true);
+    unawaited(_syncWalletAccount(identity, mnemonic));
+  }
+
+  Future<void> _syncWalletAccount(
+    WalletIdentity identity,
+    String mnemonic,
+  ) async {
     final client = AccountApiClient();
     AccountProfile? profile;
     try {

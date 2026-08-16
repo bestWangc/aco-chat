@@ -3,10 +3,18 @@ import 'dart:convert';
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-enum WalletNetwork { ethereum, bsc, polygon, tron, solana, base }
+enum WalletNetwork {
+  ethereum,
+  bsc,
+  polygon,
+  arbitrum,
+  optimism,
+  tron,
+  solana,
+  base,
+}
 
 class WalletBalance {
   const WalletBalance({
@@ -40,25 +48,19 @@ class WalletBalance {
 /// Fetches wallet balances from public JSON-RPC nodes.
 ///
 /// Fiat valuation and token metadata need an indexer or price feed. Every
-/// reported balance remains authoritative on-chain. Flutter Web uses the app
-/// API as a constrained RPC proxy because public nodes do not consistently
-/// grant browser CORS access.
+/// reported balance remains authoritative on-chain. The app API proxies every
+/// request, so endpoint selection and failover stay server-side.
 class WalletPortfolioService {
-  WalletPortfolioService({
-    http.Client? client,
-    Uri? rpcProxyBaseUri,
-    bool? useRpcProxy,
-  }) : _rpcProxyBaseUri =
-           rpcProxyBaseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
-       _useRpcProxy = useRpcProxy ?? kIsWeb,
-       _client = client ?? http.Client(),
-       _ownsClient = client == null;
+  WalletPortfolioService({http.Client? client, Uri? rpcProxyBaseUri})
+    : _rpcProxyBaseUri =
+          rpcProxyBaseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
+      _client = client ?? http.Client(),
+      _ownsClient = client == null;
 
   static const _requestTimeout = Duration(seconds: 5);
   final http.Client _client;
   final bool _ownsClient;
   final Uri _rpcProxyBaseUri;
-  final bool _useRpcProxy;
 
   Future<List<WalletBalance>> loadBalances({
     required WalletNetwork network,
@@ -336,7 +338,6 @@ class WalletPortfolioService {
       'Ethereum',
       'ETH',
       'Ethereum',
-      ['https://ethereum-rpc.publicnode.com', 'https://rpc.flashbots.net'],
       _Token('0xdAC17F958D2ee523a2206206994597C13D831ec7', 6, 'Tether USD'),
     ),
     WalletNetwork.bsc: _Chain.evm(
@@ -344,7 +345,6 @@ class WalletPortfolioService {
       'BNB Smart Chain',
       'BNB',
       'BNB',
-      ['https://bsc-rpc.publicnode.com', 'https://bsc-dataseed.binance.org'],
       _Token('0x55d398326f99059fF775485246999027B3197955', 18, 'Tether USD'),
     ),
     WalletNetwork.polygon: _Chain.evm(
@@ -352,7 +352,6 @@ class WalletPortfolioService {
       'Polygon',
       'POL',
       'Polygon Ecosystem Token',
-      ['https://polygon-bor-rpc.publicnode.com', 'https://polygon-rpc.com'],
       _Token('0xc2132D05D31c914a87C6611C10748AEb04B58e8F', 6, 'Tether USD'),
     ),
     WalletNetwork.base: _Chain.evm(
@@ -360,18 +359,27 @@ class WalletPortfolioService {
       'Base',
       'ETH',
       'Ethereum',
-      ['https://base-rpc.publicnode.com', 'https://mainnet.base.org'],
       _Token('0xfde4c96c8593536e31f229ea8f37b2ada2699bb2', 6, 'Tether USD'),
+    ),
+    WalletNetwork.arbitrum: _Chain.evm(
+      WalletNetwork.arbitrum,
+      'Arbitrum One',
+      'ETH',
+      'Ethereum',
+      _Token('0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9', 6, 'Tether USD'),
+    ),
+    WalletNetwork.optimism: _Chain.evm(
+      WalletNetwork.optimism,
+      'Optimism',
+      'ETH',
+      'Ethereum',
+      _Token('0x94b008aA00579c1307B0EF2C499aD98a8ce58e58', 6, 'Tether USD'),
     ),
     WalletNetwork.tron: _Chain.nonEvm(
       WalletNetwork.tron,
       'TRON',
       'TRX',
       'TRON',
-      [
-        'https://api.trongrid.io/wallet/getaccount',
-        'https://api.tronstack.io/wallet/getaccount',
-      ],
       'tron',
       6,
     ),
@@ -380,10 +388,6 @@ class WalletPortfolioService {
       'Solana',
       'SOL',
       'Solana',
-      [
-        'https://solana-rpc.publicnode.com',
-        'https://api.mainnet-beta.solana.com',
-      ],
       'solana',
       9,
     ),
@@ -486,17 +490,7 @@ class WalletPortfolioService {
     _Chain chain,
     Map<String, Object> request,
   ) async {
-    if (_useRpcProxy) return _postJsonToUri(_rpcUri(chain), request);
-
-    Object? lastError;
-    for (final rpcUrl in chain.rpcUrls) {
-      try {
-        return await _postJsonToUri(Uri.parse(rpcUrl), request);
-      } catch (error) {
-        lastError = error;
-      }
-    }
-    throw lastError ?? StateError('No RPC endpoints configured');
+    return _postJsonToUri(_rpcUri(chain), request);
   }
 
   Future<Map<String, dynamic>> _postJsonToUri(
@@ -536,7 +530,6 @@ class _Chain {
     this.name,
     this.symbol,
     this.nativeAssetName,
-    this.rpcUrls,
     this.usdt,
   ) : addressKey = null,
       decimals = 18;
@@ -546,7 +539,6 @@ class _Chain {
     this.name,
     this.symbol,
     this.nativeAssetName,
-    this.rpcUrls,
     this.addressKey,
     this.decimals,
   ) : usdt = null;
@@ -554,7 +546,6 @@ class _Chain {
   final String name;
   final String symbol;
   final String nativeAssetName;
-  final List<String> rpcUrls;
   final _Token? usdt;
   final WalletNetwork network;
   final String? addressKey;
