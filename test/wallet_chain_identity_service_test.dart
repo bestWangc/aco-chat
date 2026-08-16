@@ -11,13 +11,10 @@ void main() {
       mnemonic,
     );
 
-    expect(
-      addresses.keys,
-      containsAll(['bitcoin', 'solana', 'tron', 'cosmos']),
-    );
+    expect(addresses.keys, containsAll(['solana', 'tron']));
     expect(addresses.values, everyElement(isNotEmpty));
-    expect(addresses['bitcoin'], startsWith('1'));
+    expect(addresses, isNot(contains('bitcoin')));
+    expect(addresses, isNot(contains('cosmos')));
     expect(addresses['tron'], startsWith('T'));
-    expect(addresses['cosmos'], startsWith('cosmos'));
   });
 }

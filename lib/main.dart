@@ -136,10 +136,9 @@ class _AcoAppState extends State<AcoApp> {
       _walletLoginFuture = profileFuture;
     });
     widget.onWalletConfigured?.call(true);
-    final profile = await profileFuture;
-    if (profile != null && mounted) {
-      setState(() => _accountProfile = profile);
-    }
+    // Account login/binding is deliberately silent and asynchronous. The
+    // local wallet is ready now; do not make wallet creation wait on the API.
+    unawaited(_resolveAccountProfile(profileFuture));
   }
 
   Future<AccountProfile?> _syncWalletAccount(
@@ -157,7 +156,7 @@ class _AcoAppState extends State<AcoApp> {
       if (activeProfile != null) {
         await session
             .addWallet(identity.address)
-            .timeout(const Duration(seconds: 10));
+            .timeout(const Duration(seconds: 15));
         profile = activeProfile;
       } else {
         profile =
@@ -166,7 +165,7 @@ class _AcoAppState extends State<AcoApp> {
                       walletAddress: identity.address,
                       mnemonic: mnemonic,
                     )
-                    .timeout(const Duration(seconds: 10)))
+                    .timeout(const Duration(seconds: 15)))
                 .user;
       }
     } catch (_) {
