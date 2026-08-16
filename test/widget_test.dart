@@ -546,7 +546,7 @@ void main() {
     await tester.tap(find.byKey(const Key('wallet-network-selector')));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包详情'), findsOneWidget);
+    expect(find.text('钱包列表'), findsOneWidget);
     expect(find.text('选择网络'), findsNothing);
     expect(find.text('Ethereum'), findsOneWidget);
     expect(find.text('以太坊'), findsNothing);
@@ -616,7 +616,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel('切换钱包'));
     await tester.pumpAndSettle();
 
-    expect(find.text('钱包详情'), findsOneWidget);
+    expect(find.text('钱包列表'), findsOneWidget);
     expect(find.text('暂无钱包'), findsOneWidget);
     expect(find.text('BSC-1'), findsNothing);
     expect(find.text('TASDFSk...FAGSGS2324t'), findsNothing);

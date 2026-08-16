@@ -78,6 +78,7 @@ const _walletHeaderWalletArrowLeft = 210.0;
 const _walletHeaderWalletArrowTop = 16.82;
 const _walletHeaderWalletArrowWidth = 15.50;
 const _walletHeaderWalletArrowHeight = 13.42;
+const _walletChainRailWidth = 90.0;
 // Figma node 7:159, relative to the same content inset.
 const _walletHeaderNetworkLeft = 406.43;
 const _walletHeaderNetworkTop = 2.21;
@@ -109,6 +110,8 @@ enum AcoScreen {
   walletHome,
   walletChains,
   walletSwitcher,
+  walletSetupCreate,
+  walletSetupImport,
   assetDetail,
   backupMnemonic,
   exportPrivateKey,
@@ -211,6 +214,7 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
       return _WalletSetupFlow(
         dark: widget.dark,
         mode: _mode,
+        requireSecuritySetup: true,
         onBack: () => setState(() => _mode = _WalletSetupMode.welcome),
         onComplete: widget.onWalletReady,
       );
@@ -445,12 +449,14 @@ class _WalletSetupFlow extends StatefulWidget {
   const _WalletSetupFlow({
     required this.dark,
     required this.mode,
+    required this.requireSecuritySetup,
     required this.onBack,
     required this.onComplete,
   });
 
   final bool dark;
   final _WalletSetupMode mode;
+  final bool requireSecuritySetup;
   final VoidCallback onBack;
   final Future<void> Function(WalletIdentity, String) onComplete;
 
@@ -800,9 +806,12 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   bool get _isVerificationStep => _isCreating && _step == 2;
 
-  bool get _isSecurityStep => _step == _securityStep;
+  bool get _isSecurityStep =>
+      widget.requireSecuritySetup && _step == _securityStep;
 
-  int get _securityStep => _isCreating ? 3 : 1;
+  int get _securityStep => widget.requireSecuritySetup
+      ? (_isCreating ? 3 : 1)
+      : (_isCreating ? 2 : 0);
 
   String get _continueLabel {
     if (_isSecurityStep) return '完成并进入钱包';
@@ -911,10 +920,12 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
 
-    final authenticated = await BiometricAuthentication.authenticateOrSkip();
-    if (!authenticated) {
-      if (mounted) setState(() => _isCompletingWalletSetup = false);
-      return;
+    if (widget.requireSecuritySetup) {
+      final authenticated = await BiometricAuthentication.authenticateOrSkip();
+      if (!authenticated) {
+        if (mounted) setState(() => _isCompletingWalletSetup = false);
+        return;
+      }
     }
 
     await SensitiveScreenProtection.setEnabled(false);
@@ -922,12 +933,20 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         ? _createdMnemonic
         : _walletSecurity.normalizeMnemonic(_phraseController.text);
     final identity = WalletIdentity.fromMnemonic(mnemonic);
-    await _walletSecurity.saveMnemonic(
-      store: _secretStore,
-      walletAddress: identity.address,
-      mnemonic: mnemonic,
-      password: _passwordController.text,
-    );
+    if (widget.requireSecuritySetup) {
+      await _walletSecurity.saveMnemonic(
+        store: _secretStore,
+        walletAddress: identity.address,
+        mnemonic: mnemonic,
+        password: _passwordController.text,
+      );
+    } else {
+      await _walletSecurity.saveMnemonicWithDeviceProtection(
+        store: _secretStore,
+        walletAddress: identity.address,
+        mnemonic: mnemonic,
+      );
+    }
     await _cacheNonEvmAddresses(mnemonic, identity);
     await widget.onComplete(identity, mnemonic);
   }
@@ -1209,6 +1228,7 @@ class AcoDesignShell extends StatefulWidget {
   const AcoDesignShell({
     this.themeNotifier,
     this.onThemeChanged,
+    this.onWalletReady,
     this.walletIdentity,
     this.accountProfile,
     super.key,
@@ -1217,6 +1237,7 @@ class AcoDesignShell extends StatefulWidget {
   /// Owned by [AcoApp] so the Cupertino and shadcn themes update together.
   final ValueNotifier<bool>? themeNotifier;
   final ValueChanged<bool>? onThemeChanged;
+  final Future<void> Function(WalletIdentity, String)? onWalletReady;
   final WalletIdentity? walletIdentity;
   final AccountProfile? accountProfile;
 
@@ -1311,6 +1332,16 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _open(AcoScreen.send);
   }
 
+  Future<void> _completeAddedWallet(
+    WalletIdentity identity,
+    String mnemonic,
+  ) async {
+    await widget.onWalletReady?.call(identity, mnemonic);
+    if (mounted) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+  }
+
   void _open(AcoScreen screen) {
     if (screen == AcoScreen.walletHome) {
       setState(() {
@@ -1327,6 +1358,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.receive => AcoScreen.receive,
       AcoScreen.walletChains => AcoScreen.walletChains,
       AcoScreen.walletSwitcher => AcoScreen.walletSwitcher,
+      AcoScreen.walletSetupCreate => AcoScreen.walletSetupCreate,
+      AcoScreen.walletSetupImport => AcoScreen.walletSetupImport,
       AcoScreen.assetDetail => AcoScreen.assetDetail,
       AcoScreen.backupMnemonic => AcoScreen.backupMnemonic,
       AcoScreen.exportPrivateKey => AcoScreen.exportPrivateKey,
@@ -1370,6 +1403,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       isRoot: false,
       onOpen: _open,
       onThemeToggle: _toggleTheme,
+      onWalletReady: _completeAddedWallet,
       walletIdentity: widget.walletIdentity,
       walletName: _walletName.value,
       onWalletNameChanged: _saveWalletName,
@@ -1475,6 +1509,7 @@ class AcoPalette {
   const AcoPalette(this.dark);
   final bool dark;
 
+  Color get accent => _accentGreen;
   Color get background => dark ? _black : _white;
   Color get surface => dark ? const Color(0xFF3A3A3A) : const Color(0xFFF4F4F4);
   Color get surfaceRaised =>
@@ -1495,6 +1530,7 @@ class AcoScreenPage extends StatelessWidget {
     required this.isRoot,
     required this.onOpen,
     required this.onThemeToggle,
+    this.onWalletReady,
     this.displayName,
     this.accountId,
     this.username,
@@ -1521,6 +1557,7 @@ class AcoScreenPage extends StatelessWidget {
   final bool isRoot;
   final ValueChanged<AcoScreen> onOpen;
   final VoidCallback onThemeToggle;
+  final Future<void> Function(WalletIdentity, String)? onWalletReady;
   final String? displayName;
   final String? accountId;
   final String? username;
@@ -1570,6 +1607,20 @@ class AcoScreenPage extends StatelessWidget {
         walletName: walletName,
         selectedChain: walletChainIndex,
         onChainSelected: onWalletChainSelected ?? (_) {},
+      ),
+      AcoScreen.walletSetupCreate => _WalletSetupFlow(
+        dark: dark,
+        mode: _WalletSetupMode.create,
+        requireSecuritySetup: false,
+        onBack: () => Navigator.of(context).pop(),
+        onComplete: onWalletReady ?? (_, _) async {},
+      ),
+      AcoScreen.walletSetupImport => _WalletSetupFlow(
+        dark: dark,
+        mode: _WalletSetupMode.import,
+        requireSecuritySetup: false,
+        onBack: () => Navigator.of(context).pop(),
+        onComplete: onWalletReady ?? (_, _) async {},
       ),
       AcoScreen.assetDetail => _AssetDetail(
         palette: palette,
@@ -3865,7 +3916,8 @@ class _WalletChainsState extends State<_WalletChains> {
   @override
   void didUpdateWidget(covariant _WalletChains oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedChain != widget.selectedChain) {
+    if (oldWidget.selectedChain != widget.selectedChain ||
+        oldWidget.walletIdentity?.address != widget.walletIdentity?.address) {
       _selectedChain = widget.selectedChain;
       _walletsFuture = _loadWallets(widget.selectedChain);
     }
@@ -3880,19 +3932,86 @@ class _WalletChainsState extends State<_WalletChains> {
     widget.onChainSelected(index);
   }
 
-  Future<List<_WalletListItem>> _loadWallets([int? chainIndex]) async {
-    final address = await _addressForChain(
-      widget.walletIdentity,
-      _supportedWalletChains[chainIndex ?? _selectedChain],
+  Future<void> _showAddWalletSheet(BuildContext context) async {
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text(
+          '添加钱包',
+          style: TextStyle(
+            fontSize: AcoTypography.body,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(sheetContext).pop();
+              widget.onOpen(AcoScreen.walletSetupCreate);
+            },
+            child: const Text(
+              '创建钱包',
+              style: TextStyle(
+                fontSize: AcoTypography.bodyEmphasis,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.of(sheetContext).pop();
+              widget.onOpen(AcoScreen.walletSetupImport);
+            },
+            child: const Text(
+              '导入钱包',
+              style: TextStyle(
+                fontSize: AcoTypography.bodyEmphasis,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(
+              fontSize: AcoTypography.bodyEmphasis,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
+      ),
     );
-    if (address == null || address.isEmpty) return const [];
-    return [_WalletListItem(address: address)];
+  }
+
+  Future<List<_WalletListItem>> _loadWallets([int? chainIndex]) async {
+    if (widget.walletIdentity == null) return const [];
+    final identities = await WalletPreferences.walletIdentities(
+      fallback: widget.walletIdentity,
+    );
+    final selectedChain = _supportedWalletChains[chainIndex ?? _selectedChain];
+    final currentAddress = widget.walletIdentity!.address.toLowerCase();
+    final wallets = <_WalletListItem>[];
+    for (var index = 0; index < identities.length; index++) {
+      final identity = identities[index];
+      final address = await _addressForChain(identity, selectedChain);
+      if (address == null || address.isEmpty) continue;
+      wallets.add(
+        _WalletListItem(
+          address: address,
+          name: index == 0 ? widget.walletName : 'Wallet${index + 1}',
+          current: identity.address.toLowerCase() == currentAddress,
+        ),
+      );
+    }
+    return wallets;
   }
 
   @override
   Widget build(BuildContext context) => _DetailScaffold(
     palette: widget.palette,
-    title: '钱包详情',
+    title: '钱包列表',
     child: Stack(
       children: [
         Column(
@@ -3916,12 +4035,31 @@ class _WalletChainsState extends State<_WalletChains> {
                     child: CupertinoButton(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(32, 32),
-                      onPressed: () =>
-                          _showNotice(context, '添加钱包', '添加钱包功能即将开放。'),
-                      child: const Icon(
-                        CupertinoIcons.add_circled,
-                        color: _lime,
-                        size: 24,
+                      onPressed: () => _showAddWalletSheet(context),
+                      child: SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Transform.translate(
+                              offset: const Offset(-.2, 0),
+                              child: Icon(
+                                CupertinoIcons.add_circled,
+                                color: widget.palette.accent,
+                                size: 20,
+                              ),
+                            ),
+                            Transform.translate(
+                              offset: const Offset(.2, 0),
+                              child: Icon(
+                                CupertinoIcons.add_circled,
+                                color: widget.palette.accent,
+                                size: 20,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -3935,14 +4073,16 @@ class _WalletChainsState extends State<_WalletChains> {
                 builder: (context, snapshot) {
                   final wallets = snapshot.data;
                   if (wallets == null) {
-                    return const Center(
-                      child: CupertinoActivityIndicator(color: _lime),
+                    return Center(
+                      child: CupertinoActivityIndicator(
+                        color: widget.palette.accent,
+                      ),
                     );
                   }
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const SizedBox(width: 84),
+                      const SizedBox(width: _walletChainRailWidth),
                       Expanded(
                         child: wallets.isEmpty
                             ? Center(
@@ -3956,9 +4096,9 @@ class _WalletChainsState extends State<_WalletChains> {
                               )
                             : ListView.separated(
                                 padding: const EdgeInsets.fromLTRB(
-                                  10,
+                                  18,
                                   0,
-                                  12,
+                                  20,
                                   0,
                                 ),
                                 itemCount: wallets.length,
@@ -3968,9 +4108,9 @@ class _WalletChainsState extends State<_WalletChains> {
                                   final wallet = wallets[index];
                                   return _WalletChainCard(
                                     palette: widget.palette,
-                                    name: widget.walletName,
+                                    name: wallet.name,
                                     address: wallet.address,
-                                    current: true,
+                                    current: wallet.current,
                                     onTap: () =>
                                         widget.onOpen(AcoScreen.assetDetail),
                                   );
@@ -3988,7 +4128,7 @@ class _WalletChainsState extends State<_WalletChains> {
           left: 0,
           top: 0,
           bottom: 0,
-          width: 84,
+          width: _walletChainRailWidth,
           child: _WalletChainRail(
             palette: widget.palette,
             chains: _supportedWalletChains,
@@ -4002,9 +4142,15 @@ class _WalletChainsState extends State<_WalletChains> {
 }
 
 class _WalletListItem {
-  const _WalletListItem({required this.address});
+  const _WalletListItem({
+    required this.address,
+    required this.name,
+    required this.current,
+  });
 
   final String address;
+  final String name;
+  final bool current;
 }
 
 class _WalletChainRail extends StatelessWidget {
@@ -4051,6 +4197,7 @@ class _WalletChainRail extends StatelessWidget {
                     child: Center(
                       child: _WalletChainLogo(
                         asset: chain.asset,
+                        muted: !active,
                         backgroundColor: chain.backgroundColor,
                         size: 44,
                       ),
@@ -4062,7 +4209,7 @@ class _WalletChainRail extends StatelessWidget {
                 Positioned(
                   top: 0,
                   right: 0,
-                  child: Container(width: 5, height: 74, color: _lime),
+                  child: Container(width: 5, height: 74, color: palette.accent),
                 ),
             ],
           ),
@@ -4089,7 +4236,7 @@ class _WalletChainLogo extends StatelessWidget {
     width: size,
     height: size,
     child: Opacity(
-      opacity: muted ? .76 : 1,
+      opacity: muted ? .58 : 1,
       child: ClipOval(
         child: ColoredBox(
           color: backgroundColor ?? _transparent,
@@ -4126,11 +4273,11 @@ class _WalletChainCard extends StatelessWidget {
     padding: EdgeInsets.zero,
     onPressed: onTap,
     child: AspectRatio(
-      aspectRatio: 3.35,
+      aspectRatio: 2.8,
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 11, 12, 10),
         decoration: BoxDecoration(
-          color: palette.surface,
+          color: current ? const Color(0xFF080808) : palette.surface,
           borderRadius: BorderRadius.circular(8),
           border: current
               ? null
@@ -4152,29 +4299,33 @@ class _WalletChainCard extends StatelessWidget {
                 ),
                 if (current)
                   Container(
-                    margin: const EdgeInsets.only(left: 8),
+                    margin: const EdgeInsets.only(left: 14),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
+                      horizontal: 4,
+                      vertical: 1,
                     ),
                     decoration: BoxDecoration(
-                      color: _lime,
+                      color: palette.accent,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
                       '当前',
                       style: TextStyle(
                         color: _black,
-                        fontSize: AcoTypography.bodySmall,
+                        fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
                 const Spacer(),
-                Icon(
-                  CupertinoIcons.chevron_right,
-                  color: palette.mutedText,
-                  size: 14,
+                Transform.scale(
+                  scaleX: 1.35,
+                  scaleY: 1.18,
+                  child: Icon(
+                    CupertinoIcons.chevron_right,
+                    color: palette.accent,
+                    size: 16,
+                  ),
                 ),
               ],
             ),
@@ -4187,7 +4338,7 @@ class _WalletChainCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: palette.mutedText,
-                      fontSize: AcoTypography.bodySmall,
+                      fontSize: AcoTypography.body,
                     ),
                   ),
                 ),
