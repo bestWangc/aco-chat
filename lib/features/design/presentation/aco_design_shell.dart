@@ -6866,8 +6866,8 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
               child: Container(
                 width: 54,
                 height: 54,
-                decoration: const BoxDecoration(
-                  color: _lime,
+                decoration: BoxDecoration(
+                  color: palette.accent,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(CupertinoIcons.add, color: _black, size: 30),
@@ -7114,7 +7114,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
       builder: (sheetContext) => CupertinoTheme(
         data: CupertinoThemeData(
           brightness: palette.dark ? Brightness.dark : Brightness.light,
-          primaryColor: _lime,
+          primaryColor: palette.accent,
         ),
         child: Container(
           height: 332,
@@ -7138,7 +7138,9 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                         child: Text(
                           '立即开播',
                           style: TextStyle(
-                            color: _isEditing ? palette.mutedText : _lime,
+                            color: _isEditing
+                                ? palette.mutedText
+                                : palette.accent,
                             fontSize: AcoTypography.bodySmall,
                           ),
                         ),
@@ -7162,8 +7164,8 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                         },
                         child: Text(
                           '确定',
-                          style: const TextStyle(
-                            color: _lime,
+                          style: TextStyle(
+                            color: palette.accent,
                             fontSize: AcoTypography.body,
                             fontWeight: FontWeight.w700,
                           ),
@@ -7220,7 +7222,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
       builder: (sheetContext) => CupertinoTheme(
         data: CupertinoThemeData(
           brightness: palette.dark ? Brightness.dark : Brightness.light,
-          primaryColor: _lime,
+          primaryColor: palette.accent,
         ),
         child: CupertinoActionSheet(
           title: const Text(
@@ -7270,7 +7272,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
       builder: (dialogContext) => CupertinoTheme(
         data: CupertinoThemeData(
           brightness: palette.dark ? Brightness.dark : Brightness.light,
-          primaryColor: _lime,
+          primaryColor: palette.accent,
         ),
         child: StatefulBuilder(
           builder: (context, setDialogState) => CupertinoAlertDialog(
@@ -7503,7 +7505,9 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                   child: Container(
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: canConfirm ? _lime : palette.surfaceRaised,
+                      color: canConfirm
+                          ? palette.accent
+                          : palette.surfaceRaised,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: _submitting
@@ -7586,7 +7590,7 @@ class _CreateLiveRow extends StatelessWidget {
             Text(
               value!,
               style: TextStyle(
-                color: highlighted ? _lime : palette.mutedText,
+                color: highlighted ? palette.accent : palette.mutedText,
                 fontSize: AcoTypography.bodyEmphasis,
               ),
             ),
@@ -7882,42 +7886,48 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final audioMuted = room?.audioMuted ?? false;
     showCupertinoModalPopup<void>(
       context: context,
-      builder: (sheetContext) => CupertinoActionSheet(
-        actions: [
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(sheetContext).pop();
-              unawaited(_setAudioMute(!audioMuted));
-            },
-            child: _hostActionLabel(audioMuted ? '解除全员静音' : '全员静音'),
-          ),
-          CupertinoActionSheetAction(
-            onPressed: () {
-              Navigator.of(sheetContext).pop();
-              unawaited(_setChatMute(!chatMuted));
-            },
-            child: _hostActionLabel(chatMuted ? '解除全员禁言' : '全员禁言'),
-          ),
-          if (hasSpeakers)
+      builder: (sheetContext) => CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: widget.palette.dark ? Brightness.dark : Brightness.light,
+          primaryColor: widget.palette.accent,
+        ),
+        child: CupertinoActionSheet(
+          actions: [
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.of(sheetContext).pop();
-                _showHostTransferPicker(speakers);
+                unawaited(_setAudioMute(!audioMuted));
               },
-              child: _hostActionLabel('转让主持人'),
+              child: _hostActionLabel(audioMuted ? '解除全员静音' : '全员静音'),
             ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () {
-              Navigator.of(sheetContext).pop();
-              unawaited(_endLive());
-            },
-            child: _hostActionLabel('结束直播'),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_setChatMute(!chatMuted));
+              },
+              child: _hostActionLabel(chatMuted ? '解除全员禁言' : '全员禁言'),
+            ),
+            if (hasSpeakers)
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _showHostTransferPicker(speakers);
+                },
+                child: _hostActionLabel('转让主持人'),
+              ),
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_endLive());
+              },
+              child: _hostActionLabel('结束直播'),
+            ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: _hostActionLabel('取消'),
           ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: _hostActionLabel('取消'),
         ),
       ),
     );
@@ -10583,7 +10593,7 @@ class _LiveRoomHostCard extends StatelessWidget {
           width: 34,
           height: 34,
           decoration: BoxDecoration(
-            color: active ? _lime : palette.mutedText,
+            color: active ? palette.accent : palette.mutedText,
             shape: BoxShape.circle,
             border: Border.all(color: palette.background, width: 3),
           ),
@@ -10679,7 +10689,7 @@ class _RaisedHandIndicator extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: palette.dark ? const Color(0xE6292929) : palette.surfaceRaised,
-          border: Border.all(color: _lime.withValues(alpha: .52)),
+          border: Border.all(color: palette.accent.withValues(alpha: .52)),
           borderRadius: BorderRadius.circular(22),
           boxShadow: const [
             BoxShadow(
@@ -10697,8 +10707,8 @@ class _RaisedHandIndicator extends StatelessWidget {
               Container(
                 width: 28,
                 height: 28,
-                decoration: const BoxDecoration(
-                  color: _lime,
+                decoration: BoxDecoration(
+                  color: palette.accent,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -10710,8 +10720,8 @@ class _RaisedHandIndicator extends StatelessWidget {
               const SizedBox(width: 7),
               Text(
                 '$count',
-                style: const TextStyle(
-                  color: _lime,
+                style: TextStyle(
+                  color: palette.accent,
                   fontSize: AcoTypography.bodySmall,
                   fontWeight: FontWeight.w800,
                 ),
@@ -10947,8 +10957,8 @@ class _RaisedHandRequests extends StatelessWidget {
                 Container(
                   width: 28,
                   height: 28,
-                  decoration: const BoxDecoration(
-                    color: _lime,
+                  decoration: BoxDecoration(
+                    color: palette.accent,
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -10974,13 +10984,13 @@ class _RaisedHandRequests extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 7),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: _lime.withValues(alpha: .16),
+                    color: palette.accent.withValues(alpha: .16),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '${users.length}',
-                    style: const TextStyle(
-                      color: _lime,
+                    style: TextStyle(
+                      color: palette.accent,
                       fontSize: AcoTypography.caption,
                       fontWeight: FontWeight.w800,
                     ),
@@ -11058,7 +11068,7 @@ class _RaisedHandRequestChip extends StatelessWidget {
         _RaisedHandAction(
           icon: CupertinoIcons.checkmark,
           label: '允许',
-          color: _lime,
+          color: palette.accent,
           onPressed: () => onApprove(user.userId),
         ),
         const SizedBox(width: 4),
@@ -11154,7 +11164,7 @@ class _RoomMessage extends StatelessWidget {
       child: Text(
         '$name:  $text',
         style: TextStyle(
-          color: palette.dark ? _lime : palette.primaryText,
+          color: palette.dark ? palette.accent : palette.primaryText,
           fontSize: AcoTypography.bodySmall,
           height: 1.2,
         ),
@@ -11189,7 +11199,7 @@ class _RoomChatHistory extends StatelessWidget {
     }
     return ListView.separated(
       key: const Key('room-chat-history'),
-      padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
+      padding: const EdgeInsets.fromLTRB(24, 0, 18, 14),
       itemCount: roomMessages.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, index) => _RoomMessage(
@@ -11229,9 +11239,9 @@ class _RoomEmojiPicker extends StatelessWidget {
         categoryViewConfig: emoji.CategoryViewConfig(
           initCategory: emoji.Category.SMILEYS,
           backgroundColor: palette.surfaceRaised,
-          indicatorColor: _lime,
+          indicatorColor: palette.accent,
           iconColor: palette.mutedText,
-          iconColorSelected: _lime,
+          iconColorSelected: palette.accent,
           backspaceColor: palette.primaryText,
           dividerColor: _transparent,
         ),
@@ -11288,7 +11298,7 @@ class _RoomComposer extends StatelessWidget {
               controller: controller,
               enabled: !chatMuted,
               textInputAction: TextInputAction.send,
-              cursorColor: _lime,
+              cursorColor: palette.accent,
               padding: const EdgeInsets.only(right: 14),
               placeholder: chatMuted ? '全员禁言中' : '说点什么...',
               placeholderStyle: TextStyle(
@@ -11393,7 +11403,7 @@ class _RoomBottomBar extends StatelessWidget {
       );
     }
     if (!muted || palette.dark) {
-      return const _RoomControlColors(background: _lime, foreground: _black);
+      return _RoomControlColors(background: palette.accent, foreground: _black);
     }
     return const _RoomControlColors(
       background: Color(0xFFF2F2F2),
