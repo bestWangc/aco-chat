@@ -73,6 +73,7 @@ flutter:
     - assets/images/
     - assets/videos/
     - assets/icons/
+    - assets/icons/profile/
     - assets/icons/light/
     - assets/icons/lucide/
     - assets/icons/crypto/tokens/

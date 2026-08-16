@@ -2298,6 +2298,8 @@ class AcoSurface extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.radius = 18,
     this.border = false,
+    this.backgroundColor,
+    this.minHeight,
     super.key,
   });
   final AcoPalette palette;
@@ -2305,9 +2307,14 @@ class AcoSurface extends StatelessWidget {
   final EdgeInsets padding;
   final double radius;
   final bool border;
+  final Color? backgroundColor;
+  final double? minHeight;
 
   @override
   Widget build(BuildContext context) => Container(
+    constraints: minHeight == null
+        ? null
+        : BoxConstraints(minHeight: minHeight!),
     decoration: BoxDecoration(
       border: border ? Border.all(color: palette.border) : null,
       borderRadius: BorderRadius.circular(radius),
@@ -2315,7 +2322,7 @@ class AcoSurface extends StatelessWidget {
     child: shad.ShadCard(
       padding: padding,
       radius: BorderRadius.circular(radius),
-      backgroundColor: palette.surface,
+      backgroundColor: backgroundColor ?? palette.surface,
       child: child,
     ),
   );
@@ -8296,23 +8303,21 @@ class _ProfilePage extends StatelessWidget {
   final VoidCallback? onBack;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+    padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
     children: [
-      AcoPageHeader(
-        palette: palette,
-        onBack: onBack,
-        right: AcoIconButton(
-          icon: CupertinoIcons.qrcode_viewfinder,
-          palette: palette,
-          label: '个人二维码',
-          onPressed: () => onOpen(AcoScreen.profileQr),
-        ),
-      ),
-      const SizedBox(height: 2),
+      AcoPageHeader(palette: palette, onBack: onBack),
+      const SizedBox(height: 18),
       Row(
         children: [
-          const AcoAvatar(size: 70),
-          const SizedBox(width: 22),
+          Semantics(
+            button: true,
+            label: '编辑个人资料',
+            child: GestureDetector(
+              onTap: () => onOpen(AcoScreen.profileEdit),
+              child: const AcoAvatar(size: 76),
+            ),
+          ),
+          const SizedBox(width: 18),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -8351,35 +8356,185 @@ class _ProfilePage extends StatelessWidget {
               ],
             ),
           ),
-          AcoIconButton(
-            icon: CupertinoIcons.chevron_right,
+          _ProfileHeaderButton(
+            icon: CupertinoIcons.viewfinder,
             palette: palette,
-            label: '编辑个人资料',
-            size: 20,
-            onPressed: () => onOpen(AcoScreen.profileEdit),
+            label: '扫描二维码',
+            onPressed: () => onOpen(AcoScreen.scan),
+          ),
+          const SizedBox(width: 8),
+          _ProfileHeaderButton(
+            icon: CupertinoIcons.qrcode_viewfinder,
+            palette: palette,
+            label: '个人二维码',
+            filled: true,
           ),
         ],
       ),
-      const SizedBox(height: 44),
+      const SizedBox(height: 42),
       _ProfileSection(
         palette: palette,
         title: '设置',
         actions: [
           _ProfileAction(
             palette: palette,
-            icon: CupertinoIcons.flag,
+            iconAsset: 'assets/icons/profile/theme.svg',
             label: '主题模式',
             onPressed: () => onOpen(AcoScreen.profileTheme),
           ),
           _ProfileAction(
             palette: palette,
-            icon: CupertinoIcons.globe,
+            iconAsset: 'assets/icons/profile/language.svg',
             label: '语言',
             onPressed: () => onOpen(AcoScreen.profileLanguage),
           ),
         ],
       ),
     ],
+  );
+}
+
+class _ProfileHeaderButton extends StatelessWidget {
+  const _ProfileHeaderButton({
+    required this.icon,
+    required this.palette,
+    required this.label,
+    this.onPressed,
+    this.filled = false,
+  });
+
+  final IconData icon;
+  final AcoPalette palette;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    enabled: onPressed != null,
+    label: label,
+    child: SizedBox(
+      width: 44,
+      height: 44,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: filled ? palette.surface : null,
+            shape: BoxShape.circle,
+          ),
+          child: SizedBox.expand(
+            child: Icon(
+              icon,
+              color: palette.primaryText,
+              size: filled ? 24 : 28,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _ProfileOverviewSection extends StatelessWidget {
+  const _ProfileOverviewSection({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => AcoSurface(
+    palette: palette,
+    backgroundColor: palette.dark ? const Color(0xFF1D1D1D) : null,
+    minHeight: 194,
+    radius: 24,
+    padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '个人主页',
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.title,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 26),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            _ProfileMetric(
+              palette: palette,
+              iconAsset: 'assets/icons/profile/like.svg',
+              value: '3.2k',
+              label: '我的点赞',
+            ),
+            _ProfileMetric(
+              palette: palette,
+              iconAsset: 'assets/icons/profile/followers.svg',
+              value: '128',
+              label: '粉丝',
+            ),
+            _ProfileMetric(
+              palette: palette,
+              iconAsset: 'assets/icons/profile/received-likes.svg',
+              value: '15m',
+              label: '获赞',
+            ),
+            _ProfileMetric(
+              palette: palette,
+              iconAsset: 'assets/icons/profile/subscriptions.svg',
+              value: '78',
+              label: '我的订阅',
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _ProfileMetric extends StatelessWidget {
+  const _ProfileMetric({
+    required this.palette,
+    required this.iconAsset,
+    required this.value,
+    required this.label,
+  });
+
+  final AcoPalette palette;
+  final String iconAsset;
+  final String value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 58,
+    child: Column(
+      children: [
+        SvgPicture.asset(iconAsset, width: 30, height: 30, fit: BoxFit.contain),
+        const SizedBox(height: 12),
+        Text(
+          value,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.bodyEmphasis,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.visible,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
+      ],
+    ),
   );
 }
 
@@ -8746,7 +8901,7 @@ class _ThemeSettingsPage extends StatelessWidget {
                 subtitle: '清晰明亮的界面',
                 selected: !dark,
                 palette: palette,
-                onPressed: dark ? onThemeToggle : null,
+                onPressed: null,
               ),
             ],
           ),
@@ -8916,6 +9071,8 @@ class _ProfileSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AcoSurface(
     palette: palette,
+    backgroundColor: palette.dark ? const Color(0xFF1D1D1D) : null,
+    minHeight: 174,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
     child: Column(
@@ -8950,13 +9107,13 @@ class _ProfileSection extends StatelessWidget {
 class _ProfileAction extends StatelessWidget {
   const _ProfileAction({
     required this.palette,
-    required this.icon,
+    required this.iconAsset,
     required this.label,
     required this.onPressed,
   });
 
   final AcoPalette palette;
-  final IconData icon;
+  final String iconAsset;
   final String label;
   final VoidCallback? onPressed;
 
@@ -8968,7 +9125,12 @@ class _ProfileAction extends StatelessWidget {
       width: 68,
       child: Column(
         children: [
-          Icon(icon, color: palette.primaryText, size: 28),
+          SvgPicture.asset(
+            iconAsset,
+            width: 30,
+            height: 30,
+            fit: BoxFit.contain,
+          ),
           const SizedBox(height: 12),
           Text(
             label,

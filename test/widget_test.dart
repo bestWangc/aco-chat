@@ -734,17 +734,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Marry'), findsOneWidget);
+    expect(find.text('@aco'), findsOneWidget);
     expect(find.bySemanticsLabel('返回'), findsOneWidget);
+    expect(find.bySemanticsLabel('扫描二维码'), findsOneWidget);
     expect(find.bySemanticsLabel('个人二维码'), findsOneWidget);
     expect(find.bySemanticsLabel('编辑个人资料'), findsOneWidget);
     expect(find.text('个人主页'), findsNothing);
     expect(find.text('主题模式'), findsOneWidget);
     expect(find.text('切换钱包'), findsNothing);
+    expect(find.text('其他'), findsNothing);
     expect(find.text('节点质押'), findsNothing);
     expect(find.text('打赏记录'), findsNothing);
   });
 
-  testWidgets('opens a personal QR code from the profile page', (
+  testWidgets('disables the personal QR code entry from the profile page', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -754,22 +757,8 @@ void main() {
     await tester.tap(find.bySemanticsLabel('个人二维码'));
     await tester.pumpAndSettle();
 
-    expect(find.text('我的二维码'), findsOneWidget);
-    expect(find.text('@aco'), findsOneWidget);
-    expect(find.bySemanticsLabel('个人二维码：@aco'), findsOneWidget);
-    expect(find.text('扫一扫上面的二维码图案，加我为朋友。'), findsOneWidget);
-  });
-
-  testWidgets('returns from the profile page', (WidgetTester tester) async {
-    await tester.pumpWidget(const AcoApp());
-
-    await tester.tap(find.bySemanticsLabel('账户'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(CupertinoIcons.back));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Marry'), findsNothing);
-    expect(find.text('Wallet1'), findsOneWidget);
+    expect(find.text('我的二维码'), findsNothing);
+    expect(find.text('个人主页'), findsOneWidget);
   });
 
   testWidgets('requires an authenticated session to save profile changes', (
@@ -822,7 +811,7 @@ void main() {
     );
   });
 
-  testWidgets('applies light mode to the app theme and current screen', (
+  testWidgets('keeps light mode disabled in the theme settings', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -835,7 +824,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final context = tester.element(find.byType(AcoScreenPage));
-    expect(CupertinoTheme.of(context).brightness, Brightness.light);
+    expect(CupertinoTheme.of(context).brightness, Brightness.dark);
   });
 
   testWidgets('opens wallet action menu and disables adding tokens', (
