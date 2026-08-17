@@ -158,10 +158,15 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
   Future<void> _initializeBackgroundVideo() async {
     try {
       await _backgroundVideo.initialize();
+      if (_backgroundVideoDisposed) return;
       await _backgroundVideo.setLooping(true);
+      if (_backgroundVideoDisposed) return;
       await _backgroundVideo.setVolume(0);
+      if (_backgroundVideoDisposed) return;
       await _backgroundVideo.play();
-      if (mounted) setState(() => _backgroundVideoReady = true);
+      if (mounted && !_backgroundVideoDisposed) {
+        setState(() => _backgroundVideoReady = true);
+      }
     } catch (_) {
       // The welcome screen remains usable on platforms without video playback.
     }
@@ -200,8 +205,15 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
   Future<void> _disposeBackgroundVideo() async {
     if (_backgroundVideoDisposed) return;
     _backgroundVideoDisposed = true;
+    if (mounted && _backgroundVideoReady) {
+      setState(() => _backgroundVideoReady = false);
+    }
     try {
       await _backgroundVideo.pause();
+    } catch (_) {
+      // Initialization can still be in flight when the setup flow opens.
+    }
+    try {
       await _backgroundVideo.dispose();
     } catch (_) {
       // The page can still be replaced if the platform decoder is already
@@ -230,7 +242,7 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        if (_backgroundVideoReady)
+        if (_backgroundVideoReady && !_backgroundVideoDisposed)
           ClipRect(
             child: FittedBox(
               // Preserve the whole portrait scene on tall phones. The video
