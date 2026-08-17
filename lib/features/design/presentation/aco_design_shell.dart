@@ -624,7 +624,8 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                 loading: _isCompletingWalletSetup,
                 filled: true,
                 palette: palette,
-                fontSize: AcoTypography.title,
+                height: 44,
+                fontSize: AcoTypography.bodyEmphasis,
                 fontWeight: FontWeight.w500,
                 onPressed: _continue,
               ),
@@ -1102,12 +1103,10 @@ class _WalletSetupButton extends StatelessWidget {
   final bool loading;
 
   Color get _backgroundColor =>
-      backgroundColor ??
-      (filled ? (palette.dark ? _lime : _black) : _transparent);
+      backgroundColor ?? (filled ? palette.accent : _transparent);
 
   Color get _borderColor =>
-      borderColor ??
-      (filled ? (palette.dark ? _lime : _black) : palette.mutedText);
+      borderColor ?? (filled ? palette.accent : palette.mutedText);
 
   @override
   Widget build(BuildContext context) => Opacity(
@@ -10808,7 +10807,7 @@ class _LiveRoomHostCard extends StatelessWidget {
           host.nickname,
           style: TextStyle(
             color: palette.primaryText,
-            fontSize: AcoTypography.title,
+            fontSize: 17,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -10817,7 +10816,7 @@ class _LiveRoomHostCard extends StatelessWidget {
           '主持人',
           style: TextStyle(
             color: palette.mutedText,
-            fontSize: AcoTypography.body,
+            fontSize: AcoTypography.caption,
           ),
         ),
       ],
