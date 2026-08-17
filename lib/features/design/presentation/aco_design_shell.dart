@@ -7382,10 +7382,10 @@ class _CreateLivePageState extends State<_CreateLivePage> {
               padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
               children: [
                 Container(
-                  height: 164,
+                  height: 156,
                   padding: const EdgeInsets.fromLTRB(18, 16, 18, 12),
                   decoration: BoxDecoration(
-                    color: palette.surface,
+                    color: _createLiveCardColor(palette),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -7444,10 +7444,10 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                   padding: EdgeInsets.zero,
                   onPressed: _selectCover,
                   child: Container(
-                    height: 76,
+                    height: 70,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: palette.surface,
+                      color: _createLiveCardColor(palette),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: Row(
@@ -7553,7 +7553,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
               child: SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 44,
                 child: CupertinoButton(
                   key: const Key('confirm-create-live-button'),
                   padding: EdgeInsets.zero,
@@ -7563,7 +7563,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                     decoration: BoxDecoration(
                       color: canConfirm
                           ? palette.accent
-                          : palette.surfaceRaised,
+                          : _createLiveCardColor(palette),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: _submitting
@@ -7587,6 +7587,9 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   }
 }
 
+Color _createLiveCardColor(AcoPalette palette) =>
+    palette.dark ? const Color(0xFF161616) : palette.surface;
+
 class _CreateLiveRow extends StatelessWidget {
   const _CreateLiveRow({
     required this.palette,
@@ -7609,10 +7612,10 @@ class _CreateLiveRow extends StatelessWidget {
     padding: EdgeInsets.zero,
     onPressed: onTap,
     child: Container(
-      height: subtitle == null ? 56 : 68,
+      height: subtitle == null ? 52 : 64,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: palette.surface,
+        color: _createLiveCardColor(palette),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
