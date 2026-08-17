@@ -8336,13 +8336,14 @@ class _ProfilePage extends StatelessWidget {
       ),
       const SizedBox(height: 18),
       Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Semantics(
             button: true,
             label: '编辑个人资料',
             child: GestureDetector(
               onTap: () => onOpen(AcoScreen.profileEdit),
-              child: const AcoAvatar(size: 76),
+              child: const AcoAvatar(size: 68),
             ),
           ),
           const SizedBox(width: 18),
@@ -8356,7 +8357,7 @@ class _ProfilePage extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: palette.primaryText,
-                    fontSize: AcoTypography.displaySmall,
+                    fontSize: AcoTypography.titleLarge,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -8367,7 +8368,7 @@ class _ProfilePage extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: palette.mutedText,
-                    fontSize: AcoTypography.bodyEmphasis,
+                    fontSize: AcoTypography.bodySmall,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -8376,26 +8377,29 @@ class _ProfilePage extends StatelessWidget {
                   'UID:${displayAccountId(accountId)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.bodySmall,
-                  ),
+                  style: TextStyle(color: palette.mutedText, fontSize: 10),
                 ),
               ],
             ),
           ),
-          _ProfileHeaderButton(
-            icon: CupertinoIcons.viewfinder,
-            palette: palette,
-            label: '扫描二维码',
-            onPressed: () => onOpen(AcoScreen.scan),
+          Transform.translate(
+            offset: const Offset(0, -6),
+            child: _ProfileHeaderButton(
+              iconAsset: 'assets/icons/profile_scan.png',
+              palette: palette,
+              label: '扫描二维码',
+              onPressed: () => onOpen(AcoScreen.scan),
+            ),
           ),
-          const SizedBox(width: 8),
-          _ProfileHeaderButton(
-            icon: CupertinoIcons.qrcode_viewfinder,
-            palette: palette,
-            label: '个人二维码',
-            filled: true,
+          const SizedBox(width: 2),
+          Transform.translate(
+            offset: const Offset(-12, -6),
+            child: _ProfileHeaderButton(
+              iconAsset: 'assets/icons/profile_qr_code.png',
+              palette: palette,
+              label: '个人二维码',
+              filled: true,
+            ),
           ),
         ],
       ),
@@ -8424,46 +8428,63 @@ class _ProfilePage extends StatelessWidget {
 
 class _ProfileHeaderButton extends StatelessWidget {
   const _ProfileHeaderButton({
-    required this.icon,
     required this.palette,
     required this.label,
+    this.icon,
+    this.iconAsset,
     this.onPressed,
     this.filled = false,
-  });
+  }) : assert(icon != null || iconAsset != null);
 
-  final IconData icon;
+  final IconData? icon;
+  final String? iconAsset;
   final AcoPalette palette;
   final String label;
   final VoidCallback? onPressed;
   final bool filled;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    enabled: onPressed != null,
-    label: label,
-    child: SizedBox(
-      width: 44,
-      height: 44,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed: onPressed,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: filled ? palette.surface : null,
-            shape: BoxShape.circle,
-          ),
-          child: SizedBox.expand(
-            child: Icon(
-              icon,
-              color: palette.primaryText,
-              size: filled ? 24 : 28,
+  Widget build(BuildContext context) {
+    const buttonSize = 44.0;
+    const assetIconSize = 20.0;
+    final visualSize = filled ? 40.0 : buttonSize;
+    final child = iconAsset == null
+        ? Icon(icon, color: palette.primaryText, size: filled ? 24 : 28)
+        : Center(
+            child: SizedBox(
+              width: assetIconSize,
+              height: assetIconSize,
+              child: Image.asset(iconAsset!, filterQuality: FilterQuality.high),
+            ),
+          );
+
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      label: label,
+      child: SizedBox(
+        width: buttonSize,
+        height: buttonSize,
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: onPressed,
+          child: Center(
+            child: SizedBox(
+              width: visualSize,
+              height: visualSize,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: filled ? const Color(0xFF1C1C1C) : null,
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox.expand(child: child),
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 // ignore: unused_element
@@ -9106,7 +9127,7 @@ class _ProfileSection extends StatelessWidget {
   Widget build(BuildContext context) => AcoSurface(
     palette: palette,
     backgroundColor: palette.dark ? const Color(0xFF1D1D1D) : null,
-    minHeight: 174,
+    minHeight: 130,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
     child: Column(
@@ -9116,7 +9137,7 @@ class _ProfileSection extends StatelessWidget {
           title,
           style: TextStyle(
             color: palette.primaryText,
-            fontSize: AcoTypography.title,
+            fontSize: AcoTypography.body,
             fontWeight: FontWeight.w700,
           ),
         ),
@@ -9161,8 +9182,8 @@ class _ProfileAction extends StatelessWidget {
         children: [
           SvgPicture.asset(
             iconAsset,
-            width: 30,
-            height: 30,
+            width: 24,
+            height: 24,
             fit: BoxFit.contain,
           ),
           const SizedBox(height: 12),
@@ -9172,7 +9193,7 @@ class _ProfileAction extends StatelessWidget {
             overflow: TextOverflow.visible,
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: AcoTypography.bodySmall,
+              fontSize: AcoTypography.caption,
             ),
           ),
         ],
