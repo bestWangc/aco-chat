@@ -554,7 +554,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Transform.translate(
-                  offset: const Offset(-8, 0),
+                  offset: const Offset(-20, 0),
                   child: AcoIconButton(
                     icon: CupertinoIcons.back,
                     palette: palette,
@@ -1843,7 +1843,7 @@ class AcoScreenPage extends StatelessWidget {
         child: _AcoViewport(
           child: SafeArea(
             top: !isRoot,
-            minimum: isRoot ? EdgeInsets.zero : const EdgeInsets.only(top: 24),
+            minimum: EdgeInsets.zero,
             left: false,
             right: false,
             bottom: false,
@@ -1892,7 +1892,7 @@ class AcoBottomNav extends StatelessWidget {
         left: false,
         right: false,
         child: SizedBox(
-          height: 82,
+          height: 58,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1945,8 +1945,7 @@ class _FigmaNavItem extends StatelessWidget {
     if (index == 2) {
       return ExcludeSemantics(child: _DexBottomNavIcon(selected: selected));
     }
-    // Normal navigation icons share one visual scale. DEX keeps a restrained
-    // emphasis as the central action, without overwhelming its neighbours.
+    // Normal navigation icons share one visual scale.
     final iconSize = switch (index) {
       0 => const Size(22, 18),
       1 => const Size(24, 21),
@@ -1959,46 +1958,37 @@ class _FigmaNavItem extends StatelessWidget {
       child: Image.asset(_navAssets[index], fit: BoxFit.contain),
     );
     return ExcludeSemantics(
-      child: Padding(
-        padding: const EdgeInsets.only(top: 18),
-        child: index == 2
-            ? SizedBox(
-                width: iconSize.width,
-                height: iconSize.height,
-                child: icon,
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // All icons share the same bottom edge, then the label
-                  // follows immediately. This avoids SVG-specific offsets.
-                  SizedBox(
-                    height: 30,
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Transform.translate(
-                        offset: const Offset(0, 4),
-                        child: SizedBox(
-                          width: iconSize.width,
-                          height: iconSize.height,
-                          child: icon,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    _navLabels[index],
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w400,
-                      height: 1,
-                    ),
-                  ),
-                ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // All icons share the same bottom edge, then the label follows
+          // immediately. This avoids SVG-specific offsets.
+          SizedBox(
+            height: 24,
+            child: Align(
+              alignment: Alignment.bottomCenter,
+              child: Transform.translate(
+                offset: const Offset(0, 4),
+                child: SizedBox(
+                  width: iconSize.width,
+                  height: iconSize.height,
+                  child: icon,
+                ),
               ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            _navLabels[index],
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              height: 1,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2018,13 +2008,16 @@ class _DexBottomNavIcon extends StatelessWidget {
     child: SizedBox(
       width: 40,
       height: 38,
-      child: Transform.scale(
-        scale: .65,
-        child: SvgPicture.asset(
-          selected
-              ? 'assets/icons/source_dex_active.svg'
-              : 'assets/icons/source_dex_inactive.svg',
-          fit: BoxFit.contain,
+      child: Transform.translate(
+        offset: const Offset(0, -16),
+        child: Transform.scale(
+          scale: .90,
+          child: SvgPicture.asset(
+            selected
+                ? 'assets/icons/source_dex_active.svg'
+                : 'assets/icons/source_dex_inactive.svg',
+            fit: BoxFit.contain,
+          ),
         ),
       ),
     ),
@@ -2037,6 +2030,7 @@ class AcoPageHeader extends StatelessWidget {
     this.title,
     this.onBack,
     this.right,
+    this.backButtonKey,
     this.titleFollowsBack = false,
     this.backButtonOffset = const Offset(-8, 0),
     super.key,
@@ -2045,6 +2039,7 @@ class AcoPageHeader extends StatelessWidget {
   final String? title;
   final VoidCallback? onBack;
   final Widget? right;
+  final Key? backButtonKey;
   final bool titleFollowsBack;
   final Offset backButtonOffset;
 
@@ -2061,6 +2056,7 @@ class AcoPageHeader extends StatelessWidget {
             child: Transform.translate(
               offset: backButtonOffset,
               child: AcoIconButton(
+                key: backButtonKey,
                 icon: CupertinoIcons.back,
                 palette: palette,
                 label: '返回',
@@ -2396,14 +2392,18 @@ class AcoSearch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isSquareComposer = variant == AcoSearchVariant.squareComposer;
-    final submitWidth = isSquareComposer ? 64.0 : height;
+    final submitWidth = isSquareComposer ? 48.0 : height;
     final borderColor = _borderColor(isSquareComposer);
-    final iconColor = palette.dark
-        ? (isSquareComposer ? const Color(0xFF191919) : const Color(0xFFF7F7F7))
-        : palette.mutedText;
-    final hintColor = palette.dark
-        ? (isSquareComposer ? const Color(0xFFF2F2F2) : const Color(0xFF888888))
-        : palette.mutedText;
+    var iconColor = palette.mutedText;
+    var hintColor = palette.mutedText;
+    if (palette.dark) {
+      iconColor = isSquareComposer
+          ? const Color(0xFF212121)
+          : const Color(0xFFF7F7F7);
+      hintColor = isSquareComposer
+          ? const Color(0xFFF2F2F2)
+          : const Color(0xFF888888);
+    }
     final submitChild = _buildSubmitChild(isSquareComposer);
 
     return Container(
@@ -2417,16 +2417,27 @@ class AcoSearch extends StatelessWidget {
       child: Row(
         children: [
           const SizedBox(width: 14),
-          Icon(
-            CupertinoIcons.search,
-            color: iconColor,
-            size: isSquareComposer ? 16 : 20,
-          ),
+          if (isSquareComposer)
+            SizedBox(
+              width: 20,
+              height: 16,
+              child: Image.asset(
+                'assets/icons/square_search.png',
+                filterQuality: FilterQuality.high,
+              ),
+            )
+          else
+            Icon(CupertinoIcons.search, color: iconColor, size: 20),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               hint,
-              style: TextStyle(color: hintColor, fontSize: AcoTypography.body),
+              style: TextStyle(
+                color: hintColor,
+                fontSize: isSquareComposer
+                    ? AcoTypography.caption
+                    : AcoTypography.body,
+              ),
             ),
           ),
           ?action,
@@ -2466,8 +2477,8 @@ class AcoSearch extends StatelessWidget {
     if (isSquareComposer) {
       return Center(
         child: SizedBox(
-          width: 19,
-          height: 19,
+          width: 14,
+          height: 14,
           child: Image.asset(
             'assets/icons/square_search_add.png',
             filterQuality: FilterQuality.high,
@@ -2707,8 +2718,8 @@ class _TokenAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 44,
-    height: 44,
+    width: 35,
+    height: 35,
     child: token.iconAsset.endsWith('.png')
         ? ClipOval(child: Image.asset(token.iconAsset, fit: BoxFit.cover))
         : SvgPicture.asset(token.iconAsset),
@@ -2765,7 +2776,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 16, 16, 14),
+                padding: const EdgeInsets.fromLTRB(24, 14, 16, 10),
                 child: Row(
                   children: [
                     Expanded(
@@ -2774,7 +2785,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: widget.palette.primaryText,
-                          fontSize: AcoTypography.titleLarge,
+                          fontSize: AcoTypography.title,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -2786,7 +2797,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                       child: Icon(
                         CupertinoIcons.xmark,
                         color: widget.palette.primaryText,
-                        size: 23,
+                        size: 20,
                       ),
                     ),
                   ],
@@ -2795,7 +2806,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
-                  height: 48,
+                  height: 44,
                   decoration: BoxDecoration(
                     color: widget.palette.surface,
                     borderRadius: BorderRadius.circular(8),
@@ -2811,13 +2822,17 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                       child: Icon(
                         CupertinoIcons.search,
                         color: widget.palette.mutedText,
-                        size: 21,
+                        size: 19,
                       ),
                     ),
                     placeholderStyle: TextStyle(
                       color: widget.palette.mutedText,
+                      fontSize: AcoTypography.body,
                     ),
-                    style: TextStyle(color: widget.palette.primaryText),
+                    style: TextStyle(
+                      color: widget.palette.primaryText,
+                      fontSize: AcoTypography.body,
+                    ),
                     cursorColor: _lime,
                     padding: EdgeInsets.zero,
                     decoration: const BoxDecoration(color: _transparent),
@@ -2845,7 +2860,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                             label: '选择代币 ${token.symbol}',
                             child: CupertinoButton(
                               key: Key('send-token-${token.symbol}'),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
                               onPressed: () => Navigator.of(context).pop(token),
                               child: Row(
                                 children: [
@@ -2860,7 +2875,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                                           token.symbol,
                                           style: TextStyle(
                                             color: widget.palette.primaryText,
-                                            fontSize: AcoTypography.title,
+                                            fontSize: 16,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
@@ -2869,7 +2884,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                                           token.name,
                                           style: TextStyle(
                                             color: widget.palette.mutedText,
-                                            fontSize: AcoTypography.bodySmall,
+                                            fontSize: 13,
                                           ),
                                         ),
                                       ],
@@ -2882,7 +2897,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                                         token.availableAmount,
                                         style: TextStyle(
                                           color: widget.palette.primaryText,
-                                          fontSize: AcoTypography.bodyEmphasis,
+                                          fontSize: AcoTypography.body,
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
@@ -2891,7 +2906,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                                         '可用余额',
                                         style: TextStyle(
                                           color: widget.palette.mutedText,
-                                          fontSize: AcoTypography.caption,
+                                          fontSize: 11,
                                         ),
                                       ),
                                     ],
@@ -3509,7 +3524,7 @@ class _WalletHomeState extends State<_WalletHome> {
                                     'assets/icons/wallet_selector_figma.svg',
                                   ),
                                 ),
-                                SizedBox(width: 28.85 * scale),
+                                SizedBox(width: 16 * scale),
                                 Flexible(
                                   child: Transform.translate(
                                     offset: Offset(0, 6 * scale),
@@ -3671,7 +3686,8 @@ class _WalletHomeState extends State<_WalletHome> {
                           foregroundColor: actionForeground,
                           radius: 8,
                           fontWeight: FontWeight.w500,
-                          onPressed: null,
+                          onPressed: () =>
+                              showAcoAlertNotice(context, '提示', 'comming soon'),
                         ),
                       ),
                       const SizedBox(width: 39),
@@ -4578,11 +4594,14 @@ class _AssetDetailState extends State<_AssetDetail> {
                 children: [
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: AcoIconButton(
-                      icon: CupertinoIcons.back,
-                      palette: widget.palette,
-                      label: '返回',
-                      onPressed: () => Navigator.of(context).maybePop(),
+                    child: Transform.translate(
+                      offset: const Offset(-20, 0),
+                      child: AcoIconButton(
+                        icon: CupertinoIcons.back,
+                        palette: widget.palette,
+                        label: '返回',
+                        onPressed: () => Navigator.of(context).maybePop(),
+                      ),
                     ),
                   ),
                   Text(
@@ -5535,7 +5554,7 @@ class _ReceivePageContent extends StatelessWidget {
     palette: palette,
     title: '收款',
     child: ListView(
-      padding: const EdgeInsets.fromLTRB(28, 84, 28, 32),
+      padding: const EdgeInsets.fromLTRB(28, 40, 28, 28),
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -5543,23 +5562,20 @@ class _ReceivePageContent extends StatelessWidget {
             Icon(
               CupertinoIcons.info_circle,
               color: palette.mutedText,
-              size: 16,
+              size: 14,
             ),
             const SizedBox(width: 8),
             Text(
               networkNotice,
-              style: TextStyle(
-                color: palette.mutedText,
-                fontSize: AcoTypography.bodySmall,
-              ),
+              style: TextStyle(color: palette.mutedText, fontSize: 13),
             ),
           ],
         ),
-        const SizedBox(height: 40),
+        const SizedBox(height: 24),
         Center(
           child: Container(
-            width: 288,
-            height: 288,
+            width: 240,
+            height: 240,
             key: const Key('receive-qr-surface'),
             color: _white,
             child: _hasWalletAddress
@@ -5570,7 +5586,7 @@ class _ReceivePageContent extends StatelessWidget {
                         data: walletAddress!,
                         version: QrVersions.auto,
                         errorCorrectionLevel: QrErrorCorrectLevel.H,
-                        size: 288,
+                        size: 240,
                         padding: const EdgeInsets.all(8),
                         backgroundColor: _white,
                         eyeStyle: const QrEyeStyle(
@@ -5584,8 +5600,8 @@ class _ReceivePageContent extends StatelessWidget {
                         semanticsLabel: '收款二维码：$walletAddress',
                       ),
                       Container(
-                        width: 52,
-                        height: 52,
+                        width: 44,
+                        height: 44,
                         padding: const EdgeInsets.all(5),
                         decoration: const BoxDecoration(
                           color: _white,
@@ -5608,32 +5624,29 @@ class _ReceivePageContent extends StatelessWidget {
                   ),
           ),
         ),
-        const SizedBox(height: 38),
+        const SizedBox(height: 26),
         Text(
           '收款地址',
           textAlign: TextAlign.center,
           style: TextStyle(
             color: palette.mutedText,
-            fontSize: AcoTypography.titleLarge,
+            fontSize: AcoTypography.bodyEmphasis,
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 18),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               walletAddress ?? '钱包地址未就绪',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: palette.mutedText,
-                fontSize: AcoTypography.bodySmall,
-              ),
+              style: TextStyle(color: palette.mutedText, fontSize: 13),
             ),
           ),
         ),
-        const SizedBox(height: 64),
+        const SizedBox(height: 40),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -5725,30 +5738,13 @@ class _ScanPageState extends State<_ScanPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Row(
-                children: [
-                  AcoIconButton(
-                    key: const Key('scan-back-button'),
-                    icon: CupertinoIcons.back,
-                    palette: widget.palette,
-                    label: '返回',
-                    onPressed: () => Navigator.of(context).maybePop(),
-                    size: 26,
-                  ),
-                  Expanded(
-                    child: Text(
-                      '扫一扫',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: widget.palette.primaryText,
-                        fontSize: AcoTypography.title,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 44),
-                ],
+              padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
+              child: AcoPageHeader(
+                palette: widget.palette,
+                title: '扫一扫',
+                backButtonKey: const Key('scan-back-button'),
+                backButtonOffset: Offset.zero,
+                onBack: () => Navigator.of(context).maybePop(),
               ),
             ),
             const Spacer(flex: 3),
@@ -5901,16 +5897,16 @@ class _ReceiveAction extends StatelessWidget {
     padding: EdgeInsets.zero,
     onPressed: onPressed,
     child: SizedBox(
-      width: 72,
+      width: 64,
       child: Column(
         children: [
-          Icon(icon, color: palette.mutedText, size: 32),
-          const SizedBox(height: 10),
+          Icon(icon, color: palette.mutedText, size: 26),
+          const SizedBox(height: 7),
           Text(
             label,
             style: TextStyle(
               color: palette.mutedText,
-              fontSize: AcoTypography.body,
+              fontSize: AcoTypography.bodySmall,
             ),
           ),
         ],
@@ -6385,6 +6381,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
         palette: palette,
         title: '发现',
         onBack: () => Navigator.of(context).maybePop(),
+        backButtonOffset: const Offset(-20, 0),
       ),
       const SizedBox(height: 20),
       AcoSearch(
@@ -6701,27 +6698,42 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const AcoAvatar(size: 48),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Transform.translate(
-                    offset: const Offset(10, 0),
-                    child: AcoSearch(
-                      palette: palette,
-                      hint: '搜索帖文或消息',
-                      height: 44,
-                      variant: AcoSearchVariant.squareComposer,
-                      submitIcon: CupertinoIcons.add,
-                      onSubmit: () => _showNotice(context, '发布', '打开帖子编辑器。'),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 36,
+              child: OverflowBox(
+                alignment: Alignment.centerLeft,
+                maxWidth: double.infinity,
+                maxHeight: 36,
+                child: Transform.translate(
+                  offset: const Offset(-11, 0),
+                  child: SizedBox(
+                    width: MediaQuery.sizeOf(context).width - 54,
+                    child: Row(
+                      children: [
+                        const AcoAvatar(size: 36),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Transform.translate(
+                            offset: const Offset(10, 0),
+                            child: AcoSearch(
+                              palette: palette,
+                              hint: '搜索帖文或消息',
+                              height: 35,
+                              variant: AcoSearchVariant.squareComposer,
+                              submitIcon: CupertinoIcons.add,
+                              onSubmit: () =>
+                                  _showNotice(context, '发布', '打开帖子编辑器。'),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -6729,7 +6741,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   '推荐',
                   style: TextStyle(
                     color: _showLive ? palette.mutedText : palette.primaryText,
-                    fontSize: AcoTypography.title,
+                    fontSize: AcoTypography.body,
                     fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
                   ),
                 ),
@@ -6741,7 +6753,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                       '好友',
                       style: TextStyle(
                         color: palette.mutedText,
-                        fontSize: AcoTypography.title,
+                        fontSize: AcoTypography.body,
                       ),
                     ),
                     const Positioned(
@@ -6756,14 +6768,29 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   '直播',
                   style: TextStyle(
                     color: _showLive ? palette.primaryText : palette.mutedText,
-                    fontSize: AcoTypography.title,
+                    fontSize: AcoTypography.body,
                     fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
-            Container(height: 1, color: palette.border),
+            SizedBox(
+              height: 1,
+              child: OverflowBox(
+                alignment: Alignment.centerLeft,
+                maxWidth: double.infinity,
+                maxHeight: 1,
+                child: Transform.translate(
+                  offset: const Offset(-35, 0),
+                  child: SizedBox(
+                    width: MediaQuery.sizeOf(context).width,
+                    height: 1,
+                    child: ColoredBox(color: palette.border),
+                  ),
+                ),
+              ),
+            ),
             if (_showLive)
               ..._buildLiveContent(palette)
             else ...[
@@ -6789,7 +6816,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         ),
         Positioned(
           right: 22,
-          bottom: 22,
+          bottom: 0,
           child: Semantics(
             button: true,
             label: '创建直播',
@@ -6929,18 +6956,13 @@ class _ComingSoonPage extends StatelessWidget {
   final AcoPalette palette;
 
   @override
-  Widget build(BuildContext context) => _DetailScaffold(
-    palette: palette,
-    title: 'Coming Soon',
-    showBack: false,
-    child: Center(
-      child: Text(
-        'Coming Soon',
-        style: TextStyle(
-          color: palette.mutedText,
-          fontSize: AcoTypography.displaySmall,
-          fontWeight: FontWeight.w600,
-        ),
+  Widget build(BuildContext context) => Center(
+    child: Text(
+      'Coming Soon',
+      style: TextStyle(
+        color: palette.mutedText,
+        fontSize: AcoTypography.displaySmall,
+        fontWeight: FontWeight.w600,
       ),
     ),
   );
@@ -7281,11 +7303,11 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                           placeholder: '输入直播主题',
                           placeholderStyle: TextStyle(
                             color: palette.mutedText,
-                            fontSize: AcoTypography.title,
+                            fontSize: AcoTypography.body,
                           ),
                           style: TextStyle(
                             color: palette.primaryText,
-                            fontSize: AcoTypography.bodyEmphasis,
+                            fontSize: AcoTypography.body,
                           ),
                           decoration: null,
                         ),
@@ -7296,7 +7318,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                           '${_titleController.text.length}/60',
                           style: TextStyle(
                             color: palette.mutedText,
-                            fontSize: AcoTypography.bodySmall,
+                            fontSize: AcoTypography.caption,
                           ),
                         ),
                       ),
@@ -7380,7 +7402,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                     '*',
                                     style: TextStyle(
                                       color: _danger,
-                                      fontSize: AcoTypography.bodyEmphasis,
+                                      fontSize: AcoTypography.body,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -7389,7 +7411,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                     hasCover ? '更换封面' : '上传封面',
                                     style: TextStyle(
                                       color: palette.primaryText,
-                                      fontSize: AcoTypography.bodyEmphasis,
+                                      fontSize: AcoTypography.body,
                                     ),
                                   ),
                                 ],
@@ -7400,7 +7422,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                   '已选择直播封面',
                                   style: TextStyle(
                                     color: palette.mutedText,
-                                    fontSize: AcoTypography.bodySmall,
+                                    fontSize: AcoTypography.caption,
                                   ),
                                 )
                               else
@@ -7408,7 +7430,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                   '建议使用横向图片',
                                   style: TextStyle(
                                     color: palette.mutedText,
-                                    fontSize: AcoTypography.bodySmall,
+                                    fontSize: AcoTypography.caption,
                                   ),
                                 ),
                             ],
@@ -7451,7 +7473,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                             _isEditing ? '保存' : '确认',
                             style: TextStyle(
                               color: canConfirm ? _black : palette.mutedText,
-                              fontSize: AcoTypography.bodyEmphasis,
+                              fontSize: AcoTypography.body,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -7505,7 +7527,7 @@ class _CreateLiveRow extends StatelessWidget {
                   title,
                   style: TextStyle(
                     color: palette.primaryText,
-                    fontSize: AcoTypography.bodyEmphasis,
+                    fontSize: AcoTypography.body,
                   ),
                 ),
                 if (subtitle != null) ...[
@@ -7514,7 +7536,7 @@ class _CreateLiveRow extends StatelessWidget {
                     subtitle!,
                     style: TextStyle(
                       color: palette.mutedText,
-                      fontSize: AcoTypography.bodySmall,
+                      fontSize: AcoTypography.caption,
                     ),
                   ),
                 ],
@@ -7526,7 +7548,7 @@ class _CreateLiveRow extends StatelessWidget {
               value!,
               style: TextStyle(
                 color: highlighted ? palette.accent : palette.mutedText,
-                fontSize: AcoTypography.bodyEmphasis,
+                fontSize: AcoTypography.body,
               ),
             ),
             const SizedBox(width: 8),
@@ -8283,7 +8305,11 @@ class _ProfilePage extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
     children: [
-      AcoPageHeader(palette: palette, onBack: onBack),
+      AcoPageHeader(
+        palette: palette,
+        onBack: onBack,
+        backButtonOffset: const Offset(-16, 0),
+      ),
       const SizedBox(height: 18),
       Row(
         children: [
@@ -8543,7 +8569,12 @@ class _ProfileQrPage extends StatelessWidget {
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AcoPageHeader(palette: palette, title: '我的二维码', onBack: onBack),
+        AcoPageHeader(
+          palette: palette,
+          title: '我的二维码',
+          onBack: onBack,
+          backButtonOffset: const Offset(-20, 0),
+        ),
         const SizedBox(height: 18),
         Row(
           children: [
@@ -9134,8 +9165,7 @@ class _DetailScaffold extends StatelessWidget {
     this.right,
     this.onBack,
     this.titleFollowsBack = false,
-    this.showBack = true,
-    this.headerTopPadding = 4,
+    this.headerTopPadding = 0,
   });
   final AcoPalette palette;
   final Widget child;
@@ -9143,22 +9173,19 @@ class _DetailScaffold extends StatelessWidget {
   final Widget? right;
   final VoidCallback? onBack;
   final bool titleFollowsBack;
-  final bool showBack;
   final double headerTopPadding;
   @override
   Widget build(BuildContext context) => Column(
     children: [
       Padding(
-        padding: EdgeInsets.fromLTRB(20, headerTopPadding, 28, 0),
+        padding: EdgeInsets.fromLTRB(8, headerTopPadding, 28, 0),
         child: AcoPageHeader(
           palette: palette,
           title: title,
           right: right,
           titleFollowsBack: titleFollowsBack,
           backButtonOffset: Offset.zero,
-          onBack: showBack
-              ? onBack ?? () => Navigator.of(context).maybePop()
-              : null,
+          onBack: onBack ?? () => Navigator.of(context).maybePop(),
         ),
       ),
       Expanded(child: child),
@@ -10435,7 +10462,7 @@ class _LiveCard extends StatelessWidget {
             child: Image.network(
               _liveCoverUrl(session.coverUrl),
               width: double.infinity,
-              height: 220,
+              height: 160,
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
                   _LiveCoverPlaceholder(palette: palette),
