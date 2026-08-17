@@ -10750,10 +10750,11 @@ class _LiveRoomHostCard extends StatelessWidget {
           ),
           child: active
               ? Center(
-                  child: SvgPicture.asset(
-                    'assets/icons/live_mic.svg',
+                  child: Image.asset(
+                    'assets/icons/live_mic.png',
                     width: 14,
                     height: 14,
+                    fit: BoxFit.contain,
                   ),
                 )
               : const Icon(CupertinoIcons.mic_slash, color: _black, size: 14),
