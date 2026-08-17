@@ -513,7 +513,10 @@ void main() {
         matching: find.byType(CupertinoButton),
       ),
     );
-    expect(swapButton.onPressed, isNull);
+    expect(swapButton.onPressed, isNotNull);
+    await tester.tap(find.text('闪兑'));
+    await tester.pumpAndSettle();
+    expect(find.text('comming soon'), findsOneWidget);
 
     for (final label in ['NFT', '最近活动']) {
       final tab = tester.widget<CupertinoButton>(
@@ -543,7 +546,7 @@ void main() {
 
     final backButton = find.bySemanticsLabel('返回');
     expect(tester.getSize(backButton), const Size(44, 44));
-    expect(tester.getRect(backButton).left, closeTo(20, 1));
+    expect(tester.getRect(backButton).left, closeTo(8, 1));
   });
 
   testWidgets('keeps wallet header controls visible for a long wallet name', (
@@ -691,7 +694,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.getSize(find.bySemanticsLabel('返回')), const Size(44, 44));
-    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(28, 1));
+    expect(tester.getRect(find.bySemanticsLabel('返回')).left, closeTo(8, 1));
     expect(find.byKey(const Key('wallet-detail-chain-logo')), findsOneWidget);
     expect(find.text('导出助记词'), findsOneWidget);
     expect(find.text('导出私钥'), findsOneWidget);
@@ -925,7 +928,7 @@ void main() {
     expect(find.bySemanticsLabel('收款二维码：$address'), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const Key('receive-qr-surface'))),
-      const Size(288, 288),
+      const Size(240, 240),
     );
     await tester.scrollUntilVisible(find.text('分享'), 120);
     expect(find.text('分享'), findsOneWidget);
@@ -1008,6 +1011,8 @@ void main() {
 
     final title = tester.widget<Text>(find.text('扫一扫'));
     expect(title.style?.color, const Color(0xFF151515));
+    expect(title.style?.fontSize, AcoTypography.bodyEmphasis);
+    expect(title.style?.fontWeight, FontWeight.w600);
 
     final scanFrame = tester.widget<Container>(
       find.byKey(const ValueKey('scan-frame')),
@@ -1062,7 +1067,7 @@ void main() {
 
     final submit = find.byKey(const Key('square-search-submit'));
     expect(submit, findsOneWidget);
-    expect(tester.getSize(submit), const Size(64, 42));
+    expect(tester.getSize(submit), const Size(56, 36));
 
     final decoration =
         tester.widget<Container>(submit).decoration! as BoxDecoration;
