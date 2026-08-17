@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
@@ -1067,7 +1068,15 @@ void main() {
 
     final submit = find.byKey(const Key('square-search-submit'));
     expect(submit, findsOneWidget);
-    expect(tester.getSize(submit), const Size(56, 36));
+    expect(
+      tester
+          .widget<CupertinoButton>(
+            find.ancestor(of: submit, matching: find.byType(CupertinoButton)),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(tester.getSize(submit), const Size(48, 33));
 
     final decoration =
         tester.widget<Container>(submit).decoration! as BoxDecoration;
