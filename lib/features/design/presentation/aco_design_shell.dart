@@ -10751,13 +10751,18 @@ class _LiveRoomHostCard extends StatelessWidget {
           child: active
               ? Center(
                   child: Image.asset(
-                    'assets/icons/live_mic.png',
-                    width: 14,
-                    height: 14,
+                    'assets/icons/live_speaking.png',
+                    width: 21,
+                    height: 21,
                     fit: BoxFit.contain,
                   ),
                 )
-              : const Icon(CupertinoIcons.mic_slash, color: _black, size: 14),
+              : Image.asset(
+                  'assets/icons/live_muted.png',
+                  width: 21,
+                  height: 21,
+                  fit: BoxFit.contain,
+                ),
         ),
       ),
     ],
@@ -10977,14 +10982,17 @@ class _LiveRoomParticipantCard extends StatelessWidget {
               size: compact ? 36 : 58,
               assetPath: _liveRoomListenerAvatarAsset,
             ),
-            if (participant.role != 'speaker' || participant.muted)
+            if (participant.role == 'speaker' && !participant.muted)
               Positioned(
                 right: -2,
                 bottom: -2,
-                child: _MutedMicrophoneBadge(
-                  palette: palette,
-                  compact: compact,
-                ),
+                child: _SpeakingBadge(compact: compact),
+              )
+            else
+              Positioned(
+                right: -2,
+                bottom: -2,
+                child: _MutedMicrophoneBadge(compact: compact),
               ),
           ],
         ),
@@ -11016,28 +11024,35 @@ class _LiveRoomParticipantCard extends StatelessWidget {
 }
 
 class _MutedMicrophoneBadge extends StatelessWidget {
-  const _MutedMicrophoneBadge({required this.palette, this.compact = false});
+  const _MutedMicrophoneBadge({this.compact = false});
 
-  final AcoPalette palette;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final badgeSize = compact ? 17.0 : 21.0;
-    final iconSize = compact ? 10.0 : 12.0;
-    return Container(
-      width: badgeSize,
-      height: badgeSize,
-      decoration: BoxDecoration(
-        color: palette.mutedText,
-        shape: BoxShape.circle,
-        border: Border.all(color: palette.background, width: 2),
-      ),
-      child: Icon(
-        CupertinoIcons.mic_slash_fill,
-        color: palette.background,
-        size: iconSize,
-      ),
+    final size = compact ? 17.0 : 21.0;
+    return Image.asset(
+      'assets/icons/live_muted.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
+    );
+  }
+}
+
+class _SpeakingBadge extends StatelessWidget {
+  const _SpeakingBadge({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = compact ? 17.0 : 21.0;
+    return Image.asset(
+      'assets/icons/live_speaking.png',
+      width: size,
+      height: size,
+      fit: BoxFit.contain,
     );
   }
 }
