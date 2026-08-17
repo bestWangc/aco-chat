@@ -6539,6 +6539,9 @@ class _SquareFeedPage extends StatefulWidget {
 }
 
 class _SquareFeedPageState extends State<_SquareFeedPage> {
+  static const _contentHorizontalInset = 35.0;
+  static const _liveListHorizontalInset = 25.0;
+
   final bool _showLive = true;
   final AccountApiClient _apiClient = AccountApiClient();
   late Future<List<LiveSession>> _lives;
@@ -6678,140 +6681,161 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       children: [
         ListView(
           padding: EdgeInsets.fromLTRB(
-            35,
+            0,
             _rootPageTopInset * headerScale,
-            35,
+            0,
             96,
           ),
           children: [
-            SizedBox(
-              height: 46 * headerScale,
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: Padding(
-                  padding: EdgeInsets.only(right: headerRightInset),
-                  child: AcoTopActions(
-                    palette: palette,
-                    onOpen: onOpen,
-                    scale: headerScale,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: _contentHorizontalInset,
+              ),
+              child: SizedBox(
+                height: 46 * headerScale,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: EdgeInsets.only(right: headerRightInset),
+                    child: AcoTopActions(
+                      palette: palette,
+                      onOpen: onOpen,
+                      scale: headerScale,
+                    ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 8),
-            SizedBox(
-              height: 36,
-              child: OverflowBox(
-                alignment: Alignment.centerLeft,
-                maxWidth: double.infinity,
-                maxHeight: 36,
-                child: Transform.translate(
-                  offset: const Offset(-11, 0),
-                  child: SizedBox(
-                    width: MediaQuery.sizeOf(context).width - 54,
-                    child: Row(
-                      children: [
-                        const AcoAvatar(size: 36),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Transform.translate(
-                            offset: const Offset(10, 0),
-                            child: AcoSearch(
-                              palette: palette,
-                              hint: '搜索帖文或消息',
-                              height: 35,
-                              variant: AcoSearchVariant.squareComposer,
-                              submitIcon: CupertinoIcons.add,
-                              onSubmit: () =>
-                                  _showNotice(context, '发布', '打开帖子编辑器。'),
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: _contentHorizontalInset,
+              ),
+              child: SizedBox(
+                height: 36,
+                child: OverflowBox(
+                  alignment: Alignment.centerLeft,
+                  maxWidth: double.infinity,
+                  maxHeight: 36,
+                  child: Transform.translate(
+                    offset: const Offset(-11, 0),
+                    child: SizedBox(
+                      width: MediaQuery.sizeOf(context).width - 54,
+                      child: Row(
+                        children: [
+                          const AcoAvatar(size: 36),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Transform.translate(
+                              offset: const Offset(10, 0),
+                              child: AcoSearch(
+                                palette: palette,
+                                hint: '搜索帖文或消息',
+                                height: 35,
+                                variant: AcoSearchVariant.squareComposer,
+                                submitIcon: CupertinoIcons.add,
+                                onSubmit: () =>
+                                    _showNotice(context, '发布', '打开帖子编辑器。'),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
             const SizedBox(height: 18),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  '推荐',
-                  style: TextStyle(
-                    color: _showLive ? palette.mutedText : palette.primaryText,
-                    fontSize: AcoTypography.body,
-                    fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: _contentHorizontalInset,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '推荐',
+                    style: TextStyle(
+                      color: _showLive
+                          ? palette.mutedText
+                          : palette.primaryText,
+                      fontSize: AcoTypography.body,
+                      fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 54),
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Text(
-                      '好友',
-                      style: TextStyle(
-                        color: palette.mutedText,
-                        fontSize: AcoTypography.body,
+                  const SizedBox(width: 54),
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Text(
+                        '好友',
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: AcoTypography.body,
+                        ),
                       ),
-                    ),
-                    const Positioned(
-                      top: -10,
-                      right: -24,
-                      child: _GreenBadge(label: '77'),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 54),
-                Text(
-                  '直播',
-                  style: TextStyle(
-                    color: _showLive ? palette.primaryText : palette.mutedText,
-                    fontSize: AcoTypography.body,
-                    fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
+                      const Positioned(
+                        top: -10,
+                        right: -24,
+                        child: _GreenBadge(label: '77'),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(width: 54),
+                  Text(
+                    '直播',
+                    style: TextStyle(
+                      color: _showLive
+                          ? palette.primaryText
+                          : palette.mutedText,
+                      fontSize: AcoTypography.body,
+                      fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              height: 1,
-              child: OverflowBox(
-                alignment: Alignment.centerLeft,
-                maxWidth: double.infinity,
-                maxHeight: 1,
-                child: Transform.translate(
-                  offset: const Offset(-35, 0),
-                  child: SizedBox(
-                    width: MediaQuery.sizeOf(context).width,
-                    height: 1,
-                    child: ColoredBox(color: palette.border),
-                  ),
-                ),
-              ),
-            ),
+            SizedBox(height: 1, child: ColoredBox(color: palette.border)),
             if (_showLive)
-              ..._buildLiveContent(palette)
-            else ...[
-              const SizedBox(height: 32),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _liveListHorizontalInset,
+                ),
+                child: Column(children: _buildLiveContent(palette)),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _contentHorizontalInset,
+                ),
+                child: Column(
                   children: [
-                    _TopicChip(palette: palette, label: '买买买!!', width: 164),
-                    const SizedBox(width: 10),
-                    _TopicChip(
-                      palette: palette,
-                      label: 'ALD! V587!',
-                      width: 184,
+                    const SizedBox(height: 32),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _TopicChip(
+                            palette: palette,
+                            label: '买买买!!',
+                            width: 164,
+                          ),
+                          const SizedBox(width: 10),
+                          _TopicChip(
+                            palette: palette,
+                            label: 'ALD! V587!',
+                            width: 184,
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(height: 32),
+                    _PostCard(palette: palette),
                   ],
                 ),
               ),
-              const SizedBox(height: 32),
-              _PostCard(palette: palette),
-            ],
           ],
         ),
         Positioned(
@@ -10373,74 +10397,77 @@ class _LiveCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Image.asset(
               palette.dark
                   ? 'assets/icons/live_brand_dark.png'
                   : 'assets/icons/live_brand_light.png',
-              width: 52,
-              height: 52,
+              width: 44,
+              height: 44,
               fit: BoxFit.contain,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 16),
             Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    session.title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: palette.primaryText,
-                      fontSize: AcoTypography.body,
-                      fontWeight: FontWeight.w600,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      session.title,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: AcoTypography.body,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  if (session.status.isNotEmpty) ...[
-                    const SizedBox(height: 5),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _statusBackground,
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            _statusLabel,
-                            style: TextStyle(
-                              color: _statusColor,
-                              fontSize: AcoTypography.caption,
-                              fontWeight: FontWeight.w700,
+                    if (session.status.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
                             ),
-                          ),
-                        ),
-                        if (scheduledStartLabel != null) ...[
-                          const SizedBox(width: 7),
-                          Flexible(
+                            decoration: BoxDecoration(
+                              color: _statusBackground,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                             child: Text(
-                              scheduledStartLabel,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                              _statusLabel,
                               style: TextStyle(
-                                color: palette.primaryText,
+                                color: _statusColor,
                                 fontSize: AcoTypography.caption,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                           ),
+                          if (scheduledStartLabel != null) ...[
+                            const SizedBox(width: 7),
+                            Flexible(
+                              child: Text(
+                                scheduledStartLabel,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: palette.primaryText,
+                                  fontSize: AcoTypography.caption,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
             if (onEdit != null) ...[
