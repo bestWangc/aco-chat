@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <application
-        android:label="aco_chat"
+        android:label="Aco Chat"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
