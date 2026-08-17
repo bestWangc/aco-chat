@@ -216,6 +216,21 @@ class AccountSession {
         token: await _requireToken(),
       );
 
+  Future<void> setLiveParticipantMute(int liveId, bool muted) async =>
+      _apiClient.setLiveParticipantMute(
+        liveId: liveId,
+        muted: muted,
+        token: await _requireToken(),
+      );
+
+  Future<void> setLiveSpeakerMute(int liveId, int userId, bool muted) async =>
+      _apiClient.setLiveSpeakerMute(
+        liveId: liveId,
+        userId: userId,
+        muted: muted,
+        token: await _requireToken(),
+      );
+
   Future<void> setLiveChatMute(int liveId, bool muted) async =>
       _apiClient.setLiveChatMute(
         liveId: liveId,

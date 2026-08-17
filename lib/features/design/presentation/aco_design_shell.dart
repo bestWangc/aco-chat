@@ -19,6 +19,7 @@ import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
@@ -6606,6 +6607,16 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     });
   }
 
+  Future<void> _refreshLives() async {
+    final refreshFuture = _loadLives();
+    setState(() => _lives = refreshFuture);
+    try {
+      await refreshFuture;
+    } catch (_) {
+      // The FutureBuilder below presents the existing load error state.
+    }
+  }
+
   @override
   void dispose() {
     _apiClient.close();
@@ -6724,163 +6735,171 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
     return Stack(
       children: [
-        ListView(
-          padding: EdgeInsets.fromLTRB(
-            0,
-            _rootPageTopInset * headerScale,
-            0,
-            96,
-          ),
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _contentHorizontalInset,
-              ),
-              child: SizedBox(
-                height: 46 * headerScale,
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                    padding: EdgeInsets.only(right: headerRightInset),
-                    child: AcoTopActions(
-                      palette: palette,
-                      onOpen: onOpen,
-                      scale: headerScale,
-                    ),
-                  ),
-                ),
-              ),
+        material.RefreshIndicator.adaptive(
+          onRefresh: _refreshLives,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(
+              0,
+              _rootPageTopInset * headerScale,
+              0,
+              96,
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _contentHorizontalInset,
-              ),
-              child: SizedBox(
-                height: 36,
-                child: OverflowBox(
-                  alignment: Alignment.centerLeft,
-                  maxWidth: double.infinity,
-                  maxHeight: 36,
-                  child: Transform.translate(
-                    offset: const Offset(-11, 0),
-                    child: SizedBox(
-                      width: MediaQuery.sizeOf(context).width - 54,
-                      child: Row(
-                        children: [
-                          const AcoAvatar(size: 36),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Transform.translate(
-                              offset: const Offset(10, 0),
-                              child: AcoSearch(
-                                palette: palette,
-                                hint: '搜索帖文或消息',
-                                height: 35,
-                                variant: AcoSearchVariant.squareComposer,
-                                submitIcon: CupertinoIcons.add,
-                                showSubmit: true,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: _contentHorizontalInset,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    '推荐',
-                    style: TextStyle(
-                      color: _showLive
-                          ? palette.mutedText
-                          : palette.primaryText,
-                      fontSize: AcoTypography.body,
-                      fontWeight: _showLive ? FontWeight.w400 : FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(width: 54),
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Text(
-                        '好友',
-                        style: TextStyle(
-                          color: palette.mutedText,
-                          fontSize: AcoTypography.body,
-                        ),
-                      ),
-                      const Positioned(
-                        top: -10,
-                        right: -24,
-                        child: Offstage(child: _GreenBadge(label: '77')),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 54),
-                  Text(
-                    '直播',
-                    style: TextStyle(
-                      color: _showLive
-                          ? palette.primaryText
-                          : palette.mutedText,
-                      fontSize: AcoTypography.body,
-                      fontWeight: _showLive ? FontWeight.w700 : FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(height: 1, child: ColoredBox(color: palette.border)),
-            if (_showLive)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: _liveListHorizontalInset,
-                ),
-                child: Column(children: _buildLiveContent(palette)),
-              )
-            else
+            children: [
               Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: _contentHorizontalInset,
                 ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 32),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _TopicChip(
-                            palette: palette,
-                            label: '买买买!!',
-                            width: 164,
-                          ),
-                          const SizedBox(width: 10),
-                          _TopicChip(
-                            palette: palette,
-                            label: 'ALD! V587!',
-                            width: 184,
-                          ),
-                        ],
+                child: SizedBox(
+                  height: 46 * headerScale,
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: Padding(
+                      padding: EdgeInsets.only(right: headerRightInset),
+                      child: AcoTopActions(
+                        palette: palette,
+                        onOpen: onOpen,
+                        scale: headerScale,
                       ),
                     ),
-                    const SizedBox(height: 32),
-                    _PostCard(palette: palette),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _contentHorizontalInset,
+                ),
+                child: SizedBox(
+                  height: 36,
+                  child: OverflowBox(
+                    alignment: Alignment.centerLeft,
+                    maxWidth: double.infinity,
+                    maxHeight: 36,
+                    child: Transform.translate(
+                      offset: const Offset(-11, 0),
+                      child: SizedBox(
+                        width: MediaQuery.sizeOf(context).width - 54,
+                        child: Row(
+                          children: [
+                            const AcoAvatar(size: 36),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Transform.translate(
+                                offset: const Offset(10, 0),
+                                child: AcoSearch(
+                                  palette: palette,
+                                  hint: '搜索帖文或消息',
+                                  height: 35,
+                                  variant: AcoSearchVariant.squareComposer,
+                                  submitIcon: CupertinoIcons.add,
+                                  showSubmit: true,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: _contentHorizontalInset,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      '推荐',
+                      style: TextStyle(
+                        color: _showLive
+                            ? palette.mutedText
+                            : palette.primaryText,
+                        fontSize: AcoTypography.body,
+                        fontWeight: _showLive
+                            ? FontWeight.w400
+                            : FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 54),
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Text(
+                          '好友',
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.body,
+                          ),
+                        ),
+                        const Positioned(
+                          top: -10,
+                          right: -24,
+                          child: Offstage(child: _GreenBadge(label: '77')),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 54),
+                    Text(
+                      '直播',
+                      style: TextStyle(
+                        color: _showLive
+                            ? palette.primaryText
+                            : palette.mutedText,
+                        fontSize: AcoTypography.body,
+                        fontWeight: _showLive
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
+                    ),
                   ],
                 ),
               ),
-          ],
+              const SizedBox(height: 16),
+              SizedBox(height: 1, child: ColoredBox(color: palette.border)),
+              if (_showLive)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: _liveListHorizontalInset,
+                  ),
+                  child: Column(children: _buildLiveContent(palette)),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: _contentHorizontalInset,
+                  ),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 32),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _TopicChip(
+                              palette: palette,
+                              label: '买买买!!',
+                              width: 164,
+                            ),
+                            const SizedBox(width: 10),
+                            _TopicChip(
+                              palette: palette,
+                              label: 'ALD! V587!',
+                              width: 184,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      _PostCard(palette: palette),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
         Positioned(
           right: 22,
@@ -7665,6 +7684,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _handRaiseNoticeVisible = false;
   LiveRoom? _room;
   List<LiveMessage> _messages = const [];
+  final Set<int> _knownParticipantIds = <int>{};
   WebSocketChannel? _eventChannel;
   StreamSubscription<dynamic>? _eventSubscription;
   Timer? _reconnectTimer;
@@ -7774,6 +7794,34 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   void _applyRoomSnapshot(LiveRoom room) {
     if (!mounted) return;
+    final participants = [room.host, ...room.speakers, ...room.listeners];
+    final participantIds = participants.map(
+      (participant) => participant.userId,
+    );
+    final newParticipants = _knownParticipantIds.isEmpty
+        ? const <LiveParticipant>[]
+        : participants
+              .where(
+                (participant) =>
+                    !_knownParticipantIds.contains(participant.userId),
+              )
+              .toList(growable: false);
+    _knownParticipantIds
+      ..clear()
+      ..addAll(participantIds);
+    if (newParticipants.isNotEmpty) {
+      final timestamp = DateTime.now();
+      _appendMessages(
+        newParticipants.indexed.map(
+          (entry) => LiveMessage(
+            id: -timestamp.microsecondsSinceEpoch - entry.$1,
+            nickname: '',
+            text: '欢迎 ${entry.$2.nickname} 进入直播间',
+            createdAt: timestamp,
+          ),
+        ),
+      );
+    }
     setState(() {
       _room = room;
       _muted = room.viewerMuted;
@@ -7863,6 +7911,65 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
+  Future<void> _toggleMicrophone() async {
+    final live = widget.live;
+    if (live == null) return;
+    final nextMuted = !_muted;
+    setState(() => _muted = nextMuted);
+    try {
+      await _accountSession.setLiveParticipantMute(live.id, nextMuted);
+    } on AccountApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _muted = !nextMuted);
+      _showNotice(context, '设置麦克风失败', error.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _muted = !nextMuted);
+      _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
+    final shouldMute = !speaker.muted;
+    final actionLabel = shouldMute ? '静音' : '解除静音';
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text('$actionLabel ${speaker.nickname}'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text('是否要$actionLabel该用户？'),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            textStyle: TextStyle(color: widget.palette.accent),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: shouldMute,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.setLiveSpeakerMute(
+        live.id,
+        speaker.userId,
+        shouldMute,
+      );
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '设置麦克风失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
+    }
+  }
+
   Future<void> _setChatMute(bool muted) async {
     final live = widget.live;
     if (live == null) return;
@@ -7898,6 +8005,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               onReject: (userId) {
                 Navigator.of(dialogContext).pop();
                 unawaited(_rejectSpeakerRequest(userId));
+              },
+              onRejectAll: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(_rejectAllSpeakerRequests(room.raisedHands));
               },
               maxHeight: 170,
             ),
@@ -8041,20 +8152,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     );
   }
 
-  Future<void> _removeSpeaker(int userId) async {
-    await _updateSpeaker(
-      userId: userId,
-      action: _accountSession.removeLiveSpeaker,
-      failureTitle: '移除失败',
-    );
-  }
-
   Future<void> _rejectSpeakerRequest(int userId) async {
     await _updateSpeaker(
       userId: userId,
       action: _accountSession.removeLiveSpeaker,
       failureTitle: '拒绝失败',
     );
+  }
+
+  Future<void> _rejectAllSpeakerRequests(List<LiveParticipant> users) async {
+    for (final user in users) {
+      await _rejectSpeakerRequest(user.userId);
+    }
   }
 
   Future<void> _updateSpeaker({
@@ -8196,21 +8305,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                 ],
                               ),
                             ),
-                            if (room.speakers.isNotEmpty)
-                              _LiveRoomParticipantStage(
+                            if (room.speakers.isNotEmpty ||
+                                room.listeners.isNotEmpty)
+                              _LiveRoomParticipantSection(
                                 palette: palette,
                                 speakers: room.speakers,
-                              ),
-                            if (room.listeners.isNotEmpty)
-                              _LiveRoomListenerSection(
-                                palette: palette,
                                 listeners: room.listeners,
+                                onSpeakerTap: isHost
+                                    ? _confirmSpeakerMute
+                                    : null,
                               ),
-                            _LiveRoomStatus(
-                              palette: palette,
-                              room: room,
-                              onRemove: isHost ? _removeSpeaker : null,
-                            ),
                           ] else if (_roomLoading)
                             const Padding(
                               padding: EdgeInsets.only(top: 48),
@@ -8244,9 +8348,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                 audioMuted: audioMuted,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
-                onMic: canSpeak && !audioMuted
-                    ? () => setState(() => _muted = !_muted)
-                    : null,
+                onMic: canSpeak && !audioMuted ? _toggleMicrophone : null,
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
                 controller: _messageController,
                 onEmojiPressed: _toggleEmojiPicker,
@@ -10857,23 +10959,23 @@ class _RaisedHandIndicator extends StatelessWidget {
         decoration: BoxDecoration(
           color: palette.dark ? const Color(0xE6292929) : palette.surfaceRaised,
           border: Border.all(color: palette.accent.withValues(alpha: .52)),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(18),
           boxShadow: const [
             BoxShadow(
               color: Color(0x40000000),
-              blurRadius: 12,
-              offset: Offset(0, 4),
+              blurRadius: 8,
+              offset: Offset(0, 3),
             ),
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(9, 7, 11, 7),
+          padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 28,
-                height: 28,
+                width: 24,
+                height: 24,
                 decoration: BoxDecoration(
                   color: palette.accent,
                   shape: BoxShape.circle,
@@ -10881,18 +10983,18 @@ class _RaisedHandIndicator extends StatelessWidget {
                 child: Center(
                   child: Image.asset(
                     'assets/icons/live_hand.png',
-                    width: 15,
-                    height: 15,
+                    width: 13,
+                    height: 13,
                     fit: BoxFit.contain,
                   ),
                 ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(width: 5),
               Text(
                 '$count',
                 style: TextStyle(
                   color: palette.accent,
-                  fontSize: AcoTypography.bodySmall,
+                  fontSize: AcoTypography.caption,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -10904,154 +11006,142 @@ class _RaisedHandIndicator extends StatelessWidget {
   );
 }
 
-class _LiveRoomParticipantStage extends StatelessWidget {
-  const _LiveRoomParticipantStage({
+class _LiveRoomParticipantSection extends StatelessWidget {
+  const _LiveRoomParticipantSection({
     required this.palette,
     required this.speakers,
+    required this.listeners,
+    this.onSpeakerTap,
   });
 
   final AcoPalette palette;
   final List<LiveParticipant> speakers;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
-    child: Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 22,
-      runSpacing: 16,
-      children: [
-        for (final participant in speakers)
-          _LiveRoomParticipantCard(palette: palette, participant: participant),
-      ],
-    ),
-  );
-}
-
-class _LiveRoomListenerSection extends StatelessWidget {
-  const _LiveRoomListenerSection({
-    required this.palette,
-    required this.listeners,
-  });
-
-  final AcoPalette palette;
   final List<LiveParticipant> listeners;
+  final ValueChanged<LiveParticipant>? onSpeakerTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(18, 8, 18, 12),
-    child: SizedBox(
-      width: double.infinity,
-      child: Wrap(
-        alignment: WrapAlignment.start,
-        spacing: 16,
-        runSpacing: 14,
-        children: [
-          for (final listener in listeners)
-            _LiveRoomParticipantCard(
-              palette: palette,
-              participant: listener,
-              compact: true,
-            ),
-        ],
+  Widget build(BuildContext context) {
+    final participants = [...speakers, ...listeners]
+      ..sort(
+        (left, right) =>
+            (left.role == 'speaker' ? 0 : 1) -
+            (right.role == 'speaker' ? 0 : 1),
+      );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+      child: SizedBox(
+        width: double.infinity,
+        child: Wrap(
+          alignment: WrapAlignment.start,
+          spacing: 16,
+          runSpacing: 14,
+          children: [
+            for (final participant in participants)
+              _LiveRoomParticipantCard(
+                palette: palette,
+                participant: participant,
+                onSpeakerTap: onSpeakerTap,
+              ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _LiveRoomParticipantCard extends StatelessWidget {
   const _LiveRoomParticipantCard({
     required this.palette,
     required this.participant,
-    this.compact = false,
+    this.onSpeakerTap,
   });
 
   final AcoPalette palette;
   final LiveParticipant participant;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: compact ? 64 : 86,
-    child: Column(
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            AcoAvatar(
-              size: compact ? 36 : 58,
-              assetPath: _liveRoomListenerAvatarAsset,
-            ),
-            if (participant.role == 'speaker' && !participant.muted)
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: _SpeakingBadge(compact: compact),
-              )
-            else
-              Positioned(
-                right: -2,
-                bottom: -2,
-                child: _MutedMicrophoneBadge(compact: compact),
-              ),
-          ],
-        ),
-        const SizedBox(height: 7),
-        Text(
-          participant.nickname,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: AcoTypography.bodySmall,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          participant.role == 'speaker'
-              ? (participant.muted ? '已静音' : '发言中')
-              : '听众',
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.caption,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _MutedMicrophoneBadge extends StatelessWidget {
-  const _MutedMicrophoneBadge({this.compact = false});
-
-  final bool compact;
+  final ValueChanged<LiveParticipant>? onSpeakerTap;
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 17.0 : 21.0;
+    final canMuteSpeaker =
+        participant.role == 'speaker' && onSpeakerTap != null;
+    final avatar = AcoAvatar(size: 58, assetPath: _liveRoomListenerAvatarAsset);
+    return SizedBox(
+      width: 86,
+      child: Column(
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              if (canMuteSpeaker)
+                CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  onPressed: () => onSpeakerTap!(participant),
+                  child: avatar,
+                )
+              else
+                avatar,
+              if (participant.role == 'speaker' && !participant.muted)
+                Positioned(right: -2, bottom: -2, child: const _SpeakingBadge())
+              else
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: const _MutedMicrophoneBadge(),
+                ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          Text(
+            participant.nickname,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.bodySmall,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            participant.role == 'speaker'
+                ? (participant.muted ? '静音' : '发言中')
+                : '听众',
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.caption,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MutedMicrophoneBadge extends StatelessWidget {
+  const _MutedMicrophoneBadge();
+
+  @override
+  Widget build(BuildContext context) {
     return Image.asset(
       'assets/icons/live_muted.png',
-      width: size,
-      height: size,
+      width: 21,
+      height: 21,
       fit: BoxFit.contain,
     );
   }
 }
 
 class _SpeakingBadge extends StatelessWidget {
-  const _SpeakingBadge({required this.compact});
-
-  final bool compact;
+  const _SpeakingBadge();
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 17.0 : 21.0;
     return Image.asset(
       'assets/icons/live_speaking.png',
-      width: size,
-      height: size,
+      width: 21,
+      height: 21,
       fit: BoxFit.contain,
     );
   }
@@ -11082,33 +11172,6 @@ class _LiveRoomInfoNotice extends StatelessWidget {
   );
 }
 
-class _LiveRoomStatus extends StatelessWidget {
-  const _LiveRoomStatus({
-    required this.palette,
-    required this.room,
-    this.onRemove,
-  });
-
-  final AcoPalette palette;
-  final LiveRoom room;
-  final ValueChanged<int>? onRemove;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(18, 10, 18, 4),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _ParticipantActions(
-          users: room.speakers,
-          action: onRemove,
-          label: '停止 {name} 发言',
-        ),
-      ],
-    ),
-  );
-}
-
 class _RaisedHandRequests extends StatelessWidget {
   const _RaisedHandRequests({
     required this.palette,
@@ -11116,6 +11179,7 @@ class _RaisedHandRequests extends StatelessWidget {
     required this.onClose,
     required this.onApprove,
     required this.onReject,
+    required this.onRejectAll,
     this.maxHeight = 248,
   });
 
@@ -11124,6 +11188,7 @@ class _RaisedHandRequests extends StatelessWidget {
   final VoidCallback onClose;
   final ValueChanged<int> onApprove;
   final ValueChanged<int> onReject;
+  final VoidCallback onRejectAll;
   final double maxHeight;
 
   @override
@@ -11190,6 +11255,18 @@ class _RaisedHandRequests extends StatelessWidget {
                       color: palette.accent,
                       fontSize: AcoTypography.caption,
                       fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                CupertinoButton(
+                  padding: const EdgeInsets.only(left: 8),
+                  minimumSize: const Size(30, 28),
+                  onPressed: onRejectAll,
+                  child: Text(
+                    '全部拒绝',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.caption,
                     ),
                   ),
                 ),
@@ -11306,39 +11383,6 @@ class _RaisedHandAction extends StatelessWidget {
   );
 }
 
-class _ParticipantActions extends StatelessWidget {
-  const _ParticipantActions({
-    required this.users,
-    required this.action,
-    required this.label,
-  });
-
-  final List<LiveParticipant> users;
-  final ValueChanged<int>? action;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    if (action == null || users.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 6),
-      child: Wrap(
-        spacing: 6,
-        children: users
-            .map(
-              (user) => CupertinoButton(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: const Size(32, 32),
-                onPressed: () => action!(user.userId),
-                child: Text(label.replaceFirst('{name}', user.nickname)),
-              ),
-            )
-            .toList(growable: false),
-      ),
-    );
-  }
-}
-
 class _RoomMessage extends StatelessWidget {
   const _RoomMessage({
     required this.palette,
@@ -11349,25 +11393,44 @@ class _RoomMessage extends StatelessWidget {
   final String name;
   final String text;
   @override
-  Widget build(BuildContext context) => Align(
-    alignment: Alignment.centerLeft,
-    child: Container(
-      constraints: const BoxConstraints(maxWidth: 280),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: palette.dark ? const Color(0xFF3D3D3D) : palette.surfaceRaised,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        '$name:  $text',
-        style: TextStyle(
-          color: palette.dark ? palette.accent : palette.primaryText,
-          fontSize: AcoTypography.bodySmall,
-          height: 1.2,
+  Widget build(BuildContext context) {
+    final isSystemMessage = name.isEmpty;
+    final messageStyle = TextStyle(
+      color: isSystemMessage
+          ? palette.accent
+          : palette.dark
+          ? palette.accent
+          : palette.primaryText,
+      fontSize: AcoTypography.bodySmall,
+      fontWeight: isSystemMessage ? FontWeight.w500 : FontWeight.w400,
+      height: 1.2,
+    );
+    final decoration = isSystemMessage
+        ? BoxDecoration(
+            color: palette.accent.withValues(alpha: .12),
+            border: Border.all(color: palette.accent.withValues(alpha: .28)),
+            borderRadius: BorderRadius.circular(16),
+          )
+        : BoxDecoration(
+            color: palette.dark
+                ? const Color(0xFF3D3D3D)
+                : palette.surfaceRaised,
+            borderRadius: BorderRadius.circular(8),
+          );
+    return Align(
+      alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 280),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: decoration,
+        child: Text(
+          isSystemMessage ? text : '$name:  $text',
+          textAlign: isSystemMessage ? TextAlign.center : TextAlign.start,
+          style: messageStyle,
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _RoomChatHistory extends StatelessWidget {
