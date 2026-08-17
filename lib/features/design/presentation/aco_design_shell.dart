@@ -11540,9 +11540,10 @@ class _RoomBottomBar extends StatelessWidget {
         child: Row(
           children: [
             _RoomControl(
-              icon: canSpeak && !muted
-                  ? CupertinoIcons.mic
-                  : CupertinoIcons.mic_slash,
+              icon: canSpeak && !muted ? null : CupertinoIcons.mic_slash,
+              iconAsset: canSpeak && !muted
+                  ? 'assets/icons/live_mic.png'
+                  : null,
               label: audioMuted
                   ? '全员静音中'
                   : canSpeak
