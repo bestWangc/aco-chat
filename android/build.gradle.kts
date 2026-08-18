@@ -25,7 +25,7 @@ subprojects {
     plugins.withId("com.android.library") {
         extensions.configure<LibraryAndroidComponentsExtension> {
             finalizeDsl { extension ->
-                extension.compileSdk = 36
+                extension.compileSdk = 37
             }
         }
     }

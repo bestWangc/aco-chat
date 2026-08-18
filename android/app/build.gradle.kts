@@ -6,8 +6,8 @@ plugins {
 
 android {
     namespace = "com.aco.aco_chat"
-    // flutter_webrtc (used by LiveKit) requires Android API 36 to compile.
-    compileSdk = 36
+    // Keep the app aligned with the newest Android API required by plugins.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -21,7 +21,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = 36
+        targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
