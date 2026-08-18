@@ -52,13 +52,13 @@ class AccountApiClient {
     return _body(response)['challenge'] as String;
   }
 
-  Future<AccountTokens> refreshAccessToken(String refreshToken) async {
+  Future<AccountRefreshResult> refreshAccessToken(String refreshToken) async {
     final response = await _httpClient.post(
       _uri('auth/refresh'),
       headers: const {'content-type': 'application/json'},
       body: jsonEncode({'refresh_token': refreshToken}),
     );
-    return AccountTokens.fromJson(_body(response));
+    return AccountRefreshResult.fromJson(_body(response));
   }
 
   Future<WalletAddress> addWallet({

@@ -81,6 +81,19 @@ class AccountTokens {
   };
 }
 
+class AccountRefreshResult {
+  const AccountRefreshResult({required this.tokens, required this.user});
+
+  final AccountTokens tokens;
+  final AccountProfile user;
+
+  factory AccountRefreshResult.fromJson(Map<String, dynamic> json) =>
+      AccountRefreshResult(
+        tokens: AccountTokens.fromJson(json),
+        user: AccountProfile.fromJson(json['user'] as Map<String, dynamic>),
+      );
+}
+
 class LiveSession {
   const LiveSession({
     required this.id,
