@@ -7762,6 +7762,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _allowPop = false;
   bool _closingRoom = false;
   bool _handRaiseNoticeVisible = false;
+  bool _networkReconnecting = false;
   bool _checkingIn = false;
   LiveRoom? _room;
   List<LiveMessage> _messages = const [];
@@ -7769,11 +7770,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   WebSocketChannel? _eventChannel;
   StreamSubscription<dynamic>? _eventSubscription;
   Timer? _reconnectTimer;
+  int _reconnectAttempt = 0;
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
   Room? _liveKitRoom;
   bool? _liveKitCanPublish;
+  String? _liveKitRole;
   bool _refreshingLiveKitPermission = false;
+  bool _microphoneUpdating = false;
+  bool? _localMuteOverride;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
@@ -7800,13 +7805,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
-  Future<void> _connectLiveKit() async {
+  Future<void> _connectLiveKit({bool showError = true}) async {
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
     try {
       final joinInfo = await _accountSession.liveKitJoinInfo(live.id);
       final room = Room(
-        roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true),
+        roomOptions: const RoomOptions(
+          adaptiveStream: true,
+          dynacast: true,
+          defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
+        ),
       );
       await room.connect(joinInfo.url, joinInfo.token);
       if (!mounted || _leaving) {
@@ -7816,12 +7825,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       final previousRoom = _liveKitRoom;
       _liveKitRoom = room;
       _liveKitCanPublish = joinInfo.canPublish;
+      _liveKitRole = _room?.viewerRole ?? joinInfo.role;
+      await AudioManager.instance.setSpeakerOutputPreferred(true);
       await previousRoom?.disconnect();
       if (joinInfo.canPublish) {
         await room.localParticipant?.setMicrophoneEnabled(!_muted);
       }
     } catch (_) {
-      if (mounted) {
+      if (mounted && showError) {
         _showNotice(context, '语音连接失败', '无法连接直播语音，请稍后重试。');
       }
     }
@@ -7863,6 +7874,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         onDone: _scheduleRealtimeReconnect,
       );
       _reconnectTimer?.cancel();
+      _reconnectAttempt = 0;
+      if (mounted) setState(() => _networkReconnecting = false);
       await _loadMessages();
     } catch (_) {
       _scheduleRealtimeReconnect();
@@ -7885,13 +7898,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   void _scheduleRealtimeReconnect() {
     if (!mounted || widget.live == null || _leaving) return;
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+    final delaySeconds = const [3, 6, 12, 30][math.min(_reconnectAttempt, 3)];
+    _reconnectAttempt = math.min(_reconnectAttempt + 1, 3);
+    setState(() => _networkReconnecting = true);
+    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
       if (mounted && !_leaving) unawaited(_connectRealtime());
     });
   }
 
   void _handleRealtimeEvent(dynamic rawEvent) {
     if (rawEvent is! String) return;
+    if (_networkReconnecting && mounted) {
+      setState(() {
+        _networkReconnecting = false;
+        _reconnectAttempt = 0;
+      });
+    }
     final decoded = jsonDecode(rawEvent);
     if (decoded is! Map<String, dynamic>) return;
     final event = decoded;
@@ -7947,6 +7969,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _room = updatedRoom;
       _muted = updatedRoom.viewerMuted;
     });
+    _localMuteOverride = null;
     unawaited(_syncLiveKitPublishPermission(updatedRoom));
   }
 
@@ -8003,9 +8026,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         ),
       );
     }
+    final localMuteOverride = _localMuteOverride;
+    if (localMuteOverride != null && room.viewerMuted == localMuteOverride) {
+      _localMuteOverride = null;
+    }
     setState(() {
       _room = room;
-      _muted = room.viewerMuted;
+      // A realtime snapshot can arrive before the mute request completes.
+      // Keep the user's latest local choice until the server echoes it back.
+      _muted = localMuteOverride ?? room.viewerMuted;
       _handRaised = room.raisedHands.any(
         (participant) => participant.userId == room.viewerUserId,
       );
@@ -8028,16 +8057,29 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       if (_liveKitCanPublish == true) {
         await _setLocalMicrophoneEnabled(false);
       }
+      if (_liveKitRole != room.viewerRole) {
+        await _refreshLiveKitPermission();
+      }
       return;
     }
     if (_liveKitCanPublish == true) {
-      await _setLocalMicrophoneEnabled(!room.viewerMuted);
+      await _setLocalMicrophoneEnabled(!_muted);
       return;
     }
+    // A host can keep the same role while a reconnect-issued token reflects
+    // the old muted state. Refresh the token after the host unmutes.
+    if (_liveKitRole == room.viewerRole &&
+        !(room.viewerRole == 'host' && !_muted)) {
+      return;
+    }
+    await _refreshLiveKitPermission();
+  }
+
+  Future<void> _refreshLiveKitPermission() async {
     if (_refreshingLiveKitPermission) return;
     _refreshingLiveKitPermission = true;
     try {
-      await _connectLiveKit();
+      await _connectLiveKit(showError: false);
     } finally {
       _refreshingLiveKitPermission = false;
     }
@@ -8050,7 +8092,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _raiseHand() async {
     final live = widget.live;
-    if (live == null || _handRaised) return;
+    if (live == null || _handRaised || _networkReconnecting) return;
     try {
       await _accountSession.raiseLiveHand(live.id);
       if (!mounted) return;
@@ -8134,20 +8176,32 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _toggleMicrophone() async {
     final live = widget.live;
-    if (live == null) return;
+    if (live == null || _microphoneUpdating) return;
     final nextMuted = !_muted;
-    setState(() => _muted = nextMuted);
+    _microphoneUpdating = true;
+    _localMuteOverride = nextMuted;
+    if (mounted) setState(() => _muted = nextMuted);
     try {
       await _setLocalMicrophoneEnabled(!nextMuted);
       await _accountSession.setLiveParticipantMute(live.id, nextMuted);
+      final room = _room;
+      if (!nextMuted && room != null) {
+        // If a previous LiveKit reconnect issued a non-publishing token while
+        // the host was muted, obtain a publishing token immediately.
+        unawaited(_syncLiveKitPublishPermission(room));
+      }
     } on AccountApiException catch (error) {
+      _localMuteOverride = null;
       await _restoreMicrophone(!nextMuted);
       if (!mounted) return;
       _showNotice(context, '设置麦克风失败', error.message);
     } catch (_) {
+      _localMuteOverride = null;
       await _restoreMicrophone(!nextMuted);
       if (!mounted) return;
       _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
+    } finally {
+      _microphoneUpdating = false;
     }
   }
 
@@ -8527,7 +8581,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final text = _messageController.text.trim();
     final isViewerChatMuted =
         _room?.chatMuted == true && _room?.viewerRole != 'host';
-    if (live == null || text.isEmpty || _sending || isViewerChatMuted) {
+    if (live == null ||
+        text.isEmpty ||
+        _sending ||
+        _networkReconnecting ||
+        isViewerChatMuted) {
       return;
     }
     setState(() => _sending = true);
@@ -8681,18 +8739,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
             if (_handRaiseNoticeVisible)
               const Center(child: _LiveRoomInfoNotice()),
             Positioned(
+              top: 8,
+              left: 18,
+              child: _LiveRoomNetworkStatusChip(
+                palette: palette,
+                reconnecting: _networkReconnecting,
+              ),
+            ),
+            if (_networkReconnecting) const _LiveRoomNetworkNotice(),
+            Positioned(
               left: 0,
               right: 0,
               bottom: _emojiPickerVisible ? _roomEmojiPickerHeight : 0,
               child: _RoomBottomBar(
                 palette: palette,
-                muted: room?.viewerMuted ?? _muted,
+                muted: _muted,
                 canSpeak: canSpeak,
                 audioMuted: audioMuted,
                 showHandControl: !isHost,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
-                onMic: canSpeak && !(room?.viewerMuted ?? _muted)
+                onMic: canSpeak && (isHost || !_muted)
                     ? _toggleMicrophone
                     : null,
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
@@ -11689,6 +11756,87 @@ class _LiveRoomInfoNotice extends StatelessWidget {
           color: _white,
           fontSize: AcoTypography.bodySmall,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
+class _LiveRoomNetworkStatusChip extends StatelessWidget {
+  const _LiveRoomNetworkStatusChip({
+    required this.palette,
+    required this.reconnecting,
+  });
+
+  final AcoPalette palette;
+  final bool reconnecting;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: (reconnecting ? _danger : palette.accent).withValues(alpha: .14),
+      borderRadius: BorderRadius.circular(15),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              color: reconnecting ? _danger : palette.accent,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            reconnecting ? '重连中' : '网络正常',
+            style: TextStyle(
+              color: reconnecting ? _danger : palette.accent,
+              fontSize: AcoTypography.caption,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _LiveRoomNetworkNotice extends StatelessWidget {
+  const _LiveRoomNetworkNotice();
+
+  @override
+  Widget build(BuildContext context) => Positioned(
+    top: 48,
+    left: 24,
+    right: 24,
+    child: IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0xE61D1D1D),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: _white.withValues(alpha: .12)),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CupertinoActivityIndicator(radius: 7, color: _white),
+              SizedBox(width: 8),
+              Text(
+                '网络较弱，正在重连…',
+                style: TextStyle(
+                  color: _white,
+                  fontSize: AcoTypography.bodySmall,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     ),
