@@ -7820,11 +7820,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _liveKitRoom = room;
       _liveKitCanPublish = joinInfo.canPublish;
       _liveKitRole = _room?.viewerRole ?? joinInfo.role;
-      await AudioManager.instance.setSpeakerOutputPreferred(true);
       await previousRoom?.disconnect();
       if (joinInfo.canPublish) {
         await room.localParticipant?.setMicrophoneEnabled(!_muted);
       }
+      await _setSpeakerOutputPreferred();
     } catch (_) {
       if (mounted && showError) {
         _showNotice(context, '语音连接失败', '无法连接直播语音，请稍后重试。');
@@ -8207,7 +8207,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
     await _liveKitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
+    // Enabling a microphone can reconfigure Android's communication audio
+    // session. Re-apply the output preference after that transition.
+    await _setSpeakerOutputPreferred();
   }
+
+  Future<void> _setSpeakerOutputPreferred() =>
+      AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
 
   Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
     final shouldMute = !speaker.muted;
