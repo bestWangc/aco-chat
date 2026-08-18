@@ -23,6 +23,7 @@ import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:livekit_client/livekit_client.dart' hide ConnectionState;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -7703,6 +7704,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   StreamSubscription<dynamic>? _eventSubscription;
   Timer? _reconnectTimer;
   Timer? _handRaiseNoticeTimer;
+  Room? _liveKitRoom;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
@@ -7722,6 +7724,33 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     await _loadRoom();
     await _loadMessages();
     await _connectRealtime();
+    await _connectLiveKit();
+  }
+
+  Future<void> _connectLiveKit() async {
+    final live = widget.live;
+    if (live == null || !mounted || _leaving) return;
+    try {
+      final joinInfo = await _accountSession.liveKitJoinInfo(live.id);
+      final room = Room(
+        roomOptions: const RoomOptions(adaptiveStream: true, dynacast: true),
+      );
+      await room.connect(joinInfo.url, joinInfo.token);
+      if (!mounted || _leaving) {
+        await room.disconnect();
+        return;
+      }
+      final previousRoom = _liveKitRoom;
+      _liveKitRoom = room;
+      await previousRoom?.disconnect();
+      if (joinInfo.canPublish) {
+        await room.localParticipant?.setMicrophoneEnabled(!_muted);
+      }
+    } catch (_) {
+      if (mounted) {
+        _showNotice(context, '语音连接失败', '无法连接直播语音，请稍后重试。');
+      }
+    }
   }
 
   Future<void> _loadRoom({bool silent = false}) async {
@@ -7931,16 +7960,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final nextMuted = !_muted;
     setState(() => _muted = nextMuted);
     try {
+      await _setLocalMicrophoneEnabled(!nextMuted);
       await _accountSession.setLiveParticipantMute(live.id, nextMuted);
     } on AccountApiException catch (error) {
+      await _restoreMicrophone(!nextMuted);
       if (!mounted) return;
-      setState(() => _muted = !nextMuted);
       _showNotice(context, '设置麦克风失败', error.message);
     } catch (_) {
+      await _restoreMicrophone(!nextMuted);
       if (!mounted) return;
-      setState(() => _muted = !nextMuted);
       _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
     }
+  }
+
+  Future<void> _restoreMicrophone(bool muted) async {
+    if (!mounted) return;
+    setState(() => _muted = muted);
+    await _setLocalMicrophoneEnabled(!muted);
+  }
+
+  Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
+    await _liveKitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
   }
 
   Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
@@ -8201,6 +8241,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _handRaiseNoticeTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
+    unawaited(_liveKitRoom?.disconnect());
     _apiClient.close();
     _messageController.dispose();
     super.dispose();

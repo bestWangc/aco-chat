@@ -229,6 +229,17 @@ class AccountApiClient {
     return LiveRoom.fromJson(_body(response));
   }
 
+  Future<LiveKitJoinInfo> getLiveKitJoinInfo({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/join-token'),
+      headers: _authorizedHeaders(token),
+    );
+    return LiveKitJoinInfo.fromJson(_body(response));
+  }
+
   Future<String> createLiveWebsocketTicket({
     required int liveId,
     required String token,
