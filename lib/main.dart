@@ -127,24 +127,25 @@ class _AcoAppState extends State<AcoApp> {
     String mnemonic,
   ) async {
     await WalletPreferences.saveWalletIdentity(identity);
-    final profileFuture = _syncWalletAccount(identity, mnemonic);
+    final profile = await _syncWalletAccount(
+      identity,
+      mnemonic,
+    ).timeout(const Duration(seconds: 45));
+    final loginFuture = Future<AccountProfile?>.value(profile);
     setState(() {
       _walletConfigured = true;
       _walletIdentity = identity;
-      _walletLoginFuture = profileFuture;
+      _walletLoginFuture = loginFuture;
+      _accountProfile = profile;
     });
     widget.onWalletConfigured?.call(true);
-    // Account login/binding is deliberately silent and asynchronous. The
-    // local wallet is ready now; do not make wallet creation wait on the API.
-    unawaited(_resolveAccountProfile(profileFuture));
   }
 
-  Future<AccountProfile?> _syncWalletAccount(
+  Future<AccountProfile> _syncWalletAccount(
     WalletIdentity identity,
     String mnemonic,
   ) async {
     final client = AccountApiClient();
-    AccountProfile? profile;
     try {
       final session = AccountSession(client);
       // An added wallet must join the account that is already active on this
@@ -155,23 +156,19 @@ class _AcoAppState extends State<AcoApp> {
         await session
             .addWallet(identity.address)
             .timeout(const Duration(seconds: 15));
-        profile = activeProfile;
+        return activeProfile;
       } else {
-        profile =
-            (await session
-                    .signInForWallet(
-                      walletAddress: identity.address,
-                      mnemonic: mnemonic,
-                    )
-                    .timeout(const Duration(seconds: 15)))
-                .user;
+        return (await session
+                .signInForWallet(
+                  walletAddress: identity.address,
+                  mnemonic: mnemonic,
+                )
+                .timeout(const Duration(seconds: 15)))
+            .user;
       }
-    } catch (_) {
-      // The local wallet remains usable while the account login is retried later.
     } finally {
       client.close();
     }
-    return profile;
   }
 
   Future<void> _selectWallet(WalletIdentity identity) async {

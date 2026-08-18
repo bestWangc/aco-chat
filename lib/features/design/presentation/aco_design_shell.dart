@@ -1086,7 +1086,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               mnemonic: mnemonic,
             );
       await saveMnemonic.timeout(const Duration(seconds: 20));
-      _setCompletionStatus('正在完成设置...');
+      _setCompletionStatus('正在同步账户登录...');
       await widget
           .onComplete(identity, mnemonic)
           .timeout(const Duration(seconds: 15));
