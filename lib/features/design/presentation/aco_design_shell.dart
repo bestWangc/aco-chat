@@ -39,6 +39,13 @@ const _black = Color(0xFF000000);
 const _white = Color(0xFFFFFFFF);
 const _transparent = Color(0x00000000);
 const _accentGreen = Color(0xFFA6DE00);
+// Leave a small amount of headroom while the system keyboard resizes the
+// voice-room body. Some Android viewport sizes otherwise round the remaining
+// height down by a physical pixel and overflow the room content.
+const _roomBottomBarHeight = 82.0;
+const _roomEmojiPickerHeight = 292.0;
+const _roomBottomAreaWithEmojiHeight =
+    _roomBottomBarHeight + _roomEmojiPickerHeight;
 // Colors and geometry are sampled from 设计图/钱包页-dark.svg.
 const _loginSecondarySurface = Color(0xFF515151);
 // 首页-dark.svg is a 595.28pt-wide artboard. These are its measurements
@@ -6583,7 +6590,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         showAcoAlertNotice(context, '预约直播', '该直播尚未开始。');
         return;
       case 'ended':
-        if (session.canEdit) {
+        if (session.canExportCheckIns) {
           unawaited(_exportLiveCheckIns(session));
         } else {
           showAcoAlertNotice(context, '直播已结束', '该直播已经结束。');
@@ -7687,6 +7694,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _leaving = false;
   bool _allowPop = false;
   bool _handRaiseNoticeVisible = false;
+  bool _checkingIn = false;
   LiveRoom? _room;
   List<LiveMessage> _messages = const [];
   final Set<int> _knownParticipantIds = <int>{};
@@ -7948,7 +7956,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       return;
     }
     if (_liveKitCanPublish == true) {
-      await _setLocalMicrophoneEnabled(true);
+      await _setLocalMicrophoneEnabled(!room.viewerMuted);
       return;
     }
     if (_refreshingLiveKitPermission) return;
@@ -7961,7 +7969,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   }
 
   bool _canPublishAudio(LiveRoom room) {
-    if (room.viewerMuted) return false;
+    // Mute controls the track; the role controls publish permission.
     return room.viewerRole == 'host' || room.viewerRole == 'speaker';
   }
 
@@ -8162,11 +8170,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _confirmCheckIn() async {
     final live = widget.live;
-    if (live == null) return;
+    if (live == null || _checkingIn || _room?.checkIn?.viewerChecked == true) {
+      return;
+    }
+    if (mounted) setState(() => _checkingIn = true);
     try {
       await _accountSession.confirmLiveCheckIn(live.id);
+      await _loadRoom(silent: true);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '签到失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '签到失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _checkingIn = false);
     }
   }
 
@@ -8381,6 +8397,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     unawaited(_setLiveRoomWakelock(false));
     _reconnectTimer?.cancel();
     _handRaiseNoticeTimer?.cancel();
+    _checkInTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     unawaited(_liveKitRoom?.disconnect());
@@ -8446,9 +8463,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final viewerRole = room?.viewerRole;
     final isHost = viewerRole == 'host';
     final canSpeak = live == null || isHost || viewerRole == 'speaker';
-    // `viewerMuted` is authoritative: after a host mutes everyone, they can
-    // explicitly unmute one speaker without changing the room-wide indicator.
-    final audioMuted = !isHost && (room?.viewerMuted ?? _muted);
+    // A self-muted speaker becomes a listener and must raise their hand again.
+    final audioMuted = !isHost && (room?.audioMuted ?? false);
     final chatMuted = room?.chatMuted == true && !isHost;
 
     return PopScope(
@@ -8471,7 +8487,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         child: Stack(
           children: [
             Padding(
-              padding: EdgeInsets.only(bottom: _emojiPickerVisible ? 376 : 84),
+              padding: EdgeInsets.only(
+                bottom: _emojiPickerVisible
+                    ? _roomBottomAreaWithEmojiHeight
+                    : _roomBottomBarHeight,
+              ),
               child: Column(
                 children: [
                   Expanded(
@@ -8489,6 +8509,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                       palette: palette,
                                       host: room.host,
                                       active: room.hostActive,
+                                      checkIn: isHost ? null : room.checkIn,
+                                      checkingIn: _checkingIn,
+                                      onCheckIn: _confirmCheckIn,
                                     ),
                                   ),
                                   if (isHost && room.raisedHands.isNotEmpty)
@@ -8514,7 +8537,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                     ? _confirmSpeakerMute
                                     : null,
                               ),
-                            if (room.checkIn != null)
+                            if (room.checkIn != null && isHost)
                               _LiveCheckInCard(
                                 palette: palette,
                                 checkIn: room.checkIn!,
@@ -8546,15 +8569,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: _emojiPickerVisible ? 292 : 0,
+              bottom: _emojiPickerVisible ? _roomEmojiPickerHeight : 0,
               child: _RoomBottomBar(
                 palette: palette,
-                muted: audioMuted || (room?.viewerMuted ?? _muted),
+                muted: room?.viewerMuted ?? _muted,
                 canSpeak: canSpeak,
                 audioMuted: audioMuted,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
-                onMic: canSpeak && !audioMuted ? _toggleMicrophone : null,
+                onMic: canSpeak && !(room?.viewerMuted ?? _muted)
+                    ? _toggleMicrophone
+                    : null,
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
                 controller: _messageController,
                 onEmojiPressed: _toggleEmojiPicker,
@@ -10982,11 +11007,17 @@ class _LiveRoomHostCard extends StatelessWidget {
     required this.palette,
     required this.host,
     required this.active,
+    this.checkIn,
+    this.checkingIn = false,
+    this.onCheckIn,
   });
 
   final AcoPalette palette;
   final LiveParticipant host;
   final bool active;
+  final LiveCheckIn? checkIn;
+  final bool checkingIn;
+  final VoidCallback? onCheckIn;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -11076,8 +11107,81 @@ class _LiveRoomHostCard extends StatelessWidget {
                 ),
         ),
       ),
+      if (checkIn != null)
+        Positioned(
+          right: -67,
+          top: 7,
+          child: _LiveRoomCheckInButton(
+            palette: palette,
+            checked: checkIn!.viewerChecked,
+            checkingIn: checkingIn,
+            onPressed: onCheckIn,
+          ),
+        ),
     ],
   );
+}
+
+class _LiveRoomCheckInButton extends StatelessWidget {
+  const _LiveRoomCheckInButton({
+    required this.palette,
+    required this.checked,
+    required this.checkingIn,
+    required this.onPressed,
+  });
+
+  final AcoPalette palette;
+  final bool checked;
+  final bool checkingIn;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = !checked && !checkingIn && onPressed != null;
+    final background = checked ? palette.surfaceRaised : palette.accent;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      label: checked ? '已签到' : '立即签到',
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        onPressed: enabled ? onPressed : null,
+        child: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            color: background,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: checked
+                  ? palette.mutedText.withValues(alpha: .25)
+                  : palette.accent.withValues(alpha: .72),
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: (checked ? _black : palette.accent).withValues(
+                  alpha: .28,
+                ),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: checkingIn
+              ? CupertinoActivityIndicator(color: _black)
+              : Icon(
+                  checked
+                      ? CupertinoIcons.check_mark
+                      : CupertinoIcons.check_mark_circled_solid,
+                  color: checked ? palette.mutedText : _black,
+                  size: checked ? 24 : 30,
+                ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LiveRoomHeaderActions extends StatelessWidget {
@@ -11776,12 +11880,12 @@ class _RoomEmojiPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 292,
+    height: _roomEmojiPickerHeight,
     child: emoji.EmojiPicker(
       textEditingController: controller,
       onEmojiSelected: (_, _) => onEmojiSelected(),
       config: emoji.Config(
-        height: 292,
+        height: _roomEmojiPickerHeight,
         checkPlatformCompatibility: false,
         emojiViewConfig: emoji.EmojiViewConfig(
           backgroundColor: palette.surfaceRaised,
@@ -11905,9 +12009,9 @@ class _RoomBottomBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final micColors = _micControlColors();
     return SizedBox(
-      height: 84,
+      height: _roomBottomBarHeight,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 10, 18, 18),
+        padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
         child: Row(
           children: [
             _RoomControl(

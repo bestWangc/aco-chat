@@ -376,7 +376,7 @@ void main() {
     expect(find.text('该直播尚未开始。'), findsOneWidget);
   });
 
-  testWidgets('shows an ended notice when opening an ended live', (
+  testWidgets('shows an ended notice when a non-host opens an ended live', (
     WidgetTester tester,
   ) async {
     final live = LiveSession(
