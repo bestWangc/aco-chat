@@ -117,6 +117,31 @@ class LiveSession {
   );
 }
 
+class LiveKitJoinInfo {
+  const LiveKitJoinInfo({
+    required this.url,
+    required this.token,
+    required this.roomName,
+    required this.role,
+    required this.canPublish,
+  });
+
+  factory LiveKitJoinInfo.fromJson(Map<String, dynamic> json) =>
+      LiveKitJoinInfo(
+        url: json['url'] as String,
+        token: json['token'] as String,
+        roomName: json['room_name'] as String,
+        role: json['role'] as String,
+        canPublish: json['can_publish'] as bool? ?? false,
+      );
+
+  final String url;
+  final String token;
+  final String roomName;
+  final String role;
+  final bool canPublish;
+}
+
 class LiveMessage {
   const LiveMessage({
     required this.id,

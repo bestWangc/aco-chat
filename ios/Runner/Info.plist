@@ -30,6 +30,8 @@
 	<string>用于从相册选择直播封面。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>用于扫描收款地址和二维码。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于在直播间发言。</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>用于在完成钱包创建时验证你的身份。</string>
 	<key>UIApplicationSceneManifest</key>

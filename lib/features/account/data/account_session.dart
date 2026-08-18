@@ -176,6 +176,9 @@ class AccountSession {
   Future<LiveRoom> liveRoom(int liveId) async =>
       _apiClient.getLiveRoom(liveId: liveId, token: await _requireToken());
 
+  Future<LiveKitJoinInfo> liveKitJoinInfo(int liveId) async => _apiClient
+      .getLiveKitJoinInfo(liveId: liveId, token: await _requireToken());
+
   Future<String> liveWebsocketTicket(int liveId) async => _apiClient
       .createLiveWebsocketTicket(liveId: liveId, token: await _requireToken());
 
