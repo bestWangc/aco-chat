@@ -1551,15 +1551,32 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         ? AcoScreen.createLive
         : target;
     Navigator.of(context)
-        .push<bool>(
-          _AcoPageRoute<bool>(
+        .push<Object?>(
+          _AcoPageRoute<Object?>(
             builder: (_) => _buildSecondaryScreen(destination),
           ),
         )
         .then((created) {
-          if (screen == AcoScreen.createLive && created == true && mounted) {
-            setState(() => _liveListRevision++);
-          }
+          if (screen != AcoScreen.createLive || !mounted) return;
+          setState(() => _liveListRevision++);
+          if (created is! LiveSession || created.status != 'live') return;
+          Navigator.of(context).push<bool>(
+            _AcoPageRoute<bool>(
+              builder: (_) => CupertinoPageScaffold(
+                backgroundColor: AcoPalette(_isDark.value).background,
+                child: SafeArea(
+                  bottom: false,
+                  child: ColoredBox(
+                    color: AcoPalette(_isDark.value).background,
+                    child: _VoiceRoomPage(
+                      palette: AcoPalette(_isDark.value),
+                      live: created,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
         });
   }
 
@@ -7160,6 +7177,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     if (!_canConfirm || _submitting) return;
     final title = _titleController.text.trim();
     final apiClient = AccountApiClient();
+    LiveSession? createdLive;
     setState(() => _submitting = true);
     try {
       final session = AccountSession(apiClient);
@@ -7174,7 +7192,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
           scheduledAt: _scheduledAt,
         );
       } else if (_coverBytes case final coverBytes?) {
-        await session.createLive(
+        createdLive = await session.createLive(
           title: title,
           coverBytes: coverBytes,
           access: _joinPassword == null ? 'open' : 'password',
@@ -7183,7 +7201,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
         );
       }
       if (!mounted) return;
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(createdLive ?? true);
     } on AccountApiException catch (error) {
       if (mounted) {
         _showNotice(context, _isEditing ? '保存失败' : '创建失败', error.message);
@@ -8610,7 +8628,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                     ),
                                   if (isHost && room.raisedHands.isNotEmpty)
                                     Positioned(
-                                      top: 108,
+                                      top: 36,
                                       right: 14,
                                       child: _RaisedHandIndicator(
                                         palette: palette,
@@ -10950,6 +10968,27 @@ class _LiveCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                          if (session.canExportCheckIns) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: palette.accent.withValues(alpha: .16),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                '我的直播',
+                                style: TextStyle(
+                                  color: palette.accent,
+                                  fontSize: AcoTypography.caption,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                           if (scheduledStartLabel != null) ...[
                             const SizedBox(width: 7),
                             Flexible(
