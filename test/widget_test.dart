@@ -415,6 +415,52 @@ void main() {
     expect(find.text('该直播尚未开始。'), findsNothing);
   });
 
+  testWidgets('asks a host before downloading ended-live check-in data', (
+    WidgetTester tester,
+  ) async {
+    final live = LiveSession(
+      id: 10,
+      title: '已结束的主持人直播',
+      coverUrl: '/uploads/live-cover-10.jpg',
+      access: 'open',
+      status: 'ended',
+      canExportCheckIns: true,
+      createdAt: DateTime(2026, 8, 12, 20),
+    );
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => CupertinoApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.squareFeed,
+            dark: true,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+            initialLives: [live],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('已结束的主持人直播'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('下载签到数据'), findsOneWidget);
+    expect(find.text('直播已结束，是否要下载签到数据？'), findsOneWidget);
+    expect(find.text('确认'), findsOneWidget);
+    expect(find.text('该直播已经结束。'), findsNothing);
+
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('下载签到数据'), findsNothing);
+  });
+
   testWidgets('shows an edit entry for editable scheduled lives', (
     WidgetTester tester,
   ) async {

@@ -2498,45 +2498,67 @@ class AcoAvatar extends StatelessWidget {
 void _showNotice(BuildContext context, String title, String message) {
   showCupertinoModalPopup<void>(
     context: context,
-    builder: (_) => CupertinoActionSheet(
-      title: Text(title),
-      message: Text(message),
-      actions: [
-        CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('知道了'),
+    builder: (sheetContext) {
+      final themeColor = CupertinoTheme.of(sheetContext).primaryColor;
+      return CupertinoActionSheet(
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: AcoTypography.bodyEmphasis,
+            fontWeight: FontWeight.w700,
+          ),
         ),
-      ],
-      cancelButton: CupertinoActionSheetAction(
-        onPressed: () => Navigator.of(context).pop(),
-        child: const Text('取消'),
-      ),
-    ),
+        message: Text(
+          message,
+          style: TextStyle(fontSize: AcoTypography.bodySmall),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: Text(
+              '知道了',
+              style: TextStyle(
+                color: themeColor,
+                fontSize: AcoTypography.bodyEmphasis,
+              ),
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: Text(
+            '取消',
+            style: TextStyle(
+              color: themeColor,
+              fontSize: AcoTypography.bodyEmphasis,
+            ),
+          ),
+        ),
+      );
+    },
   );
 }
 
 void showAcoAlertNotice(BuildContext context, String title, String message) {
   showCupertinoDialog<void>(
     context: context,
-    builder: (dialogContext) => CupertinoAlertDialog(
-      title: Text(title),
-      content: Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(message),
-      ),
-      actions: [
-        CupertinoDialogAction(
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(dialogContext).pop(),
-          child: Text(
-            '知道了',
-            style: TextStyle(
-              color: CupertinoTheme.of(dialogContext).primaryColor,
-            ),
-          ),
+    builder: (dialogContext) {
+      final themeColor = CupertinoTheme.of(dialogContext).primaryColor;
+      return CupertinoAlertDialog(
+        title: Text(title, style: TextStyle(color: themeColor)),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(message, style: TextStyle(color: themeColor)),
         ),
-      ],
-    ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('知道了', style: TextStyle(color: themeColor)),
+          ),
+        ],
+      );
+    },
   );
 }
 
@@ -6591,7 +6613,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         return;
       case 'ended':
         if (session.canExportCheckIns) {
-          unawaited(_exportLiveCheckIns(session));
+          unawaited(_confirmCheckInExport(session));
         } else {
           showAcoAlertNotice(context, '直播已结束', '该直播已经结束。');
         }
@@ -6624,6 +6646,33 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
             showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
           }
         });
+  }
+
+  Future<void> _confirmCheckInExport(LiveSession session) async {
+    final shouldExport = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('下载签到数据'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('直播已结束，是否要下载签到数据？'),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            textStyle: TextStyle(color: widget.palette.accent),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    if (shouldExport == true && mounted) {
+      await _exportLiveCheckIns(session);
+    }
   }
 
   Future<void> _exportLiveCheckIns(LiveSession session) async {
@@ -7904,8 +7953,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final participantIds = participants.map(
       (participant) => participant.userId,
     );
-    final newParticipants = _knownParticipantIds.isEmpty
-        ? const <LiveParticipant>[]
+    final firstSnapshot = _knownParticipantIds.isEmpty;
+    final newParticipants = firstSnapshot
+        ? participants
+              .where(
+                (participant) =>
+                    room.viewerRole == 'listener' &&
+                    participant.userId == room.viewerUserId,
+              )
+              .toList(growable: false)
         : participants
               .where(
                 (participant) =>
@@ -8136,8 +8192,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
-        title: const Text('发起签到'),
-        message: const Text('请选择签到时长，成员将在房间内看到签到提醒。'),
+        title: const Text(
+          '发起签到',
+          style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+        ),
+        message: const Text(
+          '请选择签到时长，成员将在房间内看到签到提醒。',
+          style: TextStyle(fontSize: AcoTypography.bodySmall),
+        ),
         actions: [5, 10, 15, 30]
             .map(
               (minutes) => CupertinoActionSheetAction(
@@ -8145,13 +8207,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                   Navigator.of(sheetContext).pop();
                   unawaited(_startCheckIn(minutes * 60));
                 },
-                child: Text('$minutes 分钟'),
+                child: Text(
+                  '$minutes 分钟',
+                  style: const TextStyle(fontSize: AcoTypography.bodyEmphasis),
+                ),
               ),
             )
             .toList(),
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
+          child: const Text(
+            '取消',
+            style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+          ),
         ),
       ),
     );
@@ -8162,7 +8230,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     if (live == null) return;
     try {
       await _accountSession.startLiveCheckIn(live.id, durationSeconds);
-      if (mounted) _showNotice(context, '签到已发起', '成员可在倒计时结束前完成签到。');
+      if (mounted) {
+        showAcoAlertNotice(context, '签到已发起', '成员可在倒计时结束前完成签到。');
+      }
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '发起失败', error.message);
     }
@@ -8177,6 +8247,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     try {
       await _accountSession.confirmLiveCheckIn(live.id);
       await _loadRoom(silent: true);
+      if (mounted) _showNotice(context, '签到成功', '已完成本次直播签到。');
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '签到失败', error.message);
     } catch (_) {
@@ -8502,6 +8573,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                             SizedBox(
                               width: double.infinity,
                               child: Stack(
+                                clipBehavior: Clip.none,
                                 children: [
                                   Align(
                                     alignment: Alignment.topCenter,
@@ -8509,14 +8581,36 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                       palette: palette,
                                       host: room.host,
                                       active: room.hostActive,
-                                      checkIn: isHost ? null : room.checkIn,
-                                      checkingIn: _checkingIn,
-                                      onCheckIn: _confirmCheckIn,
                                     ),
                                   ),
+                                  if (isHost && room.checkIn != null)
+                                    Positioned(
+                                      top: 36,
+                                      left: 12,
+                                      child: _LiveRoomCheckInButton(
+                                        palette: palette,
+                                        checkIn: room.checkIn!,
+                                        isHost: true,
+                                        onPressed: null,
+                                      ),
+                                    ),
+                                  if (!isHost &&
+                                      room.checkIn != null &&
+                                      !_checkingIn &&
+                                      !room.checkIn!.viewerChecked)
+                                    Positioned(
+                                      top: 36,
+                                      right: 14,
+                                      child: _LiveRoomCheckInButton(
+                                        palette: palette,
+                                        checkIn: room.checkIn!,
+                                        isHost: false,
+                                        onPressed: _confirmCheckIn,
+                                      ),
+                                    ),
                                   if (isHost && room.raisedHands.isNotEmpty)
                                     Positioned(
-                                      top: 54,
+                                      top: 108,
                                       right: 14,
                                       child: _RaisedHandIndicator(
                                         palette: palette,
@@ -8536,13 +8630,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                 onSpeakerTap: isHost
                                     ? _confirmSpeakerMute
                                     : null,
-                              ),
-                            if (room.checkIn != null && isHost)
-                              _LiveCheckInCard(
-                                palette: palette,
-                                checkIn: room.checkIn!,
-                                isHost: isHost,
-                                onCheckIn: _confirmCheckIn,
                               ),
                           ] else if (_roomLoading)
                             const Padding(
@@ -8575,6 +8662,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                 muted: room?.viewerMuted ?? _muted,
                 canSpeak: canSpeak,
                 audioMuted: audioMuted,
+                showHandControl: !isHost,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
                 onMic: canSpeak && !(room?.viewerMuted ?? _muted)
@@ -11007,17 +11095,11 @@ class _LiveRoomHostCard extends StatelessWidget {
     required this.palette,
     required this.host,
     required this.active,
-    this.checkIn,
-    this.checkingIn = false,
-    this.onCheckIn,
   });
 
   final AcoPalette palette;
   final LiveParticipant host;
   final bool active;
-  final LiveCheckIn? checkIn;
-  final bool checkingIn;
-  final VoidCallback? onCheckIn;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -11107,17 +11189,6 @@ class _LiveRoomHostCard extends StatelessWidget {
                 ),
         ),
       ),
-      if (checkIn != null)
-        Positioned(
-          right: -67,
-          top: 7,
-          child: _LiveRoomCheckInButton(
-            palette: palette,
-            checked: checkIn!.viewerChecked,
-            checkingIn: checkingIn,
-            onPressed: onCheckIn,
-          ),
-        ),
     ],
   );
 }
@@ -11125,28 +11196,102 @@ class _LiveRoomHostCard extends StatelessWidget {
 class _LiveRoomCheckInButton extends StatelessWidget {
   const _LiveRoomCheckInButton({
     required this.palette,
-    required this.checked,
-    required this.checkingIn,
+    required this.checkIn,
+    required this.isHost,
     required this.onPressed,
   });
 
   final AcoPalette palette;
-  final bool checked;
-  final bool checkingIn;
+  final LiveCheckIn checkIn;
+  final bool isHost;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    final enabled = !checked && !checkingIn && onPressed != null;
+    final checked = checkIn.viewerChecked;
+    final enabled = !checked && onPressed != null;
+    final remaining = checkIn.deadline.difference(DateTime.now());
+    final minutes = remaining.inMinutes.clamp(0, 99).toString().padLeft(2, '0');
+    final seconds = (remaining.inSeconds % 60)
+        .clamp(0, 59)
+        .toString()
+        .padLeft(2, '0');
+    if (isHost) {
+      return Semantics(
+        label: '签到进行中，已签到 ${checkIn.checkedInCount} 人，剩余 $minutes:$seconds',
+        child: Container(
+          width: 76,
+          height: 76,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                palette.accent.withValues(alpha: .22),
+                palette.accent.withValues(alpha: .08),
+              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            shape: BoxShape.circle,
+            border: Border.all(color: palette.accent.withValues(alpha: .68)),
+            boxShadow: [
+              BoxShadow(
+                color: palette.accent.withValues(alpha: .16),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                '签到中',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                '${checkIn.checkedInCount} 人',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText.withValues(alpha: .82),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                '$minutes:$seconds',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     final background = checked ? palette.surfaceRaised : palette.accent;
     return Semantics(
       button: true,
       enabled: enabled,
       label: checked ? '已签到' : '立即签到',
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: Size.zero,
-        onPressed: enabled ? onPressed : null,
+      onTap: enabled ? onPressed : null,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? onPressed : null,
         child: Container(
           width: 56,
           height: 56,
@@ -11169,14 +11314,31 @@ class _LiveRoomCheckInButton extends StatelessWidget {
               ),
             ],
           ),
-          child: checkingIn
-              ? CupertinoActivityIndicator(color: _black)
-              : Icon(
-                  checked
-                      ? CupertinoIcons.check_mark
-                      : CupertinoIcons.check_mark_circled_solid,
-                  color: checked ? palette.mutedText : _black,
-                  size: checked ? 24 : 30,
+          alignment: Alignment.center,
+          child: isHost
+              ? Icon(
+                  CupertinoIcons.check_mark,
+                  color: palette.primaryText,
+                  size: 24,
+                )
+              : FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '签到',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: checked ? palette.mutedText : _white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      shadows: const [
+                        Shadow(
+                          color: Color(0x99000000),
+                          blurRadius: 2,
+                          offset: Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
         ),
       ),
@@ -11483,90 +11645,6 @@ class _LiveRoomInfoNotice extends StatelessWidget {
       ),
     ),
   );
-}
-
-class _LiveCheckInCard extends StatelessWidget {
-  const _LiveCheckInCard({
-    required this.palette,
-    required this.checkIn,
-    required this.isHost,
-    required this.onCheckIn,
-  });
-  final AcoPalette palette;
-  final LiveCheckIn checkIn;
-  final bool isHost;
-  final VoidCallback onCheckIn;
-
-  @override
-  Widget build(BuildContext context) {
-    final remaining = checkIn.deadline.difference(DateTime.now());
-    final minutes = remaining.inMinutes.clamp(0, 99).toString().padLeft(2, '0');
-    final seconds = (remaining.inSeconds % 60)
-        .clamp(0, 59)
-        .toString()
-        .padLeft(2, '0');
-    return Container(
-      margin: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: palette.accent.withValues(alpha: .13),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: palette.accent.withValues(alpha: .32)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            CupertinoIcons.check_mark_circled_solid,
-            color: palette.accent,
-            size: 24,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isHost
-                      ? '签到进行中 · 已签到 ${checkIn.checkedInCount} 人'
-                      : '主持人发起了签到',
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: AcoTypography.bodySmall,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '剩余 $minutes:$seconds',
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: AcoTypography.caption,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!isHost)
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              minimumSize: const Size(44, 44),
-              color: checkIn.viewerChecked
-                  ? palette.surfaceRaised
-                  : palette.accent,
-              onPressed: checkIn.viewerChecked ? null : onCheckIn,
-              child: Text(
-                checkIn.viewerChecked ? '已签到' : '立即签到',
-                style: TextStyle(
-                  color: checkIn.viewerChecked ? palette.mutedText : _black,
-                  fontSize: AcoTypography.caption,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class _RaisedHandRequests extends StatelessWidget {
@@ -11985,6 +12063,7 @@ class _RoomBottomBar extends StatelessWidget {
     required this.muted,
     required this.canSpeak,
     required this.audioMuted,
+    required this.showHandControl,
     required this.handRaised,
     required this.chatMuted,
     required this.onMic,
@@ -11997,6 +12076,7 @@ class _RoomBottomBar extends StatelessWidget {
   final bool muted;
   final bool canSpeak;
   final bool audioMuted;
+  final bool showHandControl;
   final bool handRaised;
   final bool chatMuted;
   final VoidCallback? onMic;
@@ -12039,15 +12119,17 @@ class _RoomBottomBar extends StatelessWidget {
                 onSubmitted: onSubmitted,
               ),
             ),
-            const SizedBox(width: 8),
-            _RoomControl(
-              iconAsset: 'assets/icons/live_hand.png',
-              label: handRaised ? '已举手' : '举手',
-              background: palette.surfaceRaised,
-              foreground: palette.primaryText,
-              onPressed: handRaised ? null : onHand,
-              large: true,
-            ),
+            if (showHandControl) ...[
+              const SizedBox(width: 8),
+              _RoomControl(
+                iconAsset: 'assets/icons/live_hand.png',
+                label: handRaised ? '已举手' : '举手',
+                background: palette.surfaceRaised,
+                foreground: palette.primaryText,
+                onPressed: handRaised ? null : onHand,
+                large: true,
+              ),
+            ],
           ],
         ),
       ),
