@@ -13,7 +13,11 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoBiometricAuthentication")
+    guard let registrar = engineBridge.pluginRegistry.registrar(
+      forPlugin: "AcoBiometricAuthentication"
+    ) else {
+      return
+    }
     let channel = FlutterMethodChannel(
       name: "aco/biometric-authentication",
       binaryMessenger: registrar.messenger()

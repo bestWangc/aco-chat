@@ -5772,7 +5772,7 @@ class _ScanPageState extends State<_ScanPage> {
       MobileScanner(
         controller: _controller,
         onDetect: _handleCapture,
-        errorBuilder: (_, error, _) => ColoredBox(
+        errorBuilder: (_, _) => ColoredBox(
           color: widget.palette.background,
           child: Center(
             child: Text(
