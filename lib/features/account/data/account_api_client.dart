@@ -52,6 +52,15 @@ class AccountApiClient {
     return _body(response)['challenge'] as String;
   }
 
+  Future<WalletLoginResult> silentWalletLogin(String walletAddress) async {
+    final response = await _httpClient.post(
+      _uri('auth/wallet-silent-login'),
+      headers: const {'content-type': 'application/json'},
+      body: jsonEncode({'wallet_address': walletAddress}),
+    );
+    return WalletLoginResult.fromJson(_body(response));
+  }
+
   Future<AccountRefreshResult> refreshAccessToken(String refreshToken) async {
     final response = await _httpClient.post(
       _uri('auth/refresh'),

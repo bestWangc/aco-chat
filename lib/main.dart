@@ -57,9 +57,7 @@ class WalletAccountAuthentication {
     final client = AccountApiClient();
     try {
       final session = AccountSession(client);
-      final restoredProfile = await session.restoreProfile();
-      if (restoredProfile != null) return restoredProfile;
-      return null;
+      return (await session.signInSilently(walletAddress)).user;
     } catch (_) {
       // A later launch will retry without preventing local wallet access.
       return null;

@@ -44,6 +44,18 @@ class AccountSession {
     return result;
   }
 
+  /// Restores an existing wallet account without requiring an access token.
+  Future<WalletLoginResult> signInSilently(String walletAddress) async {
+    final result = await _apiClient.silentWalletLogin(walletAddress);
+    await _tokenStore.write(result.tokens);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(
+      activeAccountKey,
+      jsonEncode(result.user.toJson()),
+    );
+    return result;
+  }
+
   /// Restores the server profile after silently rotating the refresh token.
   Future<AccountProfile?> restoreProfile() async {
     final tokens = await _tokenStore.read();
