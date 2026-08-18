@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import 'package:bip39/bip39.dart' as bip39;
 import 'package:blockchain_utils/blockchain_utils.dart';
+import 'package:aco_chat/services/bip39_service.dart';
 
 /// Public address for the first Ethereum account of a BIP-39 wallet.
 class WalletIdentity {
@@ -47,7 +47,7 @@ class WalletIdentity {
   }
 
   static Bip44 _ethereumAccountFromMnemonic(String mnemonic) => Bip44.fromSeed(
-    bip39.mnemonicToSeed(mnemonic),
+    Bip39Service.mnemonicToSeed(mnemonic),
     Bip44Coins.ethereum,
   ).deriveDefaultPath;
 }

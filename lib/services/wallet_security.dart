@@ -1,10 +1,10 @@
 import 'dart:convert';
 import 'dart:math';
 
-import 'package:bip39/bip39.dart' as bip39;
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'package:aco_chat/services/bip39_service.dart';
 
 /// Stores encrypted wallet material. Implementations must never expose the
 /// underlying value to application logs or analytics.
@@ -117,12 +117,14 @@ class WalletSecurity {
   final Random _random;
 
   String createMnemonic({int words = 12}) {
-    final strength = switch (words) {
-      12 => 128,
-      24 => 256,
-      _ => throw const WalletSecurityException('助记词仅支持 12 或 24 个单词'),
-    };
-    return bip39.generateMnemonic(strength: strength);
+    switch (words) {
+      case 12:
+      case 24:
+        break;
+      default:
+        throw const WalletSecurityException('助记词仅支持 12 或 24 个单词');
+    }
+    return Bip39Service.generateMnemonic(words: words);
   }
 
   String normalizeMnemonic(String mnemonic) => mnemonic
@@ -136,7 +138,7 @@ class WalletSecurity {
     final normalized = normalizeMnemonic(mnemonic);
     final wordCount = normalized.split(' ').length;
     return (wordCount == 12 || wordCount == 24) &&
-        bip39.validateMnemonic(normalized);
+        Bip39Service.validateMnemonic(normalized);
   }
 
   Future<void> saveMnemonic({
@@ -262,17 +264,16 @@ class _VaultEncryptionRequest {
   final List<int> salt;
 }
 
-Future<WalletVaultRecord> _encryptVault(
-  _VaultEncryptionRequest request,
-) async {
-  final key = await Pbkdf2(
-    macAlgorithm: Hmac.sha256(),
-    iterations: 210000,
-    bits: 256,
-  ).deriveKey(
-    secretKey: SecretKey(utf8.encode(request.password)),
-    nonce: request.salt,
-  );
+Future<WalletVaultRecord> _encryptVault(_VaultEncryptionRequest request) async {
+  final key =
+      await Pbkdf2(
+        macAlgorithm: Hmac.sha256(),
+        iterations: 210000,
+        bits: 256,
+      ).deriveKey(
+        secretKey: SecretKey(utf8.encode(request.password)),
+        nonce: request.salt,
+      );
   final secretBox = await AesGcm.with256bits().encrypt(
     utf8.encode(request.mnemonic),
     secretKey: key,

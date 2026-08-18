@@ -2,8 +2,8 @@ import 'dart:isolate';
 
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
-import 'package:bip39/bip39.dart' as bip39;
 import 'package:blockchain_utils/blockchain_utils.dart';
+import 'package:aco_chat/services/bip39_service.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Derives non-EVM public addresses after the default EVM address is ready.
@@ -33,7 +33,7 @@ class WalletChainIdentityService {
 
   /// Exposed for deterministic tests and future on-demand derivation.
   static Map<String, String> deriveNonEvmAddresses(String mnemonic) {
-    final seed = bip39.mnemonicToSeed(mnemonic);
+    final seed = Bip39Service.mnemonicToSeed(mnemonic);
     return {
       for (final entry in _nonEvmChains.entries)
         entry.key: Bip44.fromSeed(
