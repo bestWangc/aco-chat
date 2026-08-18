@@ -7760,6 +7760,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _roomLoading = false;
   bool _leaving = false;
   bool _allowPop = false;
+  bool _closingRoom = false;
   bool _handRaiseNoticeVisible = false;
   bool _checkingIn = false;
   LiveRoom? _room;
@@ -8074,6 +8075,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final live = widget.live;
     if (live == null) return;
     try {
+      // The host action sheet is popped immediately before this method is
+      // started. Wait until the room route is current before popping it, so a
+      // fast API response cannot pop the still-closing sheet instead.
+      while (mounted && !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      if (!mounted) return;
       await _accountSession.endLive(live.id);
       _closeRoom();
     } on AccountApiException catch (error) {
@@ -8360,7 +8368,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               isDestructiveAction: true,
               onPressed: () {
                 Navigator.of(sheetContext).pop();
-                unawaited(_endLive());
+                unawaited(_confirmEndLive());
               },
               child: _hostActionLabel('结束直播'),
             ),
@@ -8396,7 +8404,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   }
 
   void _closeRoom([bool? result]) {
-    if (!mounted) return;
+    if (!mounted || _closingRoom) return;
+    _closingRoom = true;
     setState(() {
       _allowPop = true;
       _leaving = true;
