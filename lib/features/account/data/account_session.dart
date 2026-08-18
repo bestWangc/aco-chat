@@ -241,6 +241,18 @@ class AccountSession {
         token: await _requireToken(),
       );
 
+  Future<void> startLiveCheckIn(int liveId, int durationSeconds) async =>
+      _apiClient.startLiveCheckIn(
+        liveId: liveId,
+        durationSeconds: durationSeconds,
+        token: await _requireToken(),
+      );
+  Future<void> confirmLiveCheckIn(int liveId) async => _apiClient
+      .confirmLiveCheckIn(liveId: liveId, token: await _requireToken());
+
+  Future<String> exportLiveCheckIns(int liveId) async => _apiClient
+      .exportLiveCheckIns(liveId: liveId, token: await _requireToken());
+
   Future<String> _requireToken() async {
     final tokens = await _tokenStore.read();
     if (tokens == null) throw StateError('No access token is available');
