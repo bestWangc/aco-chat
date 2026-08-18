@@ -9,6 +9,8 @@ import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
+import 'package:aco_chat/features/legal/presentation/legal_document_page.dart';
+import 'package:aco_chat/shared/widgets/aco_page_header.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
@@ -146,6 +148,14 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
   bool _backgroundVideoReady = false;
   bool _backgroundVideoDisposed = false;
   bool _hasAcceptedTerms = false;
+
+  void _openLegalDocument(LegalDocument document) {
+    Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => LegalDocumentPage(document: document),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -304,6 +314,10 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
                   hasAcceptedTerms: _hasAcceptedTerms,
                   onTermsChanged: (accepted) =>
                       setState(() => _hasAcceptedTerms = accepted),
+                  onOpenUserAgreement: () =>
+                      _openLegalDocument(LegalDocument.userAgreement),
+                  onOpenPrivacyPolicy: () =>
+                      _openLegalDocument(LegalDocument.privacyPolicy),
                   onCreate: () => _startWalletSetup(_WalletSetupMode.create),
                   onImport: () => _startWalletSetup(_WalletSetupMode.import),
                 ),
@@ -321,6 +335,8 @@ class _WalletWelcomeContent extends StatelessWidget {
     required this.palette,
     required this.hasAcceptedTerms,
     required this.onTermsChanged,
+    required this.onOpenUserAgreement,
+    required this.onOpenPrivacyPolicy,
     required this.onCreate,
     required this.onImport,
   });
@@ -328,6 +344,8 @@ class _WalletWelcomeContent extends StatelessWidget {
   final AcoPalette palette;
   final bool hasAcceptedTerms;
   final ValueChanged<bool> onTermsChanged;
+  final VoidCallback onOpenUserAgreement;
+  final VoidCallback onOpenPrivacyPolicy;
   final VoidCallback onCreate;
   final VoidCallback onImport;
 
@@ -375,6 +393,8 @@ class _WalletWelcomeContent extends StatelessWidget {
             palette: palette,
             selected: hasAcceptedTerms,
             onChanged: onTermsChanged,
+            onOpenUserAgreement: onOpenUserAgreement,
+            onOpenPrivacyPolicy: onOpenPrivacyPolicy,
           ),
         ),
         const SizedBox(height: _welcomeAgreementToActionsGap),
@@ -425,11 +445,15 @@ class _WalletWelcomeAgreement extends StatelessWidget {
     required this.palette,
     required this.selected,
     required this.onChanged,
+    required this.onOpenUserAgreement,
+    required this.onOpenPrivacyPolicy,
   });
 
   final AcoPalette palette;
   final bool selected;
   final ValueChanged<bool> onChanged;
+  final VoidCallback onOpenUserAgreement;
+  final VoidCallback onOpenPrivacyPolicy;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -466,37 +490,72 @@ class _WalletWelcomeAgreement extends StatelessWidget {
       ),
       const SizedBox(width: _welcomeCheckboxSize),
       Expanded(
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text.rich(
-            TextSpan(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _AgreementText(text: '我已阅读并同意 ', palette: palette),
+                _AgreementLink(label: '《用户协议》', onPressed: onOpenUserAgreement),
+                _AgreementText(text: ' 和 ', palette: palette),
+                _AgreementLink(label: '《隐私政策》', onPressed: onOpenPrivacyPolicy),
+              ],
+            ),
+            Text(
+              '由 Aladdin Dao Inc 提供',
               style: TextStyle(
                 color: palette.primaryText,
                 fontSize: _welcomeAgreementFontSize,
                 fontWeight: FontWeight.w400,
                 height: 1.25,
               ),
-              children: const [
-                TextSpan(text: '我已阅读并同意 '),
-                TextSpan(
-                  text: '《用户协议》',
-                  style: TextStyle(color: _accentGreen),
-                ),
-                TextSpan(text: ' 和 '),
-                TextSpan(
-                  text: '《隐私政策》',
-                  style: TextStyle(color: _accentGreen),
-                ),
-                TextSpan(text: '\n由 Aladdin Dao Inc 提供'),
-              ],
             ),
-            softWrap: false,
-            textScaler: TextScaler.noScaling,
-          ),
+          ],
         ),
       ),
     ],
+  );
+}
+
+class _AgreementText extends StatelessWidget {
+  const _AgreementText({required this.text, required this.palette});
+
+  final String text;
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(
+      color: palette.primaryText,
+      fontSize: _welcomeAgreementFontSize,
+      fontWeight: FontWeight.w400,
+      height: 1.25,
+    ),
+  );
+}
+
+class _AgreementLink extends StatelessWidget {
+  const _AgreementLink({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: Size.zero,
+    onPressed: onPressed,
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: _accentGreen,
+        fontSize: _welcomeAgreementFontSize,
+        fontWeight: FontWeight.w400,
+        height: 1.25,
+      ),
+    ),
   );
 }
 
@@ -812,7 +871,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     style: TextStyle(color: palette.primaryText),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: palette.surface,
+      color: palette.inputSurface,
       borderRadius: BorderRadius.circular(14),
     ),
   );
@@ -828,7 +887,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         style: TextStyle(color: palette.primaryText),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: palette.surface,
+          color: palette.inputSurface,
           borderRadius: BorderRadius.circular(14),
         ),
       ),
@@ -842,7 +901,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         style: TextStyle(color: palette.primaryText),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: palette.surface,
+          color: palette.inputSurface,
           borderRadius: BorderRadius.circular(14),
         ),
       ),
@@ -1617,24 +1676,6 @@ class _AcoPageRoute<T> extends CupertinoPageRoute<T> {
   Color? get barrierColor => null;
 }
 
-class AcoPalette {
-  const AcoPalette(this.dark);
-  final bool dark;
-
-  Color get accent => _accentGreen;
-  Color get background => dark ? _black : _white;
-  Color get surface => dark ? const Color(0xFF3A3A3A) : const Color(0xFFF4F4F4);
-  Color get surfaceRaised =>
-      dark ? const Color(0xFF222222) : const Color(0xFFEDEDED);
-  Color get primaryText =>
-      dark ? const Color(0xFFF7F7F7) : const Color(0xFF151515);
-  Color get mutedText =>
-      dark ? const Color(0xFF929292) : const Color(0xFF939393);
-  Color get border => dark ? const Color(0xFF2D2D2D) : const Color(0xFFE2E2E2);
-  Color get navInactive =>
-      dark ? const Color(0xFF9E9E9E) : const Color(0xFFC4C4C4);
-}
-
 class AcoScreenPage extends StatelessWidget {
   const AcoScreenPage({
     required this.screen,
@@ -2034,118 +2075,6 @@ class _DexBottomNavIcon extends StatelessWidget {
             fit: BoxFit.contain,
           ),
         ),
-      ),
-    ),
-  );
-}
-
-class AcoPageHeader extends StatelessWidget {
-  const AcoPageHeader({
-    required this.palette,
-    this.title,
-    this.onBack,
-    this.right,
-    this.backButtonKey,
-    this.titleFollowsBack = false,
-    this.titleFontSize = AcoTypography.bodyEmphasis,
-    this.backButtonOffset = const Offset(-8, 0),
-    super.key,
-  });
-  final AcoPalette palette;
-  final String? title;
-  final VoidCallback? onBack;
-  final Widget? right;
-  final Key? backButtonKey;
-  final bool titleFollowsBack;
-  final double titleFontSize;
-  final Offset backButtonOffset;
-
-  @override
-  Widget build(BuildContext context) {
-    final titleText = title == null
-        ? null
-        : Text(
-            title!,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: titleFontSize,
-              fontWeight: FontWeight.w600,
-            ),
-          );
-    final backButton = onBack == null
-        ? null
-        : Transform.translate(
-            offset: backButtonOffset,
-            child: AcoIconButton(
-              key: backButtonKey,
-              icon: CupertinoIcons.back,
-              palette: palette,
-              label: '返回',
-              onPressed: onBack!,
-            ),
-          );
-
-    if (titleFollowsBack) {
-      return SizedBox(
-        width: double.infinity,
-        height: 48,
-        child: Row(
-          children: [
-            if (backButton != null) SizedBox(width: 44, child: backButton),
-            if (titleText != null) Expanded(child: titleText),
-            right ?? const SizedBox.shrink(),
-          ],
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          if (backButton != null)
-            Align(alignment: Alignment.centerLeft, child: backButton),
-          if (titleText != null) Align(child: titleText),
-          if (right != null)
-            Align(alignment: Alignment.centerRight, child: right!),
-        ],
-      ),
-    );
-  }
-}
-
-class AcoIconButton extends StatelessWidget {
-  const AcoIconButton({
-    required this.icon,
-    required this.palette,
-    required this.label,
-    required this.onPressed,
-    this.size = 25,
-    super.key,
-  });
-  final IconData icon;
-  final AcoPalette palette;
-  final String label;
-  final VoidCallback onPressed;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    container: true,
-    button: true,
-    label: label,
-    child: SizedBox(
-      width: 44,
-      height: 44,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: const Size(44, 44),
-        onPressed: onPressed,
-        child: Icon(icon, color: palette.primaryText, size: size),
       ),
     ),
   );

@@ -8,6 +8,7 @@ android {
     namespace = "com.aco.aco_chat"
     // Keep the app aligned with the newest Android API required by plugins.
     compileSdk = 37
+    buildToolsVersion = "36.0.0"
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
