@@ -3338,7 +3338,7 @@ class _WalletHomeState extends State<_WalletHome> {
 
   Future<List<WalletBalance>> _loadBalances(WalletNetwork network) async {
     final identity = widget.walletIdentity;
-    if (identity == null) return const [];
+    if (identity == null) return _placeholderBalances();
     final tokens = await _tokenStore.read();
     if (tokens == null) return _placeholderBalances();
     final addresses = await WalletPreferences.derivedAddresses(identity);
@@ -3760,21 +3760,15 @@ class _WalletHomeState extends State<_WalletHome> {
               future: _balancesFuture,
               initialData: _initialBalances,
               builder: (context, snapshot) {
-                final balances = snapshot.data ?? const <WalletBalance>[];
+                final balances = snapshot.data;
+                final balancesToDisplay = balances == null || balances.isEmpty
+                    ? _initialBalances
+                    : balances;
                 return ListView.builder(
                   padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
-                  itemCount: balances.isEmpty ? 1 : balances.length,
+                  itemCount: balancesToDisplay.length,
                   itemBuilder: (context, index) {
-                    if (balances.isEmpty) {
-                      return Padding(
-                        padding: EdgeInsets.only(top: 24 * scale),
-                        child: Text(
-                          '地址派生中，请稍后刷新。',
-                          style: TextStyle(color: widget.palette.mutedText),
-                        ),
-                      );
-                    }
-                    final balance = balances[index];
+                    final balance = balancesToDisplay[index];
                     final rawAmount = balance.balance ?? BigInt.zero;
                     final amount = rawAmount == BigInt.zero
                         ? '0.00'
