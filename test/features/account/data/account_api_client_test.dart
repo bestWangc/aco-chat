@@ -49,31 +49,34 @@ void main() {
     expect(result.user.accountId, 'aco_account');
   });
 
-  test('restores an existing wallet account without a token or signature', () async {
-    late Map<String, dynamic> requestBody;
-    final client = AccountApiClient(
-      baseUri: Uri.parse('https://api.aco.test/api/v1'),
-      httpClient: MockClient((request) async {
-        expect(request.url.path, '/api/v1/auth/wallet-silent-login');
-        requestBody = jsonDecode(request.body) as Map<String, dynamic>;
-        return response({
-          'created': false,
-          'access_token': 'silent-token',
-          'refresh_token': 'unused-refresh-token',
-          'user': {
-            'account_id': 'aco_account',
-            'username': 'aco_1234',
-            'nickname': 'Aco 1234',
-          },
-        });
-      }),
-    );
+  test(
+    'restores an existing wallet account without a token or signature',
+    () async {
+      late Map<String, dynamic> requestBody;
+      final client = AccountApiClient(
+        baseUri: Uri.parse('https://api.aco.test/api/v1'),
+        httpClient: MockClient((request) async {
+          expect(request.url.path, '/api/v1/auth/wallet-silent-login');
+          requestBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return response({
+            'created': false,
+            'access_token': 'silent-token',
+            'refresh_token': 'unused-refresh-token',
+            'user': {
+              'account_id': 'aco_account',
+              'username': 'aco_1234',
+              'nickname': 'Aco 1234',
+            },
+          });
+        }),
+      );
 
-    final result = await client.silentWalletLogin('0xabc');
+      final result = await client.silentWalletLogin('0xabc');
 
-    expect(requestBody, {'wallet_address': '0xabc'});
-    expect(result.tokens.accessToken, 'silent-token');
-  });
+      expect(requestBody, {'wallet_address': '0xabc'});
+      expect(result.tokens.accessToken, 'silent-token');
+    },
+  );
 
   test('uses the account id to add and list wallet addresses', () async {
     final requests = <Uri>[];
@@ -164,6 +167,7 @@ void main() {
               'access': 'open',
               'status': 'live',
               'can_edit': true,
+              'can_export_check_ins': true,
               'created_at': '2026-08-12T08:30:00Z',
             },
           ],
@@ -180,6 +184,7 @@ void main() {
     expect(lives.single.coverUrl, '/uploads/live-cover-9.jpg');
     expect(lives.single.status, 'live');
     expect(lives.single.canEdit, isTrue);
+    expect(lives.single.canExportCheckIns, isTrue);
   });
 
   test('updates a scheduled live session', () async {

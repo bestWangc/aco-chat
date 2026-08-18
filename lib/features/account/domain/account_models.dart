@@ -103,6 +103,7 @@ class LiveSession {
     required this.status,
     required this.createdAt,
     this.canEdit = false,
+    this.canExportCheckIns = false,
     this.scheduledAt,
   });
 
@@ -113,6 +114,7 @@ class LiveSession {
   final String status;
   final DateTime createdAt;
   final bool canEdit;
+  final bool canExportCheckIns;
   final DateTime? scheduledAt;
 
   factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
@@ -122,6 +124,7 @@ class LiveSession {
     access: json['access'] as String,
     status: json['status'] as String,
     canEdit: json['can_edit'] as bool? ?? false,
+    canExportCheckIns: json['can_export_check_ins'] as bool? ?? false,
     createdAt: DateTime.parse(json['created_at'] as String),
     scheduledAt: switch (json['scheduled_at'] as String?) {
       final value? when value.isNotEmpty => DateTime.parse(value),
