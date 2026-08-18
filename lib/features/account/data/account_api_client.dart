@@ -331,6 +331,44 @@ class AccountApiClient {
     _body(response);
   }
 
+  Future<void> startLiveCheckIn({
+    required int liveId,
+    required int durationSeconds,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/check-ins'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'duration_seconds': durationSeconds}),
+    );
+    _body(response);
+  }
+
+  Future<void> confirmLiveCheckIn({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/check-ins/current'),
+      headers: _authorizedHeaders(token),
+    );
+    _body(response);
+  }
+
+  Future<String> exportLiveCheckIns({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/check-ins/export'),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      _body(response);
+    }
+    return response.body;
+  }
+
   Future<void> _postWithoutBody(String path, String token) async {
     final response = await _httpClient.post(
       _uri(path),

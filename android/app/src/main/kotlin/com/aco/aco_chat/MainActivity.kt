@@ -1,5 +1,8 @@
 package com.aco.aco_chat
 
+import android.content.ContentValues
+import android.os.Build
+import android.provider.MediaStore
 import android.view.WindowManager
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -29,6 +32,40 @@ class MainActivity : FlutterFragmentActivity() {
                     return@setMethodCallHandler
                 }
                 authenticateWithBiometrics(result)
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/downloads")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "saveText") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val filename = call.argument<String>("filename") ?: "aco-chat.txt"
+                val bytes = call.argument<ByteArray>("bytes")
+                if (bytes == null) {
+                    result.error("INVALID_DATA", "文件内容为空", null)
+                    return@setMethodCallHandler
+                }
+                try {
+                    val values = ContentValues().apply {
+                        put(MediaStore.Downloads.DISPLAY_NAME, filename)
+                        put(MediaStore.Downloads.MIME_TYPE, "text/plain")
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            put(MediaStore.Downloads.IS_PENDING, 1)
+                        }
+                    }
+                    val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                        ?: throw IllegalStateException("无法创建下载文件")
+                    contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        ?: throw IllegalStateException("无法写入下载文件")
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        values.clear()
+                        values.put(MediaStore.Downloads.IS_PENDING, 0)
+                        contentResolver.update(uri, values, null, null)
+                    }
+                    result.success(uri.toString())
+                } catch (error: Exception) {
+                    result.error("SAVE_FAILED", error.message, null)
+                }
             }
     }
 

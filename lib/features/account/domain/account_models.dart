@@ -203,6 +203,7 @@ class LiveRoom {
     required this.viewerMuted,
     required this.chatMuted,
     required this.audioMuted,
+    this.checkIn,
   });
 
   final LiveSession live;
@@ -218,6 +219,7 @@ class LiveRoom {
   final bool viewerMuted;
   final bool chatMuted;
   final bool audioMuted;
+  final LiveCheckIn? checkIn;
 
   factory LiveRoom.fromJson(Map<String, dynamic> json) => LiveRoom(
     live: LiveSession.fromJson(json['live'] as Map<String, dynamic>),
@@ -242,5 +244,25 @@ class LiveRoom {
     viewerMuted: json['viewer_muted'] as bool? ?? false,
     chatMuted: json['chat_muted'] as bool? ?? false,
     audioMuted: json['audio_muted'] as bool? ?? false,
+    checkIn: switch (json['check_in']) {
+      final Map<String, dynamic> value => LiveCheckIn.fromJson(value),
+      _ => null,
+    },
+  );
+}
+
+class LiveCheckIn {
+  const LiveCheckIn({
+    required this.deadline,
+    required this.checkedInCount,
+    required this.viewerChecked,
+  });
+  final DateTime deadline;
+  final int checkedInCount;
+  final bool viewerChecked;
+  factory LiveCheckIn.fromJson(Map<String, dynamic> json) => LiveCheckIn(
+    deadline: DateTime.parse(json['deadline'] as String),
+    checkedInCount: json['checked_in_count'] as int? ?? 0,
+    viewerChecked: json['viewer_checked'] as bool? ?? false,
   );
 }
