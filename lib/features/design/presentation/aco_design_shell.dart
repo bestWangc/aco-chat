@@ -21,7 +21,6 @@ import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart' as material;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
@@ -3267,6 +3266,7 @@ class _WalletHomeState extends State<_WalletHome> {
     _initialBalances = _placeholderBalances();
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
     _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
+    _watchWalletLogin(widget.walletLoginFuture);
   }
 
   @override
@@ -3276,12 +3276,23 @@ class _WalletHomeState extends State<_WalletHome> {
         oldWidget.walletIdentity != widget.walletIdentity) {
       _reloadBalances();
     }
+    if (oldWidget.walletLoginFuture != widget.walletLoginFuture) {
+      _watchWalletLogin(widget.walletLoginFuture);
+    }
+  }
+
+  void _watchWalletLogin(Future<AccountProfile?>? loginFuture) {
+    if (loginFuture == null) return;
+    unawaited(
+      loginFuture.whenComplete(() {
+        if (mounted) _reloadBalances();
+      }),
+    );
   }
 
   Future<List<WalletBalance>> _loadBalances(WalletNetwork network) async {
     final identity = widget.walletIdentity;
     if (identity == null) return const [];
-    await widget.walletLoginFuture;
     final tokens = await _tokenStore.read();
     if (tokens == null) return _placeholderBalances();
     final addresses = await WalletPreferences.derivedAddresses(identity);
@@ -6550,7 +6561,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
   Future<void> _refreshLives() async {
     final refreshFuture = _loadLives();
-    setState(() => _lives = refreshFuture);
+    setState(() {
+      _lives = refreshFuture;
+    });
     try {
       await refreshFuture;
     } catch (_) {
@@ -6598,8 +6611,10 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           ),
         )
         .then((ended) {
-          if (ended == true && mounted) {
-            _retryLoadingLives();
+          if (!mounted) return;
+          _retryLoadingLives();
+          if (ended == true) {
+            showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
           }
         });
   }
@@ -6718,171 +6733,175 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
     return Stack(
       children: [
-        material.RefreshIndicator.adaptive(
-          onRefresh: _refreshLives,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              0,
-              _rootPageTopInset * headerScale,
-              0,
-              96,
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: _contentHorizontalInset,
-                ),
-                child: SizedBox(
-                  height: 46 * headerScale,
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Padding(
-                      padding: EdgeInsets.only(right: headerRightInset),
-                      child: AcoTopActions(
-                        palette: palette,
-                        onOpen: onOpen,
-                        scale: headerScale,
+        CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            CupertinoSliverRefreshControl(onRefresh: _refreshLives),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                0,
+                _rootPageTopInset * headerScale,
+                0,
+                96,
+              ),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _contentHorizontalInset,
+                    ),
+                    child: SizedBox(
+                      height: 46 * headerScale,
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: EdgeInsets.only(right: headerRightInset),
+                          child: AcoTopActions(
+                            palette: palette,
+                            onOpen: onOpen,
+                            scale: headerScale,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: _contentHorizontalInset,
-                ),
-                child: SizedBox(
-                  height: 36,
-                  child: OverflowBox(
-                    alignment: Alignment.centerLeft,
-                    maxWidth: double.infinity,
-                    maxHeight: 36,
-                    child: Transform.translate(
-                      offset: const Offset(-11, 0),
-                      child: SizedBox(
-                        width: MediaQuery.sizeOf(context).width - 54,
-                        child: Row(
-                          children: [
-                            const AcoAvatar(size: 36),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Transform.translate(
-                                offset: const Offset(10, 0),
-                                child: AcoSearch(
-                                  palette: palette,
-                                  hint: '搜索帖文或消息',
-                                  height: 35,
-                                  variant: AcoSearchVariant.squareComposer,
-                                  submitIcon: CupertinoIcons.add,
-                                  showSubmit: true,
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _contentHorizontalInset,
+                    ),
+                    child: SizedBox(
+                      height: 36,
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        maxWidth: double.infinity,
+                        maxHeight: 36,
+                        child: Transform.translate(
+                          offset: const Offset(-11, 0),
+                          child: SizedBox(
+                            width: MediaQuery.sizeOf(context).width - 54,
+                            child: Row(
+                              children: [
+                                const AcoAvatar(size: 36),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Transform.translate(
+                                    offset: const Offset(10, 0),
+                                    child: AcoSearch(
+                                      palette: palette,
+                                      hint: '搜索帖文或消息',
+                                      height: 35,
+                                      variant: AcoSearchVariant.squareComposer,
+                                      submitIcon: CupertinoIcons.add,
+                                      showSubmit: true,
+                                    ),
+                                  ),
                                 ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _contentHorizontalInset,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '推荐',
+                          style: TextStyle(
+                            color: _showLive
+                                ? palette.mutedText
+                                : palette.primaryText,
+                            fontSize: AcoTypography.body,
+                            fontWeight: _showLive
+                                ? FontWeight.w400
+                                : FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 54),
+                        Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Text(
+                              '好友',
+                              style: TextStyle(
+                                color: palette.mutedText,
+                                fontSize: AcoTypography.body,
                               ),
+                            ),
+                            const Positioned(
+                              top: -10,
+                              right: -24,
+                              child: Offstage(child: _GreenBadge(label: '77')),
                             ),
                           ],
                         ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: _contentHorizontalInset,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '推荐',
-                      style: TextStyle(
-                        color: _showLive
-                            ? palette.mutedText
-                            : palette.primaryText,
-                        fontSize: AcoTypography.body,
-                        fontWeight: _showLive
-                            ? FontWeight.w400
-                            : FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 54),
-                    Stack(
-                      clipBehavior: Clip.none,
-                      children: [
+                        const SizedBox(width: 54),
                         Text(
-                          '好友',
+                          '直播',
                           style: TextStyle(
-                            color: palette.mutedText,
+                            color: _showLive
+                                ? palette.primaryText
+                                : palette.mutedText,
                             fontSize: AcoTypography.body,
+                            fontWeight: _showLive
+                                ? FontWeight.w700
+                                : FontWeight.w400,
                           ),
-                        ),
-                        const Positioned(
-                          top: -10,
-                          right: -24,
-                          child: Offstage(child: _GreenBadge(label: '77')),
                         ),
                       ],
                     ),
-                    const SizedBox(width: 54),
-                    Text(
-                      '直播',
-                      style: TextStyle(
-                        color: _showLive
-                            ? palette.primaryText
-                            : palette.mutedText,
-                        fontSize: AcoTypography.body,
-                        fontWeight: _showLive
-                            ? FontWeight.w700
-                            : FontWeight.w400,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(height: 1, child: ColoredBox(color: palette.border)),
+                  if (_showLive)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: _liveListHorizontalInset,
+                      ),
+                      child: Column(children: _buildLiveContent(palette)),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: _contentHorizontalInset,
+                      ),
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 32),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _TopicChip(
+                                  palette: palette,
+                                  label: '买买买!!',
+                                  width: 164,
+                                ),
+                                const SizedBox(width: 10),
+                                _TopicChip(
+                                  palette: palette,
+                                  label: 'ALD! V587!',
+                                  width: 184,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          _PostCard(palette: palette),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                ]),
               ),
-              const SizedBox(height: 16),
-              SizedBox(height: 1, child: ColoredBox(color: palette.border)),
-              if (_showLive)
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _liveListHorizontalInset,
-                  ),
-                  child: Column(children: _buildLiveContent(palette)),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _contentHorizontalInset,
-                  ),
-                  child: Column(
-                    children: [
-                      const SizedBox(height: 32),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: [
-                            _TopicChip(
-                              palette: palette,
-                              label: '买买买!!',
-                              width: 164,
-                            ),
-                            const SizedBox(width: 10),
-                            _TopicChip(
-                              palette: palette,
-                              label: 'ALD! V587!',
-                              width: 184,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      _PostCard(palette: palette),
-                    ],
-                  ),
-                ),
-            ],
-          ),
+            ),
+          ],
         ),
         Positioned(
           right: 22,
@@ -7677,6 +7696,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
   Room? _liveKitRoom;
+  bool? _liveKitCanPublish;
+  bool _refreshingLiveKitPermission = false;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
@@ -7697,6 +7718,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     await _loadMessages();
     await _connectRealtime();
     await _connectLiveKit();
+    final room = _room;
+    if (room != null) {
+      await _syncLiveKitPublishPermission(room);
+    }
   }
 
   Future<void> _connectLiveKit() async {
@@ -7714,6 +7739,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
       final previousRoom = _liveKitRoom;
       _liveKitRoom = room;
+      _liveKitCanPublish = joinInfo.canPublish;
       await previousRoom?.disconnect();
       if (joinInfo.canPublish) {
         await room.localParticipant?.setMicrophoneEnabled(!_muted);
@@ -7804,11 +7830,56 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         if (messageJson is Map<String, dynamic>) {
           _appendMessages([LiveMessage.fromJson(messageJson)]);
         }
+      case 'room.audio_mute':
+        final audioMutedJson = event['audio_muted'];
+        if (audioMutedJson is Map<String, dynamic>) {
+          _applyAudioMute(audioMutedJson['muted'] as bool? ?? false);
+        }
     }
+  }
+
+  void _applyAudioMute(bool muted) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    final updatedRoom = LiveRoom(
+      live: room.live,
+      host: room.host,
+      hostActive: room.hostActive,
+      viewerUserId: room.viewerUserId,
+      viewerRole: room.viewerRole,
+      participantCount: room.participantCount,
+      speakers: room.speakers
+          .map(
+            (speaker) => LiveParticipant(
+              userId: speaker.userId,
+              nickname: speaker.nickname,
+              role: speaker.role,
+              handRaised: speaker.handRaised,
+              muted: muted,
+            ),
+          )
+          .toList(growable: false),
+      listeners: room.listeners,
+      raisedHands: room.raisedHands,
+      canRaiseHand: room.canRaiseHand,
+      viewerMuted: room.viewerRole == 'speaker' ? muted : room.viewerMuted,
+      chatMuted: room.chatMuted,
+      audioMuted: muted,
+      checkIn: room.checkIn,
+    );
+    setState(() {
+      _room = updatedRoom;
+      _muted = updatedRoom.viewerMuted;
+    });
+    unawaited(_syncLiveKitPublishPermission(updatedRoom));
   }
 
   void _applyRoomSnapshot(LiveRoom room) {
     if (!mounted) return;
+    if (room.live.status == 'ended') {
+      _closeRoom(true);
+      return;
+    }
     _checkInTimer?.cancel();
     if (room.checkIn != null) {
       _checkInTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -7859,6 +7930,39 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         _emojiPickerVisible = false;
       }
     });
+    unawaited(_syncLiveKitPublishPermission(room));
+  }
+
+  // LiveKit permissions are embedded in the join token. A listener therefore
+  // has to reconnect after the host approves their hand raise; otherwise the
+  // UI shows an enabled microphone but LiveKit still rejects its audio track.
+  Future<void> _syncLiveKitPublishPermission(LiveRoom room) async {
+    final canPublish = _canPublishAudio(room);
+    if (_liveKitRoom == null) {
+      return;
+    }
+    if (!canPublish) {
+      if (_liveKitCanPublish == true) {
+        await _setLocalMicrophoneEnabled(false);
+      }
+      return;
+    }
+    if (_liveKitCanPublish == true) {
+      await _setLocalMicrophoneEnabled(true);
+      return;
+    }
+    if (_refreshingLiveKitPermission) return;
+    _refreshingLiveKitPermission = true;
+    try {
+      await _connectLiveKit();
+    } finally {
+      _refreshingLiveKitPermission = false;
+    }
+  }
+
+  bool _canPublishAudio(LiveRoom room) {
+    if (room.viewerMuted) return false;
+    return room.viewerRole == 'host' || room.viewerRole == 'speaker';
   }
 
   Future<void> _raiseHand() async {
@@ -7889,7 +7993,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     if (live == null) return;
     try {
       await _accountSession.endLive(live.id);
-      _closeRoom(true);
+      _closeRoom();
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '结束失败', error.message);
     }
@@ -8342,7 +8446,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final viewerRole = room?.viewerRole;
     final isHost = viewerRole == 'host';
     final canSpeak = live == null || isHost || viewerRole == 'speaker';
-    final audioMuted = room?.audioMuted == true && !isHost;
+    // `viewerMuted` is authoritative: after a host mutes everyone, they can
+    // explicitly unmute one speaker without changing the room-wide indicator.
+    final audioMuted = !isHost && (room?.viewerMuted ?? _muted);
     final chatMuted = room?.chatMuted == true && !isHost;
 
     return PopScope(
@@ -10913,7 +11019,10 @@ class _LiveRoomHostCard extends StatelessWidget {
     clipBehavior: Clip.none,
     children: [
       ColorFiltered(
-        colorFilter: active
+        // A muted host is intentionally shown at full brightness. `active`
+        // describes whether the host is currently speaking, so using it
+        // alone would also dim the avatar whenever the host is muted.
+        colorFilter: active || host.muted
             ? const ColorFilter.mode(_transparent, BlendMode.dst)
             : const ColorFilter.matrix(<double>[
                 .2126,

@@ -29,7 +29,6 @@ void main() {
 
   test('stores the login token and restores the profile with it', () async {
     final tokenStore = _InMemoryTokenStore();
-    var requestedProfile = false;
     final client = AccountApiClient(
       baseUri: Uri.parse('https://api.aco.test/api/v1'),
       httpClient: MockClient((request) async {
@@ -53,17 +52,17 @@ void main() {
           return _response({
             'access_token': 'rotated-access-token',
             'refresh_token': 'rotated-refresh-token',
+            'user': {
+              'account_id': '1000000000000001',
+              'username': 'aco_1000000000000001',
+              'nickname': 'Aco Updated',
+            },
           });
         }
-        requestedProfile = true;
-        expect(request.headers['authorization'], 'Bearer rotated-access-token');
-        return _response({
-          'user': {
-            'account_id': '1000000000000001',
-            'username': 'aco_1000000000000001',
-            'nickname': 'Aco Updated',
-          },
-        });
+
+        throw StateError(
+          'restoreProfile must not request auth/me after refresh',
+        );
       }),
     );
     final session = AccountSession(client, tokenStore: tokenStore);
@@ -76,7 +75,6 @@ void main() {
     final profile = await session.restoreProfile();
 
     expect(tokenStore.value, 'rotated-access-token');
-    expect(requestedProfile, isTrue);
     expect(profile?.nickname, 'Aco Updated');
   });
 

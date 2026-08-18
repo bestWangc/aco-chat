@@ -49,13 +49,11 @@ class AccountSession {
     final tokens = await _tokenStore.read();
     if (tokens == null) return null;
     try {
-      final refreshedTokens = await _apiClient.refreshAccessToken(
+      final refreshed = await _apiClient.refreshAccessToken(
         tokens.refreshToken,
       );
-      await _tokenStore.write(refreshedTokens);
-      final profile = await _apiClient.currentProfile(
-        token: refreshedTokens.accessToken,
-      );
+      await _tokenStore.write(refreshed.tokens);
+      final profile = refreshed.user;
       final preferences = await SharedPreferences.getInstance();
       await preferences.setString(
         activeAccountKey,
