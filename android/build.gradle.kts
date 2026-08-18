@@ -1,4 +1,4 @@
-import com.android.build.api.dsl.LibraryExtension
+import com.android.build.api.variant.LibraryAndroidComponentsExtension
 
 allprojects {
     repositories {
@@ -23,10 +23,10 @@ subprojects {
 
 subprojects {
     plugins.withId("com.android.library") {
-        extensions.configure<LibraryExtension> {
-            // LiveKit's current Flutter package still declares API 34, while
-            // its flutter_webrtc dependency requires API 36.
-            compileSdk = 36
+        extensions.configure<LibraryAndroidComponentsExtension> {
+            finalizeDsl { extension ->
+                extension.compileSdk = 36
+            }
         }
     }
 }
