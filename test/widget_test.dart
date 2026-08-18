@@ -219,6 +219,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('wallet-password-field')), findsOneWidget);
     expect(find.byKey(const Key('wallet-biometric-button')), findsNothing);
+    for (final key in const [
+      Key('wallet-password-field'),
+      Key('wallet-password-confirm-field'),
+    ]) {
+      final field = tester.widget<CupertinoTextField>(find.byKey(key));
+      final decoration = field.decoration! as BoxDecoration;
+      expect(decoration.color, const Color(0xFF161616));
+    }
 
     await tester.enterText(
       find.byKey(const Key('wallet-password-field')),
