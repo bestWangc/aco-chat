@@ -127,10 +127,17 @@ class _AcoAppState extends State<AcoApp> {
     String mnemonic,
   ) async {
     await WalletPreferences.saveWalletIdentity(identity);
-    final profile = await _syncWalletAccount(
-      identity,
-      mnemonic,
-    ).timeout(const Duration(seconds: 45));
+    AccountProfile? profile;
+    try {
+      profile = await _syncWalletAccount(
+        identity,
+        mnemonic,
+      ).timeout(const Duration(seconds: 12));
+    } catch (_) {
+      // Local wallet creation is independent from account synchronization.
+      // Keep the wallet usable when the API is unavailable; silent login can
+      // retry after the app has entered the wallet home.
+    }
     final loginFuture = Future<AccountProfile?>.value(profile);
     setState(() {
       _walletConfigured = true;
