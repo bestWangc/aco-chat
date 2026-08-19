@@ -7747,6 +7747,8 @@ class _VoiceRoomPage extends StatefulWidget {
 }
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
+  static Future<void>? _liveKitInitialization;
+
   bool _muted = false;
   bool _handRaised = false;
   bool _emojiPickerVisible = false;
@@ -7803,6 +7805,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
     try {
+      await _ensureLiveKitInitialized();
       final joinInfo = await _accountSession.liveKitJoinInfo(live.id);
       final room = Room(
         roomOptions: const RoomOptions(
@@ -7830,6 +7833,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         _showNotice(context, '语音连接失败', '无法连接直播语音，请稍后重试。');
       }
     }
+  }
+
+  static Future<void> _ensureLiveKitInitialized() {
+    return _liveKitInitialization ??= LiveKitClient.initialize(
+      // ignore: experimental_member_use
+      initialAudioSessionOptions: const AudioSessionOptions.communication(),
+    );
   }
 
   Future<void> _loadRoom({bool silent = false}) async {
