@@ -16,6 +16,8 @@ const _transparent = Color(0x00000000);
 const _muted = Color(0xFF888888);
 const _navInactive = Color(0xFFC4C4C4);
 const _navLabels = ['钱包', '探索', 'DEX', '广场', '社交'];
+
+void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 const _navAssets = [
   'assets/icons/source_wallet.svg',
   'assets/icons/source_explore.svg',
@@ -1315,6 +1317,9 @@ class _TokenInput extends StatelessWidget {
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) => _dismissKeyboard(),
+                      onTapOutside: (_) => _dismissKeyboard(),
                       placeholder: '0.0',
                       placeholderStyle: const TextStyle(
                         color: _white,
