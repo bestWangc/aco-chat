@@ -42,6 +42,8 @@ const _black = Color(0xFF000000);
 const _white = Color(0xFFFFFFFF);
 const _transparent = Color(0x00000000);
 const _accentGreen = Color(0xFFA6DE00);
+
+void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 // Leave a small amount of headroom while the system keyboard resizes the
 // voice-room body. Some Android viewport sizes otherwise round the remaining
 // height down by a physical pixel and overflow the room content.
@@ -875,7 +877,10 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     controller: _phraseController,
     minLines: 5,
     maxLines: 6,
+    textInputAction: TextInputAction.done,
     onChanged: (_) => setState(() {}),
+    onSubmitted: (_) => _dismissKeyboard(),
+    onTapOutside: (_) => _dismissKeyboard(),
     placeholder: '在此粘贴助记词',
     style: TextStyle(color: palette.primaryText),
     padding: const EdgeInsets.all(16),
@@ -891,7 +896,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         key: const Key('wallet-password-field'),
         controller: _passwordController,
         obscureText: true,
+        textInputAction: TextInputAction.next,
         onChanged: (_) => setState(() {}),
+        onTapOutside: (_) => _dismissKeyboard(),
         placeholder: '设置钱包密码（至少 8 位）',
         style: TextStyle(color: palette.primaryText),
         padding: const EdgeInsets.all(16),
@@ -905,7 +912,10 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         key: const Key('wallet-password-confirm-field'),
         controller: _confirmPasswordController,
         obscureText: true,
+        textInputAction: TextInputAction.done,
         onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _dismissKeyboard(),
+        onTapOutside: (_) => _dismissKeyboard(),
         placeholder: '再次输入钱包密码',
         style: TextStyle(color: palette.primaryText),
         padding: const EdgeInsets.all(16),
@@ -2828,6 +2838,8 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                     key: const Key('send-token-search'),
                     controller: _searchController,
                     onChanged: (_) => setState(() {}),
+                    onTapOutside: (_) => _dismissKeyboard(),
+                    onSubmitted: (_) => _dismissKeyboard(),
                     placeholder: '搜索代币名称或符号',
                     prefix: Padding(
                       padding: const EdgeInsets.only(left: 14, right: 10),
@@ -2873,7 +2885,10 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                             child: CupertinoButton(
                               key: Key('send-token-${token.symbol}'),
                               padding: const EdgeInsets.symmetric(vertical: 8),
-                              onPressed: () => Navigator.of(context).pop(token),
+                              onPressed: () {
+                                _dismissKeyboard();
+                                Navigator.of(context).pop(token);
+                              },
                               child: Row(
                                 children: [
                                   _TokenAvatar(token: token),
@@ -2971,6 +2986,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
 
   void _submit() {
     if (!_canConfirm) return;
+    _dismissKeyboard();
     _showNotice(context, '暂未发送', '链上签名和广播将在后续版本开放。');
   }
 
@@ -2995,6 +3011,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                     key: const Key('transfer-recipient-field'),
                     controller: _recipientController,
                     onChanged: (_) => setState(() {}),
+                    onTapOutside: (_) => _dismissKeyboard(),
                     placeholder: '输入或粘贴钱包地址',
                     placeholderStyle: TextStyle(
                       color: widget.palette.mutedText,
@@ -3010,8 +3027,10 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                     suffix: CupertinoButton(
                       padding: const EdgeInsets.symmetric(horizontal: 10),
                       minimumSize: const Size(42, 42),
-                      onPressed: () =>
-                          _showNotice(context, '扫码', '请使用钱包首页的扫码功能。'),
+                      onPressed: () {
+                        _dismissKeyboard();
+                        _showNotice(context, '扫码', '请使用钱包首页的扫码功能。');
+                      },
                       child: Icon(
                         CupertinoIcons.qrcode_viewfinder,
                         color: widget.palette.primaryText,
@@ -3038,6 +3057,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                               key: const Key('transfer-amount-field'),
                               controller: _amountController,
                               onChanged: (_) => setState(() {}),
+                              onTapOutside: (_) => _dismissKeyboard(),
                               placeholder: '请输入数量',
                               keyboardType:
                                   const TextInputType.numberWithOptions(
@@ -3068,6 +3088,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                             padding: const EdgeInsets.only(right: 14),
                             minimumSize: const Size(50, 36),
                             onPressed: () {
+                              _dismissKeyboard();
                               _amountController.text =
                                   widget.token.availableAmount;
                               setState(() {});
@@ -4897,6 +4918,9 @@ class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
                     controller: controller,
                     autofocus: true,
                     obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _dismissKeyboard(),
+                    onTapOutside: (_) => _dismissKeyboard(),
                     onChanged: (value) => setDialogState(() {
                       password = value;
                       errorMessage = null;
@@ -6049,7 +6073,10 @@ class _AddTokenSearch extends StatelessWidget {
               color: palette.primaryText,
               fontSize: AcoTypography.caption,
             ),
-            onSubmitted: (_) => onSubmit(),
+            onSubmitted: (_) {
+              _dismissKeyboard();
+              onSubmit();
+            },
           ),
         ),
         CupertinoButton(
@@ -7172,6 +7199,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
 
   Future<void> _confirm() async {
     if (!_canConfirm || _submitting) return;
+    _dismissKeyboard();
     final title = _titleController.text.trim();
     final apiClient = AccountApiClient();
     LiveSession? createdLive;
@@ -7222,6 +7250,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   }
 
   Future<void> _selectSchedule() async {
+    _dismissKeyboard();
     final now = DateTime.now();
     var selected = _scheduledAt ?? now.add(const Duration(hours: 1));
     final palette = widget.palette;
@@ -7309,6 +7338,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   }
 
   Future<void> _selectCover() async {
+    _dismissKeyboard();
     final image = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       maxWidth: 1600,
@@ -7333,6 +7363,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   String get _joinAccessLabel => _joinPassword == null ? '任何人直接加入' : '需要密码才能加入';
 
   Future<void> _selectJoinAccess() async {
+    _dismissKeyboard();
     final palette = widget.palette;
     final choice = await showCupertinoModalPopup<String>(
       context: context,
@@ -7382,6 +7413,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   }
 
   Future<void> _setJoinPassword() async {
+    _dismissKeyboard();
     final palette = widget.palette;
     var password = _joinPassword ?? '';
     final confirmedPassword = await showCupertinoDialog<String>(
@@ -7401,6 +7433,11 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                 obscureText: true,
                 maxLength: 20,
                 onChanged: (value) => setDialogState(() => password = value),
+                onSubmitted: (value) {
+                  if (value.trim().length >= 4) {
+                    Navigator.of(dialogContext).pop(value.trim());
+                  }
+                },
                 placeholder: '输入至少 4 位密码',
               ),
             ),
@@ -7459,7 +7496,10 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                           maxLines: null,
                           expands: true,
                           textAlignVertical: TextAlignVertical.top,
+                          textInputAction: TextInputAction.done,
                           onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => _dismissKeyboard(),
+                          onTapOutside: (_) => _dismissKeyboard(),
                           placeholder: '输入直播主题',
                           placeholderStyle: TextStyle(
                             color: palette.mutedText,
@@ -8155,7 +8195,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   }
 
   Future<void> _confirmEndLive() async {
-    FocusManager.instance.primaryFocus?.unfocus();
+    _dismissKeyboard();
     final shouldEnd = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
@@ -8179,7 +8219,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       ),
     );
     if (!mounted) return;
-    FocusManager.instance.primaryFocus?.unfocus();
+    _dismissKeyboard();
     if (shouldEnd == true) {
       await _endLive();
     }
@@ -9446,6 +9486,8 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
                 key: const Key('profile-name-input'),
                 controller: _nameController,
                 maxLength: 20,
+                textInputAction: TextInputAction.next,
+                onTapOutside: (_) => _dismissKeyboard(),
                 cursorColor: _lime,
                 style: TextStyle(
                   color: widget.palette.primaryText,
@@ -9469,6 +9511,9 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
                 key: const Key('profile-username-input'),
                 controller: _usernameController,
                 maxLength: 20,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _dismissKeyboard(),
+                onTapOutside: (_) => _dismissKeyboard(),
                 cursorColor: _lime,
                 style: TextStyle(
                   color: widget.palette.primaryText,
@@ -12278,6 +12323,7 @@ class _RoomComposer extends StatelessWidget {
                 fontSize: AcoTypography.bodySmall,
               ),
               onSubmitted: (message) {
+                _dismissKeyboard();
                 if (!chatMuted && message.trim().isNotEmpty) onSubmitted();
               },
               decoration: const BoxDecoration(color: _transparent),
