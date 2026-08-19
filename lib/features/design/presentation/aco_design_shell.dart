@@ -11700,20 +11700,35 @@ class _LiveRoomParticipantSection extends StatelessWidget {
       );
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
-      child: SizedBox(
-        width: double.infinity,
-        child: Wrap(
-          alignment: WrapAlignment.start,
-          spacing: 16,
-          runSpacing: 14,
-          children: [
-            for (final participant in participants)
-              _LiveRoomParticipantCard(
-                palette: palette,
-                participant: participant,
-                onSpeakerTap: onSpeakerTap,
-              ),
-          ],
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: 190),
+        child: SingleChildScrollView(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final useFiveColumns = constraints.maxWidth >= 300;
+              final columns = useFiveColumns ? 5 : 4;
+              const spacing = 8.0;
+              final cardWidth =
+                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
+              final avatarSize = useFiveColumns ? 48.0 : 54.0;
+
+              return Wrap(
+                alignment: WrapAlignment.start,
+                spacing: spacing,
+                runSpacing: 14,
+                children: [
+                  for (final participant in participants)
+                    _LiveRoomParticipantCard(
+                      palette: palette,
+                      participant: participant,
+                      width: cardWidth,
+                      avatarSize: avatarSize,
+                      onSpeakerTap: onSpeakerTap,
+                    ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -11724,20 +11739,27 @@ class _LiveRoomParticipantCard extends StatelessWidget {
   const _LiveRoomParticipantCard({
     required this.palette,
     required this.participant,
+    required this.width,
+    required this.avatarSize,
     this.onSpeakerTap,
   });
 
   final AcoPalette palette;
   final LiveParticipant participant;
+  final double width;
+  final double avatarSize;
   final ValueChanged<LiveParticipant>? onSpeakerTap;
 
   @override
   Widget build(BuildContext context) {
     final canMuteSpeaker =
         participant.role == 'speaker' && onSpeakerTap != null;
-    final avatar = AcoAvatar(size: 58, assetPath: _liveRoomListenerAvatarAsset);
+    final avatar = AcoAvatar(
+      size: avatarSize,
+      assetPath: _liveRoomListenerAvatarAsset,
+    );
     return SizedBox(
-      width: 86,
+      width: width,
       child: Column(
         children: [
           Stack(
