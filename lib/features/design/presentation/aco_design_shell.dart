@@ -33,6 +33,9 @@ import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+// LiveKit's audio-session controls are experimental in the current SDK.
+// ignore_for_file: experimental_member_use
+
 const _lime = Color(0xFFA1FF00);
 const _danger = Color(0xFFFF3B4E);
 const _black = Color(0xFF000000);
@@ -7747,6 +7750,7 @@ class _VoiceRoomPage extends StatefulWidget {
 }
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
+  static const _communicationAudioSession = AudioSessionOptions.communication();
   static Future<void>? _liveKitInitialization;
 
   bool _muted = false;
@@ -7806,6 +7810,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     if (live == null || !mounted || _leaving) return;
     try {
       await _ensureLiveKitInitialized();
+      await _prepareLiveKitAudioSession();
       final joinInfo = await _accountSession.liveKitJoinInfo(live.id);
       final room = Room(
         roomOptions: const RoomOptions(
@@ -7814,16 +7819,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
           defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
         ),
       );
+      final previousRoom = _liveKitRoom;
+      _liveKitRoom = null;
+      await previousRoom?.disconnect();
       await room.connect(joinInfo.url, joinInfo.token);
       if (!mounted || _leaving) {
         await room.disconnect();
         return;
       }
-      final previousRoom = _liveKitRoom;
       _liveKitRoom = room;
       _liveKitCanPublish = joinInfo.canPublish;
       _liveKitRole = _room?.viewerRole ?? joinInfo.role;
-      await previousRoom?.disconnect();
       if (joinInfo.canPublish) {
         await room.localParticipant?.setMicrophoneEnabled(!_muted);
       }
@@ -7837,9 +7843,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   static Future<void> _ensureLiveKitInitialized() {
     return _liveKitInitialization ??= LiveKitClient.initialize(
-      // ignore: experimental_member_use
-      initialAudioSessionOptions: const AudioSessionOptions.communication(),
+      initialAudioSessionOptions: _communicationAudioSession,
     );
+  }
+
+  Future<void> _prepareLiveKitAudioSession() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    // Activate a communication session before the first remote track arrives.
+    // Otherwise iOS may leave a listener in a media-only session until they
+    // enable the microphone.
+    await AudioManager.instance.setAudioSessionOptions(
+      _communicationAudioSession,
+    );
+    await AudioManager.instance.setAudioSessionManagementMode(
+      AudioSessionManagementMode.automatic,
+    );
+    await _setSpeakerOutputPreferred();
   }
 
   Future<void> _loadRoom({bool silent = false}) async {
@@ -8563,6 +8582,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     unawaited(_liveKitRoom?.disconnect());
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      unawaited(
+        AudioManager.instance.setAudioSessionManagementMode(
+          AudioSessionManagementMode.automatic,
+        ),
+      );
+    }
     _apiClient.close();
     _messageController.dispose();
     super.dispose();
