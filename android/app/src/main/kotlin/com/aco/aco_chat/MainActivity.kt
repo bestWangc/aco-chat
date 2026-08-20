@@ -1,6 +1,7 @@
 package com.aco.aco_chat
 
 import android.content.ContentValues
+import android.media.AudioManager
 import android.os.Build
 import android.provider.MediaStore
 import android.view.WindowManager
@@ -12,6 +13,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
+    private var callVolumeBeforeBoost: Int? = null
+    private var boostedCallVolume: Int? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/sensitive-screen")
@@ -27,11 +31,11 @@ class MainActivity : FlutterFragmentActivity() {
             }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/biometric-authentication")
             .setMethodCallHandler { call, result ->
-                if (call.method != "authenticate") {
-                    result.notImplemented()
-                    return@setMethodCallHandler
+                when (call.method) {
+                    "availability" -> result.success(biometricAvailability())
+                    "authenticate" -> authenticateWithBiometrics(result)
+                    else -> result.notImplemented()
                 }
-                authenticateWithBiometrics(result)
             }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/downloads")
             .setMethodCallHandler { call, result ->
@@ -67,22 +71,50 @@ class MainActivity : FlutterFragmentActivity() {
                     result.error("SAVE_FAILED", error.message, null)
                 }
             }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/live-audio")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setCallVolumeBoost" -> {
+                        setCallVolumeBoost(call.argument<Boolean>("enabled") ?: false)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
     }
 
+    private fun setCallVolumeBoost(enabled: Boolean) {
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        val stream = AudioManager.STREAM_VOICE_CALL
+        if (enabled) {
+            if (callVolumeBeforeBoost != null) return
+            val currentVolume = audioManager.getStreamVolume(stream)
+            val maxVolume = audioManager.getStreamMaxVolume(stream)
+            // Raise only the in-room call stream to at least 80%; never lower
+            // a volume the user has already chosen.
+            val targetVolume = maxOf(currentVolume, (maxVolume * 0.8).toInt())
+            callVolumeBeforeBoost = currentVolume
+            boostedCallVolume = targetVolume
+            if (targetVolume != currentVolume) {
+                audioManager.setStreamVolume(stream, targetVolume, 0)
+            }
+            return
+        }
+
+        val originalVolume = callVolumeBeforeBoost ?: return
+        // Preserve a volume adjustment made by the user while they were on mic.
+        if (audioManager.getStreamVolume(stream) == boostedCallVolume) {
+            audioManager.setStreamVolume(stream, originalVolume, 0)
+        }
+        callVolumeBeforeBoost = null
+        boostedCallVolume = null
+    }
+
+
     private fun authenticateWithBiometrics(result: MethodChannel.Result) {
-        val authenticators = BiometricManager.Authenticators.BIOMETRIC_WEAK
-        when (BiometricManager.from(this).canAuthenticate(authenticators)) {
-            BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
-            BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED,
-            BiometricManager.BIOMETRIC_ERROR_UNSUPPORTED -> {
-                result.success(true)
-                return
-            }
-            BiometricManager.BIOMETRIC_SUCCESS -> Unit
-            else -> {
-                result.success(false)
-                return
-            }
+        if (biometricAvailability() != "enrolled") {
+            result.success(false)
+            return
         }
         val prompt = BiometricPrompt(
             this,
@@ -101,10 +133,19 @@ class MainActivity : FlutterFragmentActivity() {
         )
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("验证身份")
-            .setSubtitle("验证身份以完成钱包创建")
-            .setNegativeButtonText("取消")
-            .setAllowedAuthenticators(authenticators)
+            .setSubtitle("使用指纹或人脸完成钱包创建")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK)
             .build()
         prompt.authenticate(promptInfo)
+    }
+
+    private fun biometricAvailability(): String = when (
+        BiometricManager.from(this).canAuthenticate(
+            BiometricManager.Authenticators.BIOMETRIC_WEAK,
+        )
+    ) {
+        BiometricManager.BIOMETRIC_SUCCESS -> "enrolled"
+        BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "not_enrolled"
+        else -> "unavailable"
     }
 }

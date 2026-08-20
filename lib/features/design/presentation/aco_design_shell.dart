@@ -44,6 +44,7 @@ const _transparent = Color(0x00000000);
 const _accentGreen = Color(0xFFA6DE00);
 
 void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
+const _liveAudioChannel = MethodChannel('aco/live-audio');
 // Leave a small amount of headroom while the system keyboard resizes the
 // voice-room body. Some Android viewport sizes otherwise round the remaining
 // height down by a physical pixel and overflow the room content.
@@ -1018,7 +1019,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   }
 
   String get _description {
-    if (_isSecurityStep) return '设置钱包密码，并使用指纹验证以完成操作。';
+    if (_isSecurityStep) return '设置钱包密码，并使用设备验证以完成操作。';
     if (!_isCreating) return '输入 12 或 24 个助记词，单词之间用空格分隔。';
     if (_isVerificationStep) return '确认你已妥善备份。请从词库中按顺序选择指定单词。';
     return '请按顺序安全备份这些助记词，任何人索取它们都是诈骗。';
@@ -1064,12 +1065,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         final authenticated = await BiometricAuthentication.authenticateOrSkip()
             .timeout(const Duration(seconds: 30), onTimeout: () => false);
         if (!authenticated) {
-          if (mounted) {
-            setState(() {
-              _isCompletingWalletSetup = false;
-              _completionStatus = null;
-            });
-          }
+          _showCompletionError('设备验证未完成，请重试。');
           return;
         }
       }
@@ -8311,13 +8307,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
     await _liveKitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
+    await _setCallVolumeBoost(enabled);
     // Enabling a microphone can reconfigure Android's communication audio
     // session. Re-apply the output preference after that transition.
     await _setSpeakerOutputPreferred();
   }
 
-  Future<void> _setSpeakerOutputPreferred() =>
-      AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+  Future<void> _setSpeakerOutputPreferred() => Future.wait<void>([
+    AudioManager.instance.setSpeakerOutputPreferred(true, force: true),
+  ]);
+
+  Future<void> _setCallVolumeBoost(bool enabled) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      await _liveAudioChannel.invokeMethod<void>('setCallVolumeBoost', {
+        'enabled': enabled,
+      });
+    } on PlatformException {
+      // Audio routing is still handled by LiveKit if the optional native
+      // volume adjustment cannot be applied on a particular device.
+    }
+  }
 
   Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
     final shouldMute = !speaker.muted;
@@ -8657,6 +8667,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     unawaited(_liveKitRoom?.disconnect());
+    unawaited(_setCallVolumeBoost(false));
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       unawaited(
         AudioManager.instance.setAudioSessionManagementMode(
