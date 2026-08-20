@@ -6621,9 +6621,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     _lives = _loadLives();
   }
 
-  Future<List<LiveSession>> _loadLives() async {
+  Future<List<LiveSession>> _loadLives({bool useInitialLives = true}) async {
     final initialLives = widget.initialLives;
-    if (initialLives != null) return initialLives;
+    if (useInitialLives && initialLives != null) return initialLives;
     // Silent authentication persists the access token asynchronously.
     // Wait for it before calling the protected lives endpoint.
     await widget.walletLoginFuture;
@@ -7858,6 +7858,9 @@ class _VoiceRoomPage extends StatefulWidget {
 }
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
+  static const _liveAudioBackgroundChannel = MethodChannel(
+    'aco/live-audio-background',
+  );
   static const _communicationAudioSession = AudioSessionOptions.communication();
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
