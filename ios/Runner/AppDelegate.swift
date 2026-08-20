@@ -23,19 +23,34 @@ import UIKit
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { call, result in
-      guard call.method == "authenticate" else {
+      switch call.method {
+      case "availability":
+        result(self.biometricAvailability())
+      case "authenticate":
+        self.authenticateWithBiometrics(result: result)
+      default:
         result(FlutterMethodNotImplemented)
-        return
       }
-      self.authenticateWithBiometrics(result: result)
     }
+  }
+
+  private func biometricAvailability() -> String {
+    let context = LAContext()
+    var error: NSError?
+    if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
+      return "enrolled"
+    }
+    if error?.code == LAError.biometryNotEnrolled.rawValue {
+      return "not_enrolled"
+    }
+    return "unavailable"
   }
 
   private func authenticateWithBiometrics(result: @escaping FlutterResult) {
     let context = LAContext()
     var error: NSError?
     guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
-      result(true)
+      result(false)
       return
     }
     context.evaluatePolicy(
