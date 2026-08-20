@@ -257,10 +257,12 @@ class AccountApiClient {
   Future<LiveRoom> getLiveRoom({
     required int liveId,
     required String token,
+    String? joinPassword,
   }) async {
-    final response = await _httpClient.get(
+    final response = await _httpClient.post(
       _uri('lives/$liveId/room'),
       headers: _authorizedHeaders(token),
+      body: jsonEncode({'join_password': joinPassword ?? ''}),
     );
     return LiveRoom.fromJson(_body(response));
   }
@@ -268,10 +270,12 @@ class AccountApiClient {
   Future<LiveKitJoinInfo> getLiveKitJoinInfo({
     required int liveId,
     required String token,
+    String? joinPassword,
   }) async {
     final response = await _httpClient.post(
       _uri('lives/$liveId/join-token'),
       headers: _authorizedHeaders(token),
+      body: jsonEncode({'join_password': joinPassword ?? ''}),
     );
     return LiveKitJoinInfo.fromJson(_body(response));
   }

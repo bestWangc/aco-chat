@@ -44,7 +44,6 @@ const _transparent = Color(0x00000000);
 const _accentGreen = Color(0xFFA6DE00);
 
 void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
-const _liveAudioChannel = MethodChannel('aco/live-audio');
 // Leave a small amount of headroom while the system keyboard resizes the
 // voice-room body. Some Android viewport sizes otherwise round the remaining
 // height down by a physical pixel and overflow the room content.
@@ -6655,7 +6654,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     super.dispose();
   }
 
-  void _openLiveRoom(LiveSession session) {
+  Future<void> _openLiveRoom(LiveSession session) async {
     switch (session.status) {
       case 'scheduled':
         showAcoAlertNotice(context, '预约直播', '该直播尚未开始。');
@@ -6673,6 +6672,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         showAcoAlertNotice(context, '直播不可用', '该直播暂时无法进入。');
         return;
     }
+    final joinPassword = session.access == 'password'
+        ? await _requestLivePassword()
+        : null;
+    if (!mounted || (session.access == 'password' && joinPassword == null)) {
+      return;
+    }
     Navigator.of(context)
         .push<bool>(
           _AcoPageRoute<bool>(
@@ -6682,7 +6687,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                 bottom: false,
                 child: ColoredBox(
                   color: widget.palette.background,
-                  child: _VoiceRoomPage(palette: widget.palette, live: session),
+                  child: _VoiceRoomPage(
+                    palette: widget.palette,
+                    live: session,
+                    joinPassword: joinPassword,
+                  ),
                 ),
               ),
             ),
@@ -6695,6 +6704,45 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
             showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
           }
         });
+  }
+
+  Future<String?> _requestLivePassword() {
+    var password = '';
+    return showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => CupertinoAlertDialog(
+          title: const Text('输入直播密码'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: CupertinoTextField(
+              key: const Key('live-join-password-field'),
+              autofocus: true,
+              obscureText: true,
+              onChanged: (value) => setDialogState(() => password = value),
+              onSubmitted: (value) {
+                if (value.trim().isNotEmpty) {
+                  Navigator.of(dialogContext).pop(value.trim());
+                }
+              },
+              placeholder: '请输入直播密码',
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              onPressed: password.trim().isEmpty
+                  ? null
+                  : () => Navigator.of(dialogContext).pop(password.trim()),
+              child: const Text('进入'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmCheckInExport(LiveSession session) async {
@@ -7800,9 +7848,10 @@ class _LiveStreamPage extends StatelessWidget {
 }
 
 class _VoiceRoomPage extends StatefulWidget {
-  const _VoiceRoomPage({required this.palette, this.live});
+  const _VoiceRoomPage({required this.palette, this.live, this.joinPassword});
   final AcoPalette palette;
   final LiveSession? live;
+  final String? joinPassword;
 
   @override
   State<_VoiceRoomPage> createState() => _VoiceRoomPageState();
@@ -7810,6 +7859,18 @@ class _VoiceRoomPage extends StatefulWidget {
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   static const _communicationAudioSession = AudioSessionOptions.communication();
+  static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    highPassFilter: true,
+    voiceIsolation: true,
+    typingNoiseDetection: true,
+    // Keep the WebRTC capture and its echo-cancellation reference alive while
+    // muted. Recreating the microphone track on every unmute makes the audio
+    // processor re-converge and can briefly reintroduce feedback.
+    stopAudioCaptureOnMute: false,
+  );
   static Future<void>? _liveKitInitialization;
 
   bool _muted = false;
@@ -7823,6 +7884,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _handRaiseNoticeVisible = false;
   bool _networkReconnecting = false;
   bool _checkingIn = false;
+  int _scrollToLatestSignal = 0;
   LiveRoom? _room;
   List<LiveMessage> _messages = const [];
   final Set<int> _knownParticipantIds = <int>{};
@@ -7870,11 +7932,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     try {
       await _ensureLiveKitInitialized();
       await _prepareLiveKitAudioSession();
-      final joinInfo = await _accountSession.liveKitJoinInfo(live.id);
+      final joinInfo = await _accountSession.liveKitJoinInfo(
+        live.id,
+        joinPassword: widget.joinPassword,
+      );
       final room = Room(
         roomOptions: const RoomOptions(
           adaptiveStream: true,
           dynacast: true,
+          defaultAudioCaptureOptions: _voiceRoomAudioCaptureOptions,
           defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
         ),
       );
@@ -7925,7 +7991,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     if (live == null) return;
     if (!silent && mounted) setState(() => _roomLoading = true);
     try {
-      final room = await _accountSession.liveRoom(live.id);
+      final room = await _accountSession.liveRoom(
+        live.id,
+        joinPassword: widget.joinPassword,
+      );
       _applyRoomSnapshot(room);
     } on AccountApiException catch (error) {
       if (!silent && mounted) _showNotice(context, '无法进入直播间', error.message);
@@ -8307,27 +8376,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
     await _liveKitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
-    await _setCallVolumeBoost(enabled);
-    // Enabling a microphone can reconfigure Android's communication audio
-    // session. Re-apply the output preference after that transition.
-    await _setSpeakerOutputPreferred();
   }
 
-  Future<void> _setSpeakerOutputPreferred() => Future.wait<void>([
-    AudioManager.instance.setSpeakerOutputPreferred(true, force: true),
-  ]);
-
-  Future<void> _setCallVolumeBoost(bool enabled) async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-    try {
-      await _liveAudioChannel.invokeMethod<void>('setCallVolumeBoost', {
-        'enabled': enabled,
-      });
-    } on PlatformException {
-      // Audio routing is still handled by LiveKit if the optional native
-      // volume adjustment cannot be applied on a particular device.
-    }
-  }
+  Future<void> _setSpeakerOutputPreferred() =>
+      AudioManager.instance.setSpeakerOutputPreferred(true);
 
   Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
     final shouldMute = !speaker.muted;
@@ -8667,7 +8719,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     unawaited(_liveKitRoom?.disconnect());
-    unawaited(_setCallVolumeBoost(false));
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       unawaited(
         AudioManager.instance.setAudioSessionManagementMode(
@@ -8721,7 +8772,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     try {
       await _accountSession.createLiveMessage(liveId: live.id, text: text);
       if (!mounted) return;
-      _messageController.clear();
+      setState(() {
+        _messageController.clear();
+        // Sending is an explicit request to return to the active conversation,
+        // even when the viewer was reading older messages.
+        _scrollToLatestSignal++;
+      });
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '发送失败', error.message);
     } catch (_) {
@@ -8857,6 +8913,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                             palette: palette,
                             liveMessages: _messages,
                             hasLive: live != null,
+                            scrollToLatestSignal: _scrollToLatestSignal,
                           ),
                         ),
                       ],
@@ -12258,25 +12315,55 @@ class _RoomMessage extends StatelessWidget {
   }
 }
 
-class _RoomChatHistory extends StatelessWidget {
+class _RoomChatHistory extends StatefulWidget {
   const _RoomChatHistory({
     required this.palette,
     required this.hasLive,
+    required this.scrollToLatestSignal,
     this.liveMessages,
   });
   final AcoPalette palette;
   final bool hasLive;
+  final int scrollToLatestSignal;
   final List<LiveMessage>? liveMessages;
 
   @override
+  State<_RoomChatHistory> createState() => _RoomChatHistoryState();
+}
+
+class _RoomChatHistoryState extends State<_RoomChatHistory> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void didUpdateWidget(covariant _RoomChatHistory oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.scrollToLatestSignal == oldWidget.scrollToLatestSignal) return;
+    _scrollToLatest();
+  }
+
+  void _scrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final roomMessages = liveMessages;
+    final roomMessages = widget.liveMessages;
     if (roomMessages == null || roomMessages.isEmpty) {
       return Center(
         child: Text(
-          hasLive ? '还没有弹幕，来说点什么吧。' : '请选择直播间后查看弹幕。',
+          widget.hasLive ? '还没有弹幕，来说点什么吧。' : '请选择直播间后查看弹幕。',
           style: TextStyle(
-            color: palette.mutedText,
+            color: widget.palette.mutedText,
             fontSize: AcoTypography.bodySmall,
           ),
         ),
@@ -12284,13 +12371,15 @@ class _RoomChatHistory extends StatelessWidget {
     }
     return ListView.separated(
       key: const Key('room-chat-history'),
+      controller: _scrollController,
+      reverse: true,
       padding: const EdgeInsets.fromLTRB(24, 0, 18, 14),
       itemCount: roomMessages.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, index) => _RoomMessage(
-        palette: palette,
-        name: roomMessages[index].nickname,
-        text: roomMessages[index].text,
+        palette: widget.palette,
+        name: roomMessages[roomMessages.length - index - 1].nickname,
+        text: roomMessages[roomMessages.length - index - 1].text,
       ),
     );
   }
