@@ -6,8 +6,11 @@ import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:http/http.dart' as http;
 
+const _forceUpdateMessage = '当前版本过低，请更新后继续使用。';
+
 class AccountApiException implements Exception {
-  const AccountApiException(this.statusCode, this.message);
+  const AccountApiException(this.statusCode, String message)
+    : message = statusCode == 426 ? _forceUpdateMessage : message;
 
   final int statusCode;
   final String message;
@@ -46,6 +49,11 @@ class AccountApiException implements Exception {
 /// HTTP gateway for the account endpoints. Supply [baseUri] in development or
 /// tests; the production default is [AppConfig.apiBaseUrl].
 class AccountApiClient {
+  static const _clientHeaders = <String, String>{
+    'content-type': 'application/json',
+    'x-app-version': AppConfig.appVersion,
+  };
+
   AccountApiClient({Uri? baseUri, http.Client? httpClient})
     : _baseUri = baseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
       _httpClient = httpClient ?? http.Client();
@@ -59,7 +67,7 @@ class AccountApiClient {
   }) async {
     final response = await _httpClient.post(
       _uri('auth/wallet-login'),
-      headers: const {'content-type': 'application/json'},
+      headers: _clientHeaders,
       body: jsonEncode({
         'wallet_address': walletAddress,
         'challenge': proof.challenge,
@@ -73,7 +81,7 @@ class AccountApiClient {
   Future<String> walletChallenge(String walletAddress) async {
     final response = await _httpClient.post(
       _uri('auth/wallet-challenge'),
-      headers: const {'content-type': 'application/json'},
+      headers: _clientHeaders,
       body: jsonEncode({'wallet_address': walletAddress}),
     );
     return _body(response)['challenge'] as String;
@@ -82,7 +90,7 @@ class AccountApiClient {
   Future<WalletLoginResult> silentWalletLogin(String walletAddress) async {
     final response = await _httpClient.post(
       _uri('auth/wallet-silent-login'),
-      headers: const {'content-type': 'application/json'},
+      headers: _clientHeaders,
       body: jsonEncode({'wallet_address': walletAddress}),
     );
     return WalletLoginResult.fromJson(_body(response));
@@ -91,7 +99,7 @@ class AccountApiClient {
   Future<AccountRefreshResult> refreshAccessToken(String refreshToken) async {
     final response = await _httpClient.post(
       _uri('auth/refresh'),
-      headers: const {'content-type': 'application/json'},
+      headers: _clientHeaders,
       body: jsonEncode({'refresh_token': refreshToken}),
     );
     return AccountRefreshResult.fromJson(_body(response));
@@ -167,6 +175,7 @@ class AccountApiClient {
     required String token,
   }) async {
     final request = http.MultipartRequest('POST', _uri('uploads/live-covers'))
+      ..headers['x-app-version'] = AppConfig.appVersion
       ..headers['authorization'] = 'Bearer $token'
       ..files.add(
         http.MultipartFile.fromBytes('file', bytes, filename: 'live-cover.jpg'),
@@ -429,7 +438,7 @@ class AccountApiClient {
   }
 
   Map<String, String> _authorizedHeaders(String token) => {
-    'content-type': 'application/json',
+    ..._clientHeaders,
     'authorization': 'Bearer $token',
   };
 
