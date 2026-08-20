@@ -7862,6 +7862,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     'aco/live-audio-background',
   );
   static const _communicationAudioSession = AudioSessionOptions.communication();
+  static const _liveKitReentryCooldown = Duration(seconds: 5);
+  static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
     noiseSuppression: true,
@@ -7886,8 +7888,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _closingRoom = false;
   bool _handRaiseNoticeVisible = false;
   bool _networkReconnecting = false;
+  bool _reentryCoolingDown = false;
   bool _checkingIn = false;
   int _scrollToLatestSignal = 0;
+  int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
   List<LiveMessage> _messages = const [];
   final Set<int> _knownParticipantIds = <int>{};
@@ -7898,6 +7902,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
   Room? _liveKitRoom;
+  EventsListener<RoomEvent>? _liveKitEventListener;
+  bool _liveKitConnecting = false;
+  bool _liveKitReconnecting = false;
+  bool _liveKitReconnectStopped = false;
   bool? _liveKitCanPublish;
   String? _liveKitRole;
   bool _refreshingLiveKitPermission = false;
@@ -7919,6 +7927,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   }
 
   Future<void> _initializeRoom() async {
+    final live = widget.live;
+    if (live == null) return;
+    if (mounted) setState(() => _roomLoading = true);
+    await _waitForLiveKitReentryCooldown(live.id);
+    if (!mounted || _leaving) return;
     await _loadRoom();
     await _loadMessages();
     await _connectRealtime();
@@ -7931,7 +7944,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   Future<void> _connectLiveKit({bool showError = true}) async {
     final live = widget.live;
-    if (live == null || !mounted || _leaving) return;
+    if (live == null || !mounted || _leaving || _liveKitConnecting) return;
+    _liveKitConnecting = true;
+    _liveKitReconnectStopped = false;
+    Room? connectingRoom;
     try {
       await _ensureLiveKitInitialized();
       await _prepareLiveKitAudioSession();
@@ -7947,8 +7963,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
           defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
         ),
       );
+      connectingRoom = room;
       final previousRoom = _liveKitRoom;
       _liveKitRoom = null;
+      _liveKitEventListener?.dispose();
+      _liveKitEventListener = null;
       await previousRoom?.disconnect();
       await room.connect(joinInfo.url, joinInfo.token);
       if (!mounted || _leaving) {
@@ -7956,6 +7975,35 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         return;
       }
       _liveKitRoom = room;
+      _liveKitEventListener = room.createListener()
+        ..on<RoomReconnectingEvent>((_) {
+          _liveKitReconnecting = true;
+        })
+        ..on<RoomResumingEvent>((_) {
+          _liveKitReconnecting = true;
+        })
+        ..on<RoomAttemptReconnectEvent>((event) {
+          _liveKitReconnecting = true;
+          // The SDK has its own retry loop. Stop it before it can turn into
+          // an unbounded app-wide reconnect storm.
+          if (event.attempt >= 3 && !_liveKitReconnectStopped) {
+            _liveKitReconnectStopped = true;
+            unawaited(_stopLiveKitAfterReconnectLimit(room));
+          }
+        })
+        ..on<RoomReconnectedEvent>((_) {
+          _liveKitReconnecting = false;
+          final latestRoom = _room;
+          if (latestRoom != null) {
+            unawaited(_syncLiveKitPublishPermission(latestRoom));
+          }
+        })
+        ..on<RoomDisconnectedEvent>((event) {
+          _liveKitReconnecting = false;
+          if (!_leaving && !_liveKitReconnectStopped && mounted) {
+            _showNotice(context, '语音连接中断', '连接已停止自动重试，请重新进入直播间。');
+          }
+        });
       if (defaultTargetPlatform == TargetPlatform.android) {
         await _liveAudioBackgroundChannel.invokeMethod<void>('start');
       }
@@ -7966,9 +8014,80 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
       await _setSpeakerOutputPreferred();
     } catch (_) {
+      final room = connectingRoom;
+      if (room != null) {
+        if (identical(room, _liveKitRoom)) {
+          _liveKitRoom = null;
+        }
+        _liveKitEventListener?.dispose();
+        _liveKitEventListener = null;
+        unawaited(room.disconnect());
+      }
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        unawaited(_liveAudioBackgroundChannel.invokeMethod<void>('stop'));
+      }
       if (mounted && showError) {
         _showNotice(context, '语音连接失败', '无法连接直播语音，请稍后重试。');
       }
+    } finally {
+      _liveKitConnecting = false;
+    }
+  }
+
+  Future<void> _stopLiveKitAfterReconnectLimit(Room room) async {
+    if (!identical(room, _liveKitRoom)) return;
+    await room.disconnect();
+    if (identical(room, _liveKitRoom)) {
+      _liveKitRoom = null;
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await _liveAudioBackgroundChannel.invokeMethod<void>('stop');
+    }
+    if (mounted && !_leaving) {
+      _showNotice(context, '语音连接中断', '网络不稳定，已停止自动重试，请重新进入直播间。');
+    }
+  }
+
+  Future<void> _waitForLiveKitReentryCooldown(int liveID) async {
+    final leftAt = _liveKitLeftAtByLiveID[liveID];
+    if (leftAt == null) return;
+
+    final remaining =
+        _liveKitReentryCooldown - DateTime.now().difference(leftAt);
+    if (remaining <= Duration.zero) {
+      _liveKitLeftAtByLiveID.remove(liveID);
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _reentryCoolingDown = true;
+        _reentryCooldownSeconds = remaining.inSeconds.ceil();
+      });
+    }
+    while (mounted) {
+      final currentRemaining =
+          _liveKitReentryCooldown - DateTime.now().difference(leftAt);
+      if (currentRemaining <= Duration.zero) break;
+      await Future<void>.delayed(
+        currentRemaining > const Duration(seconds: 1)
+            ? const Duration(seconds: 1)
+            : currentRemaining,
+      );
+      if (mounted) {
+        final updatedRemaining =
+            _liveKitReentryCooldown - DateTime.now().difference(leftAt);
+        setState(
+          () => _reentryCooldownSeconds = updatedRemaining.inSeconds.ceil(),
+        );
+      }
+    }
+    _liveKitLeftAtByLiveID.remove(liveID);
+    if (mounted) {
+      setState(() {
+        _reentryCoolingDown = false;
+        _reentryCooldownSeconds = 0;
+      });
     }
   }
 
@@ -8219,7 +8338,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   // UI shows an enabled microphone but LiveKit still rejects its audio track.
   Future<void> _syncLiveKitPublishPermission(LiveRoom room) async {
     final canPublish = _canPublishAudio(room);
-    if (_liveKitRoom == null) {
+    if (_liveKitRoom == null || _liveKitConnecting || _liveKitReconnecting) {
       return;
     }
     if (!canPublish) {
@@ -8618,6 +8737,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
     if (_leaving) return;
     _leaving = true;
+    await _disconnectLiveKitForLeave();
     final live = widget.live;
     if (live != null) {
       try {
@@ -8629,9 +8749,34 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _closeRoom();
   }
 
+  Future<void> _disconnectLiveKitForLeave() async {
+    final liveID = widget.live?.id;
+    if (liveID != null) {
+      _liveKitLeftAtByLiveID[liveID] = DateTime.now();
+    }
+    final room = _liveKitRoom;
+    _liveKitRoom = null;
+    _liveKitEventListener?.dispose();
+    _liveKitEventListener = null;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_liveAudioBackgroundChannel.invokeMethod<void>('stop'));
+    }
+    if (room == null) return;
+    try {
+      // Tell LiveKit immediately that this participant has left before the UI
+      // permits another room join. Do not hold navigation indefinitely if the
+      // network is already unavailable.
+      await room.disconnect().timeout(const Duration(seconds: 2));
+    } catch (_) {
+      // A lost network cannot send Leave; the server's disconnect timeout
+      // remains the fallback cleanup path.
+    }
+  }
+
   void _closeRoom([bool? result]) {
     if (!mounted || _closingRoom) return;
     _closingRoom = true;
+    unawaited(_disconnectLiveKitForLeave());
     setState(() {
       _allowPop = true;
       _leaving = true;
@@ -8724,10 +8869,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _checkInTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
-    unawaited(_liveKitRoom?.disconnect());
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      unawaited(_liveAudioBackgroundChannel.invokeMethod<void>('stop'));
-    }
+    unawaited(_disconnectLiveKitForLeave());
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       unawaited(
         AudioManager.instance.setAudioSessionManagementMode(
@@ -8942,6 +9084,42 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
               ),
             ),
             if (_networkReconnecting) const _LiveRoomNetworkNotice(),
+            Positioned.fill(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                child: _reentryCoolingDown
+                    ? ColoredBox(
+                        key: const ValueKey('live-room-reentry-cooldown'),
+                        color: Color(0xE6000000),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const CupertinoActivityIndicator(radius: 14),
+                              const SizedBox(height: 14),
+                              Text(
+                                '正在准备重新进入直播间',
+                                style: TextStyle(
+                                  color: _white,
+                                  fontSize: AcoTypography.bodyEmphasis,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '请稍候 $_reentryCooldownSeconds 秒',
+                                style: TextStyle(
+                                  color: _white.withValues(alpha: .72),
+                                  fontSize: AcoTypography.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
             Positioned(
               left: 0,
               right: 0,
