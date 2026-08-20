@@ -7182,7 +7182,10 @@ class _CreateLivePage extends StatefulWidget {
 }
 
 class _CreateLivePageState extends State<_CreateLivePage> {
-  static const _maxCoverSizeBytes = 5 * 1024 * 1024;
+  // Covers are resized and JPEG-compressed by image_picker before upload. Keep
+  // a smaller client-side limit so mobile users do not waste bandwidth on
+  // unnecessarily large originals (the API still enforces its 5 MB limit).
+  static const _maxCoverSizeBytes = 3 * 1024 * 1024;
 
   final _titleController = TextEditingController();
   DateTime? _scheduledAt;
@@ -7361,16 +7364,16 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     _dismissKeyboard();
     final image = await ImagePicker().pickImage(
       source: ImageSource.gallery,
-      maxWidth: 1600,
-      maxHeight: 900,
-      imageQuality: 85,
+      maxWidth: 1280,
+      maxHeight: 720,
+      imageQuality: 72,
     );
     if (image == null) return;
 
     final bytes = await image.readAsBytes();
     if (!mounted) return;
     if (bytes.lengthInBytes > _maxCoverSizeBytes) {
-      _showNotice(context, '图片过大', '请选择小于 5 MB 的直播封面。');
+      _showNotice(context, '图片过大', '请选择小于 3 MB 的直播封面。');
       return;
     }
 
@@ -11731,46 +11734,42 @@ class _LiveRoomParticipantSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keep the participant strip lightweight: show at most ten listeners.
-    // The total audience count remains visible elsewhere in the room header.
-    final participants = [...speakers, ...listeners.take(10)]
-      ..sort(
-        (left, right) =>
-            (left.role == 'speaker' ? 0 : 1) -
-            (right.role == 'speaker' ? 0 : 1),
-      );
+    // Keep the participant strip lightweight: show at most ten participants
+    // total. Speakers get priority, then fill the remaining slots with
+    // listeners. The total audience count remains visible in the room header.
+    final visibleSpeakers = speakers.take(10).toList(growable: false);
+    final remainingSlots = 10 - visibleSpeakers.length;
+    final participants = [
+      ...visibleSpeakers,
+      ...listeners.take(remainingSlots),
+    ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: 190),
-        child: SingleChildScrollView(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final useFiveColumns = constraints.maxWidth >= 300;
-              final columns = useFiveColumns ? 5 : 4;
-              const spacing = 8.0;
-              final cardWidth =
-                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
-              final avatarSize = useFiveColumns ? 48.0 : 54.0;
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final useFiveColumns = constraints.maxWidth >= 300;
+          final columns = useFiveColumns ? 5 : 4;
+          const spacing = 8.0;
+          final cardWidth =
+              (constraints.maxWidth - spacing * (columns - 1)) / columns;
+          final avatarSize = useFiveColumns ? 48.0 : 54.0;
 
-              return Wrap(
-                alignment: WrapAlignment.start,
-                spacing: spacing,
-                runSpacing: 14,
-                children: [
-                  for (final participant in participants)
-                    _LiveRoomParticipantCard(
-                      palette: palette,
-                      participant: participant,
-                      width: cardWidth,
-                      avatarSize: avatarSize,
-                      onSpeakerTap: onSpeakerTap,
-                    ),
-                ],
-              );
-            },
-          ),
-        ),
+          return Wrap(
+            alignment: WrapAlignment.start,
+            spacing: spacing,
+            runSpacing: 14,
+            children: [
+              for (final participant in participants)
+                _LiveRoomParticipantCard(
+                  palette: palette,
+                  participant: participant,
+                  width: cardWidth,
+                  avatarSize: avatarSize,
+                  onSpeakerTap: onSpeakerTap,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
