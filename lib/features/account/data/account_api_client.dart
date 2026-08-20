@@ -12,6 +12,33 @@ class AccountApiException implements Exception {
   final int statusCode;
   final String message;
 
+  /// User-facing copy for API errors. The API may return English or internal
+  /// validation text; keep the raw [message] for logging and map it at the UI
+  /// boundary so dialogs remain consistently Chinese.
+  String get localizedMessage {
+    final normalized = message.trim().toLowerCase();
+    if (normalized == 'username is already taken' ||
+        normalized == 'username already taken') {
+      return '用户名已被占用，请换一个用户名。';
+    }
+    if (normalized.contains('username') &&
+        (normalized.contains('taken') ||
+            normalized.contains('already exists'))) {
+      return '用户名已被占用，请换一个用户名。';
+    }
+    if (normalized.contains('nickname') && normalized.contains('already')) {
+      return '昵称已被占用，请换一个昵称。';
+    }
+    if (normalized.contains('invalid username')) return '用户名格式不正确。';
+    if (normalized.contains('unauthorized') || statusCode == 401) {
+      return '登录状态已失效，请重新登录。';
+    }
+    if (statusCode == 403) return '没有权限执行此操作。';
+    if (statusCode == 404) return '请求的内容不存在。';
+    if (statusCode >= 500) return '服务器暂时不可用，请稍后重试。';
+    return message.isEmpty ? '操作失败，请稍后重试。' : message;
+  }
+
   @override
   String toString() => 'AccountApiException($statusCode): $message';
 }

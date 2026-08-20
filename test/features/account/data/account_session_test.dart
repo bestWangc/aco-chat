@@ -128,6 +128,28 @@ void main() {
   });
 
   test(
+    'returns an empty live feed while no account token is available',
+    () async {
+      var requested = false;
+      final client = AccountApiClient(
+        baseUri: Uri.parse('https://api.aco.test/api/v1'),
+        httpClient: MockClient((_) async {
+          requested = true;
+          return _response({'data': <dynamic>[]});
+        }),
+      );
+
+      final lives = await AccountSession(
+        client,
+        tokenStore: _InMemoryTokenStore(),
+      ).listLives();
+
+      expect(lives, isEmpty);
+      expect(requested, isFalse);
+    },
+  );
+
+  test(
     'updates a live session without re-uploading an unchanged cover',
     () async {
       final tokenStore = _InMemoryTokenStore()..value = 'access-token';
