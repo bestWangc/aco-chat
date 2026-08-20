@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -10,10 +11,11 @@ abstract interface class AccountTokenStore {
 }
 
 class SecureAccountTokenStore implements AccountTokenStore {
-  SecureAccountTokenStore({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+  SecureAccountTokenStore({FlutterSecureStorage? storage, String? key})
+    : _storage = storage ?? const FlutterSecureStorage(),
+      _key = key ?? 'account.tokens.${const AppConfig().accountStorageScope}';
 
-  static const _key = 'account.tokens';
+  final String _key;
   final FlutterSecureStorage _storage;
 
   @override

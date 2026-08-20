@@ -1864,6 +1864,7 @@ class AcoScreenPage extends StatelessWidget {
         key: ValueKey('square-feed-$liveListRevision'),
         palette: palette,
         onOpen: onOpen,
+        walletLoginFuture: walletLoginFuture,
         initialLives: initialLives,
       ),
       AcoScreen.socialMessages => _SocialMessagesPage(
@@ -1924,7 +1925,10 @@ class AcoScreenPage extends StatelessWidget {
         onLanguageChanged: onLanguageChanged,
       ),
       AcoScreen.comingSoon => _ComingSoonPage(palette: palette),
-      AcoScreen.createLive => _CreateLivePage(palette: palette),
+      AcoScreen.createLive => _CreateLivePage(
+        palette: palette,
+        walletLoginFuture: walletLoginFuture,
+      ),
     };
 
     return SizedBox.expand(
@@ -3589,7 +3593,7 @@ class _WalletHomeState extends State<_WalletHome> {
                                       style: TextStyle(
                                         color: _walletHeaderMuted,
                                         fontSize: 32 * scale,
-                                        fontWeight: FontWeight.w300,
+                                        fontWeight: FontWeight.w400,
                                         height: 1,
                                       ),
                                     ),
@@ -6596,10 +6600,12 @@ class _SquareFeedPage extends StatefulWidget {
     super.key,
     required this.palette,
     required this.onOpen,
+    this.walletLoginFuture,
     this.initialLives,
   });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+  final Future<AccountProfile?>? walletLoginFuture;
   final List<LiveSession>? initialLives;
 
   @override
@@ -6620,8 +6626,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     _lives = _loadLives();
   }
 
-  Future<List<LiveSession>> _loadLives() async =>
-      widget.initialLives ?? AccountSession(_apiClient).listLives();
+  Future<List<LiveSession>> _loadLives() async {
+    final initialLives = widget.initialLives;
+    if (initialLives != null) return initialLives;
+    // Silent authentication persists the access token asynchronously.
+    // Wait for it before calling the protected lives endpoint.
+    await widget.walletLoginFuture;
+    return AccountSession(_apiClient).listLives();
+  }
 
   void _retryLoadingLives() {
     setState(() {
@@ -6767,6 +6779,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   child: _CreateLivePage(
                     palette: widget.palette,
                     live: session,
+                    walletLoginFuture: widget.walletLoginFuture,
                   ),
                 ),
               ),
@@ -7155,9 +7168,14 @@ class _ComingSoonPage extends StatelessWidget {
 }
 
 class _CreateLivePage extends StatefulWidget {
-  const _CreateLivePage({required this.palette, this.live});
+  const _CreateLivePage({
+    required this.palette,
+    this.live,
+    this.walletLoginFuture,
+  });
   final AcoPalette palette;
   final LiveSession? live;
+  final Future<AccountProfile?>? walletLoginFuture;
 
   @override
   State<_CreateLivePage> createState() => _CreateLivePageState();
@@ -7205,6 +7223,8 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     LiveSession? createdLive;
     setState(() => _submitting = true);
     try {
+      // Startup account restoration is asynchronous; wait for its token.
+      await widget.walletLoginFuture;
       final session = AccountSession(apiClient);
       if (widget.live case final live?) {
         await session.updateLive(
@@ -7940,6 +7960,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _reconnectAttempt = 0;
       if (mounted) setState(() => _networkReconnecting = false);
       await _loadMessages();
+    } on AccountApiException catch (error) {
+      if (error.statusCode == 404 || error.statusCode == 409) {
+        _reconnectTimer?.cancel();
+        if (mounted) setState(() => _networkReconnecting = false);
+        return;
+      }
+      _scheduleRealtimeReconnect();
     } catch (_) {
       _scheduleRealtimeReconnect();
     }
@@ -8042,11 +8069,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _closeRoom(true);
       return;
     }
+    final displayedRoom = room;
     _checkInTimer?.cancel();
-    if (room.checkIn != null) {
+    if (displayedRoom.checkIn != null) {
       _checkInTimer = Timer.periodic(const Duration(seconds: 1), (_) {
         if (!mounted) return;
-        if (room.checkIn!.deadline.isBefore(DateTime.now())) {
+        if (displayedRoom.checkIn!.deadline.isBefore(DateTime.now())) {
           _checkInTimer?.cancel();
           unawaited(_loadRoom(silent: true));
           return;
@@ -8054,7 +8082,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         setState(() {});
       });
     }
-    final participants = [room.host, ...room.speakers, ...room.listeners];
+    final participants = [
+      displayedRoom.host,
+      ...displayedRoom.speakers,
+      ...displayedRoom.listeners,
+    ];
     final participantIds = participants.map(
       (participant) => participant.userId,
     );
@@ -8063,8 +8095,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         ? participants
               .where(
                 (participant) =>
-                    room.viewerRole == 'listener' &&
-                    participant.userId == room.viewerUserId,
+                    displayedRoom.viewerRole == 'listener' &&
+                    participant.userId == displayedRoom.viewerUserId,
               )
               .toList(growable: false)
         : participants
@@ -8094,18 +8126,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _localMuteOverride = null;
     }
     setState(() {
-      _room = room;
+      _room = displayedRoom;
       // A realtime snapshot can arrive before the mute request completes.
       // Keep the user's latest local choice until the server echoes it back.
-      _muted = localMuteOverride ?? room.viewerMuted;
+      _muted = localMuteOverride ?? displayedRoom.viewerMuted;
       _handRaised = room.raisedHands.any(
-        (participant) => participant.userId == room.viewerUserId,
+        (participant) => participant.userId == displayedRoom.viewerUserId,
       );
-      if (room.chatMuted && room.viewerRole != 'host') {
+      if (displayedRoom.chatMuted && displayedRoom.viewerRole != 'host') {
         _emojiPickerVisible = false;
       }
     });
-    unawaited(_syncLiveKitPublishPermission(room));
+    unawaited(_syncLiveKitPublishPermission(displayedRoom));
   }
 
   // LiveKit permissions are embedded in the join token. A listener therefore
@@ -8643,13 +8675,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     try {
       final messages = await _accountSession.listLiveMessages(
         live.id,
-        after: _messages.isEmpty ? null : _messages.last.id,
+        after: _latestPersistedMessageId,
       );
       if (!mounted || messages.isEmpty) return;
       _appendMessages(messages);
     } catch (_) {
       // WebSocket events cover new messages; history remains a best-effort fallback.
     }
+  }
+
+  int? get _latestPersistedMessageId {
+    for (final message in _messages.reversed) {
+      if (message.id > 0) return message.id;
+    }
+    return null;
   }
 
   Future<void> _sendMessage() async {
@@ -9426,7 +9465,7 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
       widget.onUsernameChanged?.call(profile.username);
       Navigator.of(context).pop();
     } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '保存失败', error.message);
+      if (mounted) _showNotice(context, '保存失败', error.localizedMessage);
     } catch (_) {
       if (mounted) _showNotice(context, '保存失败', '请检查网络后重试。');
     } finally {
@@ -11692,7 +11731,9 @@ class _LiveRoomParticipantSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final participants = [...speakers, ...listeners]
+    // Keep the participant strip lightweight: show at most ten listeners.
+    // The total audience count remains visible elsewhere in the room header.
+    final participants = [...speakers, ...listeners.take(10)]
       ..sort(
         (left, right) =>
             (left.role == 'speaker' ? 0 : 1) -
@@ -12386,55 +12427,70 @@ class _RoomBottomBar extends StatelessWidget {
   final VoidCallback onSubmitted;
 
   @override
-  Widget build(BuildContext context) {
-    final micColors = _micControlColors();
-    return SizedBox(
-      height: _roomBottomBarHeight,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 10, 18, 16),
-        child: Row(
-          children: [
-            _RoomControl(
-              icon: canSpeak && !muted ? null : CupertinoIcons.mic_slash,
-              iconAsset: canSpeak && !muted
-                  ? 'assets/icons/live_mic.png'
-                  : null,
-              label: audioMuted
-                  ? '全员静音中'
-                  : canSpeak
-                  ? (muted ? '取消静音' : '静音')
-                  : '获准后可发言',
-              background: micColors.background,
-              foreground: micColors.foreground,
-              onPressed: onMic,
-              large: true,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _RoomComposer(
-                palette: palette,
-                controller: controller,
-                chatMuted: chatMuted,
-                onEmojiPressed: onEmojiPressed,
-                onSubmitted: onSubmitted,
-              ),
-            ),
-            if (showHandControl) ...[
-              const SizedBox(width: 8),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final micColors = _micControlColors();
+      // When the Android keyboard resizes this route, the remaining viewport
+      // can be shorter than the normal 82px bar. Keep the 56px controls but
+      // reduce the vertical chrome so the composer never overflows.
+      final height = math.min(_roomBottomBarHeight, constraints.maxHeight);
+      final verticalPadding = math.min(
+        10.0,
+        math.max(0.0, (height - 56.0) / 2),
+      );
+      return SizedBox(
+        height: height,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            18,
+            verticalPadding,
+            18,
+            verticalPadding,
+          ),
+          child: Row(
+            children: [
               _RoomControl(
-                iconAsset: 'assets/icons/live_hand.png',
-                label: handRaised ? '已举手' : '举手',
-                background: palette.surfaceRaised,
-                foreground: palette.primaryText,
-                onPressed: handRaised ? null : onHand,
+                icon: canSpeak && !muted ? null : CupertinoIcons.mic_slash,
+                iconAsset: canSpeak && !muted
+                    ? 'assets/icons/live_mic.png'
+                    : null,
+                label: audioMuted
+                    ? '全员静音中'
+                    : canSpeak
+                    ? (muted ? '取消静音' : '静音')
+                    : '获准后可发言',
+                background: micColors.background,
+                foreground: micColors.foreground,
+                onPressed: onMic,
                 large: true,
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _RoomComposer(
+                  palette: palette,
+                  controller: controller,
+                  chatMuted: chatMuted,
+                  onEmojiPressed: onEmojiPressed,
+                  onSubmitted: onSubmitted,
+                ),
+              ),
+              if (showHandControl) ...[
+                const SizedBox(width: 8),
+                _RoomControl(
+                  iconAsset: 'assets/icons/live_hand.png',
+                  label: handRaised ? '已举手' : '举手',
+                  background: palette.surfaceRaised,
+                  foreground: palette.primaryText,
+                  onPressed: handRaised ? null : onHand,
+                  large: true,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 
   _RoomControlColors _micControlColors() {
     if (!canSpeak || audioMuted) {

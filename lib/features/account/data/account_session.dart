@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
@@ -13,7 +14,8 @@ class AccountSession {
   AccountSession(this._apiClient, {AccountTokenStore? tokenStore})
     : _tokenStore = tokenStore ?? SecureAccountTokenStore();
 
-  static const activeAccountKey = 'account.active';
+  static String get activeAccountKey =>
+      'account.active.${const AppConfig().accountStorageScope}';
   final AccountApiClient _apiClient;
   final AccountTokenStore _tokenStore;
 
@@ -118,8 +120,16 @@ class AccountSession {
     return AccountProfile.fromJson(jsonDecode(value) as Map<String, dynamic>);
   }
 
-  Future<List<LiveSession>> listLives() async =>
-      _apiClient.listLives(token: await _requireToken());
+  /// Lists lives when an account is available.
+  ///
+  /// The square/live feed is also reachable while the app is still restoring
+  /// the wallet session. Treat that transient unauthenticated state as an
+  /// empty feed instead of surfacing a programming-error StateError.
+  Future<List<LiveSession>> listLives() async {
+    final tokens = await _tokenStore.read();
+    if (tokens == null) return const <LiveSession>[];
+    return _apiClient.listLives(token: tokens.accessToken);
+  }
 
   Future<LiveSession> createLive({
     required String title,

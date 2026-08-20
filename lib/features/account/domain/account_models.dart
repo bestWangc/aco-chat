@@ -172,11 +172,16 @@ class LiveMessage {
   final DateTime createdAt;
 
   factory LiveMessage.fromJson(Map<String, dynamic> json) => LiveMessage(
-    id: json['id'] as int,
+    id: _messageId(json['id']),
     nickname: json['nickname'] as String,
     text: json['text'] as String,
     createdAt: DateTime.parse(json['created_at'] as String),
   );
+}
+
+int _messageId(Object? value) {
+  if (value is int) return value;
+  return int.tryParse('$value') ?? 0;
 }
 
 class LiveParticipant {
