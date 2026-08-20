@@ -1,6 +1,7 @@
 package com.aco.aco_chat
 
 import android.content.ContentValues
+import android.content.Intent
 import android.os.Build
 import android.provider.MediaStore
 import android.view.WindowManager
@@ -65,6 +66,25 @@ class MainActivity : FlutterFragmentActivity() {
                     result.success(uri.toString())
                 } catch (error: Exception) {
                     result.error("SAVE_FAILED", error.message, null)
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/live-audio-background")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        val intent = Intent(this, LiveAudioForegroundService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        stopService(Intent(this, LiveAudioForegroundService::class.java))
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
                 }
             }
     }

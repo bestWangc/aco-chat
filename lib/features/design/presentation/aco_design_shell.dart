@@ -6632,12 +6632,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
   void _retryLoadingLives() {
     setState(() {
-      _lives = _loadLives();
+      _lives = _loadLives(useInitialLives: false);
     });
   }
 
   Future<void> _refreshLives() async {
-    final refreshFuture = _loadLives();
+    final refreshFuture = _loadLives(useInitialLives: false);
     setState(() {
       _lives = refreshFuture;
     });
@@ -7956,6 +7956,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         return;
       }
       _liveKitRoom = room;
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        await _liveAudioBackgroundChannel.invokeMethod<void>('start');
+      }
       _liveKitCanPublish = joinInfo.canPublish;
       _liveKitRole = _room?.viewerRole ?? joinInfo.role;
       if (joinInfo.canPublish) {
@@ -8291,7 +8294,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
       if (!mounted) return;
       await _accountSession.endLive(live.id);
-      _closeRoom();
+      _closeRoom(true);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '结束失败', error.message);
     }
@@ -8722,6 +8725,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     unawaited(_liveKitRoom?.disconnect());
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_liveAudioBackgroundChannel.invokeMethod<void>('stop'));
+    }
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       unawaited(
         AudioManager.instance.setAudioSessionManagementMode(
