@@ -1,4 +1,9 @@
 class AppConfig {
+  static const appVersion = String.fromEnvironment(
+    'ACO_APP_VERSION',
+    defaultValue: '1.0.11',
+  );
+
   const AppConfig({
     this.apiBaseUrl = const String.fromEnvironment(
       'ACO_API_BASE_URL',
