@@ -8285,7 +8285,35 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         if (audioMutedJson is Map<String, dynamic>) {
           _applyAudioMute(audioMutedJson['muted'] as bool? ?? false);
         }
+      case 'room.participant_count':
+        final participantCount = event['participant_count'];
+        if (participantCount is num) {
+          _applyParticipantCount(participantCount.toInt());
+        }
     }
+  }
+
+  void _applyParticipantCount(int participantCount) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    setState(() {
+      _room = LiveRoom(
+        live: room.live,
+        host: room.host,
+        hostActive: room.hostActive,
+        viewerUserId: room.viewerUserId,
+        viewerRole: room.viewerRole,
+        participantCount: participantCount,
+        speakers: room.speakers,
+        listeners: room.listeners,
+        raisedHands: room.raisedHands,
+        canRaiseHand: room.canRaiseHand,
+        viewerMuted: room.viewerMuted,
+        chatMuted: room.chatMuted,
+        audioMuted: room.audioMuted,
+        checkIn: room.checkIn,
+      );
+    });
   }
 
   void _applyAudioMute(bool muted) {
