@@ -140,6 +140,7 @@ class LiveKitJoinInfo {
     required this.roomName,
     required this.role,
     required this.canPublish,
+    required this.canPublishData,
   });
 
   factory LiveKitJoinInfo.fromJson(Map<String, dynamic> json) =>
@@ -149,6 +150,7 @@ class LiveKitJoinInfo {
         roomName: json['room_name'] as String,
         role: json['role'] as String,
         canPublish: json['can_publish'] as bool? ?? false,
+        canPublishData: json['can_publish_data'] as bool? ?? false,
       );
 
   final String url;
@@ -156,6 +158,7 @@ class LiveKitJoinInfo {
   final String roomName;
   final String role;
   final bool canPublish;
+  final bool canPublishData;
 }
 
 class LiveMessage {
