@@ -7910,6 +7910,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _liveKitReconnectStopped = false;
   final Set<String> _liveKitSpeakingParticipantIds = <String>{};
   bool? _liveKitCanPublish;
+  bool? _liveKitCanPublishData;
   String? _liveKitRole;
   bool _refreshingLiveKitPermission = false;
   bool _microphoneUpdating = false;
@@ -7936,7 +7937,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     await _waitForLiveKitReentryCooldown(live.id);
     if (!mounted || _leaving) return;
     await _loadRoom();
-    await _loadMessages();
     await _connectRealtime();
     await _connectLiveKit();
     final room = _room;
@@ -7992,6 +7992,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
       _liveKitRoom = room;
       _liveKitEventListener = room.createListener()
+        ..on<DataReceivedEvent>(_handleLiveKitData)
         ..on<ActiveSpeakersChangedEvent>((event) {
           if (!mounted) return;
           setState(() {
@@ -8034,6 +8035,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         await _liveAudioBackgroundChannel.invokeMethod<void>('start');
       }
       _liveKitCanPublish = joinInfo.canPublish;
+      _liveKitCanPublishData = joinInfo.canPublishData;
       _liveKitRole = _room?.viewerRole ?? joinInfo.role;
       if (joinInfo.canPublish) {
         await room.localParticipant?.setMicrophoneEnabled(!_muted);
@@ -8207,7 +8209,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _reconnectAttempt = 0;
       _realtimeReconnectStopped = false;
       if (mounted) setState(() => _networkReconnecting = false);
-      await _loadMessages();
     } on AccountApiException catch (error) {
       if (error.statusCode == 404 || error.statusCode == 409) {
         _reconnectTimer?.cancel();
@@ -8274,11 +8275,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         final roomJson = event['room'];
         if (roomJson is Map<String, dynamic>) {
           _applyRoomSnapshot(LiveRoom.fromJson(roomJson));
-        }
-      case 'chat.message':
-        final messageJson = event['message'];
-        if (messageJson is Map<String, dynamic>) {
-          _appendMessages([LiveMessage.fromJson(messageJson)]);
         }
       case 'room.audio_mute':
         final audioMutedJson = event['audio_muted'];
@@ -8434,8 +8430,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   // has to reconnect after the host approves their hand raise; otherwise the
   // UI shows an enabled microphone but LiveKit still rejects its audio track.
   Future<void> _syncLiveKitPublishPermission(LiveRoom room) async {
+    final canPublishData = room.viewerRole == 'host' || !room.chatMuted;
     final canPublish = _canPublishAudio(room);
     if (_liveKitRoom == null || _liveKitConnecting || _liveKitReconnecting) {
+      return;
+    }
+    final dataPermissionChanged = _liveKitCanPublishData != canPublishData;
+    if (dataPermissionChanged) {
+      await _refreshLiveKitPermission();
       return;
     }
     if (!canPublish) {
@@ -8982,26 +8984,21 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   void _toggleEmojiPicker() =>
       setState(() => _emojiPickerVisible = !_emojiPickerVisible);
 
-  Future<void> _loadMessages() async {
-    final live = widget.live;
-    if (live == null) return;
+  void _handleLiveKitData(DataReceivedEvent event) {
+    if (event.topic != 'chat' || _room?.chatMuted == true) return;
     try {
-      final messages = await _accountSession.listLiveMessages(
-        live.id,
-        after: _latestPersistedMessageId,
+      final payload = jsonDecode(utf8.decode(event.data));
+      if (payload is! Map<String, dynamic>) return;
+      final text = payload['text'];
+      if (text is! String || text.trim().isEmpty || text.length > 300) return;
+      final nickname = event.participant?.name.trim();
+      _appendChatMessage(
+        nickname: nickname == null || nickname.isEmpty ? '成员' : nickname,
+        text: text,
       );
-      if (!mounted || messages.isEmpty) return;
-      _appendMessages(messages);
     } catch (_) {
-      // WebSocket events cover new messages; history remains a best-effort fallback.
+      // Ignore malformed or non-chat data packets from other clients.
     }
-  }
-
-  int? get _latestPersistedMessageId {
-    for (final message in _messages.reversed) {
-      if (message.id > 0) return message.id;
-    }
-    return null;
   }
 
   Future<void> _sendMessage() async {
@@ -9018,7 +9015,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
     setState(() => _sending = true);
     try {
-      await _accountSession.createLiveMessage(liveId: live.id, text: text);
+      final room = _liveKitRoom;
+      if (room == null) {
+        throw StateError('LiveKit room is not connected');
+      }
+      await room.localParticipant?.publishData(
+        utf8.encode(jsonEncode({'text': text})),
+        reliable: true,
+        topic: 'chat',
+      );
+      _appendChatMessage(nickname: _localChatNickname, text: text);
       if (!mounted) return;
       setState(() {
         _messageController.clear();
@@ -9033,6 +9039,26 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  String get _localChatNickname {
+    final room = _room;
+    if (room != null && room.host.userId == room.viewerUserId) {
+      return room.host.nickname;
+    }
+    return '我';
+  }
+
+  void _appendChatMessage({required String nickname, required String text}) {
+    final now = DateTime.now();
+    _appendMessages([
+      LiveMessage(
+        id: -now.microsecondsSinceEpoch,
+        nickname: nickname,
+        text: text.trim(),
+        createdAt: now,
+      ),
+    ]);
   }
 
   void _appendMessages(Iterable<LiveMessage> incomingMessages) {
