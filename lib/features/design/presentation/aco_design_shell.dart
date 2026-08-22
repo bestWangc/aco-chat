@@ -7863,6 +7863,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   );
   static const _communicationAudioSession = AudioSessionOptions.communication();
   static const _liveKitReentryCooldown = Duration(seconds: 5);
+  static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
@@ -7899,6 +7900,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   StreamSubscription<dynamic>? _eventSubscription;
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
+  bool _realtimeReconnectStopped = false;
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
   Room? _liveKitRoom;
@@ -7948,30 +7950,42 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _liveKitConnecting = true;
     _liveKitReconnectStopped = false;
     Room? connectingRoom;
+    String? liveKitUrl;
     try {
       await _ensureLiveKitInitialized();
       await _prepareLiveKitAudioSession();
+      debugPrint('LiveKit connect: requesting join info for live ${live.id}');
       final joinInfo = await _accountSession.liveKitJoinInfo(
         live.id,
         joinPassword: widget.joinPassword,
       );
-      final room = Room(
-        roomOptions: const RoomOptions(
-          adaptiveStream: true,
-          dynacast: true,
-          defaultAudioCaptureOptions: _voiceRoomAudioCaptureOptions,
-          defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
-        ),
-      );
+      liveKitUrl = joinInfo.url;
+      debugPrint('LiveKit connect: join info received, url=$liveKitUrl');
+      var room = _createLiveKitRoom();
       connectingRoom = room;
       final previousRoom = _liveKitRoom;
       _liveKitRoom = null;
       _liveKitEventListener?.dispose();
       _liveKitEventListener = null;
-      await previousRoom?.disconnect();
-      await room.connect(joinInfo.url, joinInfo.token);
+      await _disconnectLiveKitRoomSafely(previousRoom);
+      debugPrint('LiveKit connect: starting Room.connect ($liveKitUrl)');
+      try {
+        await room.connect(joinInfo.url, joinInfo.token);
+      } catch (primaryError) {
+        if (joinInfo.url == _liveKitFallbackUrl) rethrow;
+        debugPrint(
+          'LiveKit primary connect failed ($primaryError), '
+          'retrying $_liveKitFallbackUrl',
+        );
+        await _disconnectLiveKitRoomSafely(room);
+        room = _createLiveKitRoom();
+        connectingRoom = room;
+        liveKitUrl = _liveKitFallbackUrl;
+        await room.connect(_liveKitFallbackUrl, joinInfo.token);
+      }
+      debugPrint('LiveKit connect: Room.connect completed');
       if (!mounted || _leaving) {
-        await room.disconnect();
+        await _disconnectLiveKitRoomSafely(room);
         return;
       }
       _liveKitRoom = room;
@@ -8013,7 +8027,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         await room.localParticipant?.setMicrophoneEnabled(!_muted);
       }
       await _setSpeakerOutputPreferred();
-    } catch (_) {
+    } catch (error, stackTrace) {
+      // Keep the original connect/join failure visible. A disconnect can also
+      // time out while unwinding a failed connection, and must not replace the
+      // error that explains why Room.connect failed.
+      debugPrint('LiveKit connect failed: $error');
+      debugPrint('LiveKit URL: ${liveKitUrl ?? '<not received>'}');
+      debugPrintStack(stackTrace: stackTrace);
       final room = connectingRoom;
       if (room != null) {
         if (identical(room, _liveKitRoom)) {
@@ -8021,7 +8041,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         }
         _liveKitEventListener?.dispose();
         _liveKitEventListener = null;
-        unawaited(room.disconnect());
+        unawaited(_disconnectLiveKitRoomSafely(room));
       }
       if (defaultTargetPlatform == TargetPlatform.android) {
         unawaited(_liveAudioBackgroundChannel.invokeMethod<void>('stop'));
@@ -8031,6 +8051,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
     } finally {
       _liveKitConnecting = false;
+    }
+  }
+
+  Room _createLiveKitRoom() {
+    return Room(
+      roomOptions: const RoomOptions(
+        adaptiveStream: true,
+        dynacast: true,
+        defaultAudioCaptureOptions: _voiceRoomAudioCaptureOptions,
+        defaultAudioOutputOptions: AudioOutputOptions(speakerOn: true),
+      ),
+    );
+  }
+
+  Future<void> _disconnectLiveKitRoomSafely(Room? room) async {
+    if (room == null) return;
+    try {
+      await room.disconnect().timeout(const Duration(seconds: 3));
+    } catch (error, stackTrace) {
+      debugPrint('LiveKit disconnect cleanup failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
     }
   }
 
@@ -8151,6 +8192,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       );
       _reconnectTimer?.cancel();
       _reconnectAttempt = 0;
+      _realtimeReconnectStopped = false;
       if (mounted) setState(() => _networkReconnecting = false);
       await _loadMessages();
     } on AccountApiException catch (error) {
@@ -8179,10 +8221,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   }
 
   void _scheduleRealtimeReconnect() {
-    if (!mounted || widget.live == null || _leaving) return;
+    if (!mounted ||
+        widget.live == null ||
+        _leaving ||
+        _realtimeReconnectStopped) {
+      return;
+    }
+    if (_reconnectAttempt >= 5) {
+      _realtimeReconnectStopped = true;
+      if (mounted) {
+        setState(() => _networkReconnecting = false);
+        _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入直播间。');
+      }
+      return;
+    }
     _reconnectTimer?.cancel();
-    final delaySeconds = const [3, 6, 12, 30][math.min(_reconnectAttempt, 3)];
-    _reconnectAttempt = math.min(_reconnectAttempt + 1, 3);
+    const retryDelays = [3, 6, 12, 30, 60];
+    final delaySeconds = retryDelays[_reconnectAttempt];
+    _reconnectAttempt++;
     setState(() => _networkReconnecting = true);
     _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
       if (mounted && !_leaving) unawaited(_connectRealtime());

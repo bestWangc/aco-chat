@@ -1,7 +1,7 @@
 class AppConfig {
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
-    defaultValue: '1.0.11',
+    defaultValue: '1.0.12',
   );
 
   const AppConfig({
