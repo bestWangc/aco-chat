@@ -8281,6 +8281,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         if (audioMutedJson is Map<String, dynamic>) {
           _applyAudioMute(audioMutedJson['muted'] as bool? ?? false);
         }
+      case 'room.chat_mute':
+        final chatMuted = event['chat_muted'];
+        if (chatMuted is bool) {
+          _applyChatMute(chatMuted);
+        }
       case 'room.participant_count':
         final participantCount = event['participant_count'];
         if (participantCount is num) {
@@ -8346,6 +8351,29 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _muted = updatedRoom.viewerMuted;
     });
     _localMuteOverride = null;
+    unawaited(_syncLiveKitPublishPermission(updatedRoom));
+  }
+
+  void _applyChatMute(bool muted) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    final updatedRoom = LiveRoom(
+      live: room.live,
+      host: room.host,
+      hostActive: room.hostActive,
+      viewerUserId: room.viewerUserId,
+      viewerRole: room.viewerRole,
+      participantCount: room.participantCount,
+      speakers: room.speakers,
+      listeners: room.listeners,
+      raisedHands: room.raisedHands,
+      canRaiseHand: room.canRaiseHand,
+      viewerMuted: room.viewerMuted,
+      chatMuted: muted,
+      audioMuted: room.audioMuted,
+      checkIn: room.checkIn,
+    );
+    setState(() => _room = updatedRoom);
     unawaited(_syncLiveKitPublishPermission(updatedRoom));
   }
 
