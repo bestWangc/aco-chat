@@ -7908,6 +7908,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _liveKitConnecting = false;
   bool _liveKitReconnecting = false;
   bool _liveKitReconnectStopped = false;
+  final Set<String> _liveKitSpeakingParticipantIds = <String>{};
   bool? _liveKitCanPublish;
   String? _liveKitRole;
   bool _refreshingLiveKitPermission = false;
@@ -7967,6 +7968,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       _liveKitRoom = null;
       _liveKitEventListener?.dispose();
       _liveKitEventListener = null;
+      _liveKitSpeakingParticipantIds.clear();
       await _disconnectLiveKitRoomSafely(previousRoom);
       debugPrint('LiveKit connect: starting Room.connect ($liveKitUrl)');
       try {
@@ -7990,6 +7992,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
       _liveKitRoom = room;
       _liveKitEventListener = room.createListener()
+        ..on<ActiveSpeakersChangedEvent>((event) {
+          if (!mounted) return;
+          setState(() {
+            _liveKitSpeakingParticipantIds
+              ..clear()
+              ..addAll(
+                event.speakers.map((participant) => participant.identity),
+              );
+          });
+        })
         ..on<RoomReconnectingEvent>((_) {
           _liveKitReconnecting = true;
         })
@@ -8041,6 +8053,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         }
         _liveKitEventListener?.dispose();
         _liveKitEventListener = null;
+        _liveKitSpeakingParticipantIds.clear();
         unawaited(_disconnectLiveKitRoomSafely(room));
       }
       if (defaultTargetPlatform == TargetPlatform.android) {
@@ -9057,7 +9070,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                     child: _LiveRoomHostCard(
                                       palette: palette,
                                       host: room.host,
-                                      active: room.hostActive,
+                                      active: _liveKitSpeakingParticipantIds
+                                          .contains(
+                                            room.host.userId.toString(),
+                                          ),
                                     ),
                                   ),
                                   if (isHost && room.checkIn != null)
@@ -9104,6 +9120,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                                 palette: palette,
                                 speakers: room.speakers,
                                 listeners: room.listeners,
+                                speakingParticipantIds:
+                                    _liveKitSpeakingParticipantIds,
                                 onSpeakerTap: isHost
                                     ? _confirmSpeakerMute
                                     : null,
@@ -9414,6 +9432,16 @@ class _ProfilePage extends StatelessWidget {
             onPressed: () => onOpen(AcoScreen.profileLanguage),
           ),
         ],
+      ),
+      const SizedBox(height: 28),
+      Center(
+        child: Text(
+          '当前版本 v${AppConfig.appVersion}',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
       ),
     ],
   );
@@ -11710,6 +11738,7 @@ class _LiveRoomHostCard extends StatelessWidget {
               ]),
         child: AcoAvatar(size: 76, assetPath: _liveRoomHostAvatarAsset),
       ),
+      if (active) const Positioned.fill(child: _SpeakingRing()),
       Positioned(
         right: -3,
         bottom: -3,
@@ -11722,14 +11751,7 @@ class _LiveRoomHostCard extends StatelessWidget {
             border: Border.all(color: palette.background, width: 3),
           ),
           child: active
-              ? Center(
-                  child: Image.asset(
-                    'assets/icons/live_speaking.png',
-                    width: 21,
-                    height: 21,
-                    fit: BoxFit.contain,
-                  ),
-                )
+              ? const Center(child: _SpeakingBadge())
               : Image.asset(
                   'assets/icons/live_muted.png',
                   width: 21,
@@ -12035,12 +12057,14 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     required this.palette,
     required this.speakers,
     required this.listeners,
+    required this.speakingParticipantIds,
     this.onSpeakerTap,
   });
 
   final AcoPalette palette;
   final List<LiveParticipant> speakers;
   final List<LiveParticipant> listeners;
+  final Set<String> speakingParticipantIds;
   final ValueChanged<LiveParticipant>? onSpeakerTap;
 
   @override
@@ -12076,6 +12100,9 @@ class _LiveRoomParticipantSection extends StatelessWidget {
                   participant: participant,
                   width: cardWidth,
                   avatarSize: avatarSize,
+                  isSpeaking: speakingParticipantIds.contains(
+                    participant.userId.toString(),
+                  ),
                   onSpeakerTap: onSpeakerTap,
                 ),
             ],
@@ -12092,6 +12119,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
     required this.participant,
     required this.width,
     required this.avatarSize,
+    required this.isSpeaking,
     this.onSpeakerTap,
   });
 
@@ -12099,6 +12127,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
   final LiveParticipant participant;
   final double width;
   final double avatarSize;
+  final bool isSpeaking;
   final ValueChanged<LiveParticipant>? onSpeakerTap;
 
   @override
@@ -12116,22 +12145,28 @@ class _LiveRoomParticipantCard extends StatelessWidget {
           Stack(
             clipBehavior: Clip.none,
             children: [
-              if (canMuteSpeaker)
-                CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  minimumSize: Size.zero,
-                  onPressed: () => onSpeakerTap!(participant),
-                  child: avatar,
-                )
-              else
-                avatar,
-              if (participant.role == 'speaker' && !participant.muted)
-                Positioned(right: -2, bottom: -2, child: const _SpeakingBadge())
-              else
+              canMuteSpeaker
+                  ? CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      onPressed: () => onSpeakerTap!(participant),
+                      child: avatar,
+                    )
+                  : avatar,
+              if (isSpeaking) const Positioned.fill(child: _SpeakingRing()),
+              if (isSpeaking)
+                const Positioned(right: -2, bottom: -2, child: _SpeakingBadge())
+              else if (participant.role != 'speaker' || participant.muted)
                 Positioned(
                   right: -2,
                   bottom: -2,
                   child: const _MutedMicrophoneBadge(),
+                )
+              else
+                const Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: _LiveMicrophoneBadge(),
                 ),
             ],
           ),
@@ -12177,18 +12212,66 @@ class _MutedMicrophoneBadge extends StatelessWidget {
   }
 }
 
-class _SpeakingBadge extends StatelessWidget {
+class _SpeakingBadge extends StatefulWidget {
   const _SpeakingBadge();
 
   @override
-  Widget build(BuildContext context) {
-    return Image.asset(
-      'assets/icons/live_speaking.png',
-      width: 21,
-      height: 21,
-      fit: BoxFit.contain,
-    );
+  State<_SpeakingBadge> createState() => _SpeakingBadgeState();
+}
+
+class _SpeakingBadgeState extends State<_SpeakingBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 680),
+    lowerBound: .72,
+    upperBound: 1.12,
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) => Opacity(
+      opacity: .58 + (_controller.value - .72) / .4 * .42,
+      child: Transform.scale(scale: _controller.value, child: child),
+    ),
+    child: const _LiveMicrophoneBadge(),
+  );
+}
+
+class _LiveMicrophoneBadge extends StatelessWidget {
+  const _LiveMicrophoneBadge();
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+    'assets/icons/live_speaking.png',
+    width: 21,
+    height: 21,
+    fit: BoxFit.contain,
+  );
+}
+
+class _SpeakingRing extends StatelessWidget {
+  const _SpeakingRing();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: const Color(0xFF9BEF00), width: 3),
+        boxShadow: const [
+          BoxShadow(color: Color(0x669BEF00), blurRadius: 8, spreadRadius: 1),
+        ],
+      ),
+    ),
+  );
 }
 
 class _LiveRoomInfoNotice extends StatelessWidget {
