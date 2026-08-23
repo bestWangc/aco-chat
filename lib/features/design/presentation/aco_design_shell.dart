@@ -7860,6 +7860,7 @@ class _VoiceRoomPage extends StatefulWidget {
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   static const _maxLiveMessageCount = 200;
+  static const _liveMessageRefreshInterval = Duration(milliseconds: 75);
   static const _liveAudioBackgroundChannel = MethodChannel(
     'aco/live-audio-background',
   );
@@ -7906,6 +7907,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _realtimeReconnectStopped = false;
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
+  Timer? _messageRefreshTimer;
   Room? _liveKitRoom;
   EventsListener<RoomEvent>? _liveKitEventListener;
   bool _liveKitConnecting = false;
@@ -8997,6 +8999,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _reconnectTimer?.cancel();
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
+    _messageRefreshTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
     unawaited(_disconnectLiveKitForLeave());
@@ -9105,7 +9108,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
     }
     if (!hasNewMessages || !mounted) return;
-    setState(() {});
+    _scheduleMessageRefresh();
+  }
+
+  void _scheduleMessageRefresh() {
+    if (_messageRefreshTimer != null) return;
+
+    // Coalesce bursts of incoming chat messages into one rebuild. The queue is
+    // updated immediately, while the UI is refreshed at most once per window.
+    _messageRefreshTimer = Timer(_liveMessageRefreshInterval, () {
+      _messageRefreshTimer = null;
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -9119,6 +9133,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     // A self-muted speaker becomes a listener and must raise their hand again.
     final audioMuted = !isHost && (room?.audioMuted ?? false);
     final chatMuted = room?.chatMuted == true && !isHost;
+    Widget? roomOverview;
+    if (!_emojiPickerVisible && room != null) {
+      roomOverview = _LiveRoomOverview(
+        palette: palette,
+        room: room,
+        isHost: isHost,
+        checkingIn: _checkingIn,
+        speakingParticipantIds: _liveKitSpeakingParticipantIds,
+        onCheckIn: _confirmCheckIn,
+        onShowRaisedHandRequests: _showRaisedHandRequests,
+        onSpeakerTap: isHost ? _confirmSpeakerMute : null,
+      );
+    } else if (!_emojiPickerVisible && _roomLoading) {
+      roomOverview = const Padding(
+        padding: EdgeInsets.only(top: 48),
+        child: CupertinoActivityIndicator(),
+      );
+    }
 
     return PopScope(
       canPop: _allowPop,
@@ -9150,80 +9182,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                   Expanded(
                     child: Column(
                       children: [
-                        if (!_emojiPickerVisible) ...[
-                          if (room != null) ...[
-                            SizedBox(
-                              width: double.infinity,
-                              child: Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  Align(
-                                    alignment: Alignment.topCenter,
-                                    child: _LiveRoomHostCard(
-                                      palette: palette,
-                                      host: room.host,
-                                      active: _liveKitSpeakingParticipantIds
-                                          .contains(
-                                            room.host.userId.toString(),
-                                          ),
-                                    ),
-                                  ),
-                                  if (isHost && room.checkIn != null)
-                                    Positioned(
-                                      top: 36,
-                                      left: 12,
-                                      child: _LiveRoomCheckInButton(
-                                        palette: palette,
-                                        checkIn: room.checkIn!,
-                                        isHost: true,
-                                        onPressed: null,
-                                      ),
-                                    ),
-                                  if (!isHost &&
-                                      room.checkIn != null &&
-                                      !_checkingIn &&
-                                      !room.checkIn!.viewerChecked)
-                                    Positioned(
-                                      top: 36,
-                                      right: 14,
-                                      child: _LiveRoomCheckInButton(
-                                        palette: palette,
-                                        checkIn: room.checkIn!,
-                                        isHost: false,
-                                        onPressed: _confirmCheckIn,
-                                      ),
-                                    ),
-                                  if (isHost && room.raisedHands.isNotEmpty)
-                                    Positioned(
-                                      top: 36,
-                                      right: 14,
-                                      child: _RaisedHandIndicator(
-                                        palette: palette,
-                                        count: room.raisedHands.length,
-                                        onPressed: _showRaisedHandRequests,
-                                      ),
-                                    ),
-                                ],
-                              ),
+                        if (roomOverview != null)
+                          Flexible(
+                            flex: 3,
+                            child: SingleChildScrollView(
+                              primary: false,
+                              child: roomOverview,
                             ),
-                            if (room.speakers.isNotEmpty ||
-                                room.listeners.isNotEmpty)
-                              _LiveRoomParticipantSection(
-                                palette: palette,
-                                speakers: room.speakers,
-                                listeners: room.listeners,
-                                speakingParticipantIds:
-                                    _liveKitSpeakingParticipantIds,
-                                onSpeakerTap: isHost
-                                    ? _confirmSpeakerMute
-                                    : null,
-                              ),
-                          ] else if (_roomLoading)
-                            const Padding(
-                              padding: EdgeInsets.only(top: 48),
-                              child: CupertinoActivityIndicator(),
-                            ),
-                        ],
+                          ),
                         const SizedBox(height: 14),
                         Expanded(
                           child: _RoomChatHistory(
@@ -12141,6 +12107,95 @@ class _RaisedHandIndicator extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+class _LiveRoomOverview extends StatelessWidget {
+  const _LiveRoomOverview({
+    required this.palette,
+    required this.room,
+    required this.isHost,
+    required this.checkingIn,
+    required this.speakingParticipantIds,
+    required this.onCheckIn,
+    required this.onShowRaisedHandRequests,
+    this.onSpeakerTap,
+  });
+
+  final AcoPalette palette;
+  final LiveRoom room;
+  final bool isHost;
+  final bool checkingIn;
+  final Set<String> speakingParticipantIds;
+  final VoidCallback onCheckIn;
+  final VoidCallback onShowRaisedHandRequests;
+  final ValueChanged<LiveParticipant>? onSpeakerTap;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      SizedBox(
+        width: double.infinity,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: _LiveRoomHostCard(
+                palette: palette,
+                host: room.host,
+                active: speakingParticipantIds.contains(
+                  room.host.userId.toString(),
+                ),
+              ),
+            ),
+            if (isHost && room.checkIn != null)
+              Positioned(
+                top: 36,
+                left: 12,
+                child: _LiveRoomCheckInButton(
+                  palette: palette,
+                  checkIn: room.checkIn!,
+                  isHost: true,
+                  onPressed: null,
+                ),
+              ),
+            if (!isHost &&
+                room.checkIn != null &&
+                !checkingIn &&
+                !room.checkIn!.viewerChecked)
+              Positioned(
+                top: 36,
+                right: 14,
+                child: _LiveRoomCheckInButton(
+                  palette: palette,
+                  checkIn: room.checkIn!,
+                  isHost: false,
+                  onPressed: onCheckIn,
+                ),
+              ),
+            if (isHost && room.raisedHands.isNotEmpty)
+              Positioned(
+                top: 36,
+                right: 14,
+                child: _RaisedHandIndicator(
+                  palette: palette,
+                  count: room.raisedHands.length,
+                  onPressed: onShowRaisedHandRequests,
+                ),
+              ),
+          ],
+        ),
+      ),
+      if (room.speakers.isNotEmpty || room.listeners.isNotEmpty)
+        _LiveRoomParticipantSection(
+          palette: palette,
+          speakers: room.speakers,
+          listeners: room.listeners,
+          speakingParticipantIds: speakingParticipantIds,
+          onSpeakerTap: onSpeakerTap,
+        ),
+    ],
   );
 }
 
