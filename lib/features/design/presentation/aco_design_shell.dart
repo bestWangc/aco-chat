@@ -7858,7 +7858,8 @@ class _VoiceRoomPage extends StatefulWidget {
   State<_VoiceRoomPage> createState() => _VoiceRoomPageState();
 }
 
-class _VoiceRoomPageState extends State<_VoiceRoomPage> {
+class _VoiceRoomPageState extends State<_VoiceRoomPage>
+    with WidgetsBindingObserver {
   static const _maxLiveMessageCount = 200;
   static const _maxLiveMessageBytes = 512;
   static const _minLiveMessageInterval = Duration(milliseconds: 250);
@@ -7912,6 +7913,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
   Timer? _messageRefreshTimer;
+  Timer? _hostHeartbeatTimer;
   Room? _liveKitRoom;
   EventsListener<RoomEvent>? _liveKitEventListener;
   bool _liveKitConnecting = false;
@@ -7934,6 +7936,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_setLiveRoomWakelock(true));
     _apiClient = AccountApiClient();
     _accountSession = AccountSession(_apiClient);
@@ -8200,6 +8203,38 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     }
   }
 
+  void _ensureHostHeartbeat(LiveRoom room) {
+    if (room.viewerRole != 'host') {
+      _hostHeartbeatTimer?.cancel();
+      _hostHeartbeatTimer = null;
+      return;
+    }
+    if (_hostHeartbeatTimer != null) return;
+    _hostHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 45),
+      (_) => unawaited(_sendHostHeartbeat()),
+    );
+    unawaited(_sendHostHeartbeat());
+  }
+
+  Future<void> _sendHostHeartbeat() async {
+    final live = widget.live;
+    if (live == null || _leaving) return;
+    try {
+      await _accountSession.keepLiveAlive(live.id);
+    } catch (error) {
+      // Heartbeat failures are transient and must not end the live locally.
+      debugPrint('Live heartbeat failed: $error');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _room?.viewerRole == 'host') {
+      unawaited(_sendHostHeartbeat());
+    }
+  }
+
   Future<void> _connectRealtime() async {
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
@@ -8273,36 +8308,45 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
 
   void _handleRealtimeEvent(dynamic rawEvent) {
     if (rawEvent is! String) return;
-    if (_networkReconnecting && mounted) {
-      setState(() {
-        _networkReconnecting = false;
-        _reconnectAttempt = 0;
-      });
-    }
-    final decoded = jsonDecode(rawEvent);
-    if (decoded is! Map<String, dynamic>) return;
-    final event = decoded;
-    switch (event['type'] as String?) {
-      case 'room.snapshot':
-        final roomJson = event['room'];
-        if (roomJson is Map<String, dynamic>) {
-          _applyRoomSnapshot(LiveRoom.fromJson(roomJson));
-        }
-      case 'room.audio_mute':
-        final audioMutedJson = event['audio_muted'];
-        if (audioMutedJson is Map<String, dynamic>) {
-          _applyAudioMute(audioMutedJson['muted'] as bool? ?? false);
-        }
-      case 'room.chat_mute':
-        final chatMuted = event['chat_muted'];
-        if (chatMuted is bool) {
-          _applyChatMute(chatMuted);
-        }
-      case 'room.participant_count':
-        final participantCount = event['participant_count'];
-        if (participantCount is num) {
-          _applyParticipantCount(participantCount.toInt());
-        }
+    try {
+      final decoded = jsonDecode(rawEvent);
+      if (decoded is! Map<String, dynamic>) return;
+      final eventType = decoded['type'];
+      if (eventType is! String) return;
+
+      if (_networkReconnecting && mounted) {
+        setState(() {
+          _networkReconnecting = false;
+          _reconnectAttempt = 0;
+        });
+      }
+
+      switch (eventType) {
+        case 'room.snapshot':
+          final roomJson = decoded['room'];
+          if (roomJson is Map<String, dynamic>) {
+            _applyRoomSnapshot(LiveRoom.fromJson(roomJson));
+          }
+        case 'room.audio_mute':
+          final audioMutedJson = decoded['audio_muted'];
+          if (audioMutedJson is Map<String, dynamic>) {
+            _applyAudioMute(audioMutedJson['muted'] as bool? ?? false);
+          }
+        case 'room.chat_mute':
+          final chatMuted = decoded['chat_muted'];
+          if (chatMuted is bool) {
+            _applyChatMute(chatMuted);
+          }
+        case 'room.participant_count':
+          final participantCount = decoded['participant_count'];
+          if (participantCount is num) {
+            _applyParticipantCount(participantCount.toInt());
+          }
+      }
+    } on FormatException {
+      debugPrint('Ignoring malformed live realtime event');
+    } catch (error) {
+      debugPrint('Ignoring invalid live realtime event: $error');
     }
   }
 
@@ -8464,6 +8508,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
       }
     });
     unawaited(_syncLiveKitPublishPermission(displayedRoom));
+    _ensureHostHeartbeat(displayedRoom);
   }
 
   // LiveKit permissions are embedded in the join token. A listener therefore
@@ -9006,6 +9051,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     _reconnectTimer?.cancel();
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
+    _hostHeartbeatTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _messageRefreshTimer?.cancel();
     unawaited(_eventSubscription?.cancel());
     unawaited(_eventChannel?.sink.close());
