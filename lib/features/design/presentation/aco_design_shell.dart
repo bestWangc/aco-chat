@@ -50,8 +50,6 @@ void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 // height down by a physical pixel and overflow the room content.
 const _roomBottomBarHeight = 82.0;
 const _roomEmojiPickerHeight = 292.0;
-const _roomBottomAreaWithEmojiHeight =
-    _roomBottomBarHeight + _roomEmojiPickerHeight;
 // Colors and geometry are sampled from 设计图/钱包页-dark.svg.
 const _loginSecondarySurface = Color(0xFF515151);
 // 首页-dark.svg is a 595.28pt-wide artboard. These are its measurements
@@ -1573,6 +1571,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
             _AcoPageRoute<bool>(
               builder: (_) => CupertinoPageScaffold(
                 backgroundColor: AcoPalette(_isDark.value).background,
+                resizeToAvoidBottomInset: true,
                 child: SafeArea(
                   bottom: false,
                   child: ColoredBox(
@@ -6684,6 +6683,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           _AcoPageRoute<bool>(
             builder: (_) => CupertinoPageScaffold(
               backgroundColor: widget.palette.background,
+              resizeToAvoidBottomInset: true,
               child: SafeArea(
                 bottom: false,
                 child: ColoredBox(
@@ -9266,6 +9266,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     // A self-muted speaker becomes a listener and must raise their hand again.
     final audioMuted = !isHost && (room?.audioMuted ?? false);
     final chatMuted = room?.chatMuted == true && !isHost;
+    // Do NOT add MediaQuery.viewInsetsOf: with adjustResize the window (and
+    // this route) already sits above the keyboard, and CupertinoPageScaffold
+    // zeroes viewInsets for the child. Adding the inset again would double
+    // the keyboard height and leave a gap between the danmaku and the bar.
+    final bottomOverlayInset =
+        _roomBottomBarHeight +
+        (_emojiPickerVisible ? _roomEmojiPickerHeight : 0);
     final roomOverview = _buildRoomOverview(
       palette: palette,
       room: room,
@@ -9291,38 +9298,31 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ),
         child: Stack(
           children: [
-            Padding(
-              padding: EdgeInsets.only(
-                bottom: _emojiPickerVisible
-                    ? _roomBottomAreaWithEmojiHeight
-                    : _roomBottomBarHeight,
-              ),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: Column(
-                      children: [
-                        if (roomOverview != null)
-                          Flexible(
-                            flex: 3,
-                            child: SingleChildScrollView(
-                              primary: false,
-                              child: roomOverview,
-                            ),
-                          ),
-                        const SizedBox(height: 14),
-                        Expanded(
-                          child: _RoomChatHistory(
-                            palette: palette,
-                            liveMessages: _messages.toList(growable: false),
-                            hasLive: live != null,
-                            scrollToLatestSignal: _scrollToLatestSignal,
-                          ),
+            Positioned.fill(
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomOverlayInset),
+                child: Column(
+                  children: [
+                    if (roomOverview != null)
+                      Flexible(
+                        flex: 0,
+                        fit: FlexFit.loose,
+                        child: SingleChildScrollView(
+                          primary: false,
+                          child: roomOverview,
                         ),
-                      ],
+                      ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: _RoomChatHistory(
+                        palette: palette,
+                        liveMessages: _messages.toList(growable: false),
+                        hasLive: live != null,
+                        scrollToLatestSignal: _scrollToLatestSignal,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             if (_handRaiseNoticeVisible)
@@ -9336,6 +9336,39 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               ),
             ),
             if (_networkReconnecting) const _LiveRoomNetworkNotice(),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: _emojiPickerVisible ? _roomEmojiPickerHeight : 0,
+              child: _RoomBottomBar(
+                palette: palette,
+                muted: _muted,
+                canSpeak: canSpeak,
+                audioMuted: audioMuted,
+                showHandControl: !isHost,
+                handRaised: _handRaised,
+                chatMuted: chatMuted,
+                onMic: canSpeak && (isHost || !_muted)
+                    ? _toggleMicrophone
+                    : null,
+                onHand: room?.canRaiseHand == true ? _raiseHand : null,
+                controller: _messageController,
+                onEmojiPressed: _toggleEmojiPicker,
+                onSubmitted: _sendMessage,
+              ),
+            ),
+            if (_emojiPickerVisible)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _RoomEmojiPicker(
+                  palette: palette,
+                  controller: _messageController,
+                  onEmojiSelected: () =>
+                      setState(() => _emojiPickerVisible = false),
+                ),
+              ),
             Positioned.fill(
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 220),
@@ -9372,39 +9405,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                     : const SizedBox.shrink(),
               ),
             ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: _emojiPickerVisible ? _roomEmojiPickerHeight : 0,
-              child: _RoomBottomBar(
-                palette: palette,
-                muted: _muted,
-                canSpeak: canSpeak,
-                audioMuted: audioMuted,
-                showHandControl: !isHost,
-                handRaised: _handRaised,
-                chatMuted: chatMuted,
-                onMic: canSpeak && (isHost || !_muted)
-                    ? _toggleMicrophone
-                    : null,
-                onHand: room?.canRaiseHand == true ? _raiseHand : null,
-                controller: _messageController,
-                onEmojiPressed: _toggleEmojiPicker,
-                onSubmitted: _sendMessage,
-              ),
-            ),
-            if (_emojiPickerVisible)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _RoomEmojiPicker(
-                  palette: palette,
-                  controller: _messageController,
-                  onEmojiSelected: () =>
-                      setState(() => _emojiPickerVisible = false),
-                ),
-              ),
           ],
         ),
       ),
