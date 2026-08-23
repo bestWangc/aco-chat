@@ -8353,6 +8353,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _applyParticipantCount(int participantCount) {
     final room = _room;
     if (room == null || !mounted) return;
+    // Presence events can arrive late or out of order during reconnects. Do
+    // not let an invalid server value render a negative audience count.
+    final safeParticipantCount = participantCount < 0 ? 0 : participantCount;
     setState(() {
       _room = LiveRoom(
         live: room.live,
@@ -8360,7 +8363,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         hostActive: room.hostActive,
         viewerUserId: room.viewerUserId,
         viewerRole: room.viewerRole,
-        participantCount: participantCount,
+        participantCount: safeParticipantCount,
         speakers: room.speakers,
         listeners: room.listeners,
         raisedHands: room.raisedHands,
@@ -12083,7 +12086,8 @@ class _LiveRoomHeaderActions extends StatelessWidget {
   String get _countLabel {
     final value = count;
     if (value == null) return '—';
-    return value > 999 ? '999+' : '$value';
+    final safeValue = value < 0 ? 0 : value;
+    return safeValue > 999 ? '999+' : '$safeValue';
   }
 
   @override
