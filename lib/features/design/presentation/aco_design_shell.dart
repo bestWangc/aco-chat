@@ -7860,6 +7860,10 @@ class _VoiceRoomPage extends StatefulWidget {
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   static const _maxLiveMessageCount = 200;
+  static const _maxLiveMessageBytes = 512;
+  static const _minLiveMessageInterval = Duration(milliseconds: 250);
+  static const _liveMessageRateWindow = Duration(seconds: 1);
+  static const _maxLiveMessagesPerWindow = 20;
   static const _liveMessageRefreshInterval = Duration(milliseconds: 75);
   static const _liveAudioBackgroundChannel = MethodChannel(
     'aco/live-audio-background',
@@ -7920,6 +7924,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   bool _refreshingLiveKitPermission = false;
   bool _microphoneUpdating = false;
   bool? _localMuteOverride;
+  DateTime? _lastMessageSentAt;
+  DateTime? _messageRateWindowStartedAt;
+  int _messageRateWindowCount = 0;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
@@ -9047,6 +9054,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         isViewerChatMuted) {
       return;
     }
+    final payload = utf8.encode(jsonEncode({'text': text}));
+    if (!_checkMessageSendLimits(payload.length)) return;
     setState(() => _sending = true);
     try {
       final room = _liveKitRoom;
@@ -9054,8 +9063,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
         throw StateError('LiveKit room is not connected');
       }
       await room.localParticipant?.publishData(
-        utf8.encode(jsonEncode({'text': text})),
-        reliable: true,
+        payload,
+        reliable: false,
         topic: 'chat',
       );
       _appendChatMessage(nickname: _localChatNickname, text: text);
@@ -9073,6 +9082,36 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     } finally {
       if (mounted) setState(() => _sending = false);
     }
+  }
+
+  bool _checkMessageSendLimits(int payloadBytes) {
+    if (payloadBytes > _maxLiveMessageBytes) {
+      _showNotice(context, '发送失败', '弹幕内容过长，请控制在 512 字节以内。');
+      return false;
+    }
+
+    final now = DateTime.now();
+    final lastSentAt = _lastMessageSentAt;
+    if (lastSentAt != null &&
+        now.difference(lastSentAt) < _minLiveMessageInterval) {
+      _showNotice(context, '发送太快', '请稍后再发送。');
+      return false;
+    }
+
+    final windowStartedAt = _messageRateWindowStartedAt;
+    if (windowStartedAt == null ||
+        now.difference(windowStartedAt) >= _liveMessageRateWindow) {
+      _messageRateWindowStartedAt = now;
+      _messageRateWindowCount = 0;
+    }
+    if (_messageRateWindowCount >= _maxLiveMessagesPerWindow) {
+      _showNotice(context, '发送太快', '房间弹幕较多，请稍后再试。');
+      return false;
+    }
+
+    _lastMessageSentAt = now;
+    _messageRateWindowCount++;
+    return true;
   }
 
   String get _localChatNickname {
