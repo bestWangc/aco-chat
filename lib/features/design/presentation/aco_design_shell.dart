@@ -11903,7 +11903,9 @@ class _LiveRoomHostCard extends StatelessWidget {
           child: active
               ? const Center(child: _SpeakingBadge())
               : Image.asset(
-                  'assets/icons/live_muted.png',
+                  muted
+                      ? 'assets/icons/live_muted.png'
+                      : 'assets/icons/live_mic.png',
                   width: 21,
                   height: 21,
                   fit: BoxFit.contain,
