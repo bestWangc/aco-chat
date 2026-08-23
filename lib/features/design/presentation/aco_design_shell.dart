@@ -9122,6 +9122,33 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     });
   }
 
+  Widget? _buildRoomOverview({
+    required AcoPalette palette,
+    required LiveRoom? room,
+    required bool isHost,
+  }) {
+    if (_emojiPickerVisible) return null;
+    if (room != null) {
+      return _LiveRoomOverview(
+        palette: palette,
+        room: room,
+        isHost: isHost,
+        checkingIn: _checkingIn,
+        speakingParticipantIds: _liveKitSpeakingParticipantIds,
+        onCheckIn: _confirmCheckIn,
+        onShowRaisedHandRequests: _showRaisedHandRequests,
+        onSpeakerTap: isHost ? _confirmSpeakerMute : null,
+      );
+    }
+    if (_roomLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 48),
+        child: CupertinoActivityIndicator(),
+      );
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = widget.palette;
@@ -9133,24 +9160,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
     // A self-muted speaker becomes a listener and must raise their hand again.
     final audioMuted = !isHost && (room?.audioMuted ?? false);
     final chatMuted = room?.chatMuted == true && !isHost;
-    Widget? roomOverview;
-    if (!_emojiPickerVisible && room != null) {
-      roomOverview = _LiveRoomOverview(
-        palette: palette,
-        room: room,
-        isHost: isHost,
-        checkingIn: _checkingIn,
-        speakingParticipantIds: _liveKitSpeakingParticipantIds,
-        onCheckIn: _confirmCheckIn,
-        onShowRaisedHandRequests: _showRaisedHandRequests,
-        onSpeakerTap: isHost ? _confirmSpeakerMute : null,
-      );
-    } else if (!_emojiPickerVisible && _roomLoading) {
-      roomOverview = const Padding(
-        padding: EdgeInsets.only(top: 48),
-        child: CupertinoActivityIndicator(),
-      );
-    }
+    final roomOverview = _buildRoomOverview(
+      palette: palette,
+      room: room,
+      isHost: isHost,
+    );
 
     return PopScope(
       canPop: _allowPop,
