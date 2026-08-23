@@ -242,6 +242,14 @@ class AccountSession {
   Future<void> endLive(int liveId) async =>
       _apiClient.endLive(liveId: liveId, token: await _requireToken());
 
+  /// Keeps the host's live alive with a lightweight HTTP heartbeat. The live
+  /// room screen should call this roughly every 60 seconds while the host is
+  /// presenting (cancel the timer on dispose).
+  Future<void> keepLiveAlive(int liveId) async => _apiClient.sendLiveHeartbeat(
+    liveId: liveId,
+    token: await _requireToken(),
+  );
+
   Future<void> setLiveAudioMute(int liveId, bool muted) async =>
       _apiClient.setLiveAudioMute(
         liveId: liveId,

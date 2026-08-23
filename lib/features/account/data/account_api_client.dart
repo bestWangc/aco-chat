@@ -327,6 +327,12 @@ class AccountApiClient {
   Future<void> endLive({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/end', token);
 
+  /// Lightweight HTTP keep-alive sent by the host while presenting a live.
+  /// Unlike the realtime WebSocket pong, it survives app suspension and
+  /// flaky connections, so the server does not auto-end the live.
+  Future<void> sendLiveHeartbeat({required int liveId, required String token}) =>
+      _postWithoutBody('lives/$liveId/heartbeat', token);
+
   Future<void> setLiveAudioMute({
     required int liveId,
     required bool muted,
