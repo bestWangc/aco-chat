@@ -7876,7 +7876,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
     noiseSuppression: true,
-    autoGainControl: true,
+    autoGainControl: false,
     highPassFilter: true,
     voiceIsolation: true,
     typingNoiseDetection: true,
