@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -7858,6 +7859,7 @@ class _VoiceRoomPage extends StatefulWidget {
 }
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage> {
+  static const _maxLiveMessageCount = 200;
   static const _liveAudioBackgroundChannel = MethodChannel(
     'aco/live-audio-background',
   );
@@ -7894,7 +7896,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
-  List<LiveMessage> _messages = const [];
+  final Queue<LiveMessage> _messages = ListQueue<LiveMessage>();
+  final Set<int> _knownMessageIds = <int>{};
   final Set<int> _knownParticipantIds = <int>{};
   WebSocketChannel? _eventChannel;
   StreamSubscription<dynamic>? _eventSubscription;
@@ -9090,12 +9093,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
   }
 
   void _appendMessages(Iterable<LiveMessage> incomingMessages) {
-    final knownMessageIDs = _messages.map((message) => message.id).toSet();
-    final newMessages = incomingMessages
-        .where((message) => knownMessageIDs.add(message.id))
-        .toList(growable: false);
-    if (newMessages.isEmpty) return;
-    setState(() => _messages = [..._messages, ...newMessages]);
+    var hasNewMessages = false;
+    for (final message in incomingMessages) {
+      if (!_knownMessageIds.add(message.id)) continue;
+      _messages.addLast(message);
+      hasNewMessages = true;
+
+      while (_messages.length > _maxLiveMessageCount) {
+        final evictedMessage = _messages.removeFirst();
+        _knownMessageIds.remove(evictedMessage.id);
+      }
+    }
+    if (!hasNewMessages || !mounted) return;
+    setState(() {});
   }
 
   @override
@@ -9218,7 +9228,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage> {
                         Expanded(
                           child: _RoomChatHistory(
                             palette: palette,
-                            liveMessages: _messages,
+                            liveMessages: _messages.toList(growable: false),
                             hasLive: live != null,
                             scrollToLatestSignal: _scrollToLatestSignal,
                           ),
