@@ -6698,12 +6698,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
             ),
           ),
         )
-        .then((ended) {
+        .then((ended) async {
           if (!mounted) return;
-          _retryLoadingLives();
-          if (ended == true) {
-            showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
-          }
+          await _refreshLives();
+          if (!mounted || ended != true) return;
+          showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
         });
   }
 
