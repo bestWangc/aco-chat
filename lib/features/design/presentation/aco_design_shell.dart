@@ -9321,27 +9321,36 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             Positioned.fill(
               child: Padding(
                 padding: EdgeInsets.only(bottom: bottomOverlayInset),
-                child: Column(
-                  children: [
-                    if (roomOverview != null)
-                      Flexible(
-                        flex: 0,
-                        fit: FlexFit.loose,
-                        child: SingleChildScrollView(
-                          primary: false,
-                          child: roomOverview,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final overviewMaxHeight = math.max(
+                      0.0,
+                      constraints.maxHeight - 14,
+                    );
+                    return Column(
+                      children: [
+                        if (roomOverview != null)
+                          ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxHeight: overviewMaxHeight,
+                            ),
+                            child: SingleChildScrollView(
+                              primary: false,
+                              child: roomOverview,
+                            ),
+                          ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: _RoomChatHistory(
+                            palette: palette,
+                            liveMessages: _messages.toList(growable: false),
+                            hasLive: live != null,
+                            scrollToLatestSignal: _scrollToLatestSignal,
+                          ),
                         ),
-                      ),
-                    const SizedBox(height: 14),
-                    Expanded(
-                      child: _RoomChatHistory(
-                        palette: palette,
-                        liveMessages: _messages.toList(growable: false),
-                        hasLive: live != null,
-                        scrollToLatestSignal: _scrollToLatestSignal,
-                      ),
-                    ),
-                  ],
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
