@@ -8654,7 +8654,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _localMuteOverride = nextMuted;
     if (mounted) setState(() => _muted = nextMuted);
     try {
-      await _setLocalMicrophoneEnabled(!nextMuted);
+      await _setLocalMicrophoneEnabledWithRecovery(!nextMuted);
       await _accountSession.setLiveParticipantMute(live.id, nextMuted);
       final room = _room;
       if (!nextMuted && room != null) {
@@ -8680,7 +8680,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _restoreMicrophone(bool muted) async {
     if (!mounted) return;
     setState(() => _muted = muted);
-    await _setLocalMicrophoneEnabled(!muted);
+    await _setLocalMicrophoneEnabledWithRecovery(!muted);
+  }
+
+  /// A muted WebRTC capture track can occasionally fail to resume. Reconnect
+  /// once and retry before showing a misleading microphone/network error.
+  Future<void> _setLocalMicrophoneEnabledWithRecovery(bool enabled) async {
+    try {
+      await _setLocalMicrophoneEnabled(enabled);
+    } catch (error) {
+      debugPrint('LiveKit microphone toggle failed, reconnecting: $error');
+      await _connectLiveKit(showError: false);
+      await _setLocalMicrophoneEnabled(enabled);
+    }
   }
 
   Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
@@ -9219,6 +9231,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         palette: palette,
         room: room,
         isHost: isHost,
+        // The initial room snapshot and the local LiveKit state can arrive in
+        // either order. Treat either source reporting mute as authoritative so
+        // a muted host avatar never falls back to the grey "not speaking"
+        // treatment during entry or immediately after toggling.
+        hostMuted: isHost ? (_muted || room.host.muted) : room.host.muted,
         checkingIn: _checkingIn,
         speakingParticipantIds: _liveKitSpeakingParticipantIds,
         onCheckIn: _confirmCheckIn,
@@ -11829,11 +11846,13 @@ class _LiveRoomHostCard extends StatelessWidget {
   const _LiveRoomHostCard({
     required this.palette,
     required this.host,
+    required this.muted,
     required this.active,
   });
 
   final AcoPalette palette;
   final LiveParticipant host;
+  final bool muted;
   final bool active;
 
   @override
@@ -11866,36 +11885,9 @@ class _LiveRoomHostCard extends StatelessWidget {
   Widget _buildHostAvatar() => Stack(
     clipBehavior: Clip.none,
     children: [
-      ColorFiltered(
-        // A muted host is intentionally shown at full brightness. `active`
-        // describes whether the host is currently speaking, so using it
-        // alone would also dim the avatar whenever the host is muted.
-        colorFilter: active || host.muted
-            ? const ColorFilter.mode(_transparent, BlendMode.dst)
-            : const ColorFilter.matrix(<double>[
-                .2126,
-                .7152,
-                .0722,
-                0,
-                0,
-                .2126,
-                .7152,
-                .0722,
-                0,
-                0,
-                .2126,
-                .7152,
-                .0722,
-                0,
-                0,
-                0,
-                0,
-                0,
-                .48,
-                0,
-              ]),
-        child: AcoAvatar(size: 76, assetPath: _liveRoomHostAvatarAsset),
-      ),
+      // The host always remains visually present. Speaking state is conveyed
+      // by the ring and microphone badge, never by dimming their avatar.
+      AcoAvatar(size: 76, assetPath: _liveRoomHostAvatarAsset),
       if (active) const Positioned.fill(child: _SpeakingRing()),
       Positioned(
         right: -3,
@@ -11904,7 +11896,7 @@ class _LiveRoomHostCard extends StatelessWidget {
           width: 27,
           height: 27,
           decoration: BoxDecoration(
-            color: active ? palette.accent : palette.mutedText,
+            color: muted ? _danger : palette.accent,
             shape: BoxShape.circle,
             border: Border.all(color: palette.background, width: 3),
           ),
@@ -12215,6 +12207,7 @@ class _LiveRoomOverview extends StatelessWidget {
     required this.palette,
     required this.room,
     required this.isHost,
+    required this.hostMuted,
     required this.checkingIn,
     required this.speakingParticipantIds,
     required this.onCheckIn,
@@ -12225,6 +12218,7 @@ class _LiveRoomOverview extends StatelessWidget {
   final AcoPalette palette;
   final LiveRoom room;
   final bool isHost;
+  final bool hostMuted;
   final bool checkingIn;
   final Set<String> speakingParticipantIds;
   final VoidCallback onCheckIn;
@@ -12244,6 +12238,7 @@ class _LiveRoomOverview extends StatelessWidget {
               child: _LiveRoomHostCard(
                 palette: palette,
                 host: room.host,
+                muted: hostMuted,
                 active: speakingParticipantIds.contains(
                   room.host.userId.toString(),
                 ),
