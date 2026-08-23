@@ -7869,6 +7869,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     'aco/live-audio-background',
   );
   static const _communicationAudioSession = AudioSessionOptions.communication();
+  static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
@@ -7968,7 +7969,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     String? liveKitUrl;
     try {
       await _ensureLiveKitInitialized();
-      await _prepareLiveKitAudioSession();
       debugPrint('LiveKit connect: requesting join info for live ${live.id}');
       final joinInfo = await _accountSession.liveKitJoinInfo(
         live.id,
@@ -7976,6 +7976,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       );
       liveKitUrl = joinInfo.url;
       debugPrint('LiveKit connect: join info received, url=$liveKitUrl');
+      await _prepareLiveKitAudioSession(canPublishAudio: joinInfo.canPublish);
       var room = _createLiveKitRoom();
       connectingRoom = room;
       final previousRoom = _liveKitRoom;
@@ -8007,6 +8008,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _liveKitRoom = room;
       _liveKitEventListener = room.createListener()
         ..on<DataReceivedEvent>(_handleLiveKitData)
+        ..on<TrackSubscribedEvent>((event) {
+          // Keep iOS output routing applied after the first remote audio track
+          // creates/activates the native WebRTC audio engine.
+          if (event.track is RemoteAudioTrack) {
+            debugPrint(
+              'LiveKit remote audio subscribed: '
+              '${event.participant.identity}/${event.publication.sid}',
+            );
+            unawaited(_setSpeakerOutputPreferred());
+            debugPrint(
+              'LiveKit audio engine after remote subscribe: '
+              '${AudioManager.instance.audioEngineState}',
+            );
+          }
+        })
+        ..on<AudioPlaybackStatusChanged>((event) {
+          debugPrint('LiveKit audio playback status: ${event.isPlaying}');
+          if (event.isPlaying) {
+            unawaited(_setSpeakerOutputPreferred());
+          }
+        })
         ..on<ActiveSpeakersChangedEvent>((event) {
           if (!mounted) return;
           setState(() {
@@ -8167,18 +8189,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  Future<void> _prepareLiveKitAudioSession() async {
+  Future<void> _prepareLiveKitAudioSession({
+    required bool canPublishAudio,
+  }) async {
     if (defaultTargetPlatform != TargetPlatform.iOS) return;
-    // Activate a communication session before the first remote track arrives.
-    // Otherwise iOS may leave a listener in a media-only session until they
-    // enable the microphone.
-    await AudioManager.instance.setAudioSessionOptions(
-      _communicationAudioSession,
+    await AudioManager.instance.setEngineAvailability(
+      AudioEngineAvailability.defaultAvailability,
     );
-    await AudioManager.instance.setAudioSessionManagementMode(
-      AudioSessionManagementMode.automatic,
-    );
+    // A listener has no local audio track to activate a communication session.
+    // Use playback explicitly so iOS starts remote playout immediately.
+    final audioSession = canPublishAudio
+        ? _communicationAudioSession
+        : _playbackAudioSession;
+    await AudioManager.instance.setAudioSessionOptions(audioSession);
     await _setSpeakerOutputPreferred();
+    debugPrint(
+      'LiveKit audio engine before connect: '
+      '${AudioManager.instance.audioEngineState}',
+    );
   }
 
   Future<void> _loadRoom({bool silent = false}) async {
@@ -8540,12 +8568,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       await _setLocalMicrophoneEnabled(!_muted);
       return;
     }
-    // A host can keep the same role while a reconnect-issued token reflects
-    // the old muted state. Refresh the token after the host unmutes.
-    if (_liveKitRole == room.viewerRole &&
-        !(room.viewerRole == 'host' && !_muted)) {
-      return;
-    }
+    // The token may have been issued while this participant was muted. The
+    // server updates LiveKit permissions asynchronously, but reconnecting is
+    // required to obtain a publish-capable token before enabling the track.
     await _refreshLiveKitPermission();
   }
 
@@ -9072,11 +9097,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     unawaited(_eventChannel?.sink.close());
     unawaited(_disconnectLiveKitForLeave());
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      unawaited(
-        AudioManager.instance.setAudioSessionManagementMode(
-          AudioSessionManagementMode.automatic,
-        ),
-      );
+      unawaited(AudioManager.instance.deactivateAudioSession());
     }
     _apiClient.close();
     _messageController.dispose();
@@ -12232,6 +12253,7 @@ class _LiveRoomOverview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
     children: [
       SizedBox(
         width: double.infinity,
