@@ -7954,13 +7954,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (mounted) setState(() => _roomLoading = true);
     await _waitForLiveKitReentryCooldown(live.id);
     if (!mounted || _leaving) return;
-    // These requests are independent. Starting them together removes two
-    // unnecessary network round-trip delays from the initial room entry.
-    await Future.wait<void>([
-      _loadRoom(),
-      _connectRealtime(refreshRoom: false),
-      _connectLiveKit(),
-    ]);
+    // Room metadata and LiveKit can be established independently. The
+    // auxiliary state stream is started in the background so it never delays
+    // entry into the voice room; chat itself is handled by LiveKit data.
+    await Future.wait<void>([_loadRoom(), _connectLiveKit()]);
+    unawaited(_connectRealtime(refreshRoom: false));
     final room = _room;
     if (room != null) {
       await _syncLiveKitPublishPermission(room);
