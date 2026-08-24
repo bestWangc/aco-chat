@@ -7954,9 +7954,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (mounted) setState(() => _roomLoading = true);
     await _waitForLiveKitReentryCooldown(live.id);
     if (!mounted || _leaving) return;
-    await _loadRoom();
-    await _connectRealtime();
-    await _connectLiveKit();
+    // These requests are independent. Starting them together removes two
+    // unnecessary network round-trip delays from the initial room entry.
+    await Future.wait<void>([
+      _loadRoom(),
+      _connectRealtime(refreshRoom: false),
+      _connectLiveKit(),
+    ]);
     final room = _room;
     if (room != null) {
       await _syncLiveKitPublishPermission(room);
@@ -8264,11 +8268,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
-  Future<void> _connectRealtime() async {
+  Future<void> _connectRealtime({bool refreshRoom = true}) async {
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
     try {
-      await _loadRoom(silent: true);
+      if (refreshRoom) await _loadRoom(silent: true);
       final ticket = await _accountSession.liveWebsocketTicket(live.id);
       final channel = WebSocketChannel.connect(
         _liveWebsocketUri(live.id, ticket),
