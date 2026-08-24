@@ -7876,8 +7876,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
     noiseSuppression: true,
-    autoGainControl: false,
-    highPassFilter: true,
+    // Keep the native WebRTC processing combination at its portable default.
+    // Some Android audio devices reject the custom AGC-off + high-pass-on
+    // combination during ADM prewarm with AudioProcessingException(-9001).
+    autoGainControl: true,
+    highPassFilter: false,
     voiceIsolation: true,
     typingNoiseDetection: true,
     // Keep the WebRTC capture and its echo-cancellation reference alive while
@@ -7976,7 +7979,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       );
       liveKitUrl = joinInfo.url;
       debugPrint('LiveKit connect: join info received, url=$liveKitUrl');
-      await _prepareLiveKitAudioSession(canPublishAudio: joinInfo.canPublish);
+      await _prepareLiveKitAudioSession();
       var room = _createLiveKitRoom();
       connectingRoom = room;
       final previousRoom = _liveKitRoom;
@@ -8074,9 +8077,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _liveKitCanPublishData = joinInfo.canPublishData;
       _liveKitRole = _room?.viewerRole ?? joinInfo.role;
       if (joinInfo.canPublish) {
-        await room.localParticipant?.setMicrophoneEnabled(!_muted);
+        await _setLocalMicrophoneEnabled(!_muted);
       }
       await _setSpeakerOutputPreferred();
+      // Remote publications may have been subscribed while Room.connect was
+      // completing, before the listener above was attached. Re-arm the
+      // existing tracks so iOS creates the playout sink for a listener too.
+      unawaited(_rearmConnectedRemoteAudio(room));
     } catch (error, stackTrace) {
       // Keep the original connect/join failure visible. A disconnect can also
       // time out while unwinding a failed connection, and must not replace the
@@ -8189,19 +8196,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  Future<void> _prepareLiveKitAudioSession({
-    required bool canPublishAudio,
-  }) async {
+  Future<void> _prepareLiveKitAudioSession() async {
     if (defaultTargetPlatform != TargetPlatform.iOS) return;
     await AudioManager.instance.setEngineAvailability(
       AudioEngineAvailability.defaultAvailability,
     );
     // A listener has no local audio track to activate a communication session.
     // Use playback explicitly so iOS starts remote playout immediately.
-    final audioSession = canPublishAudio
-        ? _communicationAudioSession
-        : _playbackAudioSession;
-    await AudioManager.instance.setAudioSessionOptions(audioSession);
+    await AudioManager.instance.setAudioSessionOptions(_playbackAudioSession);
     await _setSpeakerOutputPreferred();
     debugPrint(
       'LiveKit audio engine before connect: '
@@ -8723,11 +8725,38 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await AudioManager.instance.setAudioSessionOptions(
+        enabled ? _communicationAudioSession : _playbackAudioSession,
+      );
+      await _setSpeakerOutputPreferred();
+    }
     await _liveKitRoom?.localParticipant?.setMicrophoneEnabled(enabled);
   }
 
+  Future<void> _rearmConnectedRemoteAudio(Room room) async {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!identical(room, _liveKitRoom)) return;
+    var count = 0;
+    for (final participant in room.remoteParticipants.values) {
+      for (final publication in participant.audioTrackPublications) {
+        final track = publication.track;
+        if (track == null || !publication.subscribed) continue;
+        count++;
+        debugPrint(
+          'LiveKit rearming remote audio: '
+          '${participant.identity}/${publication.sid} active=${track.isActive}',
+        );
+        if (track.isActive) await track.stop();
+        await track.start();
+      }
+    }
+    debugPrint('LiveKit remote audio tracks ready: $count');
+    await _setSpeakerOutputPreferred();
+  }
+
   Future<void> _setSpeakerOutputPreferred() =>
-      AudioManager.instance.setSpeakerOutputPreferred(true);
+      AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
 
   Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
     final shouldMute = !speaker.muted;

@@ -1,4 +1,5 @@
 import Flutter
+import flutter_webrtc
 import LocalAuthentication
 import UIKit
 
@@ -13,6 +14,7 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    prepareWebRTCAudioDevice()
     guard let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "AcoBiometricAuthentication"
     ) else {
@@ -32,6 +34,20 @@ import UIKit
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  /// Keep WebRTC's recording unit prepared while a room is receive-only.
+  /// This does not enable/publish the microphone or request permission; it
+  /// prevents iOS from creating the playout path only after a local mic track
+  /// is enabled (the classic "unmuting fixes remote audio" failure).
+  private func prepareWebRTCAudioDevice() {
+    guard let adm = FlutterWebRTCPlugin.sharedSingleton()?
+      .peerConnectionFactory?.audioDeviceModule else {
+      NSLog("[AcoAudio] WebRTC audio device module unavailable")
+      return
+    }
+    let status = adm.setRecordingAlwaysPreparedMode(true)
+    NSLog("[AcoAudio] recordingAlwaysPreparedMode enabled, status=%ld", status)
   }
 
   private func biometricAvailability() -> String {
