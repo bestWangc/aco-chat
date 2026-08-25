@@ -7869,7 +7869,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     'aco/live-audio-background',
   );
   static const _communicationAudioSession = AudioSessionOptions.communication();
-  static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
@@ -8268,24 +8267,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       await _setSpeakerOutputPreferred();
       return;
     }
-    if (canPublishAudio) {
-      // A speaker connection must initialize the recorder with communication
-      // audio before LiveKit publishes its first track. This also handles the
-      // listener -> speaker permission transition without reusing a playback
-      // session that can make WebRTC return -9001.
-      await AudioManager.instance.setAudioSessionOptions(
-        _communicationAudioSession,
-      );
-    } else {
-      // Do not replace this with automatic session management for listeners.
-      // On iOS, a receive-only room has no capture track to activate the audio
-      // path. Automatic management then leaves playout uninitialized when the
-      // first remote frame is silent: RTP keeps arriving but later speech is
-      // inaudible. Keep playback active before Room.connect instead. Speakers
-      // deliberately use the automatic branch above because it is required for
-      // reliably re-enabling their microphone after muting.
-      await AudioManager.instance.setAudioSessionOptions(_playbackAudioSession);
-    }
+    // Use the communication session for both speakers and listeners. This
+    // keeps iOS routing consistent when a listener is promoted to a speaker.
+    await AudioManager.instance.setAudioSessionOptions(
+      _communicationAudioSession,
+    );
     await AudioManager.instance.setEngineAvailability(
       AudioEngineAvailability.defaultAvailability,
     );
