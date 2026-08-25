@@ -7869,7 +7869,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     'aco/live-audio-background',
   );
   static const _communicationAudioSession = AudioSessionOptions.communication();
-  static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
@@ -7924,9 +7923,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _liveKitReconnectStopped = false;
   final Set<String> _liveKitSpeakingParticipantIds = <String>{};
   bool? _liveKitCanPublish;
-  bool? _liveKitCanPublishData;
   String? _liveKitRole;
-  bool _refreshingLiveKitPermission = false;
   bool _microphoneUpdating = false;
   bool? _localMuteOverride;
   DateTime? _lastMessageSentAt;
@@ -7979,7 +7976,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         joinPassword: widget.joinPassword,
       );
       liveKitUrl = joinInfo.url;
-      debugPrint('LiveKit connect: join info received, url=$liveKitUrl');
+      debugPrint(
+        'LiveKit connect: join info received, url=$liveKitUrl '
+        'role=${joinInfo.role} canPublish=${joinInfo.canPublish} '
+        'canPublishData=${joinInfo.canPublishData}',
+      );
       await _prepareLiveKitAudioSession();
       var room = _createLiveKitRoom();
       connectingRoom = room;
@@ -8075,14 +8076,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         await _liveAudioBackgroundChannel.invokeMethod<void>('start');
       }
       _liveKitCanPublish = joinInfo.canPublish;
-      _liveKitCanPublishData = joinInfo.canPublishData;
       // The role in the newly issued token is authoritative. Using the
       // previous room snapshot here makes every later snapshot look like a
       // role change and can trigger an endless reconnect loop.
       _liveKitRole = joinInfo.role;
       if (joinInfo.canPublish) {
+        final roomRole = _room?.viewerRole;
+        final approvedSpeaker =
+            joinInfo.role == 'speaker' && roomRole != 'speaker';
+        if (approvedSpeaker && _localMuteOverride == null) {
+          if (mounted) {
+            setState(() => _muted = false);
+          } else {
+            _muted = false;
+          }
+        }
         await _setLocalMicrophoneEnabled(!_muted);
       }
+      debugPrint(
+        'LiveKit audio engine after local publish: '
+        '${AudioManager.instance.audioEngineState}',
+      );
       await _setSpeakerOutputPreferred();
       // Remote publications may have been subscribed while Room.connect was
       // completing, before the listener above was attached. Re-arm the
@@ -8202,12 +8216,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _prepareLiveKitAudioSession() async {
     if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    // Keep LiveKit as the single owner of AVAudioSession. Reapplying explicit
+    // options while the WebRTC engine is alive can make iOS reject the session
+    // with OSStatus 561017449 and leave both playout and recording disabled.
+    await AudioManager.instance.setAudioSessionManagementMode(
+      AudioSessionManagementMode.automatic,
+    );
     await AudioManager.instance.setEngineAvailability(
       AudioEngineAvailability.defaultAvailability,
     );
-    // A listener has no local audio track to activate a communication session.
-    // Use playback explicitly so iOS starts remote playout immediately.
-    await AudioManager.instance.setAudioSessionOptions(_playbackAudioSession);
     await _setSpeakerOutputPreferred();
     debugPrint(
       'LiveKit audio engine before connect: '
@@ -8547,47 +8564,28 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _ensureHostHeartbeat(displayedRoom);
   }
 
-  // LiveKit permissions are embedded in the join token. A listener therefore
-  // has to reconnect after the host approves their hand raise; otherwise the
-  // UI shows an enabled microphone but LiveKit still rejects its audio track.
   Future<void> _syncLiveKitPublishPermission(LiveRoom room) async {
-    final canPublishData = room.viewerRole == 'host' || !room.chatMuted;
+    // A room snapshot can be in flight while a newly approved speaker token
+    // is being connected. Do not let that stale listener snapshot immediately
+    // disable the publish-capable token and its local microphone track.
+    if (_liveKitCanPublish == true &&
+        _liveKitRole == 'speaker' &&
+        room.viewerRole == 'listener') {
+      return;
+    }
     final canPublish = _canPublishAudio(room);
     if (_liveKitRoom == null || _liveKitConnecting || _liveKitReconnecting) {
       return;
     }
-    final dataPermissionChanged = _liveKitCanPublishData != canPublishData;
-    if (dataPermissionChanged) {
-      await _refreshLiveKitPermission();
-      return;
-    }
+    _liveKitCanPublish = canPublish;
+    _liveKitRole = room.viewerRole;
     if (!canPublish) {
-      if (_liveKitCanPublish == true) {
-        await _setLocalMicrophoneEnabled(false);
-      }
-      if (_liveKitRole != room.viewerRole) {
-        await _refreshLiveKitPermission();
-      }
+      await _setLocalMicrophoneEnabled(false);
       return;
     }
-    if (_liveKitCanPublish == true) {
-      await _setLocalMicrophoneEnabled(!_muted);
-      return;
-    }
-    // The token may have been issued while this participant was muted. The
-    // server updates LiveKit permissions asynchronously, but reconnecting is
-    // required to obtain a publish-capable token before enabling the track.
-    await _refreshLiveKitPermission();
-  }
-
-  Future<void> _refreshLiveKitPermission() async {
-    if (_refreshingLiveKitPermission) return;
-    _refreshingLiveKitPermission = true;
-    try {
-      await _connectLiveKit(showError: false);
-    } finally {
-      _refreshingLiveKitPermission = false;
-    }
+    // LiveKit updates an already-connected participant's permission when the
+    // host approves them. Reuse the room connection and enable the local track.
+    await _setLocalMicrophoneEnabledWithRecovery(!_muted);
   }
 
   bool _canPublishAudio(LiveRoom room) {
@@ -8687,12 +8685,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _localMuteOverride = nextMuted;
     if (mounted) setState(() => _muted = nextMuted);
     try {
-      await _setLocalMicrophoneEnabledWithRecovery(!nextMuted);
-      await _accountSession.setLiveParticipantMute(live.id, nextMuted);
+      if (nextMuted) {
+        await _setLocalMicrophoneEnabledWithRecovery(false);
+        await _accountSession.setLiveParticipantMute(live.id, true);
+      } else {
+        await _accountSession.setLiveParticipantMute(live.id, false);
+        await _setLocalMicrophoneEnabledWithRecovery(true);
+      }
       final room = _room;
       if (!nextMuted && room != null) {
-        // If a previous LiveKit reconnect issued a non-publishing token while
-        // the host was muted, obtain a publishing token immediately.
+        // Synchronize the UI snapshot with the local microphone state.
         unawaited(_syncLiveKitPublishPermission(room));
       }
     } on AccountApiException catch (error) {
@@ -8716,23 +8718,21 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     await _setLocalMicrophoneEnabledWithRecovery(!muted);
   }
 
-  /// A muted WebRTC capture track can occasionally fail to resume. Reconnect
-  /// once and retry before showing a misleading microphone/network error.
+  /// LiveKit permission changes are applied to the existing participant. A
+  /// short retry handles the small delay before the server-side update reaches
+  /// the active connection without rebuilding the whole audio room.
   Future<void> _setLocalMicrophoneEnabledWithRecovery(bool enabled) async {
     try {
       await _setLocalMicrophoneEnabled(enabled);
     } catch (error) {
-      debugPrint('LiveKit microphone toggle failed, reconnecting: $error');
-      await _connectLiveKit(showError: false);
+      debugPrint('LiveKit microphone toggle failed, retrying: $error');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       await _setLocalMicrophoneEnabled(enabled);
     }
   }
 
   Future<void> _setLocalMicrophoneEnabled(bool enabled) async {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
-      await AudioManager.instance.setAudioSessionOptions(
-        enabled ? _communicationAudioSession : _playbackAudioSession,
-      );
       await _setSpeakerOutputPreferred();
     }
     final participant = _liveKitRoom?.localParticipant;
