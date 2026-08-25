@@ -7927,7 +7927,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   String? _liveKitRole;
   bool _microphoneUpdating = false;
   bool _liveKitMicrophoneOperationInFlight = false;
-  bool _liveKitPermissionReconnectInFlight = false;
   bool? _localMuteOverride;
   DateTime? _lastMessageSentAt;
   DateTime? _messageRateWindowStartedAt;
@@ -8613,9 +8612,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   Future<void> _syncLiveKitPublishPermission(LiveRoom room) async {
-    // A room snapshot can be in flight while a newly approved speaker token
-    // is being connected. Do not let that stale listener snapshot immediately
-    // disable the publish-capable token and its local microphone track.
+    // A stale listener snapshot can arrive after the server has promoted this
+    // participant. Do not let it disable an already-publishable connection.
     if (_liveKitCanPublish == true &&
         _liveKitRole == 'speaker' &&
         room.viewerRole == 'listener') {
@@ -8623,19 +8621,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
     final canPublish = _canPublishAudio(room);
     if (_liveKitRoom == null || _liveKitConnecting || _liveKitReconnecting) {
-      return;
-    }
-    if (canPublish && _liveKitCanPublish != true) {
-      // Publish permission is carried by the LiveKit join token. Enabling a
-      // microphone on the old listener token races the native recorder and
-      // fails with -9001; obtain a fresh speaker token and reconnect once.
-      if (_liveKitPermissionReconnectInFlight) return;
-      _liveKitPermissionReconnectInFlight = true;
-      try {
-        await _connectLiveKit(showError: false);
-      } finally {
-        _liveKitPermissionReconnectInFlight = false;
-      }
       return;
     }
     _liveKitCanPublish = canPublish;
