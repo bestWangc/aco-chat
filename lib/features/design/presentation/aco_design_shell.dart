@@ -7868,6 +7868,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _liveAudioBackgroundChannel = MethodChannel(
     'aco/live-audio-background',
   );
+  static const _liveAudioRouteChannel = MethodChannel('aco/live-audio-route');
   static const _communicationAudioSession = AudioSessionOptions.communication(
     apple: AppleAudioSessionConfiguration(
       category: AppleAudioCategory.playAndRecord,
@@ -7881,6 +7882,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     ),
   );
   static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
+  static const _iosAudioUnitRecoveryDelay = Duration(milliseconds: 1200);
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
@@ -8023,6 +8025,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         await room.connect(_liveKitFallbackUrl, joinInfo.token);
       }
       debugPrint('LiveKit connect: Room.connect completed');
+      unawaited(_logLiveKitAudioRoute('room-connect-completed'));
       if (!mounted || _leaving) {
         await _disconnectLiveKitRoomSafely(room);
         return;
@@ -8038,10 +8041,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               'LiveKit remote audio subscribed: '
               '${event.participant.identity}/${event.publication.sid}',
             );
-            unawaited(_setSpeakerOutputPreferred());
-            debugPrint(
-              'LiveKit audio engine after remote subscribe: '
-              '${AudioManager.instance.audioEngineState}',
+            unawaited(
+              _logLiveKitAudioRouteAfterSpeakerReset('remote-subscribe'),
             );
           }
         })
@@ -8071,7 +8072,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ..on<AudioPlaybackStatusChanged>((event) {
           debugPrint('LiveKit audio playback status: ${event.isPlaying}');
           if (event.isPlaying) {
-            unawaited(_setSpeakerOutputPreferred());
+            unawaited(_logLiveKitAudioRouteAfterSpeakerReset('audio-playback'));
           }
         })
         ..on<ActiveSpeakersChangedEvent>((event) {
@@ -8301,6 +8302,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       'LiveKit audio engine before connect: '
       '${AudioManager.instance.audioEngineState}',
     );
+    unawaited(_logLiveKitAudioRoute('before-connect'));
   }
 
   Future<void> _loadRoom({bool silent = false}) async {
@@ -8856,7 +8858,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       if (enabled) {
         // WebRTC may reset the iOS route while the audio device starts.
         unawaited(
-          Future<void>.delayed(const Duration(milliseconds: 350), () async {
+          Future<void>.delayed(_iosAudioUnitRecoveryDelay, () async {
             if (!mounted) return;
             await _setSpeakerOutputPreferred();
             debugPrint(
@@ -8865,13 +8867,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               'forced=${AudioManager.instance.isSpeakerOutputForced} '
               'engine=${AudioManager.instance.audioEngineState}',
             );
+            await _logLiveKitAudioRoute('after-microphone-enable-route-reset');
           }),
         );
       }
     }
     final participant = _liveKitRoom?.localParticipant;
     if (participant == null) return false;
-    final publication = await participant.setMicrophoneEnabled(enabled);
+    // Keep iOS WebRTC's AudioUnit alive across mute/unmute. LiveKit's
+    // maintainers document that restarting the AudioUnit on the second
+    // setMicrophoneEnabled(true) can briefly publish packets with zero audio.
+    final publication = await participant.setMicrophoneEnabled(
+      enabled,
+      audioCaptureOptions: _voiceRoomAudioCaptureOptions,
+    );
     final track = publication?.track;
     final effectiveRole = _liveKitRole ?? _room?.viewerRole ?? '<unknown>';
     debugPrint(
@@ -8880,6 +8889,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       'publication=${publication?.sid ?? '<none>'} '
       'muted=${publication?.muted} active=${track?.isActive} '
       'engine=${AudioManager.instance.audioEngineState}',
+    );
+    unawaited(
+      _logLiveKitAudioRoute('microphone-${enabled ? 'enabled' : 'disabled'}'),
     );
     if (enabled && track is LocalAudioTrack) {
       debugPrint(
@@ -8898,7 +8910,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       // first stats read can therefore be empty even though publication
       // succeeded; sample again after the native sender has had time to bind.
       unawaited(
-        Future<void>.delayed(const Duration(seconds: 1), () async {
+        Future<void>.delayed(const Duration(seconds: 2), () async {
           if (!mounted || !identical(track, publication?.track)) return;
           final delayedStats = await track.getSenderStats();
           debugPrint(
@@ -8919,6 +8931,29 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _setSpeakerOutputPreferred() =>
       AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+
+  Future<void> _logLiveKitAudioRoute(String reason) async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    try {
+      final route = await _liveAudioRouteChannel.invokeMethod<Object?>(
+        'routeInfo',
+      );
+      debugPrint('LiveKit iOS audio route: reason=$reason route=$route');
+    } catch (error) {
+      debugPrint(
+        'LiveKit iOS audio route read failed: reason=$reason error=$error',
+      );
+    }
+  }
+
+  Future<void> _logLiveKitAudioRouteAfterSpeakerReset(String reason) async {
+    await _setSpeakerOutputPreferred();
+    await _logLiveKitAudioRoute(reason);
+    debugPrint(
+      'LiveKit audio engine after $reason: '
+      '${AudioManager.instance.audioEngineState}',
+    );
+  }
 
   Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
     final shouldMute = !speaker.muted;
