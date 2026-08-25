@@ -9511,11 +9511,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     // The room snapshot is only an authorization update. A listener becomes
     // a connected speaker in the UI only after the fresh LiveKit token has
     // connected and its local track has been initialized successfully.
+    final audioMuted = !isHost && (room?.audioMuted ?? false);
     final canSpeak =
         live == null ||
         (_liveKitPublishReady && (isHost || serverViewerRole == 'speaker'));
+    final canToggleMicrophone = canSpeak && !audioMuted;
     // A self-muted speaker becomes a listener and must raise their hand again.
-    final audioMuted = !isHost && (room?.audioMuted ?? false);
     final chatMuted = room?.chatMuted == true && !isHost;
     // Do NOT add MediaQuery.viewInsetsOf: with adjustResize the window (and
     // this route) already sits above the keyboard, and CupertinoPageScaffold
@@ -9642,9 +9643,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 showHandControl: !isHost,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
-                onMic: canSpeak && (isHost || !_muted)
-                    ? _toggleMicrophone
-                    : null,
+                onMic: canToggleMicrophone ? _toggleMicrophone : null,
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
                 controller: _messageController,
                 onEmojiPressed: _toggleEmojiPicker,
