@@ -8822,6 +8822,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<bool> _setLocalMicrophoneEnabled(bool enabled) async {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
+      if (enabled) {
+        // iOS can leave WebRTC's audio engine unavailable after a listener
+        // track is muted/unsubscribed. Restoring the session alone is not
+        // enough: setMicrophoneEnabled may still create a publication while
+        // the native recorder remains stopped.
+        await AudioManager.instance.setAudioSessionOptions(
+          _communicationAudioSession,
+        );
+        await AudioManager.instance.setEngineAvailability(
+          AudioEngineAvailability.defaultAvailability,
+        );
+      }
       await _setSpeakerOutputPreferred();
     }
     final participant = _liveKitRoom?.localParticipant;
@@ -8834,6 +8846,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       'muted=${publication?.muted} active=${track?.isActive}',
     );
     if (enabled && track is LocalAudioTrack) {
+      debugPrint(
+        'LiveKit audio engine after microphone enable: '
+        '${AudioManager.instance.audioEngineState}',
+      );
       final stats = await track.getSenderStats();
       debugPrint(
         'LiveKit local audio sender: '
