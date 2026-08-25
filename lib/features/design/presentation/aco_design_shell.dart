@@ -8734,16 +8734,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
     final participant = _liveKitRoom?.localParticipant;
     if (participant == null) return;
-
-    // Room snapshots and LiveKit permission events can both request the same
-    // microphone state. Avoid queueing a duplicate operation on LiveKit's
-    // serial publish runner, which can make unmuting appear to stall.
-    final publication = participant.getTrackPublicationBySource(
-      TrackSource.microphone,
-    );
-    final track = publication?.track;
-    if (track != null && track.muted == !enabled) return;
-    if (!enabled && publication == null) return;
     await participant.setMicrophoneEnabled(enabled);
   }
 
