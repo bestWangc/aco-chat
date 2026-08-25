@@ -8840,10 +8840,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (participant == null) return false;
     final publication = await participant.setMicrophoneEnabled(enabled);
     final track = publication?.track;
+    final effectiveRole = _liveKitRole ?? _room?.viewerRole ?? '<unknown>';
     debugPrint(
       'LiveKit local microphone ${enabled ? 'enabled' : 'disabled'}: '
+      'role=$effectiveRole canPublish=$_liveKitCanPublish '
       'publication=${publication?.sid ?? '<none>'} '
-      'muted=${publication?.muted} active=${track?.isActive}',
+      'muted=${publication?.muted} active=${track?.isActive} '
+      'engine=${AudioManager.instance.audioEngineState}',
     );
     if (enabled && track is LocalAudioTrack) {
       debugPrint(
@@ -8852,9 +8855,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       );
       final stats = await track.getSenderStats();
       debugPrint(
-        'LiveKit local audio sender: '
+        'LiveKit local audio uplink: role=$effectiveRole '
         'bytes=${stats?.bytesSent} packets=${stats?.packetsSent} '
-        'source=${stats?.audioSourceStats}',
+        'source=${stats?.audioSourceStats} '
+        'trackActive=${track.isActive} publicationMuted=${publication?.muted}',
       );
       // The sender is attached asynchronously during SDP negotiation. A
       // first stats read can therefore be empty even though publication
@@ -8864,10 +8868,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           if (!mounted || !identical(track, publication?.track)) return;
           final delayedStats = await track.getSenderStats();
           debugPrint(
-            'LiveKit local audio sender delayed: '
+            'LiveKit local audio uplink delayed: role=$effectiveRole '
             'bytes=${delayedStats?.bytesSent} '
             'packets=${delayedStats?.packetsSent} '
-            'source=${delayedStats?.audioSourceStats}',
+            'source=${delayedStats?.audioSourceStats} '
+            'trackActive=${track.isActive} '
+            'publicationMuted=${publication?.muted} '
+            'engine=${AudioManager.instance.audioEngineState}',
           );
         }),
       );
