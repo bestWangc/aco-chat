@@ -7869,6 +7869,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     'aco/live-audio-background',
   );
   static const _communicationAudioSession = AudioSessionOptions.communication();
+  static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
@@ -7981,7 +7982,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         'role=${joinInfo.role} canPublish=${joinInfo.canPublish} '
         'canPublishData=${joinInfo.canPublishData}',
       );
-      await _prepareLiveKitAudioSession();
+      await _prepareLiveKitAudioSession(canPublishAudio: joinInfo.canPublish);
       var room = _createLiveKitRoom();
       connectingRoom = room;
       final previousRoom = _liveKitRoom;
@@ -8214,14 +8215,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  Future<void> _prepareLiveKitAudioSession() async {
+  Future<void> _prepareLiveKitAudioSession({
+    required bool canPublishAudio,
+  }) async {
     if (defaultTargetPlatform != TargetPlatform.iOS) return;
-    // Keep LiveKit as the single owner of AVAudioSession. Reapplying explicit
-    // options while the WebRTC engine is alive can make iOS reject the session
-    // with OSStatus 561017449 and leave both playout and recording disabled.
-    await AudioManager.instance.setAudioSessionManagementMode(
-      AudioSessionManagementMode.automatic,
-    );
+    if (canPublishAudio) {
+      // Speakers need LiveKit's automatic session lifecycle so a muted track
+      // can be published again without rebuilding the room.
+      await AudioManager.instance.setAudioSessionManagementMode(
+        AudioSessionManagementMode.automatic,
+      );
+    } else {
+      // A listener has no local capture track to activate iOS's audio path.
+      // Keep the playback session active from the moment Room.connect starts;
+      // otherwise iOS may wait for the first non-silent audio frame.
+      await AudioManager.instance.setAudioSessionOptions(_playbackAudioSession);
+    }
     await AudioManager.instance.setEngineAvailability(
       AudioEngineAvailability.defaultAvailability,
     );
