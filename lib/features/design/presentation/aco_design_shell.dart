@@ -7868,7 +7868,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _liveAudioBackgroundChannel = MethodChannel(
     'aco/live-audio-background',
   );
-  static const _communicationAudioSession = AudioSessionOptions.communication();
+  static const _communicationAudioSession = AudioSessionOptions.communication(
+    apple: AppleAudioSessionConfiguration(
+      category: AppleAudioCategory.playAndRecord,
+      categoryOptions: {
+        AppleAudioCategoryOption.allowBluetooth,
+        AppleAudioCategoryOption.allowBluetoothA2DP,
+        AppleAudioCategoryOption.allowAirPlay,
+        AppleAudioCategoryOption.defaultToSpeaker,
+      },
+      mode: AppleAudioMode.videoChat,
+    ),
+  );
   static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
@@ -8842,6 +8853,21 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         );
       }
       await _setSpeakerOutputPreferred();
+      if (enabled) {
+        // WebRTC may reset the iOS route while the audio device starts.
+        unawaited(
+          Future<void>.delayed(const Duration(milliseconds: 350), () async {
+            if (!mounted) return;
+            await _setSpeakerOutputPreferred();
+            debugPrint(
+              'LiveKit iOS speaker route reapplied: '
+              'preferred=${AudioManager.instance.isSpeakerOutputPreferred} '
+              'forced=${AudioManager.instance.isSpeakerOutputForced} '
+              'engine=${AudioManager.instance.audioEngineState}',
+            );
+          }),
+        );
+      }
     }
     final participant = _liveKitRoom?.localParticipant;
     if (participant == null) return false;
