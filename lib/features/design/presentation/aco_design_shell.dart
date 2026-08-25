@@ -7984,7 +7984,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         'role=${joinInfo.role} canPublish=${joinInfo.canPublish} '
         'canPublishData=${joinInfo.canPublishData}',
       );
-      await _prepareLiveKitAudioSession(canPublishAudio: joinInfo.canPublish);
+      await _prepareLiveKitAudioSession();
       var room = _createLiveKitRoom();
       connectingRoom = room;
       final previousRoom = _liveKitRoom;
@@ -8118,7 +8118,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             _muted = false;
           }
         }
-        await _setLocalMicrophoneEnabled(!_muted);
+        await _setLocalMicrophoneEnabledWithRecovery(!_muted);
       }
       // A server role alone only means permission was granted. Do not let the
       // UI present this participant as connected until this client has both
@@ -8256,9 +8256,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  Future<void> _prepareLiveKitAudioSession({
-    required bool canPublishAudio,
-  }) async {
+  Future<void> _prepareLiveKitAudioSession() async {
     if (defaultTargetPlatform != TargetPlatform.iOS &&
         defaultTargetPlatform != TargetPlatform.android) {
       return;
