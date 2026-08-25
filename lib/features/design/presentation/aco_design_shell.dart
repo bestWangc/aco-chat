@@ -7988,6 +7988,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     String? liveKitUrl;
     try {
       await _ensureLiveKitInitialized();
+      await _configureLiveKitMicrophoneMuteMode();
       debugPrint('LiveKit connect: requesting join info for live ${live.id}');
       final joinInfo = await _accountSession.liveKitJoinInfo(
         live.id,
@@ -8277,6 +8278,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static Future<void> _ensureLiveKitInitialized() {
     return _liveKitInitialization ??= LiveKitClient.initialize(
       initialAudioSessionOptions: _communicationAudioSession,
+    );
+  }
+
+  Future<void> _configureLiveKitMicrophoneMuteMode() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    await AudioManager.instance.setMicrophoneMuteMode(
+      MicrophoneMuteMode.inputMixer,
     );
   }
 
