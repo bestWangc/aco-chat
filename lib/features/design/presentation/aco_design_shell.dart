@@ -8076,7 +8076,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       }
       _liveKitCanPublish = joinInfo.canPublish;
       _liveKitCanPublishData = joinInfo.canPublishData;
-      _liveKitRole = _room?.viewerRole ?? joinInfo.role;
+      // The role in the newly issued token is authoritative. Using the
+      // previous room snapshot here makes every later snapshot look like a
+      // role change and can trigger an endless reconnect loop.
+      _liveKitRole = joinInfo.role;
       if (joinInfo.canPublish) {
         await _setLocalMicrophoneEnabled(!_muted);
       }
