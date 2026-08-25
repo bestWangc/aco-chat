@@ -2,6 +2,7 @@ import Flutter
 import flutter_webrtc
 import LocalAuthentication
 import UIKit
+import AVFoundation
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -15,6 +16,19 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     prepareWebRTCAudioDevice()
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoLiveAudioRoute") {
+      let channel = FlutterMethodChannel(
+        name: "aco/live-audio-route",
+        binaryMessenger: registrar.messenger()
+      )
+      channel.setMethodCallHandler { call, result in
+        guard call.method == "routeInfo" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(self.liveAudioRouteInfo())
+      }
+    }
     guard let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "AcoBiometricAuthentication"
     ) else {
@@ -48,6 +62,34 @@ import UIKit
     }
     let status = adm.setRecordingAlwaysPreparedMode(true)
     NSLog("[AcoAudio] recordingAlwaysPreparedMode enabled, status=%ld", status)
+  }
+
+  private func liveAudioRouteInfo() -> [String: Any] {
+    let session = AVAudioSession.sharedInstance()
+    let outputs = session.currentRoute.outputs.map { output in
+      [
+        "portType": output.portType.rawValue,
+        "portName": output.portName,
+        "uid": output.uid,
+      ]
+    }
+    let inputs = session.currentRoute.inputs.map { input in
+      [
+        "portType": input.portType.rawValue,
+        "portName": input.portName,
+        "uid": input.uid,
+      ]
+    }
+    let info: [String: Any] = [
+      "category": session.category.rawValue,
+      "mode": session.mode.rawValue,
+      "categoryOptions": session.categoryOptions.rawValue,
+      "isOtherAudioPlaying": session.isOtherAudioPlaying,
+      "outputs": outputs,
+      "inputs": inputs,
+    ]
+    NSLog("[AcoAudio] routeInfo=%@", String(describing: info))
+    return info
   }
 
   private func biometricAvailability() -> String {
