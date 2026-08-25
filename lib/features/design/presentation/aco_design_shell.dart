@@ -8033,6 +8033,29 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             );
           }
         })
+        ..on<TrackUnsubscribedEvent>((event) {
+          if (event.track is RemoteAudioTrack) {
+            debugPrint(
+              'LiveKit remote audio unsubscribed: '
+              '${event.participant.identity}/${event.publication.sid}',
+            );
+          }
+        })
+        ..on<TrackUnpublishedEvent>((event) {
+          if (event.publication.kind == TrackType.AUDIO) {
+            debugPrint(
+              'LiveKit remote audio unpublished: '
+              '${event.participant.identity}/${event.publication.sid}',
+            );
+          }
+        })
+        ..on<TrackSubscriptionExceptionEvent>((event) {
+          debugPrint(
+            'LiveKit remote track subscription failed: '
+            'participant=${event.participant?.identity} sid=${event.sid} '
+            'reason=${event.reason}',
+          );
+        })
         ..on<AudioPlaybackStatusChanged>((event) {
           debugPrint('LiveKit audio playback status: ${event.isPlaying}');
           if (event.isPlaying) {
@@ -8107,6 +8130,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         '${AudioManager.instance.audioEngineState}',
       );
       await _setSpeakerOutputPreferred();
+      // Approval can arrive while the old listener token is reconnecting. In
+      // that race Room.connect succeeds, but the token is still receive-only;
+      // recheck the latest snapshot after the connection lock is released so
+      // we do not miss the speaker-token refresh.
+      if (!joinInfo.canPublish) {
+        final latestRoom = _room;
+        if (latestRoom != null && _canPublishAudio(latestRoom)) {
+          unawaited(
+            Future<void>.delayed(const Duration(milliseconds: 300), () {
+              if (mounted) unawaited(_syncLiveKitPublishPermission(latestRoom));
+            }),
+          );
+        }
+      }
     } catch (error, stackTrace) {
       // Keep the original connect/join failure visible. A disconnect can also
       // time out while unwinding a failed connection, and must not replace the
@@ -8223,7 +8260,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _prepareLiveKitAudioSession({
     required bool canPublishAudio,
   }) async {
-    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      await _setSpeakerOutputPreferred();
+      return;
+    }
     if (canPublishAudio) {
       // A speaker connection must initialize the recorder with communication
       // audio before LiveKit publishes its first track. This also handles the
@@ -8793,7 +8837,36 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
     final participant = _liveKitRoom?.localParticipant;
     if (participant == null) return;
-    await participant.setMicrophoneEnabled(enabled);
+    final publication = await participant.setMicrophoneEnabled(enabled);
+    final track = publication?.track;
+    debugPrint(
+      'LiveKit local microphone ${enabled ? 'enabled' : 'disabled'}: '
+      'publication=${publication?.sid ?? '<none>'} '
+      'muted=${publication?.muted} active=${track?.isActive}',
+    );
+    if (enabled && track is LocalAudioTrack) {
+      final stats = await track.getSenderStats();
+      debugPrint(
+        'LiveKit local audio sender: '
+        'bytes=${stats?.bytesSent} packets=${stats?.packetsSent} '
+        'source=${stats?.audioSourceStats}',
+      );
+      // The sender is attached asynchronously during SDP negotiation. A
+      // first stats read can therefore be empty even though publication
+      // succeeded; sample again after the native sender has had time to bind.
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 1), () async {
+          if (!mounted || !identical(track, publication?.track)) return;
+          final delayedStats = await track.getSenderStats();
+          debugPrint(
+            'LiveKit local audio sender delayed: '
+            'bytes=${delayedStats?.bytesSent} '
+            'packets=${delayedStats?.packetsSent} '
+            'source=${delayedStats?.audioSourceStats}',
+          );
+        }),
+      );
+    }
   }
 
   Future<void> _setSpeakerOutputPreferred() =>
