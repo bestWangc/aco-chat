@@ -12147,7 +12147,7 @@ class _LiveRoomHeaderActions extends StatelessWidget {
     final value = count;
     if (value == null) return '—';
     final safeValue = value < 0 ? 0 : value;
-    return safeValue > 999 ? '999+' : '$safeValue';
+    return '$safeValue';
   }
 
   @override
