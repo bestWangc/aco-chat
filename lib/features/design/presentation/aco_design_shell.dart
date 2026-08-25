@@ -7969,6 +7969,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     if (live == null || !mounted || _leaving || _liveKitConnecting) return;
     _liveKitConnecting = true;
+    setState(() {});
     _liveKitReconnectStopped = false;
     Room? connectingRoom;
     String? liveKitUrl;
@@ -8074,12 +8075,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         })
         ..on<RoomReconnectingEvent>((_) {
           _liveKitReconnecting = true;
+          if (mounted) setState(() {});
         })
         ..on<RoomResumingEvent>((_) {
           _liveKitReconnecting = true;
+          if (mounted) setState(() {});
         })
         ..on<RoomAttemptReconnectEvent>((event) {
           _liveKitReconnecting = true;
+          if (mounted) setState(() {});
           // The SDK has its own retry loop. Stop it before it can turn into
           // an unbounded app-wide reconnect storm.
           if (event.attempt >= 3 && !_liveKitReconnectStopped) {
@@ -8089,6 +8093,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         })
         ..on<RoomReconnectedEvent>((_) {
           _liveKitReconnecting = false;
+          if (mounted) setState(() {});
           final latestRoom = _room;
           if (latestRoom != null) {
             unawaited(_syncLiveKitPublishPermission(latestRoom));
@@ -8096,6 +8101,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         })
         ..on<RoomDisconnectedEvent>((event) {
           _liveKitReconnecting = false;
+          if (mounted) setState(() {});
           if (!_leaving && !_liveKitReconnectStopped && mounted) {
             _showNotice(context, '语音连接中断', '连接已停止自动重试，请重新进入直播间。');
           }
@@ -8174,6 +8180,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       }
     } finally {
       _liveKitConnecting = false;
+      if (mounted) setState(() {});
     }
   }
 
@@ -8857,7 +8864,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       debugPrint(
         'LiveKit local audio uplink: role=$effectiveRole '
         'bytes=${stats?.bytesSent} packets=${stats?.packetsSent} '
-        'source=${stats?.audioSourceStats} '
+        'audioLevel=${stats?.audioSourceStats?.audioLevel} '
+        'totalEnergy=${stats?.audioSourceStats?.totalAudioEnergy} '
         'trackActive=${track.isActive} publicationMuted=${publication?.muted}',
       );
       // The sender is attached asynchronously during SDP negotiation. A
@@ -8871,7 +8879,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             'LiveKit local audio uplink delayed: role=$effectiveRole '
             'bytes=${delayedStats?.bytesSent} '
             'packets=${delayedStats?.packetsSent} '
-            'source=${delayedStats?.audioSourceStats} '
+            'audioLevel=${delayedStats?.audioSourceStats?.audioLevel} '
+            'totalEnergy=${delayedStats?.audioSourceStats?.totalAudioEnergy} '
             'trackActive=${track.isActive} '
             'publicationMuted=${publication?.muted} '
             'engine=${AudioManager.instance.audioEngineState}',
@@ -9517,6 +9526,40 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             ),
             if (_handRaiseNoticeVisible)
               const Center(child: _LiveRoomInfoNotice()),
+            if (_liveKitConnecting || _liveKitReconnecting)
+              Positioned(
+                top: 48,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: CupertinoColors.black.withValues(alpha: 0.72),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CupertinoActivityIndicator(radius: 8),
+                          const SizedBox(width: 8),
+                          Text(
+                            _liveKitConnecting ? '正在连接语音…' : '语音重连中…',
+                            style: const TextStyle(
+                              color: CupertinoColors.white,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             Positioned(
               top: 8,
               left: 18,
