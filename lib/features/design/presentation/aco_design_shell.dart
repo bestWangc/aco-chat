@@ -8626,6 +8626,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _liveKitCanPublish = canPublish;
     _liveKitRole = room.viewerRole;
     if (!canPublish) {
+      _liveKitPublishReady = false;
       await _setLocalMicrophoneEnabled(false);
       return;
     }
@@ -8634,7 +8635,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (_liveKitMicrophoneOperationInFlight) return;
     try {
       await _setLocalMicrophoneEnabledWithRecovery(!_muted);
+      _liveKitPublishReady = _liveKitRoom?.localParticipant != null;
+      await _setSpeakerOutputPreferred();
+      if (mounted) setState(() {});
     } catch (error) {
+      _liveKitPublishReady = false;
       // This synchronization is fire-and-forget from room state updates.
       // Surface the failure in logs without producing an unhandled exception;
       // an explicit microphone tap still reports its own failure to the UI.
