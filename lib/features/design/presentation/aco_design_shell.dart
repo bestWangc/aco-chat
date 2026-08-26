@@ -1,3 +1,5 @@
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
@@ -37,6 +39,8 @@ part 'aco_design_models.dart';
 part 'live_room_widgets.dart';
 part 'live_room_chat_widgets.dart';
 part 'live_room_page.dart';
+part 'live_room_livekit.dart';
+part 'live_room_ui.dart';
 part 'profile_pages.dart';
 part 'square_content_widgets.dart';
 part 'mining_page.dart';
@@ -46,13 +50,12 @@ part 'explore_pages.dart';
 part 'wallet_welcome_page.dart';
 part 'wallet_setup_flow.dart';
 part 'wallet_home_page.dart';
-part 'wallet_asset_pages.dart';
+part 'wallet_transfer_pages.dart';
+part 'wallet_backup_pages.dart';
+part 'wallet_receive_pages.dart';
 part 'dex_pages.dart';
 part 'create_live_page.dart';
 part 'design_shell_widgets.dart';
-
-// LiveKit's audio-session controls are experimental in the current SDK.
-// ignore_for_file: experimental_member_use
 
 const _lime = Color(0xFFA1FF00);
 const _danger = Color(0xFFFF3B4E);
