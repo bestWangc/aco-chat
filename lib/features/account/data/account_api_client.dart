@@ -320,6 +320,21 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<List<LiveParticipant>> listLiveHostTransferCandidates({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/host-transfer-candidates'),
+      headers: _authorizedHeaders(token),
+    );
+    return (_body(response)['transfer_candidates'] as List<dynamic>? ??
+            const [])
+        .cast<Map<String, dynamic>>()
+        .map(LiveParticipant.fromJson)
+        .toList(growable: false);
+  }
+
   Future<void> approveLiveSpeaker({
     required int liveId,
     required int userId,
@@ -344,8 +359,10 @@ class AccountApiClient {
   /// Lightweight HTTP keep-alive sent by the host while presenting a live.
   /// Unlike the realtime WebSocket pong, it survives app suspension and
   /// flaky connections, so the server does not auto-end the live.
-  Future<void> sendLiveHeartbeat({required int liveId, required String token}) =>
-      _postWithoutBody('lives/$liveId/heartbeat', token);
+  Future<void> sendLiveHeartbeat({
+    required int liveId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/heartbeat', token);
 
   Future<void> setLiveAudioMute({
     required int liveId,

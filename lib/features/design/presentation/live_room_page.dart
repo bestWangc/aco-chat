@@ -65,6 +65,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _handRaised = false;
   bool _emojiPickerVisible = false;
   bool _sending = false;
+  bool _transferringHost = false;
+  bool _loadingHostTransferCandidates = false;
   bool _roomLoading = false;
   bool _leaving = false;
   bool _allowPop = false;
@@ -645,8 +647,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _showHostActions() {
     final room = _room;
-    final speakers = _room?.speakers ?? const <LiveParticipant>[];
-    final hasSpeakers = speakers.isNotEmpty;
     final chatMuted = room?.chatMuted ?? false;
     final audioMuted = room?.audioMuted ?? false;
     showCupertinoModalPopup<void>(
@@ -680,14 +680,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               },
               child: _hostActionLabel(chatMuted ? '解除全员禁言' : '全员禁言'),
             ),
-            if (hasSpeakers)
-              CupertinoActionSheetAction(
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  _showHostTransferPicker(speakers);
-                },
-                child: _hostActionLabel('转让主持人'),
-              ),
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_showHostTransferCandidates());
+              },
+              child: _hostActionLabel('转让主持人'),
+            ),
             CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () {
@@ -744,7 +743,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
         title: const Text('转让主持人'),
-        message: const Text('选择一位正在发言的成员成为新主持人。直播不会中断，你将成为普通成员。'),
+        message: const Text('选择一位正在发言的成员成为新主持人。直播不会中断，你将留在房间并变为听众。'),
         actions: speakers
             .map((speaker) => _transferHostAction(sheetContext, speaker))
             .toList(growable: false),
@@ -754,6 +753,34 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ),
       ),
     );
+  }
+
+  Future<void> _showHostTransferCandidates() async {
+    final room = _room;
+    final live = widget.live;
+    if (room?.viewerRole != 'host' ||
+        live == null ||
+        _loadingHostTransferCandidates) {
+      return;
+    }
+    setState(() => _loadingHostTransferCandidates = true);
+    try {
+      final candidates = await _accountSession.liveHostTransferCandidates(
+        live.id,
+      );
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        _showNotice(context, '暂无可转让成员', '请先邀请成员上麦，再转让主持人。');
+        return;
+      }
+      _showHostTransferPicker(candidates);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '无法加载转让名单', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '无法加载转让名单', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _loadingHostTransferCandidates = false);
+    }
   }
 
   CupertinoActionSheetAction _transferHostAction(
@@ -769,14 +796,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _transferHost(LiveParticipant speaker) async {
     final live = widget.live;
-    if (live == null) return;
+    if (live == null || _transferringHost) return;
+    setState(() => _transferringHost = true);
     try {
       await _accountSession.transferLiveHost(live.id, speaker.userId);
-      _closeRoom();
+      // The room-state broadcast changes this participant from host to
+      // listener. Keep the page open so the former host can continue watching.
+      await _loadRoom(silent: true);
+      if (mounted) _showNotice(context, '转让成功', '你已变为听众，仍可留在直播间。');
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '转让失败', error.message);
     } catch (_) {
       if (mounted) _showNotice(context, '转让失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _transferringHost = false);
     }
   }
 
