@@ -306,6 +306,20 @@ class AccountApiClient {
   Future<void> raiseLiveHand({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/raise-hand', token);
 
+  Future<List<LiveParticipant>> listRaisedLiveHands({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/raised-hands'),
+      headers: _authorizedHeaders(token),
+    );
+    return (_body(response)['raised_hands'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(LiveParticipant.fromJson)
+        .toList(growable: false);
+  }
+
   Future<void> approveLiveSpeaker({
     required int liveId,
     required int userId,

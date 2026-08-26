@@ -68,13 +68,13 @@ class _LiveRoomOverview extends StatelessWidget {
                   onPressed: onCheckIn,
                 ),
               ),
-            if (isHost && room.raisedHands.isNotEmpty)
+            if (isHost && (room.raisedHandCount ?? 0) > 0)
               Positioned(
                 top: 36,
                 right: 14,
                 child: _RaisedHandIndicator(
                   palette: palette,
-                  count: room.raisedHands.length,
+                  count: room.raisedHandCount!,
                   onPressed: onShowRaisedHandRequests,
                 ),
               ),
@@ -709,7 +709,27 @@ class _LiveRoomParticipantSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleSpeakers = speakers.take(10).toList(growable: false);
+    final activeSpeakers = speakers.where(
+      (participant) =>
+          speakingParticipantIds.contains(participant.userId.toString()),
+    );
+    final unmutedSpeakers = speakers.where(
+      (participant) =>
+          !speakingParticipantIds.contains(participant.userId.toString()) &&
+          !participant.muted,
+    );
+    final mutedSpeakers = speakers.where(
+      (participant) =>
+          !speakingParticipantIds.contains(participant.userId.toString()) &&
+          participant.muted,
+    );
+    // Keep people who are actively speaking visible even when the room has
+    // more speakers than the ten available audience-grid slots.
+    final visibleSpeakers = [
+      ...activeSpeakers,
+      ...unmutedSpeakers,
+      ...mutedSpeakers,
+    ].take(10).toList(growable: false);
     final participants = [
       ...visibleSpeakers,
       ...listeners.take(10 - visibleSpeakers.length),

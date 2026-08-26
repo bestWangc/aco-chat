@@ -24,7 +24,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         checkingIn: _checkingIn,
         speakingParticipantIds: _liveKitSpeakingParticipantIds,
         onCheckIn: _confirmCheckIn,
-        onShowRaisedHandRequests: _showRaisedHandRequests,
+        onShowRaisedHandRequests: () => unawaited(_showRaisedHandRequests()),
         onSpeakerTap: isHost ? _confirmSpeakerMute : null,
       );
     }
@@ -50,7 +50,9 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     final canSpeak =
         live == null ||
         (_liveKitPublishReady && (isHost || serverViewerRole == 'speaker'));
-    final canToggleMicrophone = canSpeak && !audioMuted;
+    // The server keeps membership through a reconnect grace period, but do
+    // not send mute requests while the realtime connection is recovering.
+    final canToggleMicrophone = canSpeak && !audioMuted && !_networkReconnecting;
     // A self-muted speaker becomes a listener and must raise their hand again.
     final chatMuted = room?.chatMuted == true && !isHost;
     // Do NOT add MediaQuery.viewInsetsOf: with adjustResize the window (and

@@ -218,6 +218,12 @@ class AccountSession {
   Future<void> raiseLiveHand(int liveId) async =>
       _apiClient.raiseLiveHand(liveId: liveId, token: await _requireToken());
 
+  Future<List<LiveParticipant>> raisedLiveHands(int liveId) async =>
+      _apiClient.listRaisedLiveHands(
+        liveId: liveId,
+        token: await _requireToken(),
+      );
+
   Future<void> approveLiveSpeaker(int liveId, int userId) async =>
       _apiClient.approveLiveSpeaker(
         liveId: liveId,

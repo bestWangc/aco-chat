@@ -222,7 +222,7 @@ class LiveRoom {
     required this.participantCount,
     required this.speakers,
     required this.listeners,
-    required this.raisedHands,
+    this.raisedHandCount,
     required this.canRaiseHand,
     required this.viewerMuted,
     required this.chatMuted,
@@ -238,7 +238,9 @@ class LiveRoom {
   final int participantCount;
   final List<LiveParticipant> speakers;
   final List<LiveParticipant> listeners;
-  final List<LiveParticipant> raisedHands;
+  /// Present only in the host's room snapshot. The request details are loaded
+  /// on demand from the dedicated moderation endpoint.
+  final int? raisedHandCount;
   final bool canRaiseHand;
   final bool viewerMuted;
   final bool chatMuted;
@@ -260,10 +262,7 @@ class LiveRoom {
         .cast<Map<String, dynamic>>()
         .map(LiveParticipant.fromJson)
         .toList(growable: false),
-    raisedHands: (json['raised_hands'] as List<dynamic>? ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(LiveParticipant.fromJson)
-        .toList(growable: false),
+    raisedHandCount: (json['raised_hand_count'] as num?)?.toInt(),
     canRaiseHand: json['can_raise_hand'] as bool? ?? false,
     viewerMuted: json['viewer_muted'] as bool? ?? false,
     chatMuted: json['chat_muted'] as bool? ?? false,

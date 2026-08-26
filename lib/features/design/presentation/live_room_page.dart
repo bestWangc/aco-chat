@@ -254,7 +254,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         participantCount: safeParticipantCount,
         speakers: room.speakers,
         listeners: room.listeners,
-        raisedHands: room.raisedHands,
+        raisedHandCount: room.raisedHandCount,
         canRaiseHand: room.canRaiseHand,
         viewerMuted: room.viewerMuted,
         chatMuted: room.chatMuted,
@@ -286,7 +286,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           )
           .toList(growable: false),
       listeners: room.listeners,
-      raisedHands: room.raisedHands,
+      raisedHandCount: room.raisedHandCount,
       canRaiseHand: room.canRaiseHand,
       viewerMuted: room.viewerRole == 'speaker' ? muted : room.viewerMuted,
       chatMuted: room.chatMuted,
@@ -313,7 +313,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       participantCount: room.participantCount,
       speakers: room.speakers,
       listeners: room.listeners,
-      raisedHands: room.raisedHands,
+      raisedHandCount: room.raisedHandCount,
       canRaiseHand: room.canRaiseHand,
       viewerMuted: room.viewerMuted,
       chatMuted: muted,
@@ -391,9 +391,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       // A realtime snapshot can arrive before the mute request completes.
       // Keep the user's latest local choice until the server echoes it back.
       _muted = localMuteOverride ?? displayedRoom.viewerMuted;
-      _handRaised = room.raisedHands.any(
-        (participant) => participant.userId == displayedRoom.viewerUserId,
-      );
+      if (displayedRoom.viewerRole != 'listener') _handRaised = false;
       if (displayedRoom.chatMuted && displayedRoom.viewerRole != 'host') {
         _emojiPickerVisible = false;
       }
@@ -596,9 +594,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
-  void _showRaisedHandRequests() {
+  Future<void> _showRaisedHandRequests() async {
     final room = _room;
-    if (room == null || room.raisedHands.isEmpty) return;
+    final live = widget.live;
+    if (room?.viewerRole != 'host' || live == null) return;
+    try {
+      final users = await _accountSession.raisedLiveHands(live.id);
+      if (!mounted || users.isEmpty) return;
+      _showRaisedHandRequestsDialog(users);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '无法加载举手列表', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '无法加载举手列表', '请检查网络后重试。');
+    }
+  }
+
+  void _showRaisedHandRequestsDialog(List<LiveParticipant> users) {
     showCupertinoDialog<void>(
       context: context,
       builder: (dialogContext) => Center(
@@ -610,7 +621,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           child: CupertinoPopupSurface(
             child: _RaisedHandRequests(
               palette: widget.palette,
-              users: room.raisedHands,
+              users: users,
               onClose: () => Navigator.of(dialogContext).pop(),
               onApprove: (userId) {
                 Navigator.of(dialogContext).pop();
@@ -622,7 +633,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               },
               onRejectAll: () {
                 Navigator.of(dialogContext).pop();
-                unawaited(_rejectAllSpeakerRequests(room.raisedHands));
+                unawaited(_rejectAllSpeakerRequests(users));
               },
               maxHeight: 170,
             ),
