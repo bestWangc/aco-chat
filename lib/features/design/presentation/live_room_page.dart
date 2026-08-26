@@ -27,12 +27,6 @@ class _VoiceRoomPage extends StatefulWidget {
 
 class _VoiceRoomPageState extends State<_VoiceRoomPage>
     with WidgetsBindingObserver {
-  static const _maxLiveMessageCount = 200;
-  static const _maxLiveMessageBytes = 512;
-  static const _minLiveMessageInterval = Duration(milliseconds: 250);
-  static const _liveMessageRateWindow = Duration(seconds: 1);
-  static const _maxLiveMessagesPerWindow = 20;
-  static const _liveMessageRefreshInterval = Duration(milliseconds: 75);
   static const _liveAudioBackgroundChannel = MethodChannel(
     'aco/live-audio-background',
   );
@@ -82,17 +76,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
-  final Queue<LiveMessage> _messages = ListQueue<LiveMessage>();
-  final Set<int> _knownMessageIds = <int>{};
+  late final LiveChatBuffer _chatBuffer;
+  final LiveChatRateLimiter _chatRateLimiter = LiveChatRateLimiter();
   final Set<int> _knownParticipantIds = <int>{};
-  WebSocketChannel? _eventChannel;
-  StreamSubscription<dynamic>? _eventSubscription;
-  Timer? _reconnectTimer;
-  int _reconnectAttempt = 0;
-  bool _realtimeReconnectStopped = false;
+  late final LiveRealtimeClient _realtimeClient;
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
-  Timer? _messageRefreshTimer;
   Timer? _hostHeartbeatTimer;
   Room? _liveKitRoom;
   EventsListener<RoomEvent>? _liveKitEventListener;
@@ -108,9 +97,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _liveKitPermissionReconnectInFlight = false;
   LocalAudioTrack? _listenerAudioWarmupTrack;
   bool? _localMuteOverride;
-  DateTime? _lastMessageSentAt;
-  DateTime? _messageRateWindowStartedAt;
-  int _messageRateWindowCount = 0;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
   final TextEditingController _messageController = TextEditingController();
@@ -118,6 +104,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   @override
   void initState() {
     super.initState();
+    _chatBuffer = LiveChatBuffer(
+      onChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
+    _realtimeClient = LiveRealtimeClient(
+      onEvent: _handleRealtimeEvent,
+      onReconnectingChanged: (reconnecting) {
+        if (mounted) setState(() => _networkReconnecting = reconnecting);
+      },
+      onReconnectStopped: () {
+        if (mounted) _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入直播间。');
+      },
+    );
     WidgetsBinding.instance.addObserver(this);
     unawaited(_setLiveRoomWakelock(true));
     _apiClient = AccountApiClient();
@@ -199,37 +199,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _connectRealtime({bool refreshRoom = true}) async {
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
-    try {
-      if (refreshRoom) await _loadRoom(silent: true);
-      final ticket = await _accountSession.liveWebsocketTicket(live.id);
-      final channel = WebSocketChannel.connect(
-        _liveWebsocketUri(live.id, ticket),
-      );
-      await _eventSubscription?.cancel();
-      await _eventChannel?.sink.close();
-      _eventChannel = channel;
-      _eventSubscription = channel.stream.listen(
-        _handleRealtimeEvent,
-        onError: (_) => _scheduleRealtimeReconnect(),
-        onDone: _scheduleRealtimeReconnect,
-      );
-      _reconnectTimer?.cancel();
-      _reconnectAttempt = 0;
-      _realtimeReconnectStopped = false;
-      if (mounted) setState(() => _networkReconnecting = false);
-    } on AccountApiException catch (error) {
-      if (error.statusCode == 404 || error.statusCode == 409) {
-        _reconnectTimer?.cancel();
-        if (mounted) setState(() => _networkReconnecting = false);
-        return;
-      }
-      _scheduleRealtimeReconnect();
-    } catch (_) {
-      _scheduleRealtimeReconnect();
-    }
+    if (refreshRoom) await _loadRoom(silent: true);
+    await _realtimeClient.connect(
+      uri: _liveWebsocketUri(live.id),
+      ticketLoader: () => _accountSession.liveWebsocketTicket(live.id),
+    );
   }
 
-  Uri _liveWebsocketUri(int liveId, String ticket) {
+  Uri _liveWebsocketUri(int liveId) {
     final apiBase = Uri.parse(const AppConfig().apiBaseUrl);
     final path = apiBase.path.replaceFirst(
       RegExp(r'/api/v1/?$'),
@@ -238,76 +215,26 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     return apiBase.replace(
       scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
       path: path,
-      queryParameters: {'ticket': ticket},
     );
   }
 
-  void _scheduleRealtimeReconnect() {
-    if (!mounted ||
-        widget.live == null ||
-        _leaving ||
-        _realtimeReconnectStopped) {
-      return;
-    }
-    if (_reconnectAttempt >= 5) {
-      _realtimeReconnectStopped = true;
-      if (mounted) {
-        setState(() => _networkReconnecting = false);
-        _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入直播间。');
-      }
-      return;
-    }
-    _reconnectTimer?.cancel();
-    const retryDelays = [3, 6, 12, 30, 60];
-    final delaySeconds = retryDelays[_reconnectAttempt];
-    _reconnectAttempt++;
-    setState(() => _networkReconnecting = true);
-    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
-      if (mounted && !_leaving) unawaited(_connectRealtime());
-    });
-  }
-
   void _handleRealtimeEvent(dynamic rawEvent) {
-    if (rawEvent is! String) return;
-    try {
-      final decoded = jsonDecode(rawEvent);
-      if (decoded is! Map<String, dynamic>) return;
-      final eventType = decoded['type'];
-      if (eventType is! String) return;
-
-      if (_networkReconnecting && mounted) {
-        setState(() {
-          _networkReconnecting = false;
-          _reconnectAttempt = 0;
-        });
-      }
-
-      switch (eventType) {
-        case 'room.snapshot':
-          final roomJson = decoded['room'];
-          if (roomJson is Map<String, dynamic>) {
-            _applyRoomSnapshot(LiveRoom.fromJson(roomJson));
-          }
-        case 'room.audio_mute':
-          final audioMutedJson = decoded['audio_muted'];
-          if (audioMutedJson is Map<String, dynamic>) {
-            _applyAudioMute(audioMutedJson['muted'] as bool? ?? false);
-          }
-        case 'room.chat_mute':
-          final chatMuted = decoded['chat_muted'];
-          if (chatMuted is bool) {
-            _applyChatMute(chatMuted);
-          }
-        case 'room.participant_count':
-          final participantCount = decoded['participant_count'];
-          if (participantCount is num) {
-            _applyParticipantCount(participantCount.toInt());
-          }
-      }
-    } on FormatException {
-      debugPrint('Ignoring malformed live realtime event');
-    } catch (error) {
-      debugPrint('Ignoring invalid live realtime event: $error');
+    final event = LiveRealtimeEventParser.parse(rawEvent);
+    if (event == null) return;
+    if (_networkReconnecting && mounted) {
+      setState(() {
+        _networkReconnecting = false;
+      });
+    }
+    switch (event) {
+      case LiveRoomSnapshotEvent(:final room):
+        _applyRoomSnapshot(room);
+      case LiveAudioMuteEvent(:final muted):
+        _applyAudioMute(muted);
+      case LiveChatMuteEvent(:final muted):
+        _applyChatMute(muted);
+      case LiveParticipantCountEvent(:final count):
+        _applyParticipantCount(count);
     }
   }
 
@@ -881,14 +808,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   @override
   void dispose() {
     unawaited(_setLiveRoomWakelock(false));
-    _reconnectTimer?.cancel();
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
     _hostHeartbeatTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    _messageRefreshTimer?.cancel();
-    unawaited(_eventSubscription?.cancel());
-    unawaited(_eventChannel?.sink.close());
+    _chatBuffer.dispose();
+    unawaited(_realtimeClient.dispose());
     unawaited(_disconnectLiveKitForLeave());
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       unawaited(AudioManager.instance.deactivateAudioSession());
@@ -961,33 +886,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   bool _checkMessageSendLimits(int payloadBytes) {
-    if (payloadBytes > _maxLiveMessageBytes) {
-      _showNotice(context, '发送失败', '弹幕内容过长，请控制在 512 字节以内。');
-      return false;
+    switch (_chatRateLimiter.check(payloadBytes)) {
+      case LiveChatSendLimit.allowed:
+        return true;
+      case LiveChatSendLimit.payloadTooLarge:
+        _showNotice(context, '发送失败', '弹幕内容过长，请控制在 512 字节以内。');
+        return false;
+      case LiveChatSendLimit.sentTooRecently:
+        _showNotice(context, '发送太快', '请稍后再发送。');
+        return false;
+      case LiveChatSendLimit.rateLimited:
+        _showNotice(context, '发送太快', '房间弹幕较多，请稍后再试。');
+        return false;
     }
-
-    final now = DateTime.now();
-    final lastSentAt = _lastMessageSentAt;
-    if (lastSentAt != null &&
-        now.difference(lastSentAt) < _minLiveMessageInterval) {
-      _showNotice(context, '发送太快', '请稍后再发送。');
-      return false;
-    }
-
-    final windowStartedAt = _messageRateWindowStartedAt;
-    if (windowStartedAt == null ||
-        now.difference(windowStartedAt) >= _liveMessageRateWindow) {
-      _messageRateWindowStartedAt = now;
-      _messageRateWindowCount = 0;
-    }
-    if (_messageRateWindowCount >= _maxLiveMessagesPerWindow) {
-      _showNotice(context, '发送太快', '房间弹幕较多，请稍后再试。');
-      return false;
-    }
-
-    _lastMessageSentAt = now;
-    _messageRateWindowCount++;
-    return true;
   }
 
   String get _localChatNickname {
@@ -1000,41 +911,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _appendChatMessage({required String nickname, required String text}) {
     final now = DateTime.now();
-    _appendMessages([
+    _chatBuffer.append(
       LiveMessage(
         id: -now.microsecondsSinceEpoch,
         nickname: nickname,
         text: text.trim(),
         createdAt: now,
       ),
-    ]);
+    );
   }
 
   void _appendMessages(Iterable<LiveMessage> incomingMessages) {
-    var hasNewMessages = false;
-    for (final message in incomingMessages) {
-      if (!_knownMessageIds.add(message.id)) continue;
-      _messages.addLast(message);
-      hasNewMessages = true;
-
-      while (_messages.length > _maxLiveMessageCount) {
-        final evictedMessage = _messages.removeFirst();
-        _knownMessageIds.remove(evictedMessage.id);
-      }
-    }
-    if (!hasNewMessages || !mounted) return;
-    _scheduleMessageRefresh();
-  }
-
-  void _scheduleMessageRefresh() {
-    if (_messageRefreshTimer != null) return;
-
-    // Coalesce bursts of incoming chat messages into one rebuild. The queue is
-    // updated immediately, while the UI is refreshed at most once per window.
-    _messageRefreshTimer = Timer(_liveMessageRefreshInterval, () {
-      _messageRefreshTimer = null;
-      if (mounted) setState(() {});
-    });
+    _chatBuffer.appendAll(incomingMessages);
   }
 
   @override

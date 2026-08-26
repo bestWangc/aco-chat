@@ -110,7 +110,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                         Expanded(
                           child: _RoomChatHistory(
                             palette: palette,
-                            liveMessages: _messages.toList(growable: false),
+                            liveMessages: _chatBuffer.messages,
                             hasLive: live != null,
                             scrollToLatestSignal: _scrollToLatestSignal,
                           ),
