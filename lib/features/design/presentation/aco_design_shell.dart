@@ -7881,7 +7881,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       mode: AppleAudioMode.videoChat,
     ),
   );
-  static const _playbackAudioSession = AudioSessionOptions.mediaPlayback();
   static const _iosAudioUnitRecoveryDelay = Duration(milliseconds: 1200);
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
@@ -7889,9 +7888,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
     noiseSuppression: true,
-    // Keep the native WebRTC processing combination at its portable default.
-    // Some Android audio devices reject the custom AGC-off + high-pass-on
-    // combination during ADM prewarm with AudioProcessingException(-9001).
     autoGainControl: true,
     highPassFilter: false,
     voiceIsolation: true,
@@ -7942,6 +7938,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _microphoneUpdating = false;
   bool _liveKitMicrophoneOperationInFlight = false;
   bool _liveKitPermissionReconnectInFlight = false;
+  LocalAudioTrack? _listenerAudioWarmupTrack;
   bool? _localMuteOverride;
   DateTime? _lastMessageSentAt;
   DateTime? _messageRateWindowStartedAt;
@@ -8009,7 +8006,28 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _liveKitEventListener = null;
       _liveKitSpeakingParticipantIds.clear();
       await _disconnectLiveKitRoomSafely(previousRoom);
-      await _prepareLiveKitAudioSession(canPublishAudio: joinInfo.canPublish);
+      await _prepareLiveKitAudioSession();
+      var preConnectListener = room.createListener()
+        ..on<TrackSubscribedEvent>((event) {
+          if (event.track is RemoteAudioTrack) {
+            debugPrint(
+              'LiveKit remote audio subscribed before connect listener: '
+              '${event.participant.identity}/${event.publication.sid}',
+            );
+            unawaited(
+              _logRemoteAudioTrackStats(
+                event.track as RemoteAudioTrack,
+                event.publication.sid,
+                event.publication.muted,
+              ),
+            );
+          }
+        })
+        ..on<AudioPlaybackStatusChanged>((event) {
+          if (event.isPlaying) {
+            unawaited(_logLiveKitAudioRouteAfterSpeakerReset('audio-playback'));
+          }
+        });
       debugPrint('LiveKit connect: starting Room.connect ($liveKitUrl)');
       try {
         await room.connect(joinInfo.url, joinInfo.token);
@@ -8023,8 +8041,33 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         room = _createLiveKitRoom();
         connectingRoom = room;
         liveKitUrl = _liveKitFallbackUrl;
+        preConnectListener.dispose();
+        preConnectListener = room.createListener()
+          ..on<TrackSubscribedEvent>((event) {
+            if (event.track is RemoteAudioTrack) {
+              debugPrint(
+                'LiveKit remote audio subscribed before connect listener: '
+                '${event.participant.identity}/${event.publication.sid}',
+              );
+              unawaited(
+                _logRemoteAudioTrackStats(
+                  event.track as RemoteAudioTrack,
+                  event.publication.sid,
+                  event.publication.muted,
+                ),
+              );
+            }
+          })
+          ..on<AudioPlaybackStatusChanged>((event) {
+            if (event.isPlaying) {
+              unawaited(
+                _logLiveKitAudioRouteAfterSpeakerReset('audio-playback'),
+              );
+            }
+          });
         await room.connect(_liveKitFallbackUrl, joinInfo.token);
       }
+      preConnectListener.dispose();
       debugPrint('LiveKit connect: Room.connect completed');
       unawaited(_logLiveKitAudioRoute('room-connect-completed'));
       if (!mounted || _leaving) {
@@ -8043,7 +8086,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               '${event.participant.identity}/${event.publication.sid}',
             );
             unawaited(
-              _logLiveKitAudioRouteAfterSpeakerReset('remote-subscribe'),
+              _logRemoteAudioTrackStats(
+                event.track as RemoteAudioTrack,
+                event.publication.sid,
+                event.publication.muted,
+              ),
             );
           }
         })
@@ -8121,6 +8168,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         });
       if (defaultTargetPlatform == TargetPlatform.android) {
         await _liveAudioBackgroundChannel.invokeMethod<void>('start');
+      }
+      if (!joinInfo.canPublish) {
+        await _startListenerAudioWarmup();
+      } else {
+        await _stopListenerAudioWarmup();
       }
       _liveKitCanPublish = joinInfo.canPublish;
       // The role in the newly issued token is authoritative. Using the
@@ -8288,9 +8340,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  Future<void> _prepareLiveKitAudioSession({
-    required bool canPublishAudio,
-  }) async {
+  Future<void> _prepareLiveKitAudioSession() async {
     if (defaultTargetPlatform != TargetPlatform.iOS &&
         defaultTargetPlatform != TargetPlatform.android) {
       return;
@@ -8300,7 +8350,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       return;
     }
     await AudioManager.instance.setAudioSessionOptions(
-      canPublishAudio ? _communicationAudioSession : _playbackAudioSession,
+      // Keep iOS voice-room listeners on the communication session as well.
+      // In this app, playback-only sessions can report a subscribed remote
+      // track and an active playout engine while producing no audible output.
+      _communicationAudioSession,
     );
     await AudioManager.instance.setEngineAvailability(
       AudioEngineAvailability.defaultAvailability,
@@ -8851,13 +8904,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<bool> _setLocalMicrophoneEnabled(bool enabled) async {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       if (enabled) {
-        // iOS can leave WebRTC's audio engine unavailable after a listener
-        // track is muted/unsubscribed. Restoring the session alone is not
-        // enough: setMicrophoneEnabled may still create a publication while
-        // the native recorder remains stopped.
-        await AudioManager.instance.setAudioSessionOptions(
-          _communicationAudioSession,
-        );
+        // The communication session is configured once before Room.connect.
+        // Reapplying it on every mute toggle can reset iOS's AudioUnit.
         await AudioManager.instance.setEngineAvailability(
           AudioEngineAvailability.defaultAvailability,
         );
@@ -8896,6 +8944,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       'role=$effectiveRole canPublish=$_liveKitCanPublish '
       'publication=${publication?.sid ?? '<none>'} '
       'muted=${publication?.muted} active=${track?.isActive} '
+      'processing=ec:${_voiceRoomAudioCaptureOptions.echoCancellation},'
+      'ns:${_voiceRoomAudioCaptureOptions.noiseSuppression},'
+      'agc:${_voiceRoomAudioCaptureOptions.autoGainControl},'
+      'isolation:${_voiceRoomAudioCaptureOptions.voiceIsolation} '
       'engine=${AudioManager.instance.audioEngineState}',
     );
     unawaited(
@@ -8939,6 +8991,87 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _setSpeakerOutputPreferred() =>
       AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+
+  Future<void> _startListenerAudioWarmup() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS ||
+        _listenerAudioWarmupTrack != null) {
+      return;
+    }
+    try {
+      final track = await LocalAudioTrack.create(_voiceRoomAudioCaptureOptions);
+      await track.start();
+      _listenerAudioWarmupTrack = track;
+      debugPrint(
+        'LiveKit iOS listener audio warmup started: '
+        'trackActive=${track.isActive} '
+        'engine=${AudioManager.instance.audioEngineState}',
+      );
+    } catch (error) {
+      debugPrint('LiveKit iOS listener audio warmup failed: $error');
+    }
+  }
+
+  Future<void> _stopListenerAudioWarmup() async {
+    final track = _listenerAudioWarmupTrack;
+    _listenerAudioWarmupTrack = null;
+    if (track == null) return;
+    try {
+      await track.stop();
+      track.dispose();
+      debugPrint('LiveKit iOS listener audio warmup stopped');
+    } catch (error) {
+      debugPrint('LiveKit iOS listener audio warmup cleanup failed: $error');
+    }
+  }
+
+  Future<void> _logRemoteAudioTrackStats(
+    RemoteAudioTrack track,
+    String publicationSid,
+    bool publicationMuted,
+  ) async {
+    Future<void> log(String sample) async {
+      final stats = await track.getReceiverStats();
+      debugPrint(
+        'LiveKit remote audio downlink $sample: '
+        'publication=$publicationSid '
+        'trackActive=${track.isActive} '
+        'publicationMuted=$publicationMuted '
+        'packets=${stats?.packetsReceived} '
+        'bytes=${stats?.bytesReceived} '
+        'audioLevel=${stats?.audioSourceStats?.audioLevel} '
+        'totalEnergy=${stats?.totalAudioEnergy}',
+      );
+      final receiver = track.receiver;
+      if (receiver == null) return;
+      final rawReports = await receiver.getStats();
+      for (final report in rawReports.where(
+        (report) => report.type == 'inbound-rtp' || report.type == 'track',
+      )) {
+        final values = report.values;
+        debugPrint(
+          'LiveKit remote audio raw stats $sample: '
+          'publication=$publicationSid type=${report.type} '
+          'enabled=${track.mediaStreamTrack.enabled} '
+          'packetsReceived=${values['packetsReceived']} '
+          'bytesReceived=${values['bytesReceived']} '
+          'audioLevel=${values['audioLevel']} '
+          'totalAudioEnergy=${values['totalAudioEnergy']} '
+          'totalSamplesDuration=${values['totalSamplesDuration']}',
+        );
+      }
+    }
+
+    try {
+      await log('immediate');
+      await Future<void>.delayed(const Duration(seconds: 2));
+      await log('delayed');
+    } catch (error) {
+      debugPrint(
+        'LiveKit remote audio downlink stats failed: '
+        'publication=$publicationSid error=$error',
+      );
+    }
+  }
 
   Future<void> _logLiveKitAudioRoute(String reason) async {
     if (defaultTargetPlatform != TargetPlatform.iOS) return;
@@ -9215,6 +9348,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _liveKitRoom = null;
     _liveKitEventListener?.dispose();
     _liveKitEventListener = null;
+    await _stopListenerAudioWarmup();
     if (defaultTargetPlatform == TargetPlatform.android) {
       unawaited(_liveAudioBackgroundChannel.invokeMethod<void>('stop'));
     }
