@@ -1187,7 +1187,12 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
       if (!mounted) return;
       setState(() {
         if (reset) _members.clear();
-        _members.addAll(result.members);
+        final existingIds = _members.map((member) => member.userId).toSet();
+        for (final member in result.members) {
+          if (existingIds.add(member.userId)) {
+            _members.add(member);
+          }
+        }
         _page = result.page;
         _total = result.total;
         _hasMore = result.hasMore;
