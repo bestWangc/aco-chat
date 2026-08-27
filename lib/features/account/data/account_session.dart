@@ -113,6 +113,16 @@ class AccountSession {
     return profile;
   }
 
+  Future<AccountProfile> uploadAvatar(Uint8List bytes) async {
+    final profile = await _apiClient.uploadAvatar(
+      bytes: bytes,
+      token: await _requireToken(),
+    );
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(activeAccountKey, jsonEncode(profile.toJson()));
+    return profile;
+  }
+
   Future<AccountProfile?> activeProfile() async {
     final preferences = await SharedPreferences.getInstance();
     final value = preferences.getString(activeAccountKey);

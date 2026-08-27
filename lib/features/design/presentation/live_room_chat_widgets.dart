@@ -216,6 +216,20 @@ class _RoomBottomBar extends StatelessWidget {
   final VoidCallback onEmojiPressed;
   final VoidCallback onSubmitted;
 
+  bool get _showMutedMicAsset => canSpeak && muted && !audioMuted;
+
+  IconData? get _micIcon {
+    if (canSpeak && (!muted || _showMutedMicAsset)) return null;
+    return CupertinoIcons.mic_slash;
+  }
+
+  String? get _micIconAsset {
+    if (!canSpeak) return null;
+    return _showMutedMicAsset
+        ? 'assets/icons/live_muted_red.png'
+        : 'assets/icons/live_mic.png';
+  }
+
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -235,10 +249,8 @@ class _RoomBottomBar extends StatelessWidget {
           child: Row(
             children: [
               _RoomControl(
-                icon: canSpeak && !muted ? null : CupertinoIcons.mic_slash,
-                iconAsset: canSpeak && !muted
-                    ? 'assets/icons/live_mic.png'
-                    : null,
+                icon: _micIcon,
+                iconAsset: _micIconAsset,
                 label: audioMuted
                     ? '全员静音中'
                     : canSpeak
@@ -248,6 +260,7 @@ class _RoomBottomBar extends StatelessWidget {
                 foreground: micColors.foreground,
                 onPressed: onMic,
                 large: true,
+                iconSize: 26,
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -284,13 +297,13 @@ class _RoomBottomBar extends StatelessWidget {
         foreground: palette.mutedText,
       );
     }
-    if (!muted || palette.dark) {
-      return _RoomControlColors(background: palette.accent, foreground: _black);
+    if (muted) {
+      return _RoomControlColors(
+        background: palette.surfaceRaised,
+        foreground: const Color(0xFFFF1027),
+      );
     }
-    return const _RoomControlColors(
-      background: Color(0xFFF2F2F2),
-      foreground: _danger,
-    );
+    return _RoomControlColors(background: palette.accent, foreground: _black);
   }
 }
 
@@ -313,6 +326,7 @@ class _RoomControl extends StatelessWidget {
     required this.foreground,
     required this.onPressed,
     this.large = false,
+    this.iconSize,
   });
 
   final IconData? icon;
@@ -322,17 +336,18 @@ class _RoomControl extends StatelessWidget {
   final Color foreground;
   final VoidCallback? onPressed;
   final bool large;
+  final double? iconSize;
 
   @override
   Widget build(BuildContext context) {
     final controlSize = large ? 56.0 : 48.0;
-    final iconSize = large ? 20.0 : 17.0;
+    final resolvedIconSize = iconSize ?? (large ? 20.0 : 17.0);
     final iconWidget = iconAsset == null
-        ? Icon(icon, color: foreground, size: iconSize)
+        ? Icon(icon, color: foreground, size: resolvedIconSize)
         : Image.asset(
             iconAsset!,
-            width: iconSize,
-            height: iconSize,
+            width: resolvedIconSize,
+            height: resolvedIconSize,
             fit: BoxFit.contain,
             color: foreground,
             colorBlendMode: BlendMode.srcIn,

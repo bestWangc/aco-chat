@@ -185,6 +185,24 @@ class AccountApiClient {
     return _body(http.Response(body, response.statusCode))['url'] as String;
   }
 
+  Future<AccountProfile> uploadAvatar({
+    required Uint8List bytes,
+    required String token,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('uploads/avatars'))
+      ..headers['x-app-version'] = AppConfig.appVersion
+      ..headers['authorization'] = 'Bearer $token'
+      ..files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: 'avatar.jpg'),
+      );
+    final response = await _httpClient.send(request);
+    final body = await response.stream.bytesToString();
+    return AccountProfile.fromJson(
+      _body(http.Response(body, response.statusCode))['user']
+          as Map<String, dynamic>,
+    );
+  }
+
   Future<LiveSession> createLive({
     required String title,
     required String coverUrl,

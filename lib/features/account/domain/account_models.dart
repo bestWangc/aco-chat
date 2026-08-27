@@ -12,22 +12,26 @@ class AccountProfile {
     required this.accountId,
     required this.username,
     required this.nickname,
+    required this.avatarUrl,
   });
 
   final String accountId;
   final String username;
   final String nickname;
+  final String avatarUrl;
 
   factory AccountProfile.fromJson(Map<String, dynamic> json) => AccountProfile(
     accountId: json['account_id'] as String,
     username: json['username'] as String,
     nickname: json['nickname'] as String,
+    avatarUrl: json['avatar_url'] as String? ?? '',
   );
 
   Map<String, String> toJson() => {
     'account_id': accountId,
     'username': username,
     'nickname': nickname,
+    'avatar_url': avatarUrl,
   };
 }
 

@@ -221,7 +221,7 @@ class _LiveRoomCheckInButton extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: checked ? palette.mutedText : _white,
-                fontSize: 16,
+                fontSize: 15,
                 fontWeight: FontWeight.w800,
                 shadows: const [
                   Shadow(
@@ -451,6 +451,11 @@ class _LiveRoomHeaderActions extends StatelessWidget {
   final int? count;
   final VoidCallback? onMore;
 
+  // Provided livestream viewer-count glyph.
+  static final _viewerCountIcon = base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAFgAAABUCAYAAAAGV/BPAAAAAXNSR0IArs4c6QAAAERlWElmTU0AKgAAAAgAAYdpAAQAAAABAAAAGgAAAAAAA6ABAAMAAAABAAEAAKACAAQAAAABAAAAWKADAAQAAAABAAAAVAAAAAAicKURAAAFtElEQVR4Ae1cgXHbOBC0fr4AdfD4CqKv4OkKPh1YqeDVgawK7FQgdeCkAuorsDogO4g68O9mpAwFETRwwMEQhzdzIQHe7d0tjyBFenJ3N8nEwMTAxMDEwMTAxMDEgISBmcQphc/b25sBzgI6h7bQ42w2O2CrKohbIYBJHKRF7vvEmOFwJBX6BP0B7ZMGk1uoCUcf9gDmHFpDteQVwGyW/MLAUBIbIuuUmSLwMiS40HaVMmcvLCRKcnl2JZKsKxB8J0kg0Gdrk/KbPaEwroG5EOLS70Xoa7u19kSOsSrBOPu8zKXknuuvgPN4HkRsn+F7iPAXuao9RYAUg4waUVb9Tn/iTt32H/KfRV6Vv/WgJa9MW3bI8Ut38vfuIPH+KjHeEniPsZipHqdworxS0Vwi/vbKwN/owd+0HEsVgnF25yhxkbhMPkMT96ZEhWAwYJRY0MJVSvfuTotgrU7Twr05gluljLVwldJV6uDT49QxcdZ8GTQR3CH10NlPsftfCpDcGFprMOv4nriYb4nxssBpErxDBamWCb5vJd7NiRrBIITkXvxsjGBnE+H7oa5qBLMqkMzL+mtkhfx9v4vEGLc7foFJ38U28DUlsoO8+mRr56rawQyGLObYNHZgz/EedqnWcc+QN2QGcvkut4HGSAPnqrSyHQXl62Ak8ARSaqiJJIf+9QkvEmoE7iCCb72k3+DgOigNjpLwDxfk8aMn02c7saRrMAIuEIBdy62GGIDy5H3WAA/E3PfY9831mAmmSC6076xiWkUeBGkmc0FF/FrOpyPW3EBXycBtIIBzWWCQ3FLZuZQ2nsUmBEbnwHiFmlgsgf8RPn/hh0gr8M3ikmINXiNTkyXb6yA8udvr6XJmojoY3WtQSlNAOffo4n0BeVylENvB7N4SpJQ8rrgQd3BB3XsuqsgujvnDk+pcWSFb5rMPyQVNsoA91/GzHLDU8Mb58YLkXqAlSe3DChLm+5Ea6npm57GlD5aqDZJ4hZYm3W68qB+J8lm9Dki4gW11AZJzEJBoTlNe8leCBGJ+ZUbdQEVPEUjYXFVRxsQVwadcuXw4u/ud1B+BsXrHxnlYRLAT7eMP9JEYQ+65orW0qaRPEUdE3pyjW9vWGkuHEpwLH5CyRHADjRWeuC30PhZoVP4guIGmlCqUoLEtEb/qB6sLDMyviTQ7VSjMaAkGEcFkeJDHkxYkYyaY62Zq+RQKOGaCTSgZGvZjJrhVICwYU0wwbiL8JrWGNtAaGrw+KRDQhQwmo+vs2NfA7A8FQrfQrvDliem3zj+LXNgAqWWZpRJk7Up+lSUBzyDIs07IMBso+MYpXSJcgVzznpQkN3P92pQE+iZ5VywlWJJgdp/Td7p9gsAtMEQna9QEn4j9gi0JipENTlYrARg9wSdi7kGOiCD4fQXGDluRjJ7gDivHzn7I7iHE2LYdPcG48/+LovmXRwu7eM/xFhhU42l/YTZagkkIlC/bn6Hzi6rDB0u41MDjNkhGSTCIqMACu5bbVGIAtAX2OgRwdASDAC4JKT4TuXjkNzp+UTcug+78qAg+dReXBG3hel77kDwaglEsO/dRm9kOvsE+SR5c30dBMIpkR+Xo3A6/P3cN/uXHUKeMgmBU9+KsUP/AZ5zgpSvMzROM4nhXN64CM80/uZaKmyYYRZHYZSYSh8JwHe7N46YJRlEV1EBLkH/6kpD+ZU8fFuf+QFdVroO+83i5sve0ffC0y2FW8YqSvnW7SJBAUE1pAM4nA6fguOurimZe72Gv7IRLXSIMEuWvsSEZPAFDjorHPtnYpRLMPNmhxk64Mx461jHLulvZ0aQEHwFE1ZahGEY7uAB/bvuICMZCzsI3Nlji8eYUJzGsKtzVVTeLCXe6hKsYDIcv/5epvePYz2nErrBD9ZXW13DAjo01dFXx/ynaD/hPhyYGJgYmBiYGJgYmBiYGJgbKYOB/iLiiphmiD/sAAAAASUVORK5CYII=',
+  );
+
   String get _countLabel {
     final value = count;
     if (value == null) return '—';
@@ -462,23 +467,29 @@ class _LiveRoomHeaderActions extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       Container(
-        constraints: const BoxConstraints(minHeight: 30),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        constraints: const BoxConstraints(minHeight: 26),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
           color: palette.surfaceRaised,
-          borderRadius: BorderRadius.circular(15),
+          borderRadius: BorderRadius.circular(10),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(CupertinoIcons.person_2, size: 14, color: palette.primaryText),
+            Image.memory(
+              _viewerCountIcon,
+              width: 18,
+              height: 18,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+            ),
             const SizedBox(width: 3),
             Text(
               _countLabel,
               style: TextStyle(
                 color: palette.primaryText,
-                fontSize: AcoTypography.caption,
-                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ],
@@ -489,10 +500,11 @@ class _LiveRoomHeaderActions extends StatelessWidget {
           padding: EdgeInsets.zero,
           minimumSize: const Size(36, 44),
           onPressed: onMore,
-          child: Icon(
-            CupertinoIcons.ellipsis_vertical,
-            color: palette.primaryText,
-            size: 20,
+          child: Image.asset(
+            'assets/icons/live_more.png',
+            width: 12,
+            height: 28,
+            fit: BoxFit.contain,
           ),
         ),
     ],
@@ -621,24 +633,28 @@ class _LiveRoomHostCard extends StatelessWidget {
           width: 27,
           height: 27,
           decoration: BoxDecoration(
-            color: muted ? _danger : palette.accent,
+            color: muted ? palette.surfaceRaised : palette.accent,
             shape: BoxShape.circle,
             border: Border.all(color: palette.background, width: 3),
           ),
-          child: active
-              ? const Center(child: _SpeakingBadge())
-              : Image.asset(
-                  muted
-                      ? 'assets/icons/live_muted.png'
-                      : 'assets/icons/live_mic.png',
-                  width: 21,
-                  height: 21,
-                  fit: BoxFit.contain,
-                ),
+          child: _buildStatusBadge(),
         ),
       ),
     ],
   );
+
+  Widget _buildStatusBadge() {
+    if (active) return const Center(child: _SpeakingBadge());
+    if (muted) {
+      return _MutedMicrophoneBadge(background: palette.surfaceRaised);
+    }
+    return Image.asset(
+      'assets/icons/live_mic.png',
+      width: 21,
+      height: 21,
+      fit: BoxFit.contain,
+    );
+  }
 }
 
 class _LiveRoomInfoNotice extends StatelessWidget {
@@ -812,10 +828,12 @@ class _LiveRoomParticipantCard extends StatelessWidget {
               if (isSpeaking)
                 const Positioned(right: -2, bottom: -2, child: _SpeakingBadge())
               else if (participant.role != 'speaker' || participant.muted)
-                const Positioned(
+                Positioned(
                   right: -2,
                   bottom: -2,
-                  child: _MutedMicrophoneBadge(),
+                  child: _MutedMicrophoneBadge(
+                    background: palette.surfaceRaised,
+                  ),
                 )
               else
                 const Positioned(
@@ -938,14 +956,21 @@ class _LiveRoomNetworkNotice extends StatelessWidget {
 }
 
 class _MutedMicrophoneBadge extends StatelessWidget {
-  const _MutedMicrophoneBadge();
+  const _MutedMicrophoneBadge({required this.background});
+
+  final Color background;
 
   @override
-  Widget build(BuildContext context) => Image.asset(
-    'assets/icons/live_muted.png',
+  Widget build(BuildContext context) => Container(
     width: 21,
     height: 21,
-    fit: BoxFit.contain,
+    decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+    child: Image.asset(
+      'assets/icons/live_muted_red.png',
+      width: 13,
+      height: 16,
+      fit: BoxFit.contain,
+    ),
   );
 }
 

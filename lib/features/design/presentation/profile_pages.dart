@@ -7,6 +7,7 @@ class _ProfilePage extends StatelessWidget {
     required this.displayName,
     required this.accountId,
     required this.username,
+    required this.avatarUrl,
     this.onBack,
   });
   final AcoPalette palette;
@@ -14,6 +15,7 @@ class _ProfilePage extends StatelessWidget {
   final String displayName;
   final String accountId;
   final String username;
+  final String avatarUrl;
   final VoidCallback? onBack;
   @override
   Widget build(BuildContext context) => ListView(
@@ -33,7 +35,30 @@ class _ProfilePage extends StatelessWidget {
             label: '编辑个人资料',
             child: GestureDetector(
               onTap: () => onOpen(AcoScreen.profileEdit),
-              child: const AcoAvatar(size: 68),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  AcoAvatar(size: 68, imageUrl: avatarUrl),
+                  Positioned(
+                    right: -2,
+                    bottom: -2,
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: palette.primaryText,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: palette.background, width: 2),
+                      ),
+                      child: Icon(
+                        CupertinoIcons.pencil,
+                        size: 12,
+                        color: palette.background,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 18),
@@ -126,12 +151,102 @@ class _ProfilePage extends StatelessWidget {
   );
 }
 
+class _AvatarCropPage extends StatefulWidget {
+  const _AvatarCropPage({required this.imageBytes});
+
+  final Uint8List imageBytes;
+
+  @override
+  State<_AvatarCropPage> createState() => _AvatarCropPageState();
+}
+
+class _AvatarCropPageState extends State<_AvatarCropPage> {
+  final CropController _controller = CropController();
+  bool _cropping = false;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: _black,
+    child: SafeArea(
+      child: Column(
+        children: [
+          SizedBox(
+            height: 56,
+            child: Row(
+              children: [
+                CupertinoButton(
+                  onPressed: _cropping ? null : () => Navigator.pop(context),
+                  child: const Icon(
+                    CupertinoIcons.back,
+                    color: CupertinoColors.white,
+                  ),
+                ),
+                const Expanded(
+                  child: Text(
+                    '裁剪头像',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: CupertinoColors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                CupertinoButton(
+                  onPressed: _cropping
+                      ? null
+                      : () {
+                          setState(() => _cropping = true);
+                          _controller.crop();
+                        },
+                  child: _cropping
+                      ? const CupertinoActivityIndicator(
+                          color: CupertinoColors.white,
+                        )
+                      : const Text('完成'),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Crop(
+              image: widget.imageBytes,
+              controller: _controller,
+              withCircleUi: true,
+              interactive: true,
+              fixCropRect: true,
+              baseColor: _black,
+              maskColor: _black.withValues(alpha: .72),
+              onCropped: (result) {
+                switch (result) {
+                  case CropSuccess(:final croppedImage):
+                    Navigator.pop(context, croppedImage);
+                  case CropFailure():
+                    if (mounted) setState(() => _cropping = false);
+                }
+              },
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 10, 24, 24),
+            child: Text(
+              '拖动和缩放图片，圆形区域将作为头像保存',
+              style: TextStyle(color: CupertinoColors.systemGrey, fontSize: 14),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _ProfileQrPage extends StatelessWidget {
   const _ProfileQrPage({
     required this.palette,
     required this.displayName,
     required this.accountId,
     required this.username,
+    required this.avatarUrl,
     required this.onBack,
   });
 
@@ -139,6 +254,7 @@ class _ProfileQrPage extends StatelessWidget {
   final String displayName;
   final String accountId;
   final String username;
+  final String avatarUrl;
   final VoidCallback onBack;
 
   String get _handle => username.startsWith('@') ? username : '@$username';
@@ -161,7 +277,7 @@ class _ProfileQrPage extends StatelessWidget {
         const SizedBox(height: 18),
         Row(
           children: [
-            const AcoAvatar(size: 70),
+            AcoAvatar(size: 70, imageUrl: avatarUrl),
             const SizedBox(width: 18),
             Expanded(
               child: Column(
@@ -278,16 +394,20 @@ class _ProfileEditPage extends StatefulWidget {
     required this.initialName,
     required this.initialUsername,
     required this.accountId,
+    required this.initialAvatarUrl,
     this.onDisplayNameChanged,
     this.onUsernameChanged,
+    this.onAvatarUrlChanged,
   });
 
   final AcoPalette palette;
   final String initialName;
   final String initialUsername;
   final String accountId;
+  final String initialAvatarUrl;
   final ValueChanged<String>? onDisplayNameChanged;
   final ValueChanged<String>? onUsernameChanged;
+  final ValueChanged<String>? onAvatarUrlChanged;
 
   @override
   State<_ProfileEditPage> createState() => _ProfileEditPageState();
@@ -301,6 +421,36 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
     text: widget.initialUsername,
   );
   bool _saving = false;
+  bool _uploadingAvatar = false;
+  late String _avatarUrl = widget.initialAvatarUrl;
+
+  Future<void> _pickAvatar() async {
+    final image = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+    final imageBytes = await image.readAsBytes();
+    if (!mounted) return;
+    final croppedBytes = await Navigator.of(context).push<Uint8List>(
+      CupertinoPageRoute(
+        builder: (_) => _AvatarCropPage(imageBytes: imageBytes),
+      ),
+    );
+    if (croppedBytes == null) return;
+    setState(() => _uploadingAvatar = true);
+    final client = AccountApiClient();
+    try {
+      final profile = await AccountSession(client).uploadAvatar(croppedBytes);
+      if (!mounted) return;
+      setState(() => _avatarUrl = profile.avatarUrl);
+      widget.onAvatarUrlChanged?.call(profile.avatarUrl);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '头像上传失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '头像上传失败', '请检查网络后重试。');
+    } finally {
+      client.close();
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -344,10 +494,40 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
         Center(
           child: Column(
             children: [
-              const AcoAvatar(size: 84),
+              GestureDetector(
+                onTap: _uploadingAvatar ? null : _pickAvatar,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    AcoAvatar(size: 84, imageUrl: _avatarUrl),
+                    Positioned(
+                      right: -2,
+                      bottom: -2,
+                      child: Container(
+                        width: 26,
+                        height: 26,
+                        decoration: BoxDecoration(
+                          color: widget.palette.primaryText,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: widget.palette.background,
+                            width: 2,
+                          ),
+                        ),
+                        child: Icon(
+                          CupertinoIcons.pencil,
+                          size: 13,
+                          color: widget.palette.background,
+                        ),
+                      ),
+                    ),
+                    if (_uploadingAvatar) const CupertinoActivityIndicator(),
+                  ],
+                ),
+              ),
               const SizedBox(height: 10),
               Text(
-                '头像暂不支持修改',
+                _uploadingAvatar ? '正在上传头像…' : '点击头像从相册选择',
                 style: TextStyle(
                   color: widget.palette.mutedText,
                   fontSize: AcoTypography.caption,

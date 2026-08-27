@@ -28,6 +28,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:crop_your_image/crop_your_image.dart';
 import 'package:livekit_client/livekit_client.dart' hide ConnectionState;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -167,6 +168,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   int _liveListRevision = 0;
   String? _accountId = '1000000000000000';
   final ValueNotifier<String> _username = ValueNotifier<String>('aco');
+  final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
   String _language = '简体中文';
 
   @override
@@ -201,6 +203,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _accountId = profile.accountId;
     _displayName.value = profile.nickname;
     _username.value = profile.username;
+    _avatarUrl.value = profile.avatarUrl;
   }
 
   @override
@@ -211,7 +214,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     if (profile != null &&
         (oldProfile?.accountId != profile.accountId ||
             oldProfile?.nickname != profile.nickname ||
-            oldProfile?.username != profile.username)) {
+            oldProfile?.username != profile.username ||
+            oldProfile?.avatarUrl != profile.avatarUrl)) {
       _applyAccountProfile(profile);
     }
     if (oldWidget.walletIdentity != widget.walletIdentity) _loadWalletName();
@@ -223,6 +227,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _displayName.dispose();
     _walletName.dispose();
     _username.dispose();
+    _avatarUrl.dispose();
     _selectedWalletChain.dispose();
     super.dispose();
   }
@@ -326,6 +331,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       _isDark,
       _displayName,
       _username,
+      _avatarUrl,
       _walletName,
       _selectedWalletChain,
     ]),
@@ -347,9 +353,11 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       accountId: _accountId,
       walletLoginFuture: widget.walletLoginFuture,
       username: _username.value,
+      avatarUrl: _avatarUrl.value,
       displayName: _displayName.value,
       onDisplayNameChanged: (name) => _displayName.value = name,
       onUsernameChanged: (username) => _username.value = username,
+      onAvatarUrlChanged: (avatarUrl) => _avatarUrl.value = avatarUrl,
       language: _language,
       liveListRevision: _liveListRevision,
       onLanguageChanged: (language) => setState(() => _language = language),
@@ -376,6 +384,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                     animation: Listenable.merge([
                       _displayName,
                       _username,
+                      _avatarUrl,
                       _walletName,
                       _selectedWalletChain,
                     ]),
@@ -395,10 +404,13 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       accountId: _accountId,
                       walletLoginFuture: widget.walletLoginFuture,
                       username: _username.value,
+                      avatarUrl: _avatarUrl.value,
                       displayName: _displayName.value,
                       onDisplayNameChanged: (name) => _displayName.value = name,
                       onUsernameChanged: (username) =>
                           _username.value = username,
+                      onAvatarUrlChanged: (avatarUrl) =>
+                          _avatarUrl.value = avatarUrl,
                       language: _language,
                       liveListRevision: _liveListRevision,
                       onLanguageChanged: (language) =>

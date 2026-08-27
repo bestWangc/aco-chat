@@ -20,6 +20,7 @@ class AcoScreenPage extends StatelessWidget {
     this.accountId,
     this.walletLoginFuture,
     this.username,
+    this.avatarUrl,
     this.walletIdentity,
     this.walletSecretStore,
     this.walletName = 'Wallet1',
@@ -30,6 +31,7 @@ class AcoScreenPage extends StatelessWidget {
     this.onSendTokenSelected,
     this.onDisplayNameChanged,
     this.onUsernameChanged,
+    this.onAvatarUrlChanged,
     this.language = '简体中文',
     this.liveListRevision = 0,
     this.onLanguageChanged,
@@ -49,6 +51,7 @@ class AcoScreenPage extends StatelessWidget {
   final String? accountId;
   final Future<AccountProfile?>? walletLoginFuture;
   final String? username;
+  final String? avatarUrl;
   final WalletIdentity? walletIdentity;
   final WalletSecretStore? walletSecretStore;
   final String walletName;
@@ -59,6 +62,7 @@ class AcoScreenPage extends StatelessWidget {
   final ValueChanged<TransferToken>? onSendTokenSelected;
   final ValueChanged<String>? onDisplayNameChanged;
   final ValueChanged<String>? onUsernameChanged;
+  final ValueChanged<String>? onAvatarUrlChanged;
   final String language;
   final int liveListRevision;
   final ValueChanged<String>? onLanguageChanged;
@@ -182,6 +186,7 @@ class AcoScreenPage extends StatelessWidget {
                 displayName: currentDisplayName,
                 accountId: currentAccountId,
                 username: currentUsername,
+                avatarUrl: avatarUrl ?? '',
                 onBack: isRoot ? null : () => Navigator.of(context).maybePop(),
               ),
       AcoScreen.profileEdit =>
@@ -194,8 +199,10 @@ class AcoScreenPage extends StatelessWidget {
                 initialName: currentDisplayName,
                 initialUsername: currentUsername,
                 accountId: currentAccountId,
+                initialAvatarUrl: avatarUrl ?? '',
                 onDisplayNameChanged: onDisplayNameChanged,
                 onUsernameChanged: onUsernameChanged,
+                onAvatarUrlChanged: onAvatarUrlChanged,
               ),
       AcoScreen.profileQr =>
         currentDisplayName == null ||
@@ -207,6 +214,7 @@ class AcoScreenPage extends StatelessWidget {
                 displayName: currentDisplayName,
                 accountId: currentAccountId,
                 username: currentUsername,
+                avatarUrl: avatarUrl ?? '',
                 onBack: () => Navigator.of(context).maybePop(),
               ),
       AcoScreen.profileTheme => _ThemeSettingsPage(
@@ -803,23 +811,45 @@ class AcoAvatar extends StatelessWidget {
     this.large = false,
     this.size,
     this.assetPath = _defaultAvatarAsset,
+    this.imageUrl,
     super.key,
   });
   final bool large;
   final double? size;
   final String assetPath;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
     final resolvedSize = size ?? (large ? 76.0 : 42.0);
+    final parsed = imageUrl == null || imageUrl!.isEmpty
+        ? null
+        : Uri.tryParse(imageUrl!);
+    final url = parsed?.hasScheme == true
+        ? imageUrl
+        : (parsed == null
+              ? null
+              : Uri.parse(
+                  const AppConfig().apiBaseUrl,
+                ).replace(path: parsed.path).toString());
+    final fallback = Image.asset(
+      assetPath,
+      width: resolvedSize,
+      height: resolvedSize,
+      fit: BoxFit.cover,
+      semanticLabel: '用户头像',
+    );
     return ClipOval(
-      child: Image.asset(
-        assetPath,
-        width: resolvedSize,
-        height: resolvedSize,
-        fit: BoxFit.cover,
-        semanticLabel: '用户头像',
-      ),
+      child: url == null
+          ? fallback
+          : Image.network(
+              url,
+              width: resolvedSize,
+              height: resolvedSize,
+              fit: BoxFit.cover,
+              semanticLabel: '用户头像',
+              errorBuilder: (_, _, _) => fallback,
+            ),
     );
   }
 }
