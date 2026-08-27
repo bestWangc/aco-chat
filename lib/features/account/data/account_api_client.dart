@@ -334,7 +334,7 @@ class AccountApiClient {
       _uri('lives/$liveId/members').replace(
         queryParameters: {
           'page': '$page',
-          'page_size': '30',
+          'page_size': '20',
           if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         },
       ),

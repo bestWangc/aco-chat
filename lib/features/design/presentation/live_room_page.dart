@@ -475,47 +475,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
-  Future<void> _confirmSpeakerMute(LiveParticipant speaker) async {
-    final shouldMute = !speaker.muted;
-    final actionLabel = shouldMute ? '静音' : '解除静音';
-    final confirmed = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text('$actionLabel ${speaker.nickname}'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text('是否要$actionLabel该用户？'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            textStyle: TextStyle(color: widget.palette.accent),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: shouldMute,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(actionLabel),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    final live = widget.live;
-    if (live == null) return;
-    try {
-      await _accountSession.setLiveSpeakerMute(
-        live.id,
-        speaker.userId,
-        shouldMute,
-      );
-    } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '设置麦克风失败', error.message);
-    } catch (_) {
-      if (mounted) _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
-    }
-  }
-
   void _showMembers() {
     final room = _room;
     final live = widget.live;
@@ -534,6 +493,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         loadPage: (page, keyword) =>
             _accountSession.liveMembers(live.id, page: page, keyword: keyword),
         onMemberTap: room.viewerRole == 'host' ? _showMemberActions : null,
+        audioMuted: room.audioMuted,
+        onToggleAudioMute: room.viewerRole == 'host'
+            ? (muted) => _setAudioMute(muted)
+            : null,
+        chatMuted: room.chatMuted,
+        onToggleChatMute: room.viewerRole == 'host'
+            ? (muted) => _setChatMute(muted)
+            : null,
       ),
     );
   }
@@ -728,8 +695,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _showHostActions() {
     final room = _room;
-    final chatMuted = room?.chatMuted ?? false;
-    final audioMuted = room?.audioMuted ?? false;
     showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => CupertinoTheme(
@@ -747,20 +712,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 },
                 child: _hostActionLabel('发起签到'),
               ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_setAudioMute(!audioMuted));
-              },
-              child: _hostActionLabel(audioMuted ? '解除全员静音' : '全员静音'),
-            ),
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_setChatMute(!chatMuted));
-              },
-              child: _hostActionLabel(chatMuted ? '解除全员禁言' : '全员禁言'),
-            ),
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.of(sheetContext).pop();

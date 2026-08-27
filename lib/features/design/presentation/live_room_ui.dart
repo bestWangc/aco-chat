@@ -25,7 +25,9 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         speakingParticipantIds: _liveKitSpeakingParticipantIds,
         onCheckIn: _confirmCheckIn,
         onShowRaisedHandRequests: () => unawaited(_showRaisedHandRequests()),
-        onSpeakerTap: isHost ? _confirmSpeakerMute : null,
+        // Member mute/unmute is managed from the members list. Keep avatars
+        // display-only so tapping one does not open an action sheet.
+        onSpeakerTap: null,
       );
     }
     if (_roomLoading) {

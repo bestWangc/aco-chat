@@ -407,7 +407,11 @@ class _RaisedHandRequestChip extends StatelessWidget {
     height: 56,
     child: Row(
       children: [
-        AcoAvatar(size: 32, assetPath: _liveRoomListenerAvatarAsset),
+        AcoAvatar(
+          size: 32,
+          assetPath: _liveRoomListenerAvatarAsset,
+          imageUrl: user.avatarUrl,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -631,7 +635,11 @@ class _LiveRoomHostCard extends StatelessWidget {
   Widget _buildHostAvatar() => Stack(
     clipBehavior: Clip.none,
     children: [
-      AcoAvatar(size: 76, assetPath: _liveRoomHostAvatarAsset),
+      AcoAvatar(
+        size: 76,
+        assetPath: _liveRoomHostAvatarAsset,
+        imageUrl: host.avatarUrl,
+      ),
       if (active) const Positioned.fill(child: _SpeakingRing()),
       Positioned(
         right: -3,
@@ -815,6 +823,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
     final avatar = AcoAvatar(
       size: avatarSize,
       assetPath: _liveRoomListenerAvatarAsset,
+      imageUrl: participant.avatarUrl,
     );
     return SizedBox(
       width: width,
@@ -1036,16 +1045,16 @@ class _MemberRoleBadge extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
     decoration: BoxDecoration(
-      color: isHost ? const Color(0x269BEF00) : const Color(0x26FFFFFF),
+      color: isHost ? const Color(0x269BEF00) : const Color(0x14000000),
       borderRadius: BorderRadius.circular(5),
       border: Border.all(
-        color: isHost ? const Color(0x669BEF00) : const Color(0x40FFFFFF),
+        color: isHost ? const Color(0x669BEF00) : const Color(0x26000000),
       ),
     ),
     child: Text(
       label,
       style: TextStyle(
-        color: isHost ? const Color(0xFF9BEF00) : const Color(0xFFD0D0D0),
+        color: isHost ? const Color(0xFF6E9900) : const Color(0xFF555555),
         fontSize: 11,
         height: 1.1,
         fontWeight: FontWeight.w500,
@@ -1081,6 +1090,10 @@ class _LiveRoomMembersSheet extends StatefulWidget {
     required this.currentUserId,
     required this.loadPage,
     this.onMemberTap,
+    this.audioMuted = false,
+    this.onToggleAudioMute,
+    this.chatMuted = false,
+    this.onToggleChatMute,
   });
 
   final AcoPalette palette;
@@ -1089,6 +1102,10 @@ class _LiveRoomMembersSheet extends StatefulWidget {
   final int currentUserId;
   final Future<LiveMembersPage> Function(int page, String keyword) loadPage;
   final Future<void> Function(LiveParticipant member)? onMemberTap;
+  final bool audioMuted;
+  final Future<void> Function(bool muted)? onToggleAudioMute;
+  final bool chatMuted;
+  final Future<void> Function(bool muted)? onToggleChatMute;
 
   @override
   State<_LiveRoomMembersSheet> createState() => _LiveRoomMembersSheetState();
@@ -1096,6 +1113,7 @@ class _LiveRoomMembersSheet extends StatefulWidget {
 
 class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
   final _searchController = TextEditingController();
+  final _membersScrollController = ScrollController();
   final _members = <LiveParticipant>[];
   // Start idle so the initial request in initState is not blocked by the
   // duplicate-load guard.
@@ -1105,22 +1123,39 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
   int _page = 0;
   int _total = 0;
   bool _hasMore = false;
+  late bool _audioMuted = widget.audioMuted;
+  late bool _chatMuted = widget.chatMuted;
 
   @override
   void initState() {
     super.initState();
     _total = widget.initialTotal;
+    _membersScrollController.addListener(_onMembersScroll);
     _load(reset: true);
+  }
+
+  void _onMembersScroll() {
+    if (!_membersScrollController.hasClients ||
+        _loading ||
+        _loadingMore ||
+        !_hasMore) {
+      return;
+    }
+    if (_membersScrollController.position.extentAfter < 120) {
+      _load(reset: false);
+    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _membersScrollController.dispose();
     super.dispose();
   }
 
   Future<void> _load({required bool reset}) async {
-    if ((!reset && (_loadingMore || !_hasMore)) || (reset && _loading)) {
+    if ((!reset && (_loading || _loadingMore || !_hasMore)) ||
+        (reset && _loading)) {
       return;
     }
     setState(() {
@@ -1171,7 +1206,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
       member.username.isEmpty ? member.nickname : member.username,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
-      style: TextStyle(color: widget.palette.mutedText, fontSize: 13),
+      style: const TextStyle(color: Color(0xFF6F6F6F), fontSize: 13),
     );
   }
 
@@ -1179,7 +1214,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
   Widget build(BuildContext context) => Container(
     height: MediaQuery.sizeOf(context).height * .78,
     decoration: BoxDecoration(
-      color: widget.palette.surface,
+      color: CupertinoColors.white,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
     ),
     child: SafeArea(
@@ -1199,7 +1234,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                       child: Text(
                         '管理成员 ($_total)',
                         style: TextStyle(
-                          color: widget.palette.primaryText,
+                          color: const Color(0xFF151515),
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1212,7 +1247,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                     onPressed: () => Navigator.of(context).pop(),
                     child: Icon(
                       CupertinoIcons.xmark,
-                      color: widget.palette.primaryText,
+                      color: const Color(0xFF151515),
                       size: 20,
                     ),
                   ),
@@ -1224,12 +1259,18 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
               child: CupertinoTextField(
                 controller: _searchController,
                 placeholder: '搜索成员',
+                style: const TextStyle(color: Color(0xFF151515), fontSize: 14),
+                placeholderStyle: const TextStyle(
+                  color: Color(0xFF888888),
+                  fontSize: 14,
+                ),
+                cursorColor: const Color(0xFF151515),
                 padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
                 prefix: Padding(
                   padding: const EdgeInsets.only(left: 8),
                   child: Icon(
                     CupertinoIcons.search,
-                    color: widget.palette.mutedText,
+                    color: const Color(0xFF777777),
                     size: 22,
                   ),
                 ),
@@ -1246,23 +1287,94 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _load(reset: true),
                 decoration: BoxDecoration(
-                  border: Border.all(
-                    color: widget.palette.mutedText.withValues(alpha: .24),
-                  ),
+                  border: Border.all(color: const Color(0x26000000)),
                   borderRadius: BorderRadius.circular(18),
                 ),
               ),
             ),
             const SizedBox(height: 8),
             Expanded(child: _buildBody()),
+            if (widget.isModerator &&
+                widget.onToggleAudioMute != null &&
+                widget.onToggleChatMute != null)
+              _buildMuteActions(),
           ],
         ),
       ),
     ),
   );
 
+  Widget _buildMuteActions() => Container(
+    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+    decoration: const BoxDecoration(
+      color: CupertinoColors.white,
+      border: Border(top: BorderSide(color: Color(0x14000000))),
+    ),
+    child: SafeArea(
+      top: false,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          _buildMuteButton(
+            label: _audioMuted ? '解除全体静音' : '全体静音',
+            currentMuted: _audioMuted,
+            targetMuted: !_audioMuted,
+            onToggle: widget.onToggleAudioMute!,
+            onChanged: (muted) => _audioMuted = muted,
+          ),
+          const SizedBox(width: 24),
+          _buildMuteButton(
+            label: _chatMuted ? '解除全员禁言' : '全员禁言',
+            currentMuted: _chatMuted,
+            targetMuted: !_chatMuted,
+            onToggle: widget.onToggleChatMute!,
+            onChanged: (muted) => _chatMuted = muted,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildMuteButton({
+    required String label,
+    required bool currentMuted,
+    required bool targetMuted,
+    required Future<void> Function(bool muted) onToggle,
+    required void Function(bool muted) onChanged,
+  }) => SizedBox(
+    width: 110,
+    height: 34,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      borderRadius: BorderRadius.circular(6),
+      color: const Color(0xFF202020),
+      onPressed: () async {
+        if (currentMuted == targetMuted) return;
+        try {
+          await onToggle(targetMuted);
+          if (mounted) setState(() => onChanged(targetMuted));
+        } catch (_) {
+          // The parent reports request failures to the user.
+        }
+      },
+      child: Text(
+        label,
+        style: TextStyle(
+          color: CupertinoColors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ),
+  );
+
   Widget _buildBody() {
-    if (_loading) return const Center(child: CupertinoActivityIndicator());
+    if (_loading) {
+      return const Center(
+        child: CupertinoActivityIndicator(color: Color(0xFF666666)),
+      );
+    }
     if (_error != null && _members.isEmpty) {
       return Center(
         child: CupertinoButton(
@@ -1273,22 +1385,20 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     }
     if (_members.isEmpty) {
       return Center(
-        child: Text(
-          '没有找到成员',
-          style: TextStyle(color: widget.palette.mutedText),
-        ),
+        child: Text('没有找到成员', style: const TextStyle(color: Color(0xFF6F6F6F))),
       );
     }
     return ListView.builder(
+      controller: _membersScrollController,
       padding: EdgeInsets.zero,
       itemCount: _members.length + (_hasMore ? 1 : 0),
       itemBuilder: (context, index) {
         if (index == _members.length) {
-          return CupertinoButton(
-            onPressed: _loadingMore ? null : () => _load(reset: false),
-            child: _loadingMore
-                ? const CupertinoActivityIndicator()
-                : const Text('加载更多'),
+          return const SizedBox(
+            height: 36,
+            child: Center(
+              child: CupertinoActivityIndicator(color: Color(0xFF666666)),
+            ),
           );
         }
         final member = _members[index];
@@ -1296,65 +1406,76 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
             widget.isModerator &&
             member.userId != widget.currentUserId &&
             member.role != 'host';
-        return CupertinoButton(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
-          onPressed: canManage && widget.onMemberTap != null
-              ? () async {
-                  await widget.onMemberTap!(member);
-                  if (mounted) _load(reset: true);
-                }
-              : null,
-          child: Row(
-            children: [
-              AcoAvatar(size: 32, imageUrl: member.avatarUrl),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      member.nickname,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: widget.palette.primaryText,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
+              onPressed: canManage && widget.onMemberTap != null
+                  ? () async {
+                      await widget.onMemberTap!(member);
+                      if (mounted) _load(reset: true);
+                    }
+                  : null,
+              child: Row(
+                children: [
+                  AcoAvatar(size: 32, imageUrl: member.avatarUrl),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          member.nickname,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: const Color(0xFF151515),
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        _buildMemberSubtitle(member),
+                      ],
                     ),
-                    const SizedBox(height: 1),
-                    _buildMemberSubtitle(member),
-                  ],
-                ),
+                  ),
+                  if (member.role == 'listener')
+                    Image.asset(
+                      'assets/icons/live_muted.png',
+                      width: 22,
+                      height: 22,
+                      fit: BoxFit.contain,
+                    )
+                  else if (member.role == 'host' || member.role == 'speaker')
+                    member.muted
+                        ? Image.asset(
+                            'assets/icons/live_muted_red.png',
+                            width: 22,
+                            height: 22,
+                            fit: BoxFit.contain,
+                          )
+                        : Image.asset(
+                            'assets/icons/live_mic_open.png',
+                            width: 18,
+                            height: 22,
+                            fit: BoxFit.contain,
+                          ),
+                  if (canManage)
+                    Icon(
+                      CupertinoIcons.ellipsis_circle,
+                      color: const Color(0xFF777777),
+                      size: 23,
+                    ),
+                ],
               ),
-              if (member.role == 'host' || member.role == 'speaker')
-                member.muted
-                    ? Image.asset(
-                        'assets/icons/live_muted_red.png',
-                        width: 22,
-                        height: 22,
-                        fit: BoxFit.contain,
-                      )
-                    : ColorFiltered(
-                        colorFilter: const ColorFilter.mode(
-                          Color(0xFFA1FF00),
-                          BlendMode.srcIn,
-                        ),
-                        child: Image(
-                          image: _RoomBottomBar._liveMicIcon,
-                          width: 18,
-                          height: 22,
-                          fit: BoxFit.contain,
-                        ),
-                      ),
-              if (canManage)
-                Icon(
-                  CupertinoIcons.ellipsis_circle,
-                  color: widget.palette.mutedText,
-                  size: 23,
-                ),
-            ],
-          ),
+            ),
+            Container(
+              height: 1,
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              color: const Color(0x14000000),
+            ),
+          ],
         );
       },
     );
