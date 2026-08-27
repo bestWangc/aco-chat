@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 const _forceUpdateMessage = '当前版本过低，请更新后继续使用。';
@@ -49,6 +51,57 @@ class AccountApiException implements Exception {
 /// HTTP gateway for the account endpoints. Supply [baseUri] in development or
 /// tests; the production default is [AppConfig.apiBaseUrl].
 class AccountApiClient {
+  static String? lastRequest;
+  static int? lastStatusCode;
+  static String? lastResponseBody;
+  static String? lastError;
+
+  static Future<String> runConnectionDiagnostics() async {
+    final baseUri = Uri.parse(const AppConfig().apiBaseUrl);
+    final host = baseUri.host;
+    final port = baseUri.hasPort
+        ? baseUri.port
+        : (baseUri.scheme == 'http' ? 80 : 443);
+    final lines = <String>['目标：${baseUri.scheme}://$host:$port'];
+    try {
+      final addresses = await InternetAddress.lookup(
+        host,
+      ).timeout(const Duration(seconds: 5));
+      lines.add(
+        'DNS：成功（${addresses.map((address) => address.address).join(', ')}）',
+      );
+    } on Object catch (error) {
+      lines.add('DNS：失败（$error）');
+      return lines.join('\n');
+    }
+
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    try {
+      final healthUri = baseUri.replace(path: '/healthz', query: '');
+      final request = await client
+          .getUrl(healthUri)
+          .timeout(const Duration(seconds: 10));
+      final response = await request.close().timeout(
+        const Duration(seconds: 10),
+      );
+      final body = await response.transform(utf8.decoder).join();
+      lines.add('TLS/TCP：成功');
+      lines.add('HTTP：${response.statusCode}');
+      if (body.isNotEmpty) lines.add('响应：$body');
+    } on HandshakeException catch (error) {
+      lines.add('TLS：失败（$error）');
+    } on TimeoutException catch (error) {
+      lines.add('连接：超时（$error）');
+    } on SocketException catch (error) {
+      lines.add('TCP：失败（$error）');
+    } on Object catch (error) {
+      lines.add('连接：失败（$error）');
+    } finally {
+      client.close(force: true);
+    }
+    return lines.join('\n');
+  }
+
   static const _clientHeaders = <String, String>{
     'content-type': 'application/json',
     'x-app-version': AppConfig.appVersion,
@@ -56,7 +109,9 @@ class AccountApiClient {
 
   AccountApiClient({Uri? baseUri, http.Client? httpClient})
     : _baseUri = baseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
-      _httpClient = httpClient ?? http.Client();
+      _httpClient = _RecordingClient(httpClient ?? http.Client()) {
+    debugPrint('[API] base URL=$_baseUri appVersion=${AppConfig.appVersion}');
+  }
 
   final Uri _baseUri;
   final http.Client _httpClient;
@@ -536,6 +591,17 @@ class AccountApiClient {
   }
 
   Map<String, dynamic> _body(http.Response response) {
+    final diagnosticBody = _redactSensitiveData(response.body);
+    lastRequest =
+        '${response.request?.method ?? 'UNKNOWN'} ${response.request?.url ?? '<unknown URL>'}';
+    lastStatusCode = response.statusCode;
+    lastResponseBody = diagnosticBody;
+    lastError = response.statusCode >= 400 ? diagnosticBody : null;
+    debugPrint(
+      '[API] ${response.request?.method ?? 'UNKNOWN'} '
+      '${response.request?.url ?? '<unknown URL>'} '
+      'status=${response.statusCode} body=$diagnosticBody',
+    );
     final decoded = response.body.isEmpty
         ? <String, dynamic>{}
         : jsonDecode(response.body) as Map<String, dynamic>;
@@ -546,5 +612,85 @@ class AccountApiClient {
       );
     }
     return decoded;
+  }
+
+  String _redactSensitiveData(String body) {
+    if (body.isEmpty) return body;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        _redactMap(decoded);
+        return jsonEncode(decoded);
+      }
+    } on FormatException {
+      // Keep non-JSON response text unchanged for diagnostics.
+    }
+    return body;
+  }
+
+  void _redactMap(Map<String, dynamic> values) {
+    const sensitiveKeys = {
+      'access_token',
+      'refresh_token',
+      'token',
+      'authorization',
+      'password',
+      'signature',
+    };
+    for (final entry in values.entries.toList()) {
+      if (sensitiveKeys.contains(entry.key.toLowerCase())) {
+        values[entry.key] = '[已隐藏]';
+      } else if (entry.value is Map<String, dynamic>) {
+        _redactMap(entry.value as Map<String, dynamic>);
+      } else if (entry.value is List) {
+        for (final item in entry.value as List<Object?>) {
+          if (item is Map<String, dynamic>) _redactMap(item);
+        }
+      }
+    }
+  }
+}
+
+class _RecordingClient extends http.BaseClient {
+  _RecordingClient(this._inner);
+
+  final http.Client _inner;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    AccountApiClient.lastRequest = '${request.method} ${request.url}';
+    AccountApiClient.lastStatusCode = null;
+    AccountApiClient.lastResponseBody = null;
+    AccountApiClient.lastError = null;
+    try {
+      final response = await _inner.send(request);
+      AccountApiClient.lastStatusCode = response.statusCode;
+      return response;
+    } on Object catch (error) {
+      final kind = _networkErrorKind(error);
+      AccountApiClient.lastError = '$kind：$error';
+      debugPrint('[API] ${AccountApiClient.lastRequest} error=$error');
+      rethrow;
+    }
+  }
+
+  @override
+  void close() => _inner.close();
+
+  String _networkErrorKind(Object error) {
+    final underlyingError = error is http.ClientException
+        ? error.message
+        : error.toString();
+    final normalizedError = underlyingError.toLowerCase();
+    if (error is HandshakeException || normalizedError.contains('handshake')) {
+      return 'TLS 握手失败';
+    }
+    if (error is TimeoutException || normalizedError.contains('timed out')) {
+      return '请求超时';
+    }
+    if (error is SocketException || error is http.ClientException) {
+      return '网络连接失败';
+    }
+    return '网络请求失败';
   }
 }

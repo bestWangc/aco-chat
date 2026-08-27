@@ -139,16 +139,87 @@ class _ProfilePage extends StatelessWidget {
       ),
       const SizedBox(height: 28),
       Center(
-        child: Text(
-          '当前版本 v${AppConfig.appVersion}',
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.caption,
-          ),
+        child: Column(
+          children: [
+            Text(
+              '当前版本 v${AppConfig.appVersion}',
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.caption,
+              ),
+            ),
+            const SizedBox(height: 8),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              onPressed: () => _showConnectionDiagnostics(context, palette),
+              child: Text(
+                '连接诊断',
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.caption,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     ],
   );
+
+  Future<void> _showConnectionDiagnostics(
+    BuildContext context,
+    AcoPalette palette,
+  ) async {
+    final config = const AppConfig();
+    final request = AccountApiClient.lastRequest ?? '暂无请求记录';
+    final status = AccountApiClient.lastStatusCode?.toString() ?? '暂无';
+    final response = AccountApiClient.lastResponseBody ?? '暂无返回内容';
+    final error = AccountApiClient.lastError;
+    final diagnostics = await AccountApiClient.runConnectionDiagnostics();
+    if (!context.mounted) return;
+    final diagnosticText =
+        'API：${config.apiBaseUrl}\n'
+        '版本：${AppConfig.appVersion}\n'
+        '请求：$request\n'
+        '状态：$status\n'
+        '返回：$response'
+        '${error == null ? '' : '\n错误：$error'}\n\n'
+        '链路探测：\n$diagnostics';
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('连接诊断'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: SizedBox(
+            height: 260,
+            child: SingleChildScrollView(
+              child: Text(
+                diagnosticText,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.caption,
+                ),
+                textAlign: TextAlign.left,
+              ),
+            ),
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: diagnosticText));
+            },
+            child: const Text('复制'),
+          ),
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _AvatarCropPage extends StatefulWidget {
