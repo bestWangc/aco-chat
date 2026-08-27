@@ -94,6 +94,16 @@ class _RoomEmojiPicker extends StatelessWidget {
       config: emoji.Config(
         height: _roomEmojiPickerHeight,
         checkPlatformCompatibility: false,
+        // Keep the chat picker focused on high-frequency expressions. The
+        // recent tab remains available while the rarely used food, travel,
+        // objects, symbols and flags categories are intentionally omitted.
+        emojiSet: (locale) => getDefaultEmojiLocale(locale)
+            .where(
+              (category) =>
+                  category.category == emoji.Category.RECENT ||
+                  category.category == emoji.Category.SMILEYS,
+            )
+            .toList(growable: false),
         emojiViewConfig: emoji.EmojiViewConfig(
           backgroundColor: palette.surfaceRaised,
           columns: 8,
@@ -216,6 +226,13 @@ class _RoomBottomBar extends StatelessWidget {
   final VoidCallback onEmojiPressed;
   final VoidCallback onSubmitted;
 
+  // Supplied livestream microphone glyph for the active speaking state.
+  static final _liveMicIcon = MemoryImage(
+    base64Decode(
+      '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',
+    ),
+  );
+
   bool get _showMutedMicAsset => canSpeak && muted && !audioMuted;
 
   IconData? get _micIcon {
@@ -225,10 +242,11 @@ class _RoomBottomBar extends StatelessWidget {
 
   String? get _micIconAsset {
     if (!canSpeak) return null;
-    return _showMutedMicAsset
-        ? 'assets/icons/live_muted_red.png'
-        : 'assets/icons/live_mic.png';
+    return _showMutedMicAsset ? 'assets/icons/live_muted_red.png' : null;
   }
+
+  ImageProvider? get _micIconImage =>
+      canSpeak && !_showMutedMicAsset ? _liveMicIcon : null;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -251,6 +269,7 @@ class _RoomBottomBar extends StatelessWidget {
               _RoomControl(
                 icon: _micIcon,
                 iconAsset: _micIconAsset,
+                iconImage: _micIconImage,
                 label: audioMuted
                     ? '全员静音中'
                     : canSpeak
@@ -321,6 +340,7 @@ class _RoomControl extends StatelessWidget {
   const _RoomControl({
     this.icon,
     this.iconAsset,
+    this.iconImage,
     required this.label,
     required this.background,
     required this.foreground,
@@ -331,6 +351,7 @@ class _RoomControl extends StatelessWidget {
 
   final IconData? icon;
   final String? iconAsset;
+  final ImageProvider? iconImage;
   final String label;
   final Color background;
   final Color foreground;
@@ -342,7 +363,15 @@ class _RoomControl extends StatelessWidget {
   Widget build(BuildContext context) {
     final controlSize = large ? 56.0 : 48.0;
     final resolvedIconSize = iconSize ?? (large ? 20.0 : 17.0);
-    final iconWidget = iconAsset == null
+    final iconWidget = iconImage != null
+        ? Image(
+            image: iconImage!,
+            width: resolvedIconSize,
+            height: resolvedIconSize,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          )
+        : iconAsset == null
         ? Icon(icon, color: foreground, size: resolvedIconSize)
         : Image.asset(
             iconAsset!,

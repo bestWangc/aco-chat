@@ -281,6 +281,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             (speaker) => LiveParticipant(
               userId: speaker.userId,
               nickname: speaker.nickname,
+              avatarUrl: speaker.avatarUrl,
               role: speaker.role,
               handRaised: speaker.handRaised,
               muted: muted,
@@ -512,6 +513,86 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       if (mounted) _showNotice(context, '设置麦克风失败', error.message);
     } catch (_) {
       if (mounted) _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
+    }
+  }
+
+  void _showMembers() {
+    final room = _room;
+    final live = widget.live;
+    if (room == null || live == null) return;
+    // Clear the room message field before presenting the member sheet. If it
+    // remains focused, dismissing the sheet restores that focus and reopens
+    // the keyboard underneath the sheet.
+    _dismissKeyboard();
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (_) => _LiveRoomMembersSheet(
+        palette: widget.palette,
+        initialTotal: room.participantCount,
+        isModerator: room.viewerRole == 'host',
+        currentUserId: room.viewerUserId,
+        loadPage: (page, keyword) =>
+            _accountSession.liveMembers(live.id, page: page, keyword: keyword),
+        onMemberTap: room.viewerRole == 'host' ? _showMemberActions : null,
+      ),
+    );
+  }
+
+  Future<void> _showMemberActions(LiveParticipant member) async {
+    final live = widget.live;
+    if (live == null || member.role == 'host') return;
+    final action = await showCupertinoModalPopup<_LiveMemberAction>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: Text(member.nickname),
+        actions: [
+          if (member.role == 'listener')
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.approveSpeaker),
+              child: const Text('邀请上麦'),
+            ),
+          if (member.role == 'speaker') ...[
+            CupertinoActionSheetAction(
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(_LiveMemberAction.toggleMute),
+              child: Text(member.muted ? '解除静音' : '静音'),
+            ),
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.removeSpeaker),
+              child: const Text('移至听众'),
+            ),
+          ],
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+    if (action == null) return;
+    try {
+      switch (action) {
+        case _LiveMemberAction.approveSpeaker:
+          await _accountSession.approveLiveSpeaker(live.id, member.userId);
+        case _LiveMemberAction.toggleMute:
+          await _accountSession.setLiveSpeakerMute(
+            live.id,
+            member.userId,
+            !member.muted,
+          );
+        case _LiveMemberAction.removeSpeaker:
+          await _accountSession.removeLiveSpeaker(live.id, member.userId);
+      }
+      await _loadRoom(silent: true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '操作失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '操作失败', '请检查网络后重试。');
     }
   }
 

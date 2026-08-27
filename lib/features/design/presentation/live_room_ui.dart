@@ -52,7 +52,8 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         (_liveKitPublishReady && (isHost || serverViewerRole == 'speaker'));
     // The server keeps membership through a reconnect grace period, but do
     // not send mute requests while the realtime connection is recovering.
-    final canToggleMicrophone = canSpeak && !audioMuted && !_networkReconnecting;
+    final canToggleMicrophone =
+        canSpeak && !audioMuted && !_networkReconnecting;
     // A self-muted speaker becomes a listener and must raise their hand again.
     final chatMuted = room?.chatMuted == true && !isHost;
     // Do NOT add MediaQuery.viewInsetsOf: with adjustResize the window (and
@@ -83,6 +84,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         right: _LiveRoomHeaderActions(
           palette: palette,
           count: room?.participantCount,
+          onMembers: _showMembers,
           onMore: isHost ? _showHostActions : null,
         ),
         child: Stack(
@@ -90,36 +92,51 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
             Positioned.fill(
               child: Padding(
                 padding: EdgeInsets.only(bottom: bottomOverlayInset),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final overviewMaxHeight = math.max(
-                      0.0,
-                      constraints.maxHeight - 14,
-                    );
-                    return Column(
-                      children: [
-                        if (roomOverview != null)
-                          ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxHeight: overviewMaxHeight,
-                            ),
-                            child: SingleChildScrollView(
-                              primary: false,
-                              child: roomOverview,
-                            ),
-                          ),
-                        const SizedBox(height: 14),
-                        Expanded(
-                          child: _RoomChatHistory(
-                            palette: palette,
-                            liveMessages: _chatBuffer.messages,
-                            hasLive: live != null,
-                            scrollToLatestSignal: _scrollToLatestSignal,
-                          ),
-                        ),
-                      ],
-                    );
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    _dismissKeyboard();
+                    if (_emojiPickerVisible) {
+                      setState(() => _emojiPickerVisible = false);
+                    }
                   },
+                  onPanDown: (_) {
+                    if (_emojiPickerVisible) {
+                      setState(() => _emojiPickerVisible = false);
+                    }
+                    _dismissKeyboard();
+                  },
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final overviewMaxHeight = math.max(
+                        0.0,
+                        constraints.maxHeight - 14,
+                      );
+                      return Column(
+                        children: [
+                          if (roomOverview != null)
+                            ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: overviewMaxHeight,
+                              ),
+                              child: SingleChildScrollView(
+                                primary: false,
+                                child: roomOverview,
+                              ),
+                            ),
+                          const SizedBox(height: 14),
+                          Expanded(
+                            child: _RoomChatHistory(
+                              palette: palette,
+                              liveMessages: _chatBuffer.messages,
+                              hasLive: live != null,
+                              scrollToLatestSignal: _scrollToLatestSignal,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ),
               ),
             ),
@@ -133,24 +150,35 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 child: Center(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: CupertinoColors.black.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(18),
+                      color: CupertinoColors.black.withValues(alpha: 0.88),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(
+                        color: CupertinoColors.white.withValues(alpha: .22),
+                      ),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x66000000),
+                          blurRadius: 10,
+                          offset: Offset(0, 3),
+                        ),
+                      ],
                     ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
+                        horizontal: 17,
+                        vertical: 10,
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const CupertinoActivityIndicator(radius: 8),
-                          const SizedBox(width: 8),
+                          const CupertinoActivityIndicator(radius: 10),
+                          const SizedBox(width: 10),
                           Text(
                             _liveKitConnecting ? '正在连接语音…' : '语音重连中…',
                             style: const TextStyle(
                               color: CupertinoColors.white,
-                              fontSize: 13,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],

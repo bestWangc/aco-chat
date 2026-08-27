@@ -228,6 +228,17 @@ class AccountSession {
   Future<void> raiseLiveHand(int liveId) async =>
       _apiClient.raiseLiveHand(liveId: liveId, token: await _requireToken());
 
+  Future<LiveMembersPage> liveMembers(
+    int liveId, {
+    required int page,
+    String keyword = '',
+  }) async => _apiClient.listLiveMembers(
+    liveId: liveId,
+    page: page,
+    keyword: keyword,
+    token: await _requireToken(),
+  );
+
   Future<List<LiveParticipant>> raisedLiveHands(int liveId) async => _apiClient
       .listRaisedLiveHands(liveId: liveId, token: await _requireToken());
 

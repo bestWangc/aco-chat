@@ -285,7 +285,7 @@ class _RaisedHandRequests extends StatelessWidget {
               onClose: onClose,
               onRejectAll: onRejectAll,
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 2),
             ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
               child: ListView.separated(
@@ -444,11 +444,13 @@ class _LiveRoomHeaderActions extends StatelessWidget {
   const _LiveRoomHeaderActions({
     required this.palette,
     required this.count,
+    required this.onMembers,
     this.onMore,
   });
 
   final AcoPalette palette;
   final int? count;
+  final VoidCallback onMembers;
   final VoidCallback? onMore;
 
   // Provided livestream viewer-count glyph.
@@ -466,33 +468,38 @@ class _LiveRoomHeaderActions extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      Container(
-        constraints: const BoxConstraints(minHeight: 26),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-        decoration: BoxDecoration(
-          color: palette.surfaceRaised,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Image.memory(
-              _viewerCountIcon,
-              width: 18,
-              height: 18,
-              fit: BoxFit.contain,
-              filterQuality: FilterQuality.high,
-            ),
-            const SizedBox(width: 3),
-            Text(
-              _countLabel,
-              style: TextStyle(
-                color: palette.primaryText,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
+      CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(62, 36),
+        onPressed: onMembers,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 26),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: palette.surfaceRaised,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.memory(
+                _viewerCountIcon,
+                width: 18,
+                height: 18,
+                fit: BoxFit.contain,
+                filterQuality: FilterQuality.high,
               ),
-            ),
-          ],
+              const SizedBox(width: 3),
+              Text(
+                _countLabel,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
       if (onMore != null)
@@ -1019,6 +1026,34 @@ class _LiveMicrophoneBadge extends StatelessWidget {
   );
 }
 
+class _MemberRoleBadge extends StatelessWidget {
+  const _MemberRoleBadge({required this.label, this.isHost = false});
+
+  final String label;
+  final bool isHost;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: isHost ? const Color(0x269BEF00) : const Color(0x26FFFFFF),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(
+        color: isHost ? const Color(0x669BEF00) : const Color(0x40FFFFFF),
+      ),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: isHost ? const Color(0xFF9BEF00) : const Color(0xFFD0D0D0),
+        fontSize: 11,
+        height: 1.1,
+        fontWeight: FontWeight.w500,
+      ),
+    ),
+  );
+}
+
 class _SpeakingRing extends StatelessWidget {
   const _SpeakingRing();
 
@@ -1034,4 +1069,294 @@ class _SpeakingRing extends StatelessWidget {
       ),
     ),
   );
+}
+
+enum _LiveMemberAction { approveSpeaker, toggleMute, removeSpeaker }
+
+class _LiveRoomMembersSheet extends StatefulWidget {
+  const _LiveRoomMembersSheet({
+    required this.palette,
+    required this.initialTotal,
+    required this.isModerator,
+    required this.currentUserId,
+    required this.loadPage,
+    this.onMemberTap,
+  });
+
+  final AcoPalette palette;
+  final int initialTotal;
+  final bool isModerator;
+  final int currentUserId;
+  final Future<LiveMembersPage> Function(int page, String keyword) loadPage;
+  final Future<void> Function(LiveParticipant member)? onMemberTap;
+
+  @override
+  State<_LiveRoomMembersSheet> createState() => _LiveRoomMembersSheetState();
+}
+
+class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
+  final _searchController = TextEditingController();
+  final _members = <LiveParticipant>[];
+  // Start idle so the initial request in initState is not blocked by the
+  // duplicate-load guard.
+  bool _loading = false;
+  bool _loadingMore = false;
+  String? _error;
+  int _page = 0;
+  int _total = 0;
+  bool _hasMore = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _total = widget.initialTotal;
+    _load(reset: true);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load({required bool reset}) async {
+    if ((!reset && (_loadingMore || !_hasMore)) || (reset && _loading)) {
+      return;
+    }
+    setState(() {
+      if (reset) {
+        _loading = true;
+        _error = null;
+      } else {
+        _loadingMore = true;
+      }
+    });
+    try {
+      final result = await widget.loadPage(
+        reset ? 1 : _page + 1,
+        _searchController.text,
+      );
+      if (!mounted) return;
+      setState(() {
+        if (reset) _members.clear();
+        _members.addAll(result.members);
+        _page = result.page;
+        _total = result.total;
+        _hasMore = result.hasMore;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _error = '成员列表加载失败，请重试。');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadingMore = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildMemberSubtitle(LiveParticipant member) {
+    final badges = <Widget>[];
+    if (member.role == 'host') {
+      badges.add(const _MemberRoleBadge(label: '主持人', isHost: true));
+    }
+    if (member.userId == widget.currentUserId) {
+      badges.add(const _MemberRoleBadge(label: '我'));
+    }
+    if (badges.isNotEmpty) {
+      return Wrap(spacing: 4, runSpacing: 2, children: badges);
+    }
+    return Text(
+      member.username.isEmpty ? member.nickname : member.username,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: widget.palette.mutedText, fontSize: 13),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: MediaQuery.sizeOf(context).height * .78,
+    decoration: BoxDecoration(
+      color: widget.palette.surface,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    child: SafeArea(
+      top: false,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _dismissKeyboard,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 12, 6),
+              child: Row(
+                children: [
+                  const SizedBox(width: 44),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        '管理成员 ($_total)',
+                        style: TextStyle(
+                          color: widget.palette.primaryText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  CupertinoButton(
+                    padding: const EdgeInsets.all(10),
+                    minimumSize: const Size(44, 44),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Icon(
+                      CupertinoIcons.xmark,
+                      color: widget.palette.primaryText,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: CupertinoTextField(
+                controller: _searchController,
+                placeholder: '搜索成员',
+                padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 6),
+                prefix: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(
+                    CupertinoIcons.search,
+                    color: widget.palette.mutedText,
+                    size: 22,
+                  ),
+                ),
+                suffix: _searchController.text.isEmpty
+                    ? null
+                    : CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        onPressed: () {
+                          _searchController.clear();
+                          _load(reset: true);
+                        },
+                        child: const Icon(CupertinoIcons.clear_circled_solid),
+                      ),
+                onChanged: (_) => setState(() {}),
+                onSubmitted: (_) => _load(reset: true),
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: widget.palette.mutedText.withValues(alpha: .24),
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: _buildBody()),
+          ],
+        ),
+      ),
+    ),
+  );
+
+  Widget _buildBody() {
+    if (_loading) return const Center(child: CupertinoActivityIndicator());
+    if (_error != null && _members.isEmpty) {
+      return Center(
+        child: CupertinoButton(
+          onPressed: () => _load(reset: true),
+          child: Text(_error!),
+        ),
+      );
+    }
+    if (_members.isEmpty) {
+      return Center(
+        child: Text(
+          '没有找到成员',
+          style: TextStyle(color: widget.palette.mutedText),
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: _members.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _members.length) {
+          return CupertinoButton(
+            onPressed: _loadingMore ? null : () => _load(reset: false),
+            child: _loadingMore
+                ? const CupertinoActivityIndicator()
+                : const Text('加载更多'),
+          );
+        }
+        final member = _members[index];
+        final canManage =
+            widget.isModerator &&
+            member.userId != widget.currentUserId &&
+            member.role != 'host';
+        return CupertinoButton(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
+          onPressed: canManage && widget.onMemberTap != null
+              ? () async {
+                  await widget.onMemberTap!(member);
+                  if (mounted) _load(reset: true);
+                }
+              : null,
+          child: Row(
+            children: [
+              AcoAvatar(size: 32, imageUrl: member.avatarUrl),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      member.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: widget.palette.primaryText,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    _buildMemberSubtitle(member),
+                  ],
+                ),
+              ),
+              if (member.role == 'host' || member.role == 'speaker')
+                member.muted
+                    ? Image.asset(
+                        'assets/icons/live_muted_red.png',
+                        width: 22,
+                        height: 22,
+                        fit: BoxFit.contain,
+                      )
+                    : ColorFiltered(
+                        colorFilter: const ColorFilter.mode(
+                          Color(0xFFA1FF00),
+                          BlendMode.srcIn,
+                        ),
+                        child: Image(
+                          image: _RoomBottomBar._liveMicIcon,
+                          width: 18,
+                          height: 22,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+              if (canManage)
+                Icon(
+                  CupertinoIcons.ellipsis_circle,
+                  color: widget.palette.mutedText,
+                  size: 23,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }

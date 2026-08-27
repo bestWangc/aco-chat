@@ -324,6 +324,25 @@ class AccountApiClient {
   Future<void> raiseLiveHand({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/raise-hand', token);
 
+  Future<LiveMembersPage> listLiveMembers({
+    required int liveId,
+    required int page,
+    required String keyword,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/members').replace(
+        queryParameters: {
+          'page': '$page',
+          'page_size': '30',
+          if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
+        },
+      ),
+      headers: _authorizedHeaders(token),
+    );
+    return LiveMembersPage.fromJson(_body(response));
+  }
+
   Future<List<LiveParticipant>> listRaisedLiveHands({
     required int liveId,
     required String token,

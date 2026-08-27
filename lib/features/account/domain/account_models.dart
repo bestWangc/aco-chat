@@ -195,6 +195,8 @@ class LiveParticipant {
   const LiveParticipant({
     required this.userId,
     required this.nickname,
+    this.username = '',
+    required this.avatarUrl,
     required this.role,
     required this.handRaised,
     required this.muted,
@@ -202,6 +204,8 @@ class LiveParticipant {
 
   final int userId;
   final String nickname;
+  final String username;
+  final String avatarUrl;
   final String role;
   final bool handRaised;
   final bool muted;
@@ -210,9 +214,38 @@ class LiveParticipant {
       LiveParticipant(
         userId: json['user_id'] as int,
         nickname: json['nickname'] as String,
+        username: json['username'] as String? ?? '',
+        avatarUrl: json['avatar_url'] as String? ?? '',
         role: json['role'] as String,
         handRaised: json['hand_raised'] as bool? ?? false,
         muted: json['muted'] as bool? ?? false,
+      );
+}
+
+class LiveMembersPage {
+  const LiveMembersPage({
+    required this.members,
+    required this.page,
+    required this.pageSize,
+    required this.total,
+  });
+
+  final List<LiveParticipant> members;
+  final int page;
+  final int pageSize;
+  final int total;
+
+  bool get hasMore => page * pageSize < total;
+
+  factory LiveMembersPage.fromJson(Map<String, dynamic> json) =>
+      LiveMembersPage(
+        members: (json['members'] as List<dynamic>? ?? const [])
+            .cast<Map<String, dynamic>>()
+            .map(LiveParticipant.fromJson)
+            .toList(growable: false),
+        page: (json['page'] as num?)?.toInt() ?? 1,
+        pageSize: (json['page_size'] as num?)?.toInt() ?? 30,
+        total: (json['total'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -242,6 +275,7 @@ class LiveRoom {
   final int participantCount;
   final List<LiveParticipant> speakers;
   final List<LiveParticipant> listeners;
+
   /// Present only in the host's room snapshot. The request details are loaded
   /// on demand from the dedicated moderation endpoint.
   final int? raisedHandCount;
