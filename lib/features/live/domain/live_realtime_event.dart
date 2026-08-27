@@ -58,12 +58,10 @@ abstract final class LiveRealtimeEventParser {
           return count is num ? LiveParticipantCountEvent(count.toInt()) : null;
         case 'room.participant_joined':
           final participant = decoded['participant'];
-          final nickname = participant is Map<String, dynamic>
-              ? participant['nickname']
-              : null;
-          return nickname is String && nickname.trim().isNotEmpty
-              ? LiveParticipantJoinedEvent(nickname.trim())
-              : null;
+          if (participant is! Map<String, dynamic>) return null;
+          final nickname = participant['nickname'];
+          if (nickname is! String || nickname.trim().isEmpty) return null;
+          return LiveParticipantJoinedEvent(nickname.trim());
         default:
           return null;
       }
