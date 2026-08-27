@@ -238,6 +238,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyChatMute(muted);
       case LiveParticipantCountEvent(:final count):
         _applyParticipantCount(count);
+      case LiveParticipantJoinedEvent(:final nickname):
+        _appendChatMessage(nickname: '', text: '欢迎 $nickname 进入直播间');
     }
   }
 

@@ -26,6 +26,11 @@ final class LiveParticipantCountEvent extends LiveRealtimeEvent {
   final int count;
 }
 
+final class LiveParticipantJoinedEvent extends LiveRealtimeEvent {
+  const LiveParticipantJoinedEvent(this.nickname);
+  final String nickname;
+}
+
 abstract final class LiveRealtimeEventParser {
   static LiveRealtimeEvent? parse(Object? rawEvent) {
     if (rawEvent is! String) return null;
@@ -51,6 +56,14 @@ abstract final class LiveRealtimeEventParser {
         case 'room.participant_count':
           final count = decoded['participant_count'];
           return count is num ? LiveParticipantCountEvent(count.toInt()) : null;
+        case 'room.participant_joined':
+          final participant = decoded['participant'];
+          final nickname = participant is Map<String, dynamic>
+              ? participant['nickname']
+              : null;
+          return nickname is String && nickname.trim().isNotEmpty
+              ? LiveParticipantJoinedEvent(nickname.trim())
+              : null;
         default:
           return null;
       }
