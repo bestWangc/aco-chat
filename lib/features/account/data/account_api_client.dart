@@ -35,6 +35,31 @@ class AccountApiException implements Exception {
       return '昵称已被占用，请换一个昵称。';
     }
     if (normalized.contains('invalid username')) return '用户名格式不正确。';
+    if (normalized == 'invalid live password' ||
+        normalized.contains('live password')) {
+      return '直播间密码错误，请重新输入。';
+    }
+    if (normalized == 'avatar image is required') return '请选择头像图片。';
+    if (normalized.contains('avatar image must be') &&
+        normalized.contains('2 mb')) {
+      return '头像图片不能超过 2 MB。';
+    }
+    if (normalized.contains('avatar image must be') &&
+        normalized.contains('jpeg')) {
+      return '头像仅支持 JPEG、PNG 或 WebP 格式。';
+    }
+    if (normalized.contains('cannot read avatar image')) {
+      return '头像图片读取失败，请重新选择。';
+    }
+    if (normalized.contains('cannot save avatar image')) {
+      return '头像保存失败，请稍后重试。';
+    }
+    if (normalized.contains('avatar uploads are not configured')) {
+      return '头像上传服务未配置，请联系管理员。';
+    }
+    if (normalized.contains('cannot update profile')) {
+      return '资料更新失败，请稍后重试。';
+    }
     if (normalized.contains('unauthorized') || statusCode == 401) {
       return '登录状态已失效，请重新登录。';
     }

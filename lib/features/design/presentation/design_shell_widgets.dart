@@ -163,6 +163,7 @@ class AcoScreenPage extends StatelessWidget {
         key: ValueKey('square-feed-$liveListRevision'),
         palette: palette,
         onOpen: onOpen,
+        avatarUrl: avatarUrl,
         walletLoginFuture: walletLoginFuture,
         initialLives: initialLives,
       ),

@@ -155,7 +155,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       );
       _applyRoomSnapshot(room);
     } on AccountApiException catch (error) {
-      if (!silent && mounted) _showNotice(context, '无法进入直播间', error.message);
+      if (!silent && mounted) {
+        _showNotice(context, '无法进入直播间', error.localizedMessage);
+      }
     } catch (_) {
       if (!silent && mounted) {
         _showNotice(context, '无法进入直播间', '请检查网络后重试。');
@@ -275,22 +277,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       viewerUserId: room.viewerUserId,
       viewerRole: room.viewerRole,
       participantCount: room.participantCount,
-      speakers: room.speakers
-          .map(
-            (speaker) => LiveParticipant(
-              userId: speaker.userId,
-              nickname: speaker.nickname,
-              avatarUrl: speaker.avatarUrl,
-              role: speaker.role,
-              handRaised: speaker.handRaised,
-              muted: muted,
-            ),
-          )
-          .toList(growable: false),
+      // The room-level event only changes the global control state. Individual
+      // participant mute flags come from the next room snapshot; preserving
+      // them here avoids a late global event undoing an individual unmute.
+      speakers: room.speakers,
       listeners: room.listeners,
       raisedHandCount: room.raisedHandCount,
       canRaiseHand: room.canRaiseHand,
-      viewerMuted: room.viewerRole == 'speaker' ? muted : room.viewerMuted,
+      viewerMuted: room.viewerMuted,
       chatMuted: room.chatMuted,
       audioMuted: muted,
       checkIn: room.checkIn,
@@ -301,6 +295,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     });
     _localMuteOverride = null;
     unawaited(_syncLiveKitPublishPermission(updatedRoom));
+    // The event carries only the room-level flag. Reload the snapshot to get
+    // authoritative per-participant mute states (including individual
+    // unmute overrides) instead of guessing them locally.
+    unawaited(_loadRoom(silent: true));
   }
 
   void _applyChatMute(bool muted) {
@@ -388,6 +386,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (localMuteOverride != null && room.viewerMuted == localMuteOverride) {
       _localMuteOverride = null;
     }
+    // Active-speaker notifications are transport-level activity signals and
+    // can arrive after the server has persisted a mute action. Remove stale
+    // entries at the snapshot boundary; the widgets also re-check each
+    // participant's muted flag when rendering.
+    final mutedParticipantIds = <String>{
+      if (displayedRoom.host.muted) displayedRoom.host.userId.toString(),
+      ...displayedRoom.speakers
+          .where((participant) => participant.muted)
+          .map((participant) => participant.userId.toString()),
+    };
+    _liveKitSpeakingParticipantIds.removeAll(mutedParticipantIds);
     setState(() {
       _room = displayedRoom;
       // A realtime snapshot can arrive before the mute request completes.
@@ -494,11 +503,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         onMemberTap: room.viewerRole == 'host' ? _showMemberActions : null,
         audioMuted: room.audioMuted,
         onToggleAudioMute: room.viewerRole == 'host'
-            ? (muted) => _setAudioMute(muted)
+            ? (muted) async {
+                await _setAudioMute(muted);
+                await _loadRoom(silent: true);
+              }
             : null,
         chatMuted: room.chatMuted,
         onToggleChatMute: room.viewerRole == 'host'
-            ? (muted) => _setChatMute(muted)
+            ? (muted) async {
+                await _setChatMute(muted);
+                await _loadRoom(silent: true);
+              }
             : null,
       ),
     );
@@ -595,8 +610,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       await _accountSession.setLiveChatMute(live.id, muted);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '设置失败', error.message);
+      rethrow;
     } catch (_) {
       if (mounted) _showNotice(context, '设置失败', '请检查网络后重试。');
+      rethrow;
     }
   }
 
@@ -903,7 +920,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       }
       await room.localParticipant?.publishData(
         payload,
-        reliable: false,
+        reliable: true,
         topic: 'chat',
       );
       _appendChatMessage(nickname: _localChatNickname, text: text);

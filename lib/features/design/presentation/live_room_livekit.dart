@@ -472,8 +472,10 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       await _accountSession.setLiveAudioMute(live.id, muted);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '设置失败', error.message);
+      rethrow;
     } catch (_) {
       if (mounted) _showNotice(context, '设置失败', '请检查网络后重试。');
+      rethrow;
     }
   }
 

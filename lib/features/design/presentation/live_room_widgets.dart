@@ -38,9 +38,14 @@ class _LiveRoomOverview extends StatelessWidget {
                 palette: palette,
                 host: room.host,
                 muted: hostMuted,
-                active: speakingParticipantIds.contains(
-                  room.host.userId.toString(),
-                ),
+                // LiveKit active-speaker events can arrive after the mute
+                // snapshot. Never show the speaking animation for a muted
+                // host, even while that stale event is still present.
+                active:
+                    !hostMuted &&
+                    speakingParticipantIds.contains(
+                      room.host.userId.toString(),
+                    ),
               ),
             ),
             if (isHost && room.checkIn != null)
@@ -740,6 +745,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final activeSpeakers = speakers.where(
       (participant) =>
+          !participant.muted &&
           speakingParticipantIds.contains(participant.userId.toString()),
     );
     final unmutedSpeakers = speakers.where(
@@ -784,9 +790,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
                   participant: participant,
                   width: cardWidth,
                   avatarSize: avatarSize,
-                  isSpeaking: speakingParticipantIds.contains(
-                    participant.userId.toString(),
-                  ),
+                  speakingParticipantIds: speakingParticipantIds,
                   onSpeakerTap: onSpeakerTap,
                 ),
             ],
@@ -803,7 +807,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
     required this.participant,
     required this.width,
     required this.avatarSize,
-    required this.isSpeaking,
+    required this.speakingParticipantIds,
     this.onSpeakerTap,
   });
 
@@ -811,11 +815,14 @@ class _LiveRoomParticipantCard extends StatelessWidget {
   final LiveParticipant participant;
   final double width;
   final double avatarSize;
-  final bool isSpeaking;
+  final Set<String> speakingParticipantIds;
   final ValueChanged<LiveParticipant>? onSpeakerTap;
 
   @override
   Widget build(BuildContext context) {
+    final isSpeaking =
+        !participant.muted &&
+        speakingParticipantIds.contains(participant.userId.toString());
     final canMuteSpeaker =
         participant.role == 'speaker' && onSpeakerTap != null;
     final avatar = AcoAvatar(
@@ -1442,7 +1449,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 7),
               onPressed: canManage && widget.onMemberTap != null
                   ? () async {
                       await widget.onMemberTap!(member);
@@ -1484,7 +1491,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
             ),
             Container(
               height: 1,
-              margin: const EdgeInsets.symmetric(horizontal: 20),
+              margin: const EdgeInsets.symmetric(horizontal: 28),
               color: const Color(0x14000000),
             ),
           ],

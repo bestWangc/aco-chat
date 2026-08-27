@@ -233,20 +233,21 @@ class _RoomBottomBar extends StatelessWidget {
     ),
   );
 
-  bool get _showMutedMicAsset => canSpeak && muted && !audioMuted;
-
   IconData? get _micIcon {
-    if (canSpeak && (!muted || _showMutedMicAsset)) return null;
+    if (canSpeak && !muted && !audioMuted) return null;
+    if (_micIconAsset != null) return null;
     return CupertinoIcons.mic_slash;
   }
 
   String? get _micIconAsset {
-    if (!canSpeak) return null;
-    return _showMutedMicAsset ? 'assets/icons/live_muted_red.png' : null;
+    if (!canSpeak || audioMuted || muted) {
+      return 'assets/icons/live_muted_red.png';
+    }
+    return null;
   }
 
   ImageProvider? get _micIconImage =>
-      canSpeak && !_showMutedMicAsset ? _liveMicIcon : null;
+      canSpeak && !audioMuted && !muted ? _liveMicIcon : null;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -310,13 +311,7 @@ class _RoomBottomBar extends StatelessWidget {
   );
 
   _RoomControlColors _micControlColors() {
-    if (!canSpeak || audioMuted) {
-      return _RoomControlColors(
-        background: palette.surfaceRaised,
-        foreground: palette.mutedText,
-      );
-    }
-    if (muted) {
+    if (!canSpeak || audioMuted || muted) {
       return _RoomControlColors(
         background: palette.surfaceRaised,
         foreground: const Color(0xFFFF1027),

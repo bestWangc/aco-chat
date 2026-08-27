@@ -159,11 +159,13 @@ class _SquareFeedPage extends StatefulWidget {
     super.key,
     required this.palette,
     required this.onOpen,
+    this.avatarUrl,
     this.walletLoginFuture,
     this.initialLives,
   });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+  final String? avatarUrl;
   final Future<AccountProfile?>? walletLoginFuture;
   final List<LiveSession>? initialLives;
 
@@ -242,6 +244,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     if (!mounted || (session.access == 'password' && joinPassword == null)) {
       return;
     }
+    if (joinPassword != null &&
+        !await _verifyLivePassword(session, joinPassword)) {
+      return;
+    }
+    if (!mounted) return;
     Navigator.of(context)
         .push<bool>(
           _AcoPageRoute<bool>(
@@ -268,6 +275,22 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           if (!mounted || ended != true) return;
           showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
         });
+  }
+
+  Future<bool> _verifyLivePassword(LiveSession session, String password) async {
+    try {
+      await AccountSession(
+        _apiClient,
+      ).liveRoom(session.id, joinPassword: password);
+      return true;
+    } on AccountApiException catch (error) {
+      if (mounted) {
+        showAcoAlertNotice(context, '无法进入直播间', error.localizedMessage);
+      }
+    } catch (_) {
+      if (mounted) showAcoAlertNotice(context, '无法进入直播间', '请检查网络后重试。');
+    }
+    return false;
   }
 
   Future<String?> _requestLivePassword() {
@@ -500,7 +523,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                             width: MediaQuery.sizeOf(context).width - 54,
                             child: Row(
                               children: [
-                                const AcoAvatar(size: 36),
+                                AcoAvatar(size: 36, imageUrl: widget.avatarUrl),
                                 const SizedBox(width: 6),
                                 Expanded(
                                   child: Transform.translate(
