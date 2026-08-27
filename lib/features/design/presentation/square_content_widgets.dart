@@ -619,8 +619,9 @@ class _LiveCard extends StatelessWidget {
     }
   }
 
-  Color get _statusColor =>
-      _isLive || session.status == 'scheduled' ? _lime : palette.mutedText;
+  Color get _statusColor => _isLive || session.status == 'scheduled'
+      ? palette.accent
+      : palette.mutedText;
 
   Color get _statusBackground => _statusColor.withValues(alpha: 0.14);
 
