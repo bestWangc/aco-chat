@@ -543,19 +543,11 @@ class _RaisedHandIndicator extends StatelessWidget {
       onPressed: onPressed,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          color: palette.dark ? const Color(0xE6292929) : palette.surfaceRaised,
-          border: Border.all(color: palette.accent.withValues(alpha: .52)),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x40000000),
-              blurRadius: 8,
-              offset: Offset(0, 3),
-            ),
-          ],
+          color: const Color(0xFF181818),
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
+          padding: const EdgeInsets.fromLTRB(3, 3, 7, 3),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -567,11 +559,17 @@ class _RaisedHandIndicator extends StatelessWidget {
                   shape: BoxShape.circle,
                 ),
                 child: Center(
-                  child: Image.asset(
-                    'assets/icons/live_hand.png',
-                    width: 13,
-                    height: 13,
-                    fit: BoxFit.contain,
+                  child: ColorFiltered(
+                    colorFilter: const ColorFilter.mode(
+                      Color(0xFF111111),
+                      BlendMode.srcIn,
+                    ),
+                    child: Image.asset(
+                      'assets/icons/live_hand.png',
+                      width: 13,
+                      height: 13,
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
               ),
@@ -579,9 +577,9 @@ class _RaisedHandIndicator extends StatelessWidget {
               Text(
                 '$count',
                 style: TextStyle(
-                  color: palette.accent,
-                  fontSize: AcoTypography.caption,
-                  fontWeight: FontWeight.w800,
+                  color: CupertinoColors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
@@ -981,11 +979,14 @@ class _MutedMicrophoneBadge extends StatelessWidget {
     width: 21,
     height: 21,
     decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-    child: Image.asset(
-      'assets/icons/live_muted_red.png',
-      width: 13,
-      height: 16,
-      fit: BoxFit.contain,
+    child: ColorFiltered(
+      colorFilter: const ColorFilter.mode(Color(0xFFFF3347), BlendMode.srcIn),
+      child: Image.asset(
+        'assets/icons/live_muted_red.png',
+        width: 17,
+        height: 21,
+        fit: BoxFit.contain,
+      ),
     ),
   );
 }
@@ -1080,7 +1081,12 @@ class _SpeakingRing extends StatelessWidget {
   );
 }
 
-enum _LiveMemberAction { approveSpeaker, toggleMute, removeSpeaker }
+enum _LiveMemberAction {
+  approveSpeaker,
+  toggleMute,
+  removeSpeaker,
+  transferHost,
+}
 
 class _LiveRoomMembersSheet extends StatefulWidget {
   const _LiveRoomMembersSheet({
@@ -1278,11 +1284,15 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                     ? null
                     : CupertinoButton(
                         padding: const EdgeInsets.symmetric(horizontal: 10),
+                        minimumSize: Size.zero,
                         onPressed: () {
                           _searchController.clear();
                           _load(reset: true);
                         },
-                        child: const Icon(CupertinoIcons.clear_circled_solid),
+                        child: const Icon(
+                          CupertinoIcons.clear_circled_solid,
+                          size: 20,
+                        ),
                       ),
                 onChanged: (_) => setState(() {}),
                 onSubmitted: (_) => _load(reset: true),
@@ -1369,6 +1379,28 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     ),
   );
 
+  Widget _buildMemberAudioIcon(LiveParticipant member) {
+    final isSpeaker = member.role == 'host' || member.role == 'speaker';
+    final showMuted = member.role == 'listener' || (isSpeaker && member.muted);
+    if (showMuted) {
+      return Image.asset(
+        'assets/icons/live_muted_red.png',
+        width: 18,
+        height: 23,
+        fit: BoxFit.contain,
+      );
+    }
+    if (isSpeaker) {
+      return Image.asset(
+        'assets/icons/live_mic_open.png',
+        width: 18,
+        height: 23,
+        fit: BoxFit.contain,
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   Widget _buildBody() {
     if (_loading) {
       return const Center(
@@ -1440,27 +1472,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                       ],
                     ),
                   ),
-                  if (member.role == 'listener')
-                    Image.asset(
-                      'assets/icons/live_muted.png',
-                      width: 22,
-                      height: 22,
-                      fit: BoxFit.contain,
-                    )
-                  else if (member.role == 'host' || member.role == 'speaker')
-                    member.muted
-                        ? Image.asset(
-                            'assets/icons/live_muted_red.png',
-                            width: 22,
-                            height: 22,
-                            fit: BoxFit.contain,
-                          )
-                        : Image.asset(
-                            'assets/icons/live_mic_open.png',
-                            width: 18,
-                            height: 22,
-                            fit: BoxFit.contain,
-                          ),
+                  _buildMemberAudioIcon(member),
                   if (canManage)
                     Icon(
                       CupertinoIcons.ellipsis_circle,

@@ -48,7 +48,10 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     // The room snapshot is only an authorization update. A listener becomes
     // a connected speaker in the UI only after the fresh LiveKit token has
     // connected and its local track has been initialized successfully.
-    final audioMuted = !isHost && (room?.audioMuted ?? false);
+    // Individual speaker unmute overrides the room-wide mute. Use the
+    // viewer's persisted mute state for local microphone controls instead of
+    // treating the global room flag as authoritative for every participant.
+    final audioMuted = !isHost && (room?.viewerMuted ?? false);
     final canSpeak =
         live == null ||
         (_liveKitPublishReady && (isHost || serverViewerRole == 'speaker'));

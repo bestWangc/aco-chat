@@ -66,7 +66,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _emojiPickerVisible = false;
   bool _sending = false;
   bool _transferringHost = false;
-  bool _loadingHostTransferCandidates = false;
   bool _roomLoading = false;
   bool _leaving = false;
   bool _allowPop = false;
@@ -511,33 +510,57 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final action = await showCupertinoModalPopup<_LiveMemberAction>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
-        title: Text(member.nickname),
+        title: Text(
+          member.nickname,
+          style: const TextStyle(fontSize: AcoTypography.bodySmall),
+        ),
         actions: [
           if (member.role == 'listener')
             CupertinoActionSheetAction(
               onPressed: () => Navigator.of(
                 sheetContext,
               ).pop(_LiveMemberAction.approveSpeaker),
-              child: const Text('邀请上麦'),
+              child: const Text(
+                '上麦',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
             ),
           if (member.role == 'speaker') ...[
             CupertinoActionSheetAction(
               onPressed: () =>
                   Navigator.of(sheetContext).pop(_LiveMemberAction.toggleMute),
-              child: Text(member.muted ? '解除静音' : '静音'),
+              child: Text(
+                member.muted ? '解除静音' : '静音',
+                style: const TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.transferHost),
+              child: const Text(
+                '转让主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
             ),
             CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () => Navigator.of(
                 sheetContext,
               ).pop(_LiveMemberAction.removeSpeaker),
-              child: const Text('移至听众'),
+              child: const Text(
+                '移至听众',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
             ),
           ],
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
+          child: const Text(
+            '取消',
+            style: TextStyle(fontSize: AcoTypography.bodySmall),
+          ),
         ),
       ),
     );
@@ -554,6 +577,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           );
         case _LiveMemberAction.removeSpeaker:
           await _accountSession.removeLiveSpeaker(live.id, member.userId);
+        case _LiveMemberAction.transferHost:
+          await _transferHost(member);
       }
       await _loadRoom(silent: true);
     } on AccountApiException catch (error) {
@@ -713,13 +738,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 child: _hostActionLabel('发起签到'),
               ),
             CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_showHostTransferCandidates());
-              },
-              child: _hostActionLabel('转让主持人'),
-            ),
-            CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () {
                 Navigator.of(sheetContext).pop();
@@ -769,62 +787,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     });
     Navigator.of(context).pop(result);
   }
-
-  void _showHostTransferPicker(List<LiveParticipant> speakers) {
-    showCupertinoModalPopup<void>(
-      context: context,
-      builder: (sheetContext) => CupertinoActionSheet(
-        title: const Text('转让主持人'),
-        message: const Text('选择一位正在发言的成员成为新主持人。直播不会中断，你将留在房间并变为听众。'),
-        actions: speakers
-            .map((speaker) => _transferHostAction(sheetContext, speaker))
-            .toList(growable: false),
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _showHostTransferCandidates() async {
-    final room = _room;
-    final live = widget.live;
-    if (room?.viewerRole != 'host' ||
-        live == null ||
-        _loadingHostTransferCandidates) {
-      return;
-    }
-    setState(() => _loadingHostTransferCandidates = true);
-    try {
-      final candidates = await _accountSession.liveHostTransferCandidates(
-        live.id,
-      );
-      if (!mounted) return;
-      if (candidates.isEmpty) {
-        _showNotice(context, '暂无可转让成员', '请先邀请成员上麦，再转让主持人。');
-        return;
-      }
-      _showHostTransferPicker(candidates);
-    } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '无法加载转让名单', error.message);
-    } catch (_) {
-      if (mounted) _showNotice(context, '无法加载转让名单', '请检查网络后重试。');
-    } finally {
-      if (mounted) setState(() => _loadingHostTransferCandidates = false);
-    }
-  }
-
-  CupertinoActionSheetAction _transferHostAction(
-    BuildContext sheetContext,
-    LiveParticipant speaker,
-  ) => CupertinoActionSheetAction(
-    onPressed: () {
-      Navigator.of(sheetContext).pop();
-      unawaited(_transferHost(speaker));
-    },
-    child: Text(speaker.nickname),
-  );
 
   Future<void> _transferHost(LiveParticipant speaker) async {
     final live = widget.live;
