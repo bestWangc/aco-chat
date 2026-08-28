@@ -46,7 +46,10 @@ class AppConfig {
               DateTime.fromMillisecondsSinceEpoch(cachedAt),
             ) <
             _apiRouteCacheLifetime;
-    if (cacheIsFresh && _isSupportedApiRoute(cachedRoute)) {
+    // Direct is always the primary route. A cached Cloudflare route only
+    // records a previous fallback and must not make the next launch start on
+    // the fallback again.
+    if (cacheIsFresh && cachedRoute == directApiBaseUrl && hasDirectApiRoute) {
       _selectedApiBaseUrl = cachedRoute;
       return;
     }

@@ -255,8 +255,8 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     }
     if (!mounted) return;
     Navigator.of(context)
-        .push<bool>(
-          _AcoPageRoute<bool>(
+        .push<Object?>(
+          _AcoPageRoute<Object?>(
             builder: (_) => CupertinoPageScaffold(
               backgroundColor: widget.palette.background,
               resizeToAvoidBottomInset: true,
@@ -277,8 +277,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         .then((ended) async {
           if (!mounted) return;
           await _refreshLives();
-          if (!mounted || ended != true) return;
-          showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
+          if (!mounted) return;
+          if (ended == LiveRoomExitReason.kicked) {
+            showAcoAlertNotice(context, '你被踢出直播间', '10分钟内不能再次进入该直播间。');
+          } else if (ended == true) {
+            showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
+          }
         });
   }
 

@@ -15,6 +15,8 @@ class _LiveStreamPage extends StatelessWidget {
   );
 }
 
+enum LiveRoomExitReason { kicked }
+
 class _VoiceRoomPage extends StatefulWidget {
   const _VoiceRoomPage({required this.palette, this.live, this.joinPassword});
   final AcoPalette palette;
@@ -241,9 +243,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       case LiveParticipantJoinedEvent(:final nickname):
         _appendChatMessage(nickname: '', text: '欢迎 $nickname 进入直播间');
       case LiveKickedEvent():
-        _showNotice(context, '已被移出直播间', '主持人已将你移出本场直播。');
-        _closeRoom();
+        unawaited(_handleKicked());
     }
+  }
+
+  Future<void> _handleKicked() async {
+    if (_leaving || _closingRoom) return;
+    _leaving = true;
+    await _disconnectLiveKitForLeave();
+    _closeRoom(LiveRoomExitReason.kicked);
   }
 
   void _applyParticipantCount(int participantCount) {
@@ -839,7 +847,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _closeRoom();
   }
 
-  void _closeRoom([bool? result]) {
+  void _closeRoom([Object? result]) {
     if (!mounted || _closingRoom) return;
     _closingRoom = true;
     unawaited(_disconnectLiveKitForLeave());
