@@ -294,7 +294,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       return true;
     } on AccountApiException catch (error) {
       if (mounted) {
-        showAcoAlertNotice(context, '无法进入直播间', error.localizedMessage);
+        showAcoAlertNotice(
+          context,
+          error.isLiveKick ? '暂时无法进入直播间' : '无法进入直播间',
+          error.localizedMessage,
+        );
       }
     } catch (_) {
       if (mounted) showAcoAlertNotice(context, '无法进入直播间', '请检查网络后重试。');

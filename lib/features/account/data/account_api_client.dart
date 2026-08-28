@@ -17,11 +17,19 @@ class AccountApiException implements Exception {
   final int statusCode;
   final String message;
 
+  String get _normalizedMessage => message.trim().toLowerCase();
+
+  bool get isLiveKick {
+    final normalized = _normalizedMessage;
+    return normalized.contains('removed from this live') ||
+        normalized.contains('kicked from this live');
+  }
+
   /// User-facing copy for API errors. The API may return English or internal
   /// validation text; keep the raw [message] for logging and map it at the UI
   /// boundary so dialogs remain consistently Chinese.
   String get localizedMessage {
-    final normalized = message.trim().toLowerCase();
+    final normalized = _normalizedMessage;
     if (normalized == 'username is already taken' ||
         normalized == 'username already taken') {
       return '用户名已被占用，请换一个用户名。';
@@ -59,6 +67,9 @@ class AccountApiException implements Exception {
     }
     if (normalized.contains('cannot update profile')) {
       return '资料更新失败，请稍后重试。';
+    }
+    if (isLiveKick) {
+      return '你已被踢出直播间，10分钟内不能再次进入。';
     }
     if (normalized.contains('unauthorized') || statusCode == 401) {
       return '登录状态已失效，请重新登录。';
