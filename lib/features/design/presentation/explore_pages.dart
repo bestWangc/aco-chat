@@ -238,10 +238,15 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         showAcoAlertNotice(context, '直播不可用', '该直播暂时无法进入。');
         return;
     }
-    final joinPassword = session.access == 'password'
+    // Hosts can re-enter their own password-protected live without being
+    // prompted again; the server identifies the host authoritatively.
+    final joinPassword = session.access == 'password' && !session.canEdit
         ? await _requestLivePassword()
         : null;
-    if (!mounted || (session.access == 'password' && joinPassword == null)) {
+    if (!mounted ||
+        (session.access == 'password' &&
+            !session.canEdit &&
+            joinPassword == null)) {
       return;
     }
     if (joinPassword != null &&
