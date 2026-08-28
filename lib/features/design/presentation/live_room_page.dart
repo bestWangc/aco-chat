@@ -240,6 +240,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyParticipantCount(count);
       case LiveParticipantJoinedEvent(:final nickname):
         _appendChatMessage(nickname: '', text: '欢迎 $nickname 进入直播间');
+      case LiveKickedEvent():
+        _showNotice(context, '已被移出直播间', '主持人已将你移出本场直播。');
+        _closeRoom();
     }
   }
 
@@ -571,6 +574,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               ),
             ),
           ],
+          CupertinoActionSheetAction(
+            isDestructiveAction: true,
+            onPressed: () =>
+                Navigator.of(sheetContext).pop(_LiveMemberAction.kick),
+            child: const Text(
+              '踢出直播间',
+              style: TextStyle(fontSize: AcoTypography.bodySmall),
+            ),
+          ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
@@ -582,6 +594,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       ),
     );
     if (action == null) return;
+    if (!mounted) return;
+    if (action == _LiveMemberAction.kick && !await _confirmKickMember(member)) {
+      return;
+    }
     try {
       switch (action) {
         case _LiveMemberAction.approveSpeaker:
@@ -596,6 +612,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           await _accountSession.removeLiveSpeaker(live.id, member.userId);
         case _LiveMemberAction.transferHost:
           await _transferHost(member);
+        case _LiveMemberAction.kick:
+          await _accountSession.kickLiveMember(live.id, member.userId);
       }
       await _loadRoom(silent: true);
     } on AccountApiException catch (error) {
@@ -603,6 +621,31 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     } catch (_) {
       if (mounted) _showNotice(context, '操作失败', '请检查网络后重试。');
     }
+  }
+
+  Future<bool> _confirmKickMember(LiveParticipant member) async {
+    final shouldKick = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('踢出成员'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text('确定要将 ${member.nickname} 移出本场直播吗？'),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('踢出'),
+          ),
+        ],
+      ),
+    );
+    return shouldKick == true;
   }
 
   Future<void> _setChatMute(bool muted) async {

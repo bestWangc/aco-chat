@@ -31,6 +31,10 @@ final class LiveParticipantJoinedEvent extends LiveRealtimeEvent {
   final String nickname;
 }
 
+final class LiveKickedEvent extends LiveRealtimeEvent {
+  const LiveKickedEvent();
+}
+
 abstract final class LiveRealtimeEventParser {
   static LiveRealtimeEvent? parse(Object? rawEvent) {
     if (rawEvent is! String) return null;
@@ -62,6 +66,8 @@ abstract final class LiveRealtimeEventParser {
           final nickname = participant['nickname'];
           if (nickname is! String || nickname.trim().isEmpty) return null;
           return LiveParticipantJoinedEvent(nickname.trim());
+        case 'room.kicked':
+          return const LiveKickedEvent();
         default:
           return null;
       }

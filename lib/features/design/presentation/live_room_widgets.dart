@@ -1093,6 +1093,7 @@ enum _LiveMemberAction {
   toggleMute,
   removeSpeaker,
   transferHost,
+  kick,
 }
 
 class _LiveRoomMembersSheet extends StatefulWidget {

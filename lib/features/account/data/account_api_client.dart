@@ -472,6 +472,12 @@ class AccountApiClient {
     required String token,
   }) => _postWithoutBody('lives/$liveId/speakers/$userId/remove', token);
 
+  Future<void> kickLiveMember({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/members/$userId/kick', token);
+
   Future<void> transferLiveHost({
     required int liveId,
     required int userId,

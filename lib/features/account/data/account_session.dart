@@ -262,6 +262,13 @@ class AccountSession {
         token: await _requireToken(),
       );
 
+  Future<void> kickLiveMember(int liveId, int userId) async =>
+      _apiClient.kickLiveMember(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
   Future<void> transferLiveHost(int liveId, int userId) async =>
       _apiClient.transferLiveHost(
         liveId: liveId,
