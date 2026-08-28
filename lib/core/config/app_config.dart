@@ -12,6 +12,7 @@ class AppConfig {
   );
   static const directApiBaseUrl = String.fromEnvironment(
     'ACO_DIRECT_API_BASE_URL',
+    defaultValue: 'https://api-direct.aco.chat/api/v1',
   );
   static const _apiRouteCacheKey = 'network.api_route';
   static const _apiRouteCacheUpdatedAtKey = 'network.api_route_updated_at';
