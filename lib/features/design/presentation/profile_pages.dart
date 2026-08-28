@@ -175,6 +175,8 @@ class _ProfilePage extends StatelessWidget {
     if (!context.mounted) return;
     final request = AccountApiClient.lastRequest ?? '暂无请求记录';
     final status = AccountApiClient.lastStatusCode?.toString() ?? '暂无';
+    final duration = AccountApiClient.lastRequestDurationMilliseconds;
+    final serverTiming = AccountApiClient.lastServerTiming;
     final response = AccountApiClient.lastResponseBody ?? '暂无返回内容';
     final error = AccountApiClient.lastError;
     final diagnosticText =
@@ -182,6 +184,8 @@ class _ProfilePage extends StatelessWidget {
         '版本：${AppConfig.appVersion}\n'
         '请求：$request\n'
         '状态：$status\n'
+        '耗时：${duration == null ? '暂无' : '${duration}ms'}\n'
+        '${serverTiming == null ? '' : '服务端：$serverTiming\n'}'
         '返回：$response'
         '${error == null ? '' : '\n错误：$error'}\n\n'
         '链路探测：\n$diagnostics';

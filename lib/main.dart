@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
@@ -10,6 +12,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,6 +20,7 @@ Future<void> main() async {
   await WalletPreferences.removeLegacyPlaceholderData();
   final identity = await WalletPreferences.walletIdentity();
   final walletConfigured = await WalletPreferences.load() && identity != null;
+  AppConfig.preferDirectApiRoute();
   final accountProfileFuture = walletConfigured
       ? WalletAccountAuthentication.signInSilently(identity.address)
       : null;
@@ -54,14 +58,38 @@ class WalletAccountAuthentication {
   /// Restores the server account for [walletAddress] without showing a login UI.
   /// A network failure leaves the local wallet usable and is retried next launch.
   static Future<AccountProfile?> signInSilently(String walletAddress) async {
+    try {
+      return await _signInSilently(walletAddress);
+    } on AccountApiException {
+      rethrow;
+    } on Object catch (error) {
+      if (!AppConfig.isUsingDirectApiRoute || !_isNetworkError(error)) {
+        rethrow;
+      }
+      AppConfig.useCloudflareApiRoute();
+      return _signInSilently(walletAddress);
+    }
+  }
+
+  static Future<AccountProfile?> _signInSilently(String walletAddress) async {
     final client = AccountApiClient();
     try {
       final session = AccountSession(client);
-      return (await session.signInSilently(walletAddress)).user;
+      final signIn = session.signInSilently(walletAddress);
+      final result = AppConfig.isUsingDirectApiRoute
+          ? await signIn.timeout(const Duration(seconds: 2))
+          : await signIn;
+      return result.user;
     } finally {
       client.close();
     }
   }
+
+  static bool _isNetworkError(Object error) =>
+      error is SocketException ||
+      error is HandshakeException ||
+      error is TimeoutException ||
+      error is http.ClientException;
 }
 
 class AcoApp extends StatefulWidget {

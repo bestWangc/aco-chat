@@ -80,6 +80,8 @@ class AccountApiClient {
   static int? lastStatusCode;
   static String? lastResponseBody;
   static String? lastError;
+  static int? lastRequestDurationMilliseconds;
+  static String? lastServerTiming;
 
   static Future<String> runConnectionDiagnostics() async {
     final baseUri = Uri.parse(const AppConfig().apiBaseUrl);
@@ -636,10 +638,15 @@ class AccountApiClient {
     lastStatusCode = response.statusCode;
     lastResponseBody = diagnosticBody;
     lastError = response.statusCode >= 400 ? diagnosticBody : null;
+    lastServerTiming = response.headers['server-timing'];
+    final serverTiming = lastServerTiming;
     debugPrint(
       '[API] ${response.request?.method ?? 'UNKNOWN'} '
       '${response.request?.url ?? '<unknown URL>'} '
-      'status=${response.statusCode} body=$diagnosticBody',
+      'status=${response.statusCode} '
+      'duration=${lastRequestDurationMilliseconds ?? 0}ms '
+      '${serverTiming == null ? '' : 'server_timing=[$serverTiming] '}'
+      'body=$diagnosticBody',
     );
     final decoded = response.body.isEmpty
         ? <String, dynamic>{}
@@ -701,14 +708,26 @@ class _RecordingClient extends http.BaseClient {
     AccountApiClient.lastStatusCode = null;
     AccountApiClient.lastResponseBody = null;
     AccountApiClient.lastError = null;
+    AccountApiClient.lastRequestDurationMilliseconds = null;
+    AccountApiClient.lastServerTiming = null;
+    final stopwatch = Stopwatch()..start();
     try {
       final response = await _inner.send(request);
+      stopwatch.stop();
       AccountApiClient.lastStatusCode = response.statusCode;
+      AccountApiClient.lastRequestDurationMilliseconds =
+          stopwatch.elapsedMilliseconds;
       return response;
     } on Object catch (error) {
+      stopwatch.stop();
       final kind = _networkErrorKind(error);
       AccountApiClient.lastError = '$kind：$error';
-      debugPrint('[API] ${AccountApiClient.lastRequest} error=$error');
+      AccountApiClient.lastRequestDurationMilliseconds =
+          stopwatch.elapsedMilliseconds;
+      debugPrint(
+        '[API] ${AccountApiClient.lastRequest} '
+        'duration=${stopwatch.elapsedMilliseconds}ms error=$error',
+      );
       rethrow;
     }
   }
