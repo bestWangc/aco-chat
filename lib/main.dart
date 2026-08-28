@@ -58,9 +58,6 @@ class WalletAccountAuthentication {
     try {
       final session = AccountSession(client);
       return (await session.signInSilently(walletAddress)).user;
-    } catch (_) {
-      // A later launch will retry without preventing local wallet access.
-      return null;
     } finally {
       client.close();
     }
@@ -112,10 +109,40 @@ class _AcoAppState extends State<AcoApp> {
   Future<void> _resolveAccountProfile(
     Future<AccountProfile?> profileFuture,
   ) async {
-    final profile = await profileFuture;
-    if (profile != null && mounted) {
-      setState(() => _accountProfile = profile);
+    try {
+      final profile = await profileFuture;
+      if (profile != null && mounted) {
+        setState(() => _accountProfile = profile);
+        return;
+      }
+      if (mounted) _showProfileLoadError('钱包尚未注册，请完成钱包验证后再注册账号。');
+    } on AccountApiException catch (error) {
+      if (mounted) _showProfileLoadError(error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showProfileLoadError('个人资料加载失败，请检查网络后重试。');
     }
+  }
+
+  void _showProfileLoadError(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('个人资料加载失败'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text(message),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   void _onThemeChanged(bool isDark) {

@@ -171,12 +171,12 @@ class _ProfilePage extends StatelessWidget {
     AcoPalette palette,
   ) async {
     final config = const AppConfig();
+    final diagnostics = await AccountApiClient.runConnectionDiagnostics();
+    if (!context.mounted) return;
     final request = AccountApiClient.lastRequest ?? '暂无请求记录';
     final status = AccountApiClient.lastStatusCode?.toString() ?? '暂无';
     final response = AccountApiClient.lastResponseBody ?? '暂无返回内容';
     final error = AccountApiClient.lastError;
-    final diagnostics = await AccountApiClient.runConnectionDiagnostics();
-    if (!context.mounted) return;
     final diagnosticText =
         'API：${config.apiBaseUrl}\n'
         '版本：${AppConfig.appVersion}\n'

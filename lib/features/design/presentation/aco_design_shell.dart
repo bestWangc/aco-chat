@@ -162,13 +162,13 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   late final bool _ownsThemeNotifier;
   int _selectedNav = 0;
   AcoScreen _rootScreen = AcoScreen.walletHome;
-  final ValueNotifier<String> _displayName = ValueNotifier<String>('Marry');
+  final ValueNotifier<String> _displayName = ValueNotifier<String>('');
   final ValueNotifier<String> _walletName = ValueNotifier<String>('Wallet1');
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
   TransferToken? _selectedTransferToken;
   int _liveListRevision = 0;
-  String? _accountId = '1000000000000000';
-  final ValueNotifier<String> _username = ValueNotifier<String>('aco');
+  String? _accountId;
+  final ValueNotifier<String> _username = ValueNotifier<String>('');
   final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
   String _language = '简体中文';
 

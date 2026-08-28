@@ -101,8 +101,10 @@ class AccountApiClient {
     }
 
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
+    final healthUri = baseUri.replace(path: '/healthz', query: '');
+    lastRequest = healthUri.toString();
+    lastError = null;
     try {
-      final healthUri = baseUri.replace(path: '/healthz', query: '');
       final request = await client
           .getUrl(healthUri)
           .timeout(const Duration(seconds: 10));
@@ -110,16 +112,22 @@ class AccountApiClient {
         const Duration(seconds: 10),
       );
       final body = await response.transform(utf8.decoder).join();
+      lastStatusCode = response.statusCode;
+      lastResponseBody = body;
       lines.add('TLS/TCP：成功');
       lines.add('HTTP：${response.statusCode}');
       if (body.isNotEmpty) lines.add('响应：$body');
     } on HandshakeException catch (error) {
+      lastError = error.toString();
       lines.add('TLS：失败（$error）');
     } on TimeoutException catch (error) {
+      lastError = error.toString();
       lines.add('连接：超时（$error）');
     } on SocketException catch (error) {
+      lastError = error.toString();
       lines.add('TCP：失败（$error）');
     } on Object catch (error) {
+      lastError = error.toString();
       lines.add('连接：失败（$error）');
     } finally {
       client.close(force: true);
