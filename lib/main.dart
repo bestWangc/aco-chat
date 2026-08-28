@@ -20,7 +20,7 @@ Future<void> main() async {
   await WalletPreferences.removeLegacyPlaceholderData();
   final identity = await WalletPreferences.walletIdentity();
   final walletConfigured = await WalletPreferences.load() && identity != null;
-  AppConfig.preferDirectApiRoute();
+  await AppConfig.restoreCachedApiRoute();
   final accountProfileFuture = walletConfigured
       ? WalletAccountAuthentication.signInSilently(identity.address)
       : null;
@@ -59,7 +59,9 @@ class WalletAccountAuthentication {
   /// A network failure leaves the local wallet usable and is retried next launch.
   static Future<AccountProfile?> signInSilently(String walletAddress) async {
     try {
-      return await _signInSilently(walletAddress);
+      final profile = await _signInSilently(walletAddress);
+      await AppConfig.cacheSelectedApiRoute();
+      return profile;
     } on AccountApiException {
       rethrow;
     } on Object catch (error) {
@@ -67,7 +69,9 @@ class WalletAccountAuthentication {
         rethrow;
       }
       AppConfig.useCloudflareApiRoute();
-      return _signInSilently(walletAddress);
+      final profile = await _signInSilently(walletAddress);
+      await AppConfig.cacheSelectedApiRoute();
+      return profile;
     }
   }
 
