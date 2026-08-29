@@ -177,7 +177,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
     if (_hostHeartbeatTimer != null) return;
     _hostHeartbeatTimer = Timer.periodic(
-      const Duration(seconds: 45),
+      const Duration(seconds: 200),
       (_) => unawaited(_sendHostHeartbeat()),
     );
     unawaited(_sendHostHeartbeat());
@@ -196,9 +196,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _room?.viewerRole == 'host') {
-      unawaited(_sendHostHeartbeat());
+    if (state == AppLifecycleState.paused) {
+      _hostHeartbeatTimer?.cancel();
+      _hostHeartbeatTimer = null;
+      return;
     }
+    if (state != AppLifecycleState.resumed) return;
+
+    final room = _room;
+    if (room?.viewerRole != 'host') return;
+    _ensureHostHeartbeat(room);
+    unawaited(_sendHostHeartbeat());
   }
 
   Future<void> _connectRealtime({bool refreshRoom = true}) async {
