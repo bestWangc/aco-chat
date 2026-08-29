@@ -255,6 +255,19 @@ class AccountSession {
         token: await _requireToken(),
       );
 
+  Future<void> inviteLiveSpeaker(int liveId, int userId) async =>
+      _apiClient.inviteLiveSpeaker(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
+  Future<void> acceptLiveSpeakerInvite(int liveId) async => _apiClient
+      .acceptLiveSpeakerInvite(liveId: liveId, token: await _requireToken());
+
+  Future<void> declineLiveSpeakerInvite(int liveId) async => _apiClient
+      .declineLiveSpeakerInvite(liveId: liveId, token: await _requireToken());
+
   Future<void> removeLiveSpeaker(int liveId, int userId) async =>
       _apiClient.removeLiveSpeaker(
         liveId: liveId,

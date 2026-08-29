@@ -479,6 +479,22 @@ class AccountApiClient {
     required String token,
   }) => _postWithoutBody('lives/$liveId/speakers/$userId/approve', token);
 
+  Future<void> inviteLiveSpeaker({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/speakers/$userId/invite', token);
+
+  Future<void> acceptLiveSpeakerInvite({
+    required int liveId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/speaker-invite/accept', token);
+
+  Future<void> declineLiveSpeakerInvite({
+    required int liveId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/speaker-invite/decline', token);
+
   Future<void> removeLiveSpeaker({
     required int liveId,
     required int userId,

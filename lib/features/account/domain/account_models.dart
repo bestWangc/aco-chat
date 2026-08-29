@@ -200,6 +200,7 @@ class LiveParticipant {
     required this.role,
     required this.handRaised,
     required this.muted,
+    this.speakerInvited = false,
   });
 
   final int userId;
@@ -209,6 +210,7 @@ class LiveParticipant {
   final String role;
   final bool handRaised;
   final bool muted;
+  final bool speakerInvited;
 
   factory LiveParticipant.fromJson(Map<String, dynamic> json) =>
       LiveParticipant(
@@ -219,6 +221,7 @@ class LiveParticipant {
         role: json['role'] as String,
         handRaised: json['hand_raised'] as bool? ?? false,
         muted: json['muted'] as bool? ?? false,
+        speakerInvited: json['speaker_invite'] as bool? ?? false,
       );
 }
 

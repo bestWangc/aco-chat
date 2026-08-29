@@ -98,6 +98,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _microphoneUpdating = false;
   bool _liveKitMicrophoneOperationInFlight = false;
   bool _liveKitPermissionReconnectInFlight = false;
+  bool _speakerInviteDialogVisible = false;
   LocalAudioTrack? _listenerAudioWarmupTrack;
   bool? _localMuteOverride;
   late final AccountApiClient _apiClient;
@@ -205,7 +206,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
     final room = _room;
     if (room?.viewerRole != 'host') return;
-    _ensureHostHeartbeat(room);
+    _ensureHostHeartbeat(room!);
     unawaited(_sendHostHeartbeat());
   }
 
@@ -352,6 +353,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       return;
     }
     final displayedRoom = room;
+    final invitePending =
+        displayedRoom.viewerRole == 'listener' &&
+        displayedRoom.listeners.any(
+          (participant) =>
+              participant.userId == displayedRoom.viewerUserId &&
+              participant.speakerInvited,
+        );
+    if (invitePending && !_speakerInviteDialogVisible) {
+      _speakerInviteDialogVisible = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_showSpeakerInviteDialog());
+      });
+    }
     _checkInTimer?.cancel();
     if (displayedRoom.checkIn != null) {
       _checkInTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -557,7 +571,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 sheetContext,
               ).pop(_LiveMemberAction.approveSpeaker),
               child: const Text(
-                '上麦',
+                '邀请上麦',
                 style: TextStyle(fontSize: AcoTypography.bodySmall),
               ),
             ),
@@ -617,7 +631,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     try {
       switch (action) {
         case _LiveMemberAction.approveSpeaker:
-          await _accountSession.approveLiveSpeaker(live.id, member.userId);
+          await _accountSession.inviteLiveSpeaker(live.id, member.userId);
         case _LiveMemberAction.toggleMute:
           await _accountSession.setLiveSpeakerMute(
             live.id,
@@ -636,6 +650,44 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       if (mounted) _showNotice(context, '操作失败', error.localizedMessage);
     } catch (_) {
       if (mounted) _showNotice(context, '操作失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _showSpeakerInviteDialog() async {
+    final live = widget.live;
+    if (live == null) return;
+    final accepted = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('主持人邀请你上麦'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 8),
+          child: Text('同意后将连接麦克风并成为发言人。'),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('拒绝'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('同意'),
+          ),
+        ],
+      ),
+    );
+    _speakerInviteDialogVisible = false;
+    if (!mounted) return;
+    try {
+      if (accepted == true) {
+        await _accountSession.acceptLiveSpeakerInvite(live.id);
+      } else {
+        await _accountSession.declineLiveSpeakerInvite(live.id);
+      }
+      await _loadRoom(silent: true);
+    } catch (_) {
+      if (mounted) _showNotice(context, '上麦失败', '请稍后重试。');
     }
   }
 
