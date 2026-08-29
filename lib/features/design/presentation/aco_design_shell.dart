@@ -15,6 +15,7 @@ import 'package:aco_chat/features/live/domain/live_chat_state.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_event.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_client.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
+import 'package:aco_chat/services/app_update_service.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
@@ -171,6 +172,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<String> _username = ValueNotifier<String>('');
   final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
   String _language = '简体中文';
+  bool _hasAppUpdate = false;
 
   @override
   void initState() {
@@ -179,6 +181,45 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _isDark = widget.themeNotifier ?? ValueNotifier<bool>(true);
     _applyAccountProfile(widget.accountProfile);
     _loadWalletName();
+    unawaited(_checkForAppUpdate());
+  }
+
+  Future<void> _checkForAppUpdate() async {
+    const updateService = AppUpdateService();
+    final hasUpdate = await updateService.hasUpdate();
+    if (!mounted || !hasUpdate) return;
+    setState(() => _hasAppUpdate = true);
+    if (!await updateService.shouldPromptToday() || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showAppUpdateDialog(updateService);
+    });
+  }
+
+  void _showAppUpdateDialog(AppUpdateService updateService) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('发现新版本'),
+        content: const Padding(
+          padding: EdgeInsets.only(top: 12),
+          child: Text('已有新版本可用，是否立即查看？'),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('稍后再说'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              unawaited(updateService.openWebsite());
+            },
+            child: const Text('立即更新'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _loadWalletName() async {
@@ -361,6 +402,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       onAvatarUrlChanged: (avatarUrl) => _avatarUrl.value = avatarUrl,
       language: _language,
       liveListRevision: _liveListRevision,
+      hasAppUpdate: _hasAppUpdate,
+      onOpenAppUpdate: () => const AppUpdateService().openWebsite(),
       onLanguageChanged: (language) => setState(() => _language = language),
     ),
   );
@@ -414,6 +457,9 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                           _avatarUrl.value = avatarUrl,
                       language: _language,
                       liveListRevision: _liveListRevision,
+                      hasAppUpdate: _hasAppUpdate,
+                      onOpenAppUpdate: () =>
+                          const AppUpdateService().openWebsite(),
                       onLanguageChanged: (language) =>
                           setState(() => _language = language),
                     ),
