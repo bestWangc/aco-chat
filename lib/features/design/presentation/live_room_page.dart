@@ -76,6 +76,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _networkReconnecting = false;
   bool _reentryCoolingDown = false;
   bool _checkingIn = false;
+  int? _realtimeParticipantCount;
+  // A concurrent realtime snapshot can lag behind a successful check-in.
+  DateTime? _locallyConfirmedCheckInDeadline;
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
@@ -116,7 +119,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _realtimeClient = LiveRealtimeClient(
       onEvent: _handleRealtimeEvent,
       onReconnectingChanged: (reconnecting) {
-        if (mounted) setState(() => _networkReconnecting = reconnecting);
+        if (mounted) {
+          setState(() {
+            _networkReconnecting = reconnecting;
+            if (reconnecting) _realtimeParticipantCount = null;
+          });
+        }
       },
       onReconnectStopped: () {
         if (mounted) _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入直播间。');
@@ -275,6 +283,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     // Presence events can arrive late or out of order during reconnects. Do
     // not let an invalid server value render a negative audience count.
     final safeParticipantCount = participantCount < 0 ? 0 : participantCount;
+    _realtimeParticipantCount = safeParticipantCount;
     setState(() {
       _room = LiveRoom(
         live: room.live,
@@ -358,7 +367,30 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _closeRoom(true);
       return;
     }
-    final displayedRoom = room;
+    final displayedParticipantCount =
+        _realtimeParticipantCount ?? room.participantCount;
+    final localCheckInDeadline = _locallyConfirmedCheckInDeadline;
+    final incomingCheckIn = room.checkIn;
+    var displayedCheckIn = incomingCheckIn;
+    if (localCheckInDeadline != null &&
+        incomingCheckIn != null &&
+        incomingCheckIn.deadline == localCheckInDeadline &&
+        !incomingCheckIn.viewerChecked) {
+      displayedCheckIn = LiveCheckIn(
+        deadline: incomingCheckIn.deadline,
+        checkedInCount: incomingCheckIn.checkedInCount,
+        viewerChecked: true,
+      );
+    } else if (localCheckInDeadline != null &&
+        incomingCheckIn != null &&
+        incomingCheckIn.deadline != localCheckInDeadline) {
+      _locallyConfirmedCheckInDeadline = null;
+    }
+    final displayedRoom = _copyRoom(
+      room,
+      participantCount: displayedParticipantCount,
+      checkIn: displayedCheckIn,
+    );
     debugPrint(
       'Live room snapshot: source=state live=${room.live.id} '
       'role=${room.viewerRole} hostMuted=${room.host.muted} '
@@ -463,6 +495,27 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     unawaited(_syncLiveKitPublishPermission(displayedRoom));
     _ensureHostHeartbeat(displayedRoom);
   }
+
+  LiveRoom _copyRoom(
+    LiveRoom room, {
+    required int participantCount,
+    required LiveCheckIn? checkIn,
+  }) => LiveRoom(
+    live: room.live,
+    host: room.host,
+    hostActive: room.hostActive,
+    viewerUserId: room.viewerUserId,
+    viewerRole: room.viewerRole,
+    participantCount: participantCount,
+    speakers: room.speakers,
+    listeners: room.listeners,
+    raisedHandCount: room.raisedHandCount,
+    canRaiseHand: room.canRaiseHand,
+    viewerMuted: room.viewerMuted,
+    chatMuted: room.chatMuted,
+    audioMuted: room.audioMuted,
+    checkIn: checkIn,
+  );
 
   Future<void> _raiseHand() async {
     final live = widget.live;
@@ -811,6 +864,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (mounted) setState(() => _checkingIn = true);
     try {
       await _accountSession.confirmLiveCheckIn(live.id);
+      _locallyConfirmedCheckInDeadline = _room?.checkIn?.deadline;
       await _loadRoom(silent: true);
       if (mounted) _showNotice(context, '签到成功', '已完成本次直播签到。');
     } on AccountApiException catch (error) {
