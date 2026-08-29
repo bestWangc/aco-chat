@@ -27,8 +27,34 @@ final class LiveParticipantCountEvent extends LiveRealtimeEvent {
 }
 
 final class LiveParticipantJoinedEvent extends LiveRealtimeEvent {
-  const LiveParticipantJoinedEvent(this.nickname);
+  const LiveParticipantJoinedEvent({
+    required this.userId,
+    required this.nickname,
+  });
+  final int userId;
   final String nickname;
+}
+
+final class LiveCheckInEvent extends LiveRealtimeEvent {
+  const LiveCheckInEvent({
+    required this.deadline,
+    required this.checkedInCount,
+    required this.userId,
+  });
+  final DateTime deadline;
+  final int checkedInCount;
+  final int userId;
+}
+
+final class LiveRaisedHandCountEvent extends LiveRealtimeEvent {
+  const LiveRaisedHandCountEvent(this.count);
+  final int count;
+}
+
+final class LiveParticipantMuteEvent extends LiveRealtimeEvent {
+  const LiveParticipantMuteEvent({required this.userId, required this.muted});
+  final int userId;
+  final bool muted;
 }
 
 final class LiveKickedEvent extends LiveRealtimeEvent {
@@ -65,7 +91,40 @@ abstract final class LiveRealtimeEventParser {
           if (participant is! Map<String, dynamic>) return null;
           final nickname = participant['nickname'];
           if (nickname is! String || nickname.trim().isEmpty) return null;
-          return LiveParticipantJoinedEvent(nickname.trim());
+          final userId = participant['user_id'];
+          if (userId is! num) return null;
+          return LiveParticipantJoinedEvent(
+            userId: userId.toInt(),
+            nickname: nickname.trim(),
+          );
+        case 'room.check_in':
+          final checkIn = decoded['check_in'];
+          if (checkIn is! Map<String, dynamic>) return null;
+          final deadline = checkIn['deadline'];
+          final count = checkIn['checked_in_count'];
+          final userId = checkIn['user_id'];
+          if (deadline is! String || count is! num || userId is! num) {
+            return null;
+          }
+          return LiveCheckInEvent(
+            deadline: DateTime.parse(deadline),
+            checkedInCount: count.toInt(),
+            userId: userId.toInt(),
+          );
+        case 'room.raised_hand_count':
+          final count = decoded['raised_hand_count'];
+          return count is num ? LiveRaisedHandCountEvent(count.toInt()) : null;
+        case 'room.participant_mute':
+          final mute = decoded['participant_mute'];
+          if (mute is! Map<String, dynamic> ||
+              mute['user_id'] is! num ||
+              mute['muted'] is! bool) {
+            return null;
+          }
+          return LiveParticipantMuteEvent(
+            userId: (mute['user_id'] as num).toInt(),
+            muted: mute['muted'] as bool,
+          );
         case 'room.kicked':
           return const LiveKickedEvent();
         default:

@@ -263,8 +263,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyChatMute(muted);
       case LiveParticipantCountEvent(:final count):
         _applyParticipantCount(count);
-      case LiveParticipantJoinedEvent(:final nickname):
-        _appendChatMessage(nickname: '', text: '欢迎 $nickname 进入直播间');
+      case LiveParticipantJoinedEvent(:final userId, :final nickname):
+        if (_knownParticipantIds.add(userId)) {
+          _appendChatMessage(nickname: '', text: '欢迎 $nickname 进入直播间');
+        }
+      case LiveCheckInEvent(
+        :final deadline,
+        :final checkedInCount,
+        :final userId,
+      ):
+        _applyCheckInEvent(deadline, checkedInCount, userId);
+      case LiveRaisedHandCountEvent(:final count):
+        _applyRaisedHandCount(count);
+      case LiveParticipantMuteEvent(:final userId, :final muted):
+        _applyParticipantMute(userId, muted);
       case LiveKickedEvent():
         unawaited(_handleKicked());
     }
@@ -302,6 +314,38 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         checkIn: room.checkIn,
       );
     });
+  }
+
+  void _applyCheckInEvent(DateTime deadline, int checkedInCount, int userId) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    final current = room.checkIn;
+    if (current == null || current.deadline != deadline) return;
+    final viewerChecked = current.viewerChecked || userId == room.viewerUserId;
+    setState(() {
+      _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: LiveCheckIn(
+          deadline: deadline,
+          checkedInCount: checkedInCount,
+          viewerChecked: viewerChecked,
+        ),
+      );
+    });
+  }
+
+  void _applyRaisedHandCount(int count) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        raisedHandCount: count,
+      ),
+    );
   }
 
   void _applyAudioMute(bool muted) {
@@ -500,22 +544,54 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     LiveRoom room, {
     required int participantCount,
     required LiveCheckIn? checkIn,
+    int? raisedHandCount,
+    LiveParticipant? host,
+    List<LiveParticipant>? speakers,
+    List<LiveParticipant>? listeners,
   }) => LiveRoom(
     live: room.live,
-    host: room.host,
+    host: host ?? room.host,
     hostActive: room.hostActive,
     viewerUserId: room.viewerUserId,
     viewerRole: room.viewerRole,
     participantCount: participantCount,
-    speakers: room.speakers,
-    listeners: room.listeners,
-    raisedHandCount: room.raisedHandCount,
+    speakers: speakers ?? room.speakers,
+    listeners: listeners ?? room.listeners,
+    raisedHandCount: raisedHandCount ?? room.raisedHandCount,
     canRaiseHand: room.canRaiseHand,
     viewerMuted: room.viewerMuted,
     chatMuted: room.chatMuted,
     audioMuted: room.audioMuted,
     checkIn: checkIn,
   );
+
+  void _applyParticipantMute(int userId, bool muted) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    LiveParticipant update(LiveParticipant participant) =>
+        participant.userId == userId
+        ? LiveParticipant(
+            userId: participant.userId,
+            nickname: participant.nickname,
+            username: participant.username,
+            avatarUrl: participant.avatarUrl,
+            role: participant.role,
+            handRaised: participant.handRaised,
+            muted: muted,
+            speakerInvited: participant.speakerInvited,
+          )
+        : participant;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        host: update(room.host),
+        speakers: room.speakers.map(update).toList(growable: false),
+        listeners: room.listeners.map(update).toList(growable: false),
+      ),
+    );
+  }
 
   Future<void> _raiseHand() async {
     final live = widget.live;
