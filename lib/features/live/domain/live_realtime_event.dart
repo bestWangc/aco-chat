@@ -3,26 +3,27 @@ import 'dart:convert';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 
 sealed class LiveRealtimeEvent {
-  const LiveRealtimeEvent();
+  const LiveRealtimeEvent({this.eventVersion = 0});
+  final int eventVersion;
 }
 
 final class LiveRoomSnapshotEvent extends LiveRealtimeEvent {
-  const LiveRoomSnapshotEvent(this.room);
+  const LiveRoomSnapshotEvent(this.room, {super.eventVersion});
   final LiveRoom room;
 }
 
 final class LiveAudioMuteEvent extends LiveRealtimeEvent {
-  const LiveAudioMuteEvent(this.muted);
+  const LiveAudioMuteEvent(this.muted, {super.eventVersion});
   final bool muted;
 }
 
 final class LiveChatMuteEvent extends LiveRealtimeEvent {
-  const LiveChatMuteEvent(this.muted);
+  const LiveChatMuteEvent(this.muted, {super.eventVersion});
   final bool muted;
 }
 
 final class LiveParticipantCountEvent extends LiveRealtimeEvent {
-  const LiveParticipantCountEvent(this.count);
+  const LiveParticipantCountEvent(this.count, {super.eventVersion});
   final int count;
 }
 
@@ -30,6 +31,7 @@ final class LiveParticipantJoinedEvent extends LiveRealtimeEvent {
   const LiveParticipantJoinedEvent({
     required this.userId,
     required this.nickname,
+    super.eventVersion,
   });
   final int userId;
   final String nickname;
@@ -40,6 +42,7 @@ final class LiveCheckInEvent extends LiveRealtimeEvent {
     required this.deadline,
     required this.checkedInCount,
     required this.userId,
+    super.eventVersion,
   });
   final DateTime deadline;
   final int checkedInCount;
@@ -47,23 +50,27 @@ final class LiveCheckInEvent extends LiveRealtimeEvent {
 }
 
 final class LiveCheckInStartedEvent extends LiveRealtimeEvent {
-  const LiveCheckInStartedEvent(this.deadline);
+  const LiveCheckInStartedEvent(this.deadline, {super.eventVersion});
   final DateTime deadline;
 }
 
 final class LiveRaisedHandCountEvent extends LiveRealtimeEvent {
-  const LiveRaisedHandCountEvent(this.count);
+  const LiveRaisedHandCountEvent(this.count, {super.eventVersion});
   final int count;
 }
 
 final class LiveParticipantMuteEvent extends LiveRealtimeEvent {
-  const LiveParticipantMuteEvent({required this.userId, required this.muted});
+  const LiveParticipantMuteEvent({
+    required this.userId,
+    required this.muted,
+    super.eventVersion,
+  });
   final int userId;
   final bool muted;
 }
 
 final class LiveKickedEvent extends LiveRealtimeEvent {
-  const LiveKickedEvent();
+  const LiveKickedEvent({super.eventVersion});
 }
 
 abstract final class LiveRealtimeEventParser {
@@ -74,23 +81,37 @@ abstract final class LiveRealtimeEventParser {
       if (decoded is! Map<String, dynamic> || decoded['type'] is! String) {
         return null;
       }
+      final eventVersion = (decoded['event_version'] as num?)?.toInt() ?? 0;
       switch (decoded['type']) {
         case 'room.snapshot':
           final room = decoded['room'];
           return room is Map<String, dynamic>
-              ? LiveRoomSnapshotEvent(LiveRoom.fromJson(room))
+              ? LiveRoomSnapshotEvent(
+                  LiveRoom.fromJson(room),
+                  eventVersion: eventVersion,
+                )
               : null;
         case 'room.audio_mute':
           final audioMuted = decoded['audio_muted'];
           return audioMuted is Map<String, dynamic>
-              ? LiveAudioMuteEvent(audioMuted['muted'] as bool? ?? false)
+              ? LiveAudioMuteEvent(
+                  audioMuted['muted'] as bool? ?? false,
+                  eventVersion: eventVersion,
+                )
               : null;
         case 'room.chat_mute':
           final muted = decoded['chat_muted'];
-          return muted is bool ? LiveChatMuteEvent(muted) : null;
+          return muted is bool
+              ? LiveChatMuteEvent(muted, eventVersion: eventVersion)
+              : null;
         case 'room.participant_count':
           final count = decoded['participant_count'];
-          return count is num ? LiveParticipantCountEvent(count.toInt()) : null;
+          return count is num
+              ? LiveParticipantCountEvent(
+                  count.toInt(),
+                  eventVersion: eventVersion,
+                )
+              : null;
         case 'room.participant_joined':
           final participant = decoded['participant'];
           if (participant is! Map<String, dynamic>) return null;
@@ -101,6 +122,7 @@ abstract final class LiveRealtimeEventParser {
           return LiveParticipantJoinedEvent(
             userId: userId.toInt(),
             nickname: nickname.trim(),
+            eventVersion: eventVersion,
           );
         case 'room.check_in':
           final checkIn = decoded['check_in'];
@@ -115,6 +137,7 @@ abstract final class LiveRealtimeEventParser {
             deadline: DateTime.parse(deadline),
             checkedInCount: count.toInt(),
             userId: userId.toInt(),
+            eventVersion: eventVersion,
           );
         case 'room.check_in_started':
           final checkIn = decoded['check_in'];
@@ -122,11 +145,19 @@ abstract final class LiveRealtimeEventParser {
               ? checkIn['deadline']
               : null;
           return deadline is String
-              ? LiveCheckInStartedEvent(DateTime.parse(deadline))
+              ? LiveCheckInStartedEvent(
+                  DateTime.parse(deadline),
+                  eventVersion: eventVersion,
+                )
               : null;
         case 'room.raised_hand_count':
           final count = decoded['raised_hand_count'];
-          return count is num ? LiveRaisedHandCountEvent(count.toInt()) : null;
+          return count is num
+              ? LiveRaisedHandCountEvent(
+                  count.toInt(),
+                  eventVersion: eventVersion,
+                )
+              : null;
         case 'room.participant_mute':
           final mute = decoded['participant_mute'];
           if (mute is! Map<String, dynamic> ||
@@ -137,9 +168,10 @@ abstract final class LiveRealtimeEventParser {
           return LiveParticipantMuteEvent(
             userId: (mute['user_id'] as num).toInt(),
             muted: mute['muted'] as bool,
+            eventVersion: eventVersion,
           );
         case 'room.kicked':
-          return const LiveKickedEvent();
+          return LiveKickedEvent(eventVersion: eventVersion);
         default:
           return null;
       }

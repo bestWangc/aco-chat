@@ -82,6 +82,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   DateTime? _realtimeCheckInDeadline;
   int? _realtimeCheckInCount;
   int _lastRoomSnapshotVersion = 0;
+  int _lastRealtimeEventVersion = 0;
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
@@ -252,6 +253,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _handleRealtimeEvent(dynamic rawEvent) {
     final event = LiveRealtimeEventParser.parse(rawEvent);
     if (event == null) return;
+    if (event.eventVersion < _lastRealtimeEventVersion) return;
+    _lastRealtimeEventVersion = event.eventVersion;
     if (_networkReconnecting && mounted) {
       setState(() {
         _networkReconnecting = false;
