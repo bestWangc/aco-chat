@@ -46,6 +46,11 @@ final class LiveCheckInEvent extends LiveRealtimeEvent {
   final int userId;
 }
 
+final class LiveCheckInStartedEvent extends LiveRealtimeEvent {
+  const LiveCheckInStartedEvent(this.deadline);
+  final DateTime deadline;
+}
+
 final class LiveRaisedHandCountEvent extends LiveRealtimeEvent {
   const LiveRaisedHandCountEvent(this.count);
   final int count;
@@ -111,6 +116,14 @@ abstract final class LiveRealtimeEventParser {
             checkedInCount: count.toInt(),
             userId: userId.toInt(),
           );
+        case 'room.check_in_started':
+          final checkIn = decoded['check_in'];
+          final deadline = checkIn is Map<String, dynamic>
+              ? checkIn['deadline']
+              : null;
+          return deadline is String
+              ? LiveCheckInStartedEvent(DateTime.parse(deadline))
+              : null;
         case 'room.raised_hand_count':
           final count = decoded['raised_hand_count'];
           return count is num ? LiveRaisedHandCountEvent(count.toInt()) : null;

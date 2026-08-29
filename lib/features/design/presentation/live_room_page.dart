@@ -79,6 +79,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   int? _realtimeParticipantCount;
   // A concurrent realtime snapshot can lag behind a successful check-in.
   DateTime? _locallyConfirmedCheckInDeadline;
+  DateTime? _realtimeCheckInDeadline;
+  int? _realtimeCheckInCount;
+  int _lastRoomSnapshotVersion = 0;
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
@@ -273,6 +276,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         :final userId,
       ):
         _applyCheckInEvent(deadline, checkedInCount, userId);
+      case LiveCheckInStartedEvent(:final deadline):
+        _applyCheckInStarted(deadline);
       case LiveRaisedHandCountEvent(:final count):
         _applyRaisedHandCount(count);
       case LiveParticipantMuteEvent(:final userId, :final muted):
@@ -303,6 +308,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         hostActive: room.hostActive,
         viewerUserId: room.viewerUserId,
         viewerRole: room.viewerRole,
+        snapshotVersion: room.snapshotVersion,
         participantCount: safeParticipantCount,
         speakers: room.speakers,
         listeners: room.listeners,
@@ -321,6 +327,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (room == null || !mounted) return;
     final current = room.checkIn;
     if (current == null || current.deadline != deadline) return;
+    _realtimeCheckInDeadline = deadline;
+    _realtimeCheckInCount = checkedInCount > (_realtimeCheckInCount ?? 0)
+        ? checkedInCount
+        : _realtimeCheckInCount;
     final viewerChecked = current.viewerChecked || userId == room.viewerUserId;
     setState(() {
       _room = _copyRoom(
@@ -333,6 +343,25 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ),
       );
     });
+  }
+
+  void _applyCheckInStarted(DateTime deadline) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    if (room.checkIn?.deadline == deadline) return;
+    _realtimeCheckInDeadline = deadline;
+    _realtimeCheckInCount = 0;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: LiveCheckIn(
+          deadline: deadline,
+          checkedInCount: 0,
+          viewerChecked: false,
+        ),
+      ),
+    );
   }
 
   void _applyRaisedHandCount(int count) {
@@ -357,6 +386,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       hostActive: room.hostActive,
       viewerUserId: room.viewerUserId,
       viewerRole: room.viewerRole,
+      snapshotVersion: room.snapshotVersion,
       participantCount: room.participantCount,
       // The room-level event only changes the global control state. Individual
       // participant mute flags come from the next room snapshot; preserving
@@ -391,6 +421,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       hostActive: room.hostActive,
       viewerUserId: room.viewerUserId,
       viewerRole: room.viewerRole,
+      snapshotVersion: room.snapshotVersion,
       participantCount: room.participantCount,
       speakers: room.speakers,
       listeners: room.listeners,
@@ -407,6 +438,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _applyRoomSnapshot(LiveRoom room) {
     if (!mounted) return;
+    if (room.snapshotVersion < _lastRoomSnapshotVersion) return;
+    _lastRoomSnapshotVersion = room.snapshotVersion;
     if (room.live.status == 'ended') {
       _closeRoom(true);
       return;
@@ -416,13 +449,25 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final localCheckInDeadline = _locallyConfirmedCheckInDeadline;
     final incomingCheckIn = room.checkIn;
     var displayedCheckIn = incomingCheckIn;
+    final realtimeCount = _realtimeCheckInDeadline == incomingCheckIn?.deadline
+        ? _realtimeCheckInCount
+        : null;
+    if (incomingCheckIn != null &&
+        realtimeCount != null &&
+        realtimeCount > incomingCheckIn.checkedInCount) {
+      displayedCheckIn = LiveCheckIn(
+        deadline: incomingCheckIn.deadline,
+        checkedInCount: realtimeCount,
+        viewerChecked: incomingCheckIn.viewerChecked,
+      );
+    }
     if (localCheckInDeadline != null &&
         incomingCheckIn != null &&
         incomingCheckIn.deadline == localCheckInDeadline &&
         !incomingCheckIn.viewerChecked) {
       displayedCheckIn = LiveCheckIn(
         deadline: incomingCheckIn.deadline,
-        checkedInCount: incomingCheckIn.checkedInCount,
+        checkedInCount: realtimeCount ?? incomingCheckIn.checkedInCount,
         viewerChecked: true,
       );
     } else if (localCheckInDeadline != null &&
@@ -554,6 +599,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     hostActive: room.hostActive,
     viewerUserId: room.viewerUserId,
     viewerRole: room.viewerRole,
+    snapshotVersion: room.snapshotVersion,
     participantCount: participantCount,
     speakers: speakers ?? room.speakers,
     listeners: listeners ?? room.listeners,

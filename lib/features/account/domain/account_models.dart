@@ -259,6 +259,7 @@ class LiveRoom {
     required this.hostActive,
     required this.viewerUserId,
     required this.viewerRole,
+    required this.snapshotVersion,
     required this.participantCount,
     required this.speakers,
     required this.listeners,
@@ -275,6 +276,7 @@ class LiveRoom {
   final bool hostActive;
   final int viewerUserId;
   final String viewerRole;
+  final int snapshotVersion;
   final int participantCount;
   final List<LiveParticipant> speakers;
   final List<LiveParticipant> listeners;
@@ -294,6 +296,7 @@ class LiveRoom {
     hostActive: json['host_active'] as bool? ?? false,
     viewerUserId: json['viewer_user_id'] as int? ?? 0,
     viewerRole: json['viewer_role'] as String,
+    snapshotVersion: (json['snapshot_version'] as num?)?.toInt() ?? 0,
     participantCount: json['participant_count'] as int,
     speakers: (json['speakers'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
