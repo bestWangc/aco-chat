@@ -8,6 +8,8 @@ class _ProfilePage extends StatelessWidget {
     required this.accountId,
     required this.username,
     required this.avatarUrl,
+    required this.hasAppUpdate,
+    required this.onOpenAppUpdate,
     this.onBack,
   });
   final AcoPalette palette;
@@ -16,6 +18,8 @@ class _ProfilePage extends StatelessWidget {
   final String accountId;
   final String username;
   final String avatarUrl;
+  final bool hasAppUpdate;
+  final Future<bool> Function() onOpenAppUpdate;
   final VoidCallback? onBack;
   @override
   Widget build(BuildContext context) => ListView(
@@ -141,11 +145,30 @@ class _ProfilePage extends StatelessWidget {
       Center(
         child: Column(
           children: [
-            Text(
-              '当前版本 v${AppConfig.appVersion}',
-              style: TextStyle(
-                color: palette.mutedText,
-                fontSize: AcoTypography.caption,
+            GestureDetector(
+              onTap: hasAppUpdate ? onOpenAppUpdate : null,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '当前版本 v${AppConfig.appVersion}',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.caption,
+                    ),
+                  ),
+                  if (hasAppUpdate) ...[
+                    const SizedBox(width: 5),
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: const BoxDecoration(
+                        color: _danger,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: 8),

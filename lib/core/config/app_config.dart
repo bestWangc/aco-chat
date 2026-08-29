@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
-    defaultValue: '1.0.27',
+    defaultValue: '1.0.29',
   );
 
   static const cloudflareApiBaseUrl = String.fromEnvironment(
@@ -13,6 +13,10 @@ class AppConfig {
   static const directApiBaseUrl = String.fromEnvironment(
     'ACO_DIRECT_API_BASE_URL',
     defaultValue: 'https://api-direct.aco.chat/api/v1',
+  );
+  static const websiteUrl = String.fromEnvironment(
+    'ACO_WEBSITE_URL',
+    defaultValue: 'https://aco.chat',
   );
   static const _apiRouteCacheKey = 'network.api_route';
   static const _apiRouteCacheUpdatedAtKey = 'network.api_route_updated_at';

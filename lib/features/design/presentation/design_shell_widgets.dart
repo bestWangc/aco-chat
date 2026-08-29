@@ -37,6 +37,8 @@ class AcoScreenPage extends StatelessWidget {
     this.onLanguageChanged,
     this.live,
     this.initialLives,
+    this.hasAppUpdate = false,
+    this.onOpenAppUpdate,
     super.key,
   });
 
@@ -68,6 +70,8 @@ class AcoScreenPage extends StatelessWidget {
   final ValueChanged<String>? onLanguageChanged;
   final LiveSession? live;
   final List<LiveSession>? initialLives;
+  final bool hasAppUpdate;
+  final Future<bool> Function()? onOpenAppUpdate;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +192,8 @@ class AcoScreenPage extends StatelessWidget {
                 accountId: currentAccountId,
                 username: currentUsername,
                 avatarUrl: avatarUrl ?? '',
+                hasAppUpdate: hasAppUpdate,
+                onOpenAppUpdate: onOpenAppUpdate ?? () async => false,
                 onBack: isRoot ? null : () => Navigator.of(context).maybePop(),
               ),
       AcoScreen.profileEdit =>
