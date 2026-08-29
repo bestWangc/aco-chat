@@ -61,9 +61,13 @@ class _WalletHomeState extends State<_WalletHome> {
   void _watchWalletLogin(Future<AccountProfile?>? loginFuture) {
     if (loginFuture == null) return;
     unawaited(
-      loginFuture.whenComplete(() {
-        if (mounted) _reloadBalances();
-      }),
+      loginFuture
+          .then<void>((_) {
+            if (mounted) _reloadBalances();
+          })
+          .catchError((_) {
+            if (mounted) _reloadBalances();
+          }),
     );
   }
 

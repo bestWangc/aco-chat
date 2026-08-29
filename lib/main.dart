@@ -119,6 +119,7 @@ class AcoApp extends StatefulWidget {
 }
 
 class _AcoAppState extends State<AcoApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
   late final ValueNotifier<bool> _isDark = ValueNotifier<bool>(
     widget.initialIsDark,
   );
@@ -158,8 +159,10 @@ class _AcoAppState extends State<AcoApp> {
   void _showProfileLoadError(String message) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final dialogContext = _navigatorKey.currentContext;
+      if (dialogContext == null) return;
       showCupertinoDialog<void>(
-        context: context,
+        context: dialogContext,
         builder: (dialogContext) => CupertinoAlertDialog(
           title: const Text('个人资料加载失败'),
           content: Padding(
@@ -168,12 +171,26 @@ class _AcoAppState extends State<AcoApp> {
           ),
           actions: [
             CupertinoDialogAction(
+              onPressed: () => _returnToWalletSetup(dialogContext),
+              child: const Text('重新导入'),
+            ),
+            CupertinoDialogAction(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
+              child: const Text('取消'),
             ),
           ],
         ),
       );
+    });
+  }
+
+  void _returnToWalletSetup(BuildContext dialogContext) {
+    Navigator.of(dialogContext).pop();
+    if (!mounted) return;
+    setState(() {
+      _walletConfigured = false;
+      _accountProfile = null;
+      _walletLoginFuture = null;
     });
   }
 
@@ -261,6 +278,7 @@ class _AcoAppState extends State<AcoApp> {
               : shad.ShadSlateColorScheme.light(),
         ),
         appBuilder: (_) => CupertinoApp(
+          navigatorKey: _navigatorKey,
           title: 'Aco',
           debugShowCheckedModeBanner: false,
           locale: const Locale('zh', 'CN'),
