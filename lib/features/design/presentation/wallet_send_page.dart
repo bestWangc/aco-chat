@@ -1,5 +1,14 @@
 part of 'aco_design_shell.dart';
 
+WalletNetwork _networkForToken(TransferToken token) => switch (token.chain) {
+  'BSC' => WalletNetwork.bsc,
+  'Polygon' => WalletNetwork.polygon,
+  'Arbitrum' => WalletNetwork.arbitrum,
+  'Optimism' => WalletNetwork.optimism,
+  'Base' => WalletNetwork.base,
+  _ => WalletNetwork.ethereum,
+};
+
 class _TokenAvatar extends StatelessWidget {
   const _TokenAvatar({required this.token});
 
@@ -221,10 +230,17 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
 }
 
 class _SendTransferPage extends StatefulWidget {
-  const _SendTransferPage({required this.palette, required this.token});
+  const _SendTransferPage({
+    required this.palette,
+    required this.token,
+    this.walletIdentity,
+    required this.secretStore,
+  });
 
   final AcoPalette palette;
   final TransferToken token;
+  final WalletIdentity? walletIdentity;
+  final WalletSecretStore secretStore;
 
   @override
   State<_SendTransferPage> createState() => _SendTransferPageState();
@@ -233,11 +249,18 @@ class _SendTransferPage extends StatefulWidget {
 class _SendTransferPageState extends State<_SendTransferPage> {
   final _recipientController = TextEditingController();
   final _amountController = TextEditingController();
+  bool _submitting = false;
 
   bool get _canConfirm {
     final amount = double.tryParse(_amountController.text.trim());
     final availableAmount = double.tryParse(widget.token.availableAmount);
-    return _recipientController.text.trim().isNotEmpty &&
+    final recipient = _recipientController.text.trim();
+    final validAddress = switch (widget.token.chain) {
+      'Tron' => RegExp(r'^T[1-9A-HJ-NP-Za-km-z]{33}$').hasMatch(recipient),
+      'Solana' => RegExp(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$').hasMatch(recipient),
+      _ => RegExp(r'^0x[0-9a-fA-F]{40}$').hasMatch(recipient),
+    };
+    return validAddress &&
         amount != null &&
         availableAmount != null &&
         amount > 0 &&
@@ -251,11 +274,115 @@ class _SendTransferPageState extends State<_SendTransferPage> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_canConfirm) return;
     _dismissKeyboard();
-    _showNotice(context, '暂未发送', '链上签名和广播将在后续版本开放。');
+    final identity = widget.walletIdentity;
+    if (identity == null || _submitting) return;
+    if (widget.token.chain == 'Tron' ||
+        widget.token.chain == 'Solana' ||
+        widget.token.symbol == 'USDT') {
+      _showNotice(
+        context,
+        '暂不支持',
+        widget.token.symbol == 'USDT' ? 'ERC-20 代币交易正在接入。' : '该网络正在接入原生交易签名。',
+      );
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final biometric = await BiometricAuthentication.availability();
+      String? mnemonic;
+      if (biometric == BiometricAvailability.enrolled) {
+        if (!await BiometricAuthentication.authenticateOrSkip()) {
+          throw const WalletSecurityException('生物识别验证失败');
+        }
+        mnemonic = await WalletSecurity().unlockMnemonicWithDeviceProtection(
+          store: widget.secretStore,
+          walletAddress: identity.address,
+        );
+      } else {
+        final password = await _requestPassword();
+        if (password == null) return;
+        mnemonic = await WalletSecurity().unlockMnemonic(
+          store: widget.secretStore,
+          walletAddress: identity.address,
+          password: password,
+        );
+      }
+      final tokens = await SecureAccountTokenStore().read();
+      final rpc = WalletRpcClient(
+        client: http.Client(),
+        directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+        ownsClient: true,
+      );
+      late WalletTransferResult result;
+      try {
+        if (tokens == null) {
+          result = await const WalletTransferService().execute(
+            mnemonic: mnemonic,
+            from: identity.address,
+            to: _recipientController.text.trim(),
+            amount: _amountController.text.trim(),
+            chainId: 1,
+          );
+        } else {
+          result = await const WalletTransferService().executeWithRpc(
+            mnemonic: mnemonic,
+            from: identity.address,
+            to: _recipientController.text.trim(),
+            amount: _amountController.text.trim(),
+            network: _networkForToken(widget.token),
+            accessToken: tokens.accessToken,
+            rpc: rpc,
+          );
+        }
+      } finally {
+        rpc.close();
+      }
+      if (mounted) {
+        final title = result.status == '已广播' ? '转账成功' : '交易已签名';
+        _showNotice(context, title, '交易哈希：${result.hash}');
+      }
+    } on WalletSecurityException catch (error) {
+      if (mounted) _showNotice(context, '转账失败', error.message);
+    } catch (error) {
+      if (mounted) _showNotice(context, '转账失败', '交易构造失败：$error');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
+
+  Future<String?> _requestPassword() => showCupertinoDialog<String>(
+    context: context,
+    builder: (dialogContext) {
+      var value = '';
+      return CupertinoAlertDialog(
+        title: const Text('验证钱包密码'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CupertinoTextField(
+            obscureText: true,
+            autofocus: true,
+            key: const Key('transfer-password-field'),
+            onChanged: (v) => value = v,
+            placeholder: '输入钱包密码',
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(dialogContext, value),
+            child: const Text('确认'),
+          ),
+        ],
+      );
+    },
+  );
 
   @override
   Widget build(BuildContext context) => _DetailScaffold(

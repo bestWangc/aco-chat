@@ -216,6 +216,19 @@ class WalletSecurity {
     }
   }
 
+  Future<String> unlockMnemonicWithDeviceProtection({
+    required WalletSecretStore store,
+    required String walletAddress,
+  }) async {
+    final password = await store.read(_devicePasswordKey(walletAddress));
+    if (password == null) throw const WalletSecurityException('未配置设备保护');
+    return unlockMnemonic(
+      store: store,
+      walletAddress: walletAddress,
+      password: password,
+    );
+  }
+
   Future<void> deleteMnemonic({
     required WalletSecretStore store,
     required String walletAddress,

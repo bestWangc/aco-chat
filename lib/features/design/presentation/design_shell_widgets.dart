@@ -142,6 +142,8 @@ class AcoScreenPage extends StatelessWidget {
       ),
       AcoScreen.send => _SendTransferPage(
         palette: palette,
+        walletIdentity: walletIdentity,
+        secretStore: walletSecretStore ?? SecureWalletSecretStore(),
         token:
             transferToken ??
             _transferTokensForChain(

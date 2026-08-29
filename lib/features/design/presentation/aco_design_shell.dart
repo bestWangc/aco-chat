@@ -23,6 +23,8 @@ import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
 import 'package:aco_chat/services/wallet_valuation_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
+import 'package:aco_chat/services/wallet_transfer_service.dart';
+import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
 import 'package:emoji_picker_flutter/locales/default_emoji_set_locale.dart';
 import 'package:flutter/cupertino.dart';
@@ -38,6 +40,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:http/http.dart' as http;
 
 part 'aco_design_models.dart';
 part 'live_room_widgets.dart';
