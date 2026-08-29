@@ -140,14 +140,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     // Load the current role before requesting the LiveKit token. Connecting
     // both requests concurrently can issue a second token refresh as soon as
     // the room snapshot arrives, creating two joins for the same participant.
-    await _loadRoom();
+    await _loadRoom(resetRole: true);
     await _connectLiveKit();
     // The auxiliary state stream is started in the background; chat itself is
     // handled by LiveKit data.
     unawaited(_connectRealtime(refreshRoom: false));
   }
 
-  Future<void> _loadRoom({bool silent = false}) async {
+  Future<void> _loadRoom({bool silent = false, bool resetRole = false}) async {
     final live = widget.live;
     if (live == null) return;
     if (!silent && mounted) setState(() => _roomLoading = true);
@@ -155,6 +155,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       final room = await _accountSession.liveRoom(
         live.id,
         joinPassword: widget.joinPassword,
+        resetRole: resetRole,
+      );
+      debugPrint(
+        'Live room snapshot: source=api live=${live.id} '
+        'role=${room.viewerRole} hostMuted=${room.host.muted} '
+        'viewerMuted=${room.viewerMuted} resetRole=$resetRole',
       );
       _applyRoomSnapshot(room);
     } on AccountApiException catch (error) {
@@ -353,6 +359,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       return;
     }
     final displayedRoom = room;
+    debugPrint(
+      'Live room snapshot: source=state live=${room.live.id} '
+      'role=${room.viewerRole} hostMuted=${room.host.muted} '
+      'viewerMuted=${room.viewerMuted} localMuted=$_muted',
+    );
     final invitePending =
         displayedRoom.viewerRole == 'listener' &&
         displayedRoom.listeners.any(
@@ -421,6 +432,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (localMuteOverride != null && room.viewerMuted == localMuteOverride) {
       _localMuteOverride = null;
     }
+    // A room refresh triggered by another member's moderation action may race
+    // the mute broadcast. Never turn a locally muted host/speaker back on
+    // from that stale snapshot; only an explicit local unmute may do so.
+    final keepLocalMute =
+        _muted &&
+        _room?.viewerRole == displayedRoom.viewerRole &&
+        displayedRoom.viewerRole != 'listener';
     // Active-speaker notifications are transport-level activity signals and
     // can arrive after the server has persisted a mute action. Remove stale
     // entries at the snapshot boundary; the widgets also re-check each
@@ -436,7 +454,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _room = displayedRoom;
       // A realtime snapshot can arrive before the mute request completes.
       // Keep the user's latest local choice until the server echoes it back.
-      _muted = localMuteOverride ?? displayedRoom.viewerMuted;
+      _muted = localMuteOverride ?? displayedRoom.viewerMuted || keepLocalMute;
       if (displayedRoom.viewerRole != 'listener') _handRaised = false;
       if (displayedRoom.chatMuted && displayedRoom.viewerRole != 'host') {
         _emojiPickerVisible = false;
@@ -631,7 +649,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     try {
       switch (action) {
         case _LiveMemberAction.approveSpeaker:
+          debugPrint(
+            'Live invite speaker: live=${live.id} target=${member.userId} '
+            'beforeHostMuted=${_room?.host.muted} localMuted=$_muted',
+          );
           await _accountSession.inviteLiveSpeaker(live.id, member.userId);
+          if (mounted) _showNotice(context, '邀请已发送', '等待对方确认上麦。');
         case _LiveMemberAction.toggleMute:
           await _accountSession.setLiveSpeakerMute(
             live.id,

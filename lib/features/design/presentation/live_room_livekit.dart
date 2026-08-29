@@ -52,13 +52,6 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
               'LiveKit remote audio subscribed before connect listener: '
               '${event.participant.identity}/${event.publication.sid}',
             );
-            unawaited(
-              _logRemoteAudioTrackStats(
-                event.track as RemoteAudioTrack,
-                event.publication.sid,
-                event.publication.muted,
-              ),
-            );
           }
         })
         ..on<AudioPlaybackStatusChanged>((event) {
@@ -86,13 +79,6 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
               debugPrint(
                 'LiveKit remote audio subscribed before connect listener: '
                 '${event.participant.identity}/${event.publication.sid}',
-              );
-              unawaited(
-                _logRemoteAudioTrackStats(
-                  event.track as RemoteAudioTrack,
-                  event.publication.sid,
-                  event.publication.muted,
-                ),
               );
             }
           })
@@ -424,7 +410,12 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     if (_liveKitRoom == null || _liveKitConnecting || _liveKitReconnecting) {
       return;
     }
-    if (canPublish && _liveKitCanPublish != true) {
+    // A receive-only token can still report the speaker role while approval
+    // propagation is catching up. Once this connection has adopted that same
+    // role, retrying on every room snapshot creates an endless reconnect loop.
+    if (canPublish &&
+        _liveKitCanPublish != true &&
+        _liveKitRole != room.viewerRole) {
       // A listener uses the media playback session. Promotion must reconnect
       // with a publishing token after switching to the communication session,
       // which recreates iOS's audio device instead of reusing a stopped one.
@@ -487,8 +478,11 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     _localMuteOverride = nextMuted;
     try {
       if (nextMuted) {
-        await _setLocalMicrophoneEnabledWithRecovery(false);
+        // The API persists the mute and updates the LiveKit room permission;
+        // only then stop the local publication so other clients observe one
+        // authoritative transition.
         await _accountSession.setLiveParticipantMute(live.id, true);
+        await _setLocalMicrophoneEnabledWithRecovery(false);
       } else {
         await _accountSession.setLiveParticipantMute(live.id, false);
         await _setLocalMicrophoneEnabledWithRecovery(true);
@@ -638,8 +632,23 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     return !enabled || track is LocalAudioTrack;
   }
 
-  Future<void> _setSpeakerOutputPreferred() =>
-      AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+  Future<void> _setSpeakerOutputPreferred() async {
+    // Android uses LiveKit's official RoomOptions speakerOn setting. The
+    // AudioManager override is only needed for the iOS audio session.
+    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    try {
+      await AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+      debugPrint(
+        'LiveKit speaker output requested: platform=$defaultTargetPlatform '
+        'preferred=${AudioManager.instance.isSpeakerOutputPreferred} '
+        'forced=${AudioManager.instance.isSpeakerOutputForced} '
+        'engine=${AudioManager.instance.audioEngineState}',
+      );
+    } catch (error, stackTrace) {
+      debugPrint('LiveKit speaker output request failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
 
   Future<void> _startListenerAudioWarmup() async {
     if (defaultTargetPlatform != TargetPlatform.iOS ||

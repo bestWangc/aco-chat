@@ -47,6 +47,9 @@ class AccountApiException implements Exception {
         normalized.contains('live password')) {
       return '直播间密码错误，请重新输入。';
     }
+    if (normalized.contains('live is not currently active')) {
+      return '该直播当前未开始或已结束。';
+    }
     if (normalized == 'avatar image is required') return '请选择头像图片。';
     if (normalized.contains('avatar image must be') &&
         normalized.contains('2 mb')) {
@@ -386,11 +389,15 @@ class AccountApiClient {
     required int liveId,
     required String token,
     String? joinPassword,
+    bool resetRole = false,
   }) async {
     final response = await _httpClient.post(
       _uri('lives/$liveId/room'),
       headers: _authorizedHeaders(token),
-      body: jsonEncode({'join_password': joinPassword ?? ''}),
+      body: jsonEncode({
+        'join_password': joinPassword ?? '',
+        'reset_role': resetRole,
+      }),
     );
     return LiveRoom.fromJson(_body(response));
   }

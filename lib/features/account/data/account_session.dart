@@ -203,12 +203,16 @@ class AccountSession {
     token: await _requireToken(),
   );
 
-  Future<LiveRoom> liveRoom(int liveId, {String? joinPassword}) async =>
-      _apiClient.getLiveRoom(
-        liveId: liveId,
-        joinPassword: joinPassword,
-        token: await _requireToken(),
-      );
+  Future<LiveRoom> liveRoom(
+    int liveId, {
+    String? joinPassword,
+    bool resetRole = false,
+  }) async => _apiClient.getLiveRoom(
+    liveId: liveId,
+    joinPassword: joinPassword,
+    resetRole: resetRole,
+    token: await _requireToken(),
+  );
 
   Future<LiveKitJoinInfo> liveKitJoinInfo(
     int liveId, {

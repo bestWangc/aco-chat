@@ -54,7 +54,9 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     final audioMuted = !isHost && (room?.viewerMuted ?? false);
     final canSpeak =
         live == null ||
-        (_liveKitPublishReady && (isHost || serverViewerRole == 'speaker'));
+        (_liveKitRoom != null &&
+            (isHost ||
+                (serverViewerRole == 'speaker' && _liveKitPublishReady)));
     // The server keeps membership through a reconnect grace period, but do
     // not send mute requests while the realtime connection is recovering.
     // Keep the control enabled so a muted speaker can unmute themselves.

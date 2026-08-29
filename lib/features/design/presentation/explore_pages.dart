@@ -253,6 +253,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         !await _verifyLivePassword(session, joinPassword)) {
       return;
     }
+    // Check the kick block before pushing the room route. This keeps the
+    // rejection in the live list instead of briefly entering a room page.
+    if (joinPassword == null && !await _verifyLiveEntry(session)) return;
     if (!mounted) return;
     Navigator.of(context)
         .push<Object?>(
@@ -291,6 +294,24 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       await AccountSession(
         _apiClient,
       ).liveRoom(session.id, joinPassword: password);
+      return true;
+    } on AccountApiException catch (error) {
+      if (mounted) {
+        showAcoAlertNotice(
+          context,
+          error.isLiveKick ? '暂时无法进入直播间' : '无法进入直播间',
+          error.localizedMessage,
+        );
+      }
+    } catch (_) {
+      if (mounted) showAcoAlertNotice(context, '无法进入直播间', '请检查网络后重试。');
+    }
+    return false;
+  }
+
+  Future<bool> _verifyLiveEntry(LiveSession session) async {
+    try {
+      await AccountSession(_apiClient).liveRoom(session.id);
       return true;
     } on AccountApiException catch (error) {
       if (mounted) {
