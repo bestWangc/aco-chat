@@ -246,6 +246,9 @@ class AccountSession {
   Future<List<LiveParticipant>> raisedLiveHands(int liveId) async => _apiClient
       .listRaisedLiveHands(liveId: liveId, token: await _requireToken());
 
+  Future<void> rejectAllRaisedLiveHands(int liveId) async => _apiClient
+      .rejectAllRaisedLiveHands(liveId: liveId, token: await _requireToken());
+
   Future<List<LiveParticipant>> liveHostTransferCandidates(int liveId) async =>
       _apiClient.listLiveHostTransferCandidates(
         liveId: liveId,

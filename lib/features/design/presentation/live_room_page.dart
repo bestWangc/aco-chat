@@ -1075,7 +1075,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               },
               onRejectAll: () {
                 Navigator.of(dialogContext).pop();
-                unawaited(_rejectAllSpeakerRequests(users));
+                unawaited(_rejectAllSpeakerRequests());
               },
               maxHeight: 170,
             ),
@@ -1190,9 +1190,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  Future<void> _rejectAllSpeakerRequests(List<LiveParticipant> users) async {
-    for (final user in users) {
-      await _rejectSpeakerRequest(user.userId);
+  Future<void> _rejectAllSpeakerRequests() async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.rejectAllRaisedLiveHands(live.id);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '拒绝失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '拒绝失败', '请检查网络后重试。');
     }
   }
 

@@ -465,6 +465,11 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<void> rejectAllRaisedLiveHands({
+    required int liveId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/raised-hands/reject-all', token);
+
   Future<List<LiveParticipant>> listLiveHostTransferCandidates({
     required int liveId,
     required String token,
