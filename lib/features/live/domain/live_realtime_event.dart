@@ -73,6 +73,11 @@ final class LiveKickedEvent extends LiveRealtimeEvent {
   const LiveKickedEvent({super.eventVersion});
 }
 
+final class LiveSpeakerInviteEvent extends LiveRealtimeEvent {
+  const LiveSpeakerInviteEvent(this.invited, {super.eventVersion});
+  final bool invited;
+}
+
 abstract final class LiveRealtimeEventParser {
   static LiveRealtimeEvent? parse(Object? rawEvent) {
     if (rawEvent is! String) return null;
@@ -172,6 +177,11 @@ abstract final class LiveRealtimeEventParser {
           );
         case 'room.kicked':
           return LiveKickedEvent(eventVersion: eventVersion);
+        case 'room.speaker_invite':
+          final invited = decoded['speaker_invite'];
+          return invited is bool
+              ? LiveSpeakerInviteEvent(invited, eventVersion: eventVersion)
+              : null;
         default:
           return null;
       }

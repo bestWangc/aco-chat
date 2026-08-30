@@ -299,6 +299,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyParticipantMute(userId, muted);
       case LiveKickedEvent():
         unawaited(_handleKicked());
+      case LiveSpeakerInviteEvent(:final invited):
+        if (invited) {
+          _showPendingSpeakerInvite();
+        }
     }
   }
 
@@ -311,8 +315,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     LiveCheckInStartedEvent() => 'room.check_in_started',
     LiveRaisedHandCountEvent() => 'room.raised_hand_count',
     LiveParticipantMuteEvent(:final userId) => 'room.participant_mute:$userId',
-    LiveParticipantJoinedEvent() || LiveKickedEvent() => null,
+    LiveParticipantJoinedEvent() ||
+    LiveKickedEvent() ||
+    LiveSpeakerInviteEvent() => null,
   };
+
+  void _showPendingSpeakerInvite() {
+    if (!mounted ||
+        _room?.viewerRole != 'listener' ||
+        _speakerInviteDialogVisible) {
+      return;
+    }
+    _speakerInviteDialogVisible = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_showSpeakerInviteDialog());
+    });
+  }
 
   Future<void> _handleKicked() async {
     if (_leaving || _closingRoom) return;
@@ -520,10 +538,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               participant.speakerInvited,
         );
     if (invitePending && !_speakerInviteDialogVisible) {
-      _speakerInviteDialogVisible = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(_showSpeakerInviteDialog());
-      });
+      _showPendingSpeakerInvite();
     }
     _checkInTimer?.cancel();
     if (displayedRoom.checkIn != null) {
