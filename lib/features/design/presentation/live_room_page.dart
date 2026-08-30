@@ -620,6 +620,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     LiveParticipant? host,
     List<LiveParticipant>? speakers,
     List<LiveParticipant>? listeners,
+    bool? viewerMuted,
   }) => LiveRoom(
     live: room.live,
     host: host ?? room.host,
@@ -632,7 +633,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     listeners: listeners ?? room.listeners,
     raisedHandCount: raisedHandCount ?? room.raisedHandCount,
     canRaiseHand: room.canRaiseHand,
-    viewerMuted: room.viewerMuted,
+    viewerMuted: viewerMuted ?? room.viewerMuted,
     chatMuted: room.chatMuted,
     audioMuted: room.audioMuted,
     checkIn: checkIn,
@@ -654,16 +655,26 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             speakerInvited: participant.speakerInvited,
           )
         : participant;
-    setState(
-      () => _room = _copyRoom(
-        room,
-        participantCount: room.participantCount,
-        checkIn: room.checkIn,
-        host: update(room.host),
-        speakers: room.speakers.map(update).toList(growable: false),
-        listeners: room.listeners.map(update).toList(growable: false),
-      ),
+    final isViewer = userId == room.viewerUserId;
+    final updatedRoom = _copyRoom(
+      room,
+      participantCount: room.participantCount,
+      checkIn: room.checkIn,
+      host: update(room.host),
+      speakers: room.speakers.map(update).toList(growable: false),
+      listeners: room.listeners.map(update).toList(growable: false),
+      viewerMuted: isViewer ? muted : null,
     );
+    setState(() {
+      _room = updatedRoom;
+      if (isViewer) {
+        _muted = muted;
+        _localMuteOverride = null;
+      }
+    });
+    if (isViewer) {
+      unawaited(_syncLiveKitPublishPermission(updatedRoom));
+    }
   }
 
   Future<void> _raiseHand() async {
