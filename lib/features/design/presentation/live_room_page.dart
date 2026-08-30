@@ -82,7 +82,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   DateTime? _realtimeCheckInDeadline;
   int? _realtimeCheckInCount;
   int _lastRoomSnapshotVersion = 0;
-  int _lastRealtimeEventVersion = 0;
+  final Map<String, int> _latestRealtimeEventVersions = <String, int>{};
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
@@ -253,8 +253,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _handleRealtimeEvent(dynamic rawEvent) {
     final event = LiveRealtimeEventParser.parse(rawEvent);
     if (event == null) return;
-    if (event.eventVersion < _lastRealtimeEventVersion) return;
-    _lastRealtimeEventVersion = event.eventVersion;
+    final eventKey = _stateEventKey(event);
+    if (eventKey != null && event.eventVersion > 0) {
+      final previousVersion = _latestRealtimeEventVersions[eventKey];
+      if (previousVersion != null && event.eventVersion <= previousVersion) {
+        return;
+      }
+      _latestRealtimeEventVersions[eventKey] = event.eventVersion;
+    }
     if (_networkReconnecting && mounted) {
       setState(() {
         _networkReconnecting = false;
@@ -289,6 +295,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         unawaited(_handleKicked());
     }
   }
+
+  String? _stateEventKey(LiveRealtimeEvent event) => switch (event) {
+    LiveRoomSnapshotEvent() => 'room.snapshot',
+    LiveAudioMuteEvent() => 'room.audio_mute',
+    LiveChatMuteEvent() => 'room.chat_mute',
+    LiveParticipantCountEvent() => 'room.participant_count',
+    LiveCheckInEvent(:final userId) => 'room.check_in:$userId',
+    LiveCheckInStartedEvent() => 'room.check_in_started',
+    LiveRaisedHandCountEvent() => 'room.raised_hand_count',
+    LiveParticipantMuteEvent(:final userId) => 'room.participant_mute:$userId',
+    LiveParticipantJoinedEvent() || LiveKickedEvent() => null,
+  };
 
   Future<void> _handleKicked() async {
     if (_leaving || _closingRoom) return;
