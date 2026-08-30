@@ -93,6 +93,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   late final LiveRealtimeClient _realtimeClient;
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
+  Timer? _roomReconcileTimer;
   Timer? _hostHeartbeatTimer;
   Room? _liveKitRoom;
   EventsListener<RoomEvent>? _liveKitEventListener;
@@ -293,6 +294,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyCheckInEvent(deadline, checkedInCount, userId);
       case LiveCheckInStartedEvent(:final deadline):
         _applyCheckInStarted(deadline);
+        _scheduleRoomReconcile();
       case LiveRaisedHandCountEvent(:final count):
         _applyRaisedHandCount(count);
       case LiveParticipantMuteEvent(:final userId, :final muted):
@@ -302,6 +304,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       case LiveSpeakerInviteEvent(:final invited):
         if (invited) {
           _showPendingSpeakerInvite();
+          _scheduleRoomReconcile();
         }
     }
   }
@@ -329,6 +332,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _speakerInviteDialogVisible = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_showSpeakerInviteDialog());
+    });
+  }
+
+  void _scheduleRoomReconcile() {
+    _roomReconcileTimer?.cancel();
+    _roomReconcileTimer = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) unawaited(_loadRoom(silent: true));
     });
   }
 
@@ -1236,6 +1246,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     unawaited(_setLiveRoomWakelock(false));
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
+    _roomReconcileTimer?.cancel();
     _hostHeartbeatTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _chatBuffer.dispose();
