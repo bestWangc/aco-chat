@@ -22,6 +22,7 @@ class LiveRealtimeClient {
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
+  bool _reconnectScheduled = false;
   bool _stopped = false;
   bool _disposed = false;
 
@@ -46,12 +47,14 @@ class LiveRealtimeClient {
         onDone: () => _scheduleReconnect(uri: uri, ticketLoader: ticketLoader),
       );
       _reconnectTimer?.cancel();
+      _reconnectScheduled = false;
       _reconnectAttempt = 0;
       _stopped = false;
       onReconnectingChanged(false);
     } on AccountApiException catch (error) {
       if (error.statusCode == 404 || error.statusCode == 409) {
         _reconnectTimer?.cancel();
+        _reconnectScheduled = false;
         onReconnectingChanged(false);
         return;
       }
@@ -64,6 +67,7 @@ class LiveRealtimeClient {
   Future<void> dispose() async {
     _disposed = true;
     _reconnectTimer?.cancel();
+    _reconnectScheduled = false;
     await _subscription?.cancel();
     await _channel?.sink.close();
     _subscription = null;
@@ -74,7 +78,7 @@ class LiveRealtimeClient {
     required Uri uri,
     required LiveRealtimeTicketLoader ticketLoader,
   }) {
-    if (_disposed || _stopped) return;
+    if (_disposed || _stopped || _reconnectScheduled) return;
     const retryDelays = [3, 6, 12, 30, 60];
     if (_reconnectAttempt >= retryDelays.length) {
       _stopped = true;
@@ -82,10 +86,12 @@ class LiveRealtimeClient {
       onReconnectStopped();
       return;
     }
+    _reconnectScheduled = true;
     _reconnectTimer?.cancel();
     onReconnectingChanged(true);
     final delay = Duration(seconds: retryDelays[_reconnectAttempt++]);
     _reconnectTimer = Timer(delay, () {
+      _reconnectScheduled = false;
       unawaited(connect(uri: uri, ticketLoader: ticketLoader));
     });
   }
