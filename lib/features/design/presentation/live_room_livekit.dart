@@ -633,9 +633,10 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
   }
 
   Future<void> _setSpeakerOutputPreferred() async {
-    // Android uses LiveKit's official RoomOptions speakerOn setting. The
-    // AudioManager override is only needed for the iOS audio session.
-    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
     try {
       await AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
       debugPrint(
