@@ -82,6 +82,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   DateTime? _realtimeCheckInDeadline;
   int? _realtimeCheckInCount;
   int _lastRoomSnapshotVersion = 0;
+  int _roomLoadSequence = 0;
   final Map<String, int> _latestRealtimeEventVersions = <String, int>{};
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
@@ -162,6 +163,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _loadRoom({bool silent = false, bool resetRole = false}) async {
     final live = widget.live;
     if (live == null) return;
+    final requestSequence = ++_roomLoadSequence;
     if (!silent && mounted) setState(() => _roomLoading = true);
     try {
       final room = await _accountSession.liveRoom(
@@ -174,17 +176,21 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         'role=${room.viewerRole} hostMuted=${room.host.muted} '
         'viewerMuted=${room.viewerMuted} resetRole=$resetRole',
       );
-      _applyRoomSnapshot(room);
+      if (requestSequence == _roomLoadSequence) {
+        _applyRoomSnapshot(room);
+      }
     } on AccountApiException catch (error) {
-      if (!silent && mounted) {
+      if (requestSequence == _roomLoadSequence && !silent && mounted) {
         _showNotice(context, '无法进入直播间', error.localizedMessage);
       }
     } catch (_) {
-      if (!silent && mounted) {
+      if (requestSequence == _roomLoadSequence && !silent && mounted) {
         _showNotice(context, '无法进入直播间', '请检查网络后重试。');
       }
     } finally {
-      if (!silent && mounted) setState(() => _roomLoading = false);
+      if (requestSequence == _roomLoadSequence && !silent && mounted) {
+        setState(() => _roomLoading = false);
+      }
     }
   }
 
