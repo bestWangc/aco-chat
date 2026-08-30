@@ -638,7 +638,10 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       return;
     }
     try {
-      await AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+      await AudioManager.instance.setSpeakerOutputPreferred(
+        true,
+        force: defaultTargetPlatform == TargetPlatform.iOS,
+      );
       debugPrint(
         'LiveKit speaker output requested: platform=$defaultTargetPlatform '
         'preferred=${AudioManager.instance.isSpeakerOutputPreferred} '
