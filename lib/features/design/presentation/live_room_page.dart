@@ -130,6 +130,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             _networkReconnecting = reconnecting;
             if (reconnecting) _realtimeParticipantCount = null;
           });
+          if (!reconnecting) {
+            // A reconnect can miss presence events. Reconcile from the
+            // authoritative room snapshot before rendering the recovered UI.
+            unawaited(_loadRoom(silent: true));
+          }
         }
       },
       onReconnectStopped: () {
@@ -499,6 +504,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _closeRoom(true);
       return;
     }
+    // A participant_count event is the authoritative live value. A snapshot
+    // may have been requested before that event arrived, so never let an
+    // older snapshot overwrite a newer realtime count.
     final displayedParticipantCount =
         _realtimeParticipantCount ?? room.participantCount;
     final localCheckInDeadline = _locallyConfirmedCheckInDeadline;
