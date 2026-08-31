@@ -1091,7 +1091,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         child: ConstrainedBox(
           constraints: BoxConstraints(
             maxWidth: 320,
-            maxHeight: math.min(280, MediaQuery.sizeOf(context).height * .42),
+            maxHeight: math.min(420, MediaQuery.sizeOf(context).height * .62),
           ),
           child: CupertinoPopupSurface(
             child: _RaisedHandRequests(
@@ -1110,7 +1110,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 Navigator.of(dialogContext).pop();
                 unawaited(_rejectAllSpeakerRequests());
               },
-              maxHeight: 170,
+              maxHeight: math.min(320, MediaQuery.sizeOf(context).height * .5),
             ),
           ),
         ),

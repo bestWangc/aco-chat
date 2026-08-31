@@ -306,6 +306,7 @@ class _RaisedHandRequests extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (users.isEmpty) return const SizedBox.shrink();
+    final listMaxHeight = math.min(maxHeight, users.length * 57.0);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xF21F1F1F),
@@ -322,6 +323,7 @@ class _RaisedHandRequests extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _RaisedHandRequestsHeader(
@@ -332,7 +334,7 @@ class _RaisedHandRequests extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxHeight),
+              constraints: BoxConstraints(maxHeight: listMaxHeight),
               child: ListView.separated(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
