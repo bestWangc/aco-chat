@@ -536,13 +536,27 @@ class _ProfileEditPageState extends State<_ProfileEditPage> {
     setState(() => _uploadingAvatar = true);
     final client = AccountApiClient();
     try {
+      debugPrint('[AvatarUpload] start bytes=${croppedBytes.length}');
       final profile = await AccountSession(client).uploadAvatar(croppedBytes);
+      debugPrint('[AvatarUpload] success avatarUrl=${profile.avatarUrl}');
       if (!mounted) return;
       setState(() => _avatarUrl = profile.avatarUrl);
       widget.onAvatarUrlChanged?.call(profile.avatarUrl);
     } on AccountApiException catch (error) {
+      debugPrint(
+        '[AvatarUpload] API error status=${error.statusCode} message=${error.message} '
+        'response=${AccountApiClient.lastResponseBody}',
+      );
       if (mounted) _showNotice(context, '头像上传失败', error.localizedMessage);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint(
+        '[AvatarUpload] unexpected error=$error '
+        'request=${AccountApiClient.lastRequest} '
+        'status=${AccountApiClient.lastStatusCode} '
+        'response=${AccountApiClient.lastResponseBody} '
+        'apiError=${AccountApiClient.lastError}',
+      );
+      debugPrintStack(stackTrace: stackTrace, label: 'AvatarUpload');
       if (mounted) _showNotice(context, '头像上传失败', '请检查网络后重试。');
     } finally {
       client.close();
