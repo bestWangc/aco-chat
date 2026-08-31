@@ -150,60 +150,25 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
             ),
             if (_handRaiseNoticeVisible)
               const Center(child: _LiveRoomInfoNotice()),
-            if (_liveKitConnecting || _liveKitReconnecting)
-              Positioned(
-                top: 48,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: CupertinoColors.black.withValues(alpha: 0.88),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: CupertinoColors.white.withValues(alpha: .22),
-                      ),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Color(0x66000000),
-                          blurRadius: 10,
-                          offset: Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 17,
-                        vertical: 10,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CupertinoActivityIndicator(radius: 10),
-                          const SizedBox(width: 10),
-                          Text(
-                            _liveKitConnecting ? '正在连接语音…' : '语音重连中…',
-                            style: const TextStyle(
-                              color: CupertinoColors.white,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             Positioned(
               top: 8,
               left: 18,
               child: _LiveRoomNetworkStatusChip(
-                palette: palette,
-                reconnecting: _networkReconnecting,
+                wsReconnecting: _networkReconnecting,
+                liveKitConnecting: _liveKitConnecting,
+                liveKitConnected: _liveKitRoom != null,
+                liveKitReconnecting: _liveKitReconnecting,
+                liveKitReconnectStopped: _liveKitReconnectStopped,
               ),
             ),
-            if (_networkReconnecting) const _LiveRoomNetworkNotice(),
+            if (_networkReconnecting ||
+                _liveKitConnecting ||
+                _liveKitReconnecting)
+              _LiveRoomNetworkNotice(
+                wsReconnecting: _networkReconnecting,
+                liveKitConnecting: _liveKitConnecting,
+                liveKitReconnecting: _liveKitReconnecting,
+              ),
             Positioned(
               left: 0,
               right: 0,

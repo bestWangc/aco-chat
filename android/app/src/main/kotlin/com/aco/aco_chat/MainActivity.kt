@@ -2,6 +2,8 @@ package com.aco.aco_chat
 
 import android.content.ContentValues
 import android.content.Intent
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.Build
 import android.provider.MediaStore
 import android.view.WindowManager
@@ -86,6 +88,33 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                     else -> result.notImplemented()
                 }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/live-audio-route")
+            .setMethodCallHandler { call, result ->
+                if (call.method != "routeInfo") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                val audioManager = getSystemService(AudioManager::class.java)
+                val outputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                    .map { device ->
+                        mapOf(
+                            "type" to device.type,
+                            "name" to device.productName.toString(),
+                            "selected" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                                audioManager.communicationDevice?.id == device.id),
+                        )
+                    }
+                result.success(
+                    mapOf(
+                        "mode" to audioManager.mode,
+                        "speakerphoneOn" to audioManager.isSpeakerphoneOn,
+                        "communicationDevice" to (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            audioManager.communicationDevice?.productName?.toString()
+                        } else null),
+                        "outputs" to outputs,
+                    ),
+                )
             }
     }
 

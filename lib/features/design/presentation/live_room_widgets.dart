@@ -958,86 +958,175 @@ class _LiveRoomParticipantCard extends StatelessWidget {
 
 class _LiveRoomNetworkStatusChip extends StatelessWidget {
   const _LiveRoomNetworkStatusChip({
-    required this.palette,
-    required this.reconnecting,
+    required this.wsReconnecting,
+    required this.liveKitConnecting,
+    required this.liveKitConnected,
+    required this.liveKitReconnecting,
+    required this.liveKitReconnectStopped,
   });
 
-  final AcoPalette palette;
-  final bool reconnecting;
+  final bool wsReconnecting;
+  final bool liveKitConnecting;
+  final bool liveKitConnected;
+  final bool liveKitReconnecting;
+  final bool liveKitReconnectStopped;
 
   @override
   Widget build(BuildContext context) {
-    final statusColor = reconnecting ? _danger : palette.accent;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: .14),
-        borderRadius: BorderRadius.circular(15),
-      ),
+    return GestureDetector(
+      onTap: () => _showStatusDetails(context),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        padding: const EdgeInsets.all(6),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 7,
-              height: 7,
-              decoration: BoxDecoration(
-                color: statusColor,
-                shape: BoxShape.circle,
-              ),
+            _buildStatusIcon(
+              label: '实时消息连接',
+              reconnecting: wsReconnecting,
+              disconnected: false,
             ),
-            const SizedBox(width: 5),
-            Text(
-              reconnecting ? '重连中' : '网络正常',
-              style: TextStyle(
-                color: statusColor,
-                fontSize: AcoTypography.caption,
-                fontWeight: FontWeight.w700,
-              ),
+            const SizedBox(width: 10),
+            _buildStatusIcon(
+              label: '语音连接',
+              reconnecting: liveKitConnecting || liveKitReconnecting,
+              disconnected: liveKitReconnectStopped || !liveKitConnected,
             ),
           ],
         ),
       ),
     );
   }
-}
 
-class _LiveRoomNetworkNotice extends StatelessWidget {
-  const _LiveRoomNetworkNotice();
-
-  @override
-  Widget build(BuildContext context) => Positioned(
-    top: 48,
-    left: 24,
-    right: 24,
-    child: IgnorePointer(
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: const Color(0xE61D1D1D),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _white.withValues(alpha: .12)),
+  void _showStatusDetails(BuildContext context) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('连接状态'),
+        message: Text(
+          '实时消息：${_statusText(wsReconnecting, false)}\n'
+          '语音：${_statusText(liveKitConnecting || liveKitReconnecting, liveKitReconnectStopped || !liveKitConnected)}',
         ),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CupertinoActivityIndicator(radius: 7, color: _white),
-              SizedBox(width: 8),
-              Text(
-                '网络较弱，正在重连…',
-                style: TextStyle(
-                  color: _white,
-                  fontSize: AcoTypography.bodySmall,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text(
+            '关闭',
+            style: TextStyle(fontSize: AcoTypography.bodySmall),
           ),
         ),
       ),
+    );
+  }
+
+  String _statusText(bool reconnecting, bool disconnected) {
+    if (reconnecting) return '连接中';
+    if (disconnected) return '已断开';
+    return '正常';
+  }
+
+  Widget _buildStatusIcon({
+    required String label,
+    required bool reconnecting,
+    required bool disconnected,
+  }) {
+    Color color;
+    String status;
+    if (reconnecting) {
+      color = CupertinoColors.systemOrange;
+      status = '连接中';
+    } else if (disconnected) {
+      color = _danger;
+      status = '已断开';
+    } else {
+      color = const Color(0xFF9BEF00);
+      status = '正常';
+    }
+    return Semantics(
+      label: '$label：$status',
+      child: _SignalStrengthIcon(color: color),
+    );
+  }
+}
+
+class _SignalStrengthIcon extends StatelessWidget {
+  const _SignalStrengthIcon({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 14,
+    height: 14,
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [_bar(4), _bar(7), _bar(10), _bar(13)],
     ),
   );
+
+  Widget _bar(double height) => Container(
+    width: 2,
+    height: height,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(1),
+    ),
+  );
+}
+
+class _LiveRoomNetworkNotice extends StatelessWidget {
+  const _LiveRoomNetworkNotice({
+    required this.wsReconnecting,
+    required this.liveKitConnecting,
+    required this.liveKitReconnecting,
+  });
+
+  final bool wsReconnecting;
+  final bool liveKitConnecting;
+  final bool liveKitReconnecting;
+
+  @override
+  Widget build(BuildContext context) {
+    final String message;
+    if (wsReconnecting && (liveKitConnecting || liveKitReconnecting)) {
+      message = '实时消息和语音连接中…';
+    } else if (wsReconnecting) {
+      message = '实时消息连接中…';
+    } else {
+      message = '语音连接中…';
+    }
+    return Positioned(
+      top: 48,
+      left: 24,
+      right: 24,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xE61D1D1D),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: _white.withValues(alpha: .12)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CupertinoActivityIndicator(radius: 7, color: _white),
+                const SizedBox(width: 8),
+                Text(
+                  message,
+                  style: const TextStyle(
+                    color: _white,
+                    fontSize: AcoTypography.bodySmall,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MutedMicrophoneBadge extends StatelessWidget {
@@ -1145,7 +1234,7 @@ class _SpeakingRing extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: const Color(0xFF9BEF00), width: 3),
         boxShadow: const [
-          BoxShadow(color: Color(0x669BEF00), blurRadius: 8, spreadRadius: 1),
+          BoxShadow(color: Color(0x669BEF00), blurRadius: 6, spreadRadius: 1),
         ],
       ),
     ),
