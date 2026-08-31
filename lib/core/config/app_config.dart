@@ -3,7 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
-    defaultValue: '1.0.32',
+    defaultValue: '1.0.33',
   );
 
   static const cloudflareApiBaseUrl = String.fromEnvironment(
