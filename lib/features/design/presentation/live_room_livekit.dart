@@ -104,6 +104,32 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       _liveKitRoom = room;
       _liveKitEventListener = room.createListener()
         ..on<DataReceivedEvent>(_handleLiveKitData)
+        ..on<LocalTrackPublishedEvent>((event) {
+          if (event.publication.kind == TrackType.AUDIO) {
+            debugPrint(
+              '[LIVEKIT诊断][本地发布] sid=${event.publication.sid} '
+              'muted=${event.publication.muted} '
+              'active=${event.publication.track?.isActive}',
+            );
+          }
+        })
+        ..on<LocalTrackUnpublishedEvent>((event) {
+          if (event.publication.kind == TrackType.AUDIO) {
+            debugPrint(
+              '[LIVEKIT诊断][本地取消发布] sid=${event.publication.sid} '
+              'muted=${event.publication.muted} '
+              'active=${event.publication.track?.isActive}',
+            );
+          }
+        })
+        ..on<ParticipantPermissionsUpdatedEvent>((event) {
+          debugPrint(
+            '[LIVEKIT诊断][本地权限变化] '
+            'canPublish=${event.permissions.canPublish} '
+            '旧canPublish=${event.oldPermissions.canPublish} '
+            'canPublishData=${event.permissions.canPublishData}',
+          );
+        })
         ..on<TrackSubscribedEvent>((event) {
           // Keep iOS output routing applied after the first remote audio track
           // creates/activates the native WebRTC audio engine.
@@ -134,6 +160,24 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
             debugPrint(
               'LiveKit remote audio unpublished: '
               '${event.participant.identity}/${event.publication.sid}',
+            );
+          }
+        })
+        ..on<TrackMutedEvent>((event) {
+          if (event.publication.kind == TrackType.AUDIO) {
+            debugPrint(
+              '[LIVEKIT诊断][远端静音] '
+              'participant=${event.participant.identity} '
+              'sid=${event.publication.sid}',
+            );
+          }
+        })
+        ..on<TrackUnmutedEvent>((event) {
+          if (event.publication.kind == TrackType.AUDIO) {
+            debugPrint(
+              '[LIVEKIT诊断][远端取消静音] '
+              'participant=${event.participant.identity} '
+              'sid=${event.publication.sid}',
             );
           }
         })
@@ -479,6 +523,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       'beforeEngine=${AudioManager.instance.audioEngineState}',
     );
     unawaited(_logLiveKitAudioRoute('mute-toggle-before'));
+    unawaited(_logAllRemoteAudioTrackStats('开关麦前'));
     try {
       if (nextMuted) {
         // Persist the state first, then mute the existing publication so the
@@ -504,6 +549,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         'engine=${AudioManager.instance.audioEngineState}',
       );
       unawaited(_logLiveKitAudioRoute('mute-toggle-after-local'));
+      unawaited(_logAllRemoteAudioTrackStats('本地静音完成'));
       unawaited(
         Future<void>.delayed(const Duration(milliseconds: 1500), () async {
           if (!mounted) return;
@@ -512,6 +558,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
             'engine=${AudioManager.instance.audioEngineState}',
           );
           await _logLiveKitAudioRoute('mute-toggle-delayed');
+          await _logAllRemoteAudioTrackStats('延迟检查');
         }),
       );
       if (mounted) setState(() => _muted = nextMuted);
@@ -744,7 +791,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     Future<void> log(String sample) async {
       final stats = await track.getReceiverStats();
       debugPrint(
-        'LiveKit remote audio downlink $sample: '
+        '[LIVEKIT诊断][远端接收统计][$sample] '
         'publication=$publicationSid '
         'trackActive=${track.isActive} '
         'publicationMuted=$publicationMuted '
@@ -761,7 +808,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       )) {
         final values = report.values;
         debugPrint(
-          'LiveKit remote audio raw stats $sample: '
+          '[LIVEKIT诊断][远端原始统计][$sample] '
           'publication=$publicationSid type=${report.type} '
           'enabled=${track.mediaStreamTrack.enabled} '
           'packetsReceived=${values['packetsReceived']} '
@@ -785,6 +832,36 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     }
   }
 
+  Future<void> _logAllRemoteAudioTrackStats(String sample) async {
+    final room = _liveKitRoom;
+    if (room == null) return;
+    for (final participant in room.remoteParticipants.values) {
+      for (final publication in participant.audioTrackPublications) {
+        final track = publication.track;
+        if (track == null) {
+          debugPrint(
+            '[LIVEKIT诊断][远端下行][$sample] '
+            'participant=${participant.identity} publication=${publication.sid} '
+            'track=<none> subscribed=${publication.subscribed} '
+            'muted=${publication.muted}',
+          );
+          continue;
+        }
+        debugPrint(
+          '[LIVEKIT诊断][远端状态][$sample] '
+          'participant=${participant.identity} publication=${publication.sid} '
+          'subscribed=${publication.subscribed} muted=${publication.muted} '
+          'trackActive=${track.isActive}',
+        );
+        await _logRemoteAudioTrackStats(
+          track,
+          publication.sid,
+          publication.muted,
+        );
+      }
+    }
+  }
+
   Future<void> _logLiveKitAudioRoute(String reason) async {
     if (defaultTargetPlatform != TargetPlatform.iOS &&
         defaultTargetPlatform != TargetPlatform.android) {
@@ -794,7 +871,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       final route = await _VoiceRoomPageState._liveAudioRouteChannel
           .invokeMethod<Object?>('routeInfo');
       debugPrint(
-        'LiveKit audio route: platform=$defaultTargetPlatform reason=$reason route=$route',
+        '[LIVEKIT诊断][音频路由] platform=$defaultTargetPlatform reason=$reason route=$route',
       );
     } catch (error) {
       debugPrint(

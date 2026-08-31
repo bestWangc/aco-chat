@@ -6,6 +6,7 @@ class _LiveRoomOverview extends StatelessWidget {
     required this.room,
     required this.isHost,
     required this.hostMuted,
+    required this.viewerMuted,
     required this.checkingIn,
     required this.speakingParticipantIds,
     required this.onCheckIn,
@@ -17,6 +18,7 @@ class _LiveRoomOverview extends StatelessWidget {
   final LiveRoom room;
   final bool isHost;
   final bool hostMuted;
+  final bool viewerMuted;
   final bool checkingIn;
   final Set<String> speakingParticipantIds;
   final VoidCallback onCheckIn;
@@ -91,6 +93,8 @@ class _LiveRoomOverview extends StatelessWidget {
           palette: palette,
           speakers: room.speakers,
           listeners: room.listeners,
+          viewerUserId: room.viewerUserId,
+          viewerMuted: viewerMuted,
           speakingParticipantIds: speakingParticipantIds,
           onSpeakerTap: onSpeakerTap,
         ),
@@ -98,7 +102,7 @@ class _LiveRoomOverview extends StatelessWidget {
   );
 }
 
-class _LiveRoomCheckInButton extends StatelessWidget {
+class _LiveRoomCheckInButton extends StatefulWidget {
   const _LiveRoomCheckInButton({
     required this.palette,
     required this.checkIn,
@@ -112,16 +116,52 @@ class _LiveRoomCheckInButton extends StatelessWidget {
   final VoidCallback? onPressed;
 
   @override
+  State<_LiveRoomCheckInButton> createState() => _LiveRoomCheckInButtonState();
+}
+
+class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  @override
+  void didUpdateWidget(_LiveRoomCheckInButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.checkIn.deadline != widget.checkIn.deadline) {
+      _startTimer();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final palette = widget.palette;
+    final checkIn = widget.checkIn;
     final checked = checkIn.viewerChecked;
-    final enabled = !checked && onPressed != null;
+    final enabled = !checked && widget.onPressed != null;
     final remaining = checkIn.deadline.difference(DateTime.now());
     final minutes = remaining.inMinutes.clamp(0, 99).toString().padLeft(2, '0');
     final seconds = (remaining.inSeconds % 60)
         .clamp(0, 59)
         .toString()
         .padLeft(2, '0');
-    if (isHost) {
+    if (widget.isHost) {
       return Semantics(
         label: '签到进行中，已签到 ${checkIn.checkedInCount} 人，剩余 $minutes:$seconds',
         child: Container(
@@ -192,10 +232,10 @@ class _LiveRoomCheckInButton extends StatelessWidget {
       button: true,
       enabled: enabled,
       label: checked ? '已签到' : '立即签到',
-      onTap: enabled ? onPressed : null,
+      onTap: enabled ? widget.onPressed : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: enabled ? onPressed : null,
+        onTap: enabled ? widget.onPressed : null,
         child: Container(
           width: 56,
           height: 56,
@@ -731,6 +771,8 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     required this.palette,
     required this.speakers,
     required this.listeners,
+    required this.viewerUserId,
+    required this.viewerMuted,
     required this.speakingParticipantIds,
     this.onSpeakerTap,
   });
@@ -738,22 +780,44 @@ class _LiveRoomParticipantSection extends StatelessWidget {
   final AcoPalette palette;
   final List<LiveParticipant> speakers;
   final List<LiveParticipant> listeners;
+  final int viewerUserId;
+  final bool viewerMuted;
   final Set<String> speakingParticipantIds;
   final ValueChanged<LiveParticipant>? onSpeakerTap;
 
+  LiveParticipant _withViewerMute(LiveParticipant participant) {
+    if (participant.userId != viewerUserId) return participant;
+    return LiveParticipant(
+      userId: participant.userId,
+      nickname: participant.nickname,
+      username: participant.username,
+      avatarUrl: participant.avatarUrl,
+      role: participant.role,
+      handRaised: participant.handRaised,
+      muted: viewerMuted,
+      speakerInvited: participant.speakerInvited,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final activeSpeakers = speakers.where(
+    final effectiveSpeakers = speakers
+        .map(_withViewerMute)
+        .toList(growable: false);
+    final effectiveListeners = listeners
+        .map(_withViewerMute)
+        .toList(growable: false);
+    final activeSpeakers = effectiveSpeakers.where(
       (participant) =>
           !participant.muted &&
           speakingParticipantIds.contains(participant.userId.toString()),
     );
-    final unmutedSpeakers = speakers.where(
+    final unmutedSpeakers = effectiveSpeakers.where(
       (participant) =>
           !speakingParticipantIds.contains(participant.userId.toString()) &&
           !participant.muted,
     );
-    final mutedSpeakers = speakers.where(
+    final mutedSpeakers = effectiveSpeakers.where(
       (participant) =>
           !speakingParticipantIds.contains(participant.userId.toString()) &&
           participant.muted,
@@ -767,7 +831,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     ].take(10).toList(growable: false);
     final participants = [
       ...visibleSpeakers,
-      ...listeners.take(10 - visibleSpeakers.length),
+      ...effectiveListeners.take(10 - visibleSpeakers.length),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),

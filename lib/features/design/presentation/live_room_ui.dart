@@ -21,6 +21,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         // a muted host avatar never falls back to the grey "not speaking"
         // treatment during entry or immediately after toggling.
         hostMuted: isHost ? (_muted || room.host.muted) : room.host.muted,
+        viewerMuted: _muted,
         checkingIn: _checkingIn,
         speakingParticipantIds: _liveKitSpeakingParticipantIds,
         onCheckIn: _confirmCheckIn,

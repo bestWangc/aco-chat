@@ -85,6 +85,8 @@ import AVFoundation
       "mode": session.mode.rawValue,
       "categoryOptions": session.categoryOptions.rawValue,
       "isOtherAudioPlaying": session.isOtherAudioPlaying,
+      "outputVolume": session.outputVolume,
+      "secondaryAudioShouldBeSilencedHint": session.secondaryAudioShouldBeSilencedHint,
       "outputs": outputs,
       "inputs": inputs,
     ]
