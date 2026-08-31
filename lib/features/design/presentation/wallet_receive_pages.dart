@@ -470,7 +470,6 @@ class _AddTokenPage extends StatelessWidget {
   Widget build(BuildContext context) => _DetailScaffold(
     palette: palette,
     title: '添加代币',
-    right: _AddTokenMoreButton(palette: palette),
     child: ListView(
       padding: const EdgeInsets.fromLTRB(27, 12, 27, 26),
       children: [
@@ -499,30 +498,6 @@ class _AddTokenPage extends StatelessWidget {
   );
 }
 
-class _AddTokenMoreButton extends StatelessWidget {
-  const _AddTokenMoreButton({required this.palette});
-
-  final AcoPalette palette;
-
-  @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: EdgeInsets.zero,
-    minimumSize: const Size(44, 44),
-    onPressed: () => _showNotice(context, '更多', '更多代币设置即将开放。'),
-    child: Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Icon(CupertinoIcons.ellipsis, color: palette.primaryText, size: 26),
-        Positioned(
-          right: -1,
-          top: 6,
-          child: Icon(CupertinoIcons.sparkles, color: _lime, size: 11),
-        ),
-      ],
-    ),
-  );
-}
-
 class _AddTokenSearch extends StatelessWidget {
   const _AddTokenSearch({required this.palette, required this.onSubmit});
   final AcoPalette palette;
@@ -530,18 +505,18 @@ class _AddTokenSearch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 44,
+    height: 38,
     decoration: BoxDecoration(
       border: Border.all(
         color: palette.dark ? const Color(0xFFC6C6C6) : palette.border,
       ),
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(19),
     ),
     child: Row(
       children: [
-        const SizedBox(width: 16),
-        Icon(CupertinoIcons.search, color: palette.mutedText, size: 21),
-        const SizedBox(width: 10),
+        const SizedBox(width: 13),
+        Icon(CupertinoIcons.search, color: palette.mutedText, size: 19),
+        const SizedBox(width: 8),
         Expanded(
           child: CupertinoTextField(
             padding: EdgeInsets.zero,
@@ -564,19 +539,19 @@ class _AddTokenSearch extends StatelessWidget {
         ),
         CupertinoButton(
           padding: EdgeInsets.zero,
-          minimumSize: const Size(68, 44),
+          minimumSize: const Size(56, 38),
           onPressed: onSubmit,
           child: Container(
-            width: 68,
-            height: 44,
+            width: 56,
+            height: 38,
             decoration: const BoxDecoration(
               color: _lime,
-              borderRadius: BorderRadius.all(Radius.circular(22)),
+              borderRadius: BorderRadius.all(Radius.circular(19)),
             ),
             child: const Icon(
               CupertinoIcons.arrow_right,
               color: _black,
-              size: 25,
+              size: 22,
             ),
           ),
         ),
