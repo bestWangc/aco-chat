@@ -285,8 +285,7 @@ class AccountApiClient {
         http.MultipartFile.fromBytes('file', bytes, filename: 'live-cover.jpg'),
       );
     final response = await _httpClient.send(request);
-    final body = await response.stream.bytesToString();
-    return _body(http.Response(body, response.statusCode))['url'] as String;
+    return _body(await _readResponse(response))['url'] as String;
   }
 
   Future<AccountProfile> uploadAvatar({
@@ -300,12 +299,19 @@ class AccountApiClient {
         http.MultipartFile.fromBytes('file', bytes, filename: 'avatar.jpg'),
       );
     final response = await _httpClient.send(request);
-    final body = await response.stream.bytesToString();
     return AccountProfile.fromJson(
-      _body(http.Response(body, response.statusCode))['user']
-          as Map<String, dynamic>,
+      _body(await _readResponse(response))['user'] as Map<String, dynamic>,
     );
   }
+
+  Future<http.Response> _readResponse(http.StreamedResponse response) async =>
+      http.Response.bytes(
+        await response.stream.toBytes(),
+        response.statusCode,
+        headers: response.headers,
+        request: response.request,
+        reasonPhrase: response.reasonPhrase,
+      );
 
   Future<LiveSession> createLive({
     required String title,
