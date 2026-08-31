@@ -304,14 +304,16 @@ class AccountApiClient {
     );
   }
 
-  Future<http.Response> _readResponse(http.StreamedResponse response) async =>
-      http.Response.bytes(
-        await response.stream.toBytes(),
-        response.statusCode,
-        headers: response.headers,
-        request: response.request,
-        reasonPhrase: response.reasonPhrase,
-      );
+  Future<http.Response> _readResponse(http.StreamedResponse response) async {
+    final bytes = await response.stream.toBytes();
+    return http.Response.bytes(
+      bytes,
+      response.statusCode,
+      headers: response.headers,
+      request: response.request,
+      reasonPhrase: response.reasonPhrase,
+    );
+  }
 
   Future<LiveSession> createLive({
     required String title,
