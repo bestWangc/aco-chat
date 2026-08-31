@@ -437,9 +437,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     }
     if (_liveKitMicrophoneOperationInFlight) return;
     try {
-      _liveKitPublishReady = await _setLocalMicrophoneEnabledWithRecovery(
-        !_muted,
-      );
+      _liveKitPublishReady = await _setLocalMicrophoneMuted(_muted);
       await _setSpeakerOutputPreferred();
       if (mounted) setState(() {});
     } catch (error) {
@@ -476,17 +474,46 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     final nextMuted = !_muted;
     _microphoneUpdating = true;
     _localMuteOverride = nextMuted;
+    debugPrint(
+      'LiveKit mute toggle: requested muted=$nextMuted '
+      'beforeEngine=${AudioManager.instance.audioEngineState}',
+    );
+    unawaited(_logLiveKitAudioRoute('mute-toggle-before'));
     try {
       if (nextMuted) {
-        // The API persists the mute and updates the LiveKit room permission;
-        // only then stop the local publication so other clients observe one
-        // authoritative transition.
+        // Persist the state first, then mute the existing publication so the
+        // LiveKit audio session and remote playback stay alive.
         await _accountSession.setLiveParticipantMute(live.id, true);
-        await _setLocalMicrophoneEnabledWithRecovery(false);
+        debugPrint(
+          'LiveKit mute toggle: server muted=true '
+          'engine=${AudioManager.instance.audioEngineState}',
+        );
+        unawaited(_logLiveKitAudioRoute('mute-toggle-after-server'));
+        await _setLocalMicrophoneMuted(true);
       } else {
         await _accountSession.setLiveParticipantMute(live.id, false);
-        await _setLocalMicrophoneEnabledWithRecovery(true);
+        debugPrint(
+          'LiveKit mute toggle: server muted=false '
+          'engine=${AudioManager.instance.audioEngineState}',
+        );
+        unawaited(_logLiveKitAudioRoute('mute-toggle-after-server'));
+        await _setLocalMicrophoneMuted(false);
       }
+      debugPrint(
+        'LiveKit mute toggle: local complete muted=$nextMuted '
+        'engine=${AudioManager.instance.audioEngineState}',
+      );
+      unawaited(_logLiveKitAudioRoute('mute-toggle-after-local'));
+      unawaited(
+        Future<void>.delayed(const Duration(milliseconds: 1500), () async {
+          if (!mounted) return;
+          debugPrint(
+            'LiveKit mute toggle: delayed check muted=$nextMuted '
+            'engine=${AudioManager.instance.audioEngineState}',
+          );
+          await _logLiveKitAudioRoute('mute-toggle-delayed');
+        }),
+      );
       if (mounted) setState(() => _muted = nextMuted);
       final room = _room;
       if (!nextMuted && room != null) {
@@ -512,6 +539,27 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     if (!mounted) return;
     setState(() => _muted = muted);
     await _setLocalMicrophoneEnabledWithRecovery(!muted);
+  }
+
+  Future<bool> _setLocalMicrophoneMuted(bool muted) async {
+    final participant = _liveKitRoom?.localParticipant;
+    final publication = participant?.audioTrackPublications.firstOrNull;
+    if (publication == null) {
+      return _setLocalMicrophoneEnabledWithRecovery(!muted);
+    }
+    if (publication.muted == muted) return true;
+    if (_liveKitMicrophoneOperationInFlight) return false;
+    _liveKitMicrophoneOperationInFlight = true;
+    try {
+      if (muted) {
+        await publication.mute(stopOnMute: false);
+      } else {
+        await publication.unmute(stopOnMute: false);
+      }
+      return true;
+    } finally {
+      _liveKitMicrophoneOperationInFlight = false;
+    }
   }
 
   Future<bool> _setLocalMicrophoneEnabledWithRecovery(bool enabled) async {
@@ -738,11 +786,16 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
   }
 
   Future<void> _logLiveKitAudioRoute(String reason) async {
-    if (defaultTargetPlatform != TargetPlatform.iOS) return;
+    if (defaultTargetPlatform != TargetPlatform.iOS &&
+        defaultTargetPlatform != TargetPlatform.android) {
+      return;
+    }
     try {
       final route = await _VoiceRoomPageState._liveAudioRouteChannel
           .invokeMethod<Object?>('routeInfo');
-      debugPrint('LiveKit iOS audio route: reason=$reason route=$route');
+      debugPrint(
+        'LiveKit audio route: platform=$defaultTargetPlatform reason=$reason route=$route',
+      );
     } catch (error) {
       debugPrint(
         'LiveKit iOS audio route read failed: reason=$reason error=$error',
