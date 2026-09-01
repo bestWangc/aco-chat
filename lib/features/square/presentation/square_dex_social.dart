@@ -96,83 +96,176 @@ class _DexPageState extends State<DexPage> {
   );
 }
 
-class SocialPage extends StatefulWidget {
+class SocialPage extends StatelessWidget {
   const SocialPage({super.key});
-
-  @override
-  State<SocialPage> createState() => _SocialPageState();
-}
-
-class _SocialPageState extends State<SocialPage> {
-  int _tab = 0;
 
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
     children: [
-      const _TopActions(),
-      const SizedBox(height: 24),
       Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            '社交',
-            style: TextStyle(
-              color: _white,
-              fontSize: AcoTypography.headline,
-              fontWeight: FontWeight.w700,
-            ),
+          const Icon(CupertinoIcons.line_horizontal_3, color: _white, size: 24),
+          const Spacer(),
+          _AssetIconButton(
+            asset: 'assets/icons/source_scan.svg',
+            size: 20,
+            onPressed: () => _showScanSheet(context),
           ),
-          _IconButton(
-            icon: CupertinoIcons.person_add,
+          const SizedBox(width: 11),
+          _AssetIconButton(
+            asset: 'assets/icons/source_person.svg',
+            size: 20,
             onPressed: () => _showWalletSheet(context, '添加好友'),
           ),
         ],
       ),
-      const SizedBox(height: 14),
-      _SegmentedTabs(
-        labels: const ['消息', '联系人'],
-        selected: _tab,
-        onSelected: (value) => setState(() => _tab = value),
+      const SizedBox(height: 26),
+      Row(
+        children: [
+          ClipOval(
+            child: Image.asset(
+              'assets/images/default_avatar.png',
+              width: 42,
+              height: 42,
+              fit: BoxFit.cover,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: _SocialSearch(
+              onPressed: () => _showNotice(context, '搜索', '正在搜索消息。'),
+            ),
+          ),
+        ],
       ),
-      const SizedBox(height: 10),
-      if (_tab == 0) ...const [
-        _ChatRow(
-          image: 'assets/images/avatar_host.jpg',
-          name: 'Aco 社区',
-          preview: '欢迎加入 Aco，开始探索链上世界',
-          time: '刚刚',
-          unread: '3',
+      const SizedBox(height: 28),
+      for (var i = 0; i < 5; i++)
+        const _DesignChatRow(
+          name: '克里斯蒂亚诺',
+          preview: '你好，股票账户已就位',
+          date: '2026-08-05',
+          unread: '14',
         ),
-        _ChatRow(
-          image: 'assets/images/avatar_builder.jpg',
-          name: 'Builder',
-          preview: '你的交易已确认',
-          time: '09:41',
+    ],
+  );
+}
+
+class _SocialSearch extends StatelessWidget {
+  const _SocialSearch({required this.onPressed});
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 42,
+    decoration: BoxDecoration(
+      border: Border.all(color: _muted),
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Row(
+      children: [
+        const SizedBox(width: 12),
+        const Icon(CupertinoIcons.search, color: _white, size: 21),
+        const SizedBox(width: 10),
+        const Expanded(
+          child: Text(
+            '搜索帖文或消息',
+            style: TextStyle(color: _muted, fontSize: AcoTypography.body),
+          ),
         ),
-        _ChatRow(
-          image: 'assets/images/avatar_orbit.jpg',
-          name: 'Orbit',
-          preview: '周末一起参加线上 Space？',
-          time: '昨天',
-        ),
-      ] else ...const [
-        _ContactRow(
-          image: 'assets/images/avatar_host.jpg',
-          name: 'Aco 社区',
-          handle: '@aco_community',
-        ),
-        _ContactRow(
-          image: 'assets/images/avatar_builder.jpg',
-          name: 'Builder',
-          handle: '@build_on_chain',
-        ),
-        _ContactRow(
-          image: 'assets/images/avatar_orbit.jpg',
-          name: 'Orbit',
-          handle: '@orbit_eth',
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          onPressed: onPressed,
+          child: Container(
+            width: 58,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: _white,
+              borderRadius: BorderRadius.all(Radius.circular(22)),
+            ),
+            child: const Icon(CupertinoIcons.add, color: _black, size: 24),
+          ),
         ),
       ],
-    ],
+    ),
+  );
+}
+
+class _DesignChatRow extends StatelessWidget {
+  const _DesignChatRow({
+    required this.name,
+    required this.preview,
+    required this.date,
+    required this.unread,
+  });
+  final String name, preview, date, unread;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 14),
+    child: Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: const BoxDecoration(color: _lime, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                style: const TextStyle(
+                  color: _white,
+                  fontSize: AcoTypography.body,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 5),
+              Text(
+                preview,
+                style: const TextStyle(
+                  color: _muted,
+                  fontSize: AcoTypography.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Container(
+              width: 20,
+              height: 20,
+              alignment: Alignment.center,
+              decoration: const BoxDecoration(
+                color: _lime,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                unread,
+                style: const TextStyle(
+                  color: _black,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              date,
+              style: const TextStyle(
+                color: _muted,
+                fontSize: AcoTypography.caption,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
   );
 }

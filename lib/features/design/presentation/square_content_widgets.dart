@@ -208,18 +208,26 @@ class _MarketRow extends StatelessWidget {
 }
 
 class _GreenBadge extends StatelessWidget {
-  const _GreenBadge({required this.label});
+  const _GreenBadge({
+    required this.label,
+    this.color = _lime,
+    this.fontSize = AcoTypography.caption,
+    this.padding = const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+  });
   final String label;
+  final Color color;
+  final double fontSize;
+  final EdgeInsets padding;
   @override
   Widget build(BuildContext context) => Container(
     margin: const EdgeInsets.only(left: 4),
-    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-    decoration: const BoxDecoration(color: _lime, shape: BoxShape.circle),
+    padding: padding,
+    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
     child: Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         color: _black,
-        fontSize: AcoTypography.caption,
+        fontSize: fontSize,
         fontWeight: FontWeight.w700,
       ),
     ),
@@ -490,69 +498,6 @@ class _PostOptionStar extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       const Icon(CupertinoIcons.sparkles, color: _lime, size: 10);
-}
-
-class _MessageRow extends StatelessWidget {
-  const _MessageRow({
-    required this.palette,
-    required this.name,
-    required this.onTap,
-  });
-  final AcoPalette palette;
-  final String name;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: const EdgeInsets.symmetric(vertical: 12),
-    onPressed: onTap,
-    child: Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: const BoxDecoration(color: _lime, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.body,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '你好，股票账户已就位',
-                style: TextStyle(
-                  color: palette.mutedText,
-                  fontSize: AcoTypography.caption,
-                ),
-              ),
-            ],
-          ),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            const _GreenBadge(label: '14'),
-            const SizedBox(height: 5),
-            Text(
-              '2026-08-05',
-              style: TextStyle(
-                color: palette.mutedText,
-                fontSize: AcoTypography.caption,
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
 }
 
 class _Bubble extends StatelessWidget {

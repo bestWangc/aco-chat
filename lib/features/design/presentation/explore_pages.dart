@@ -1,5 +1,7 @@
 part of 'aco_design_shell.dart';
 
+const _squareComposerHorizontalInset = 35.0;
+
 class _BrowserDiscoverPage extends StatelessWidget {
   const _BrowserDiscoverPage({required this.palette, required this.onOpen});
   final AcoPalette palette;
@@ -508,175 +510,100 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
     return Stack(
       children: [
-        CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            CupertinoSliverRefreshControl(onRefresh: _refreshLives),
-            SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                0,
-                _rootPageTopInset * headerScale,
-                0,
-                96,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _contentHorizontalInset,
-                    ),
-                    child: SizedBox(
-                      height: 46 * headerScale,
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: EdgeInsets.only(right: headerRightInset),
-                          child: AcoTopActions(
-                            palette: palette,
-                            onOpen: onOpen,
-                            scale: headerScale,
-                          ),
+        RefreshIndicator(
+          onRefresh: _refreshLives,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _PinnedHeaderDelegate(
+                  extent: 46 * headerScale + 8 + 36 + 18 + 24 + 16 + 1,
+                  backgroundColor: palette.background,
+                  child: Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: _contentHorizontalInset,
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _contentHorizontalInset,
-                    ),
-                    child: SizedBox(
-                      height: 36,
-                      child: OverflowBox(
-                        alignment: Alignment.centerLeft,
-                        maxWidth: double.infinity,
-                        maxHeight: 36,
-                        child: Transform.translate(
-                          offset: const Offset(-11, 0),
-                          child: SizedBox(
-                            width: MediaQuery.sizeOf(context).width - 54,
-                            child: Row(
-                              children: [
-                                AcoAvatar(size: 36, imageUrl: widget.avatarUrl),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Transform.translate(
-                                    offset: const Offset(10, 0),
-                                    child: AcoSearch(
-                                      palette: palette,
-                                      hint: '搜索帖文或消息',
-                                      height: 35,
-                                      variant: AcoSearchVariant.squareComposer,
-                                      submitIcon: CupertinoIcons.add,
-                                      showSubmit: true,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: _contentHorizontalInset,
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          '推荐',
-                          style: TextStyle(
-                            color: _showLive
-                                ? palette.mutedText
-                                : palette.primaryText,
-                            fontSize: AcoTypography.body,
-                            fontWeight: _showLive
-                                ? FontWeight.w400
-                                : FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(width: 54),
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            Text(
-                              '好友',
-                              style: TextStyle(
-                                color: palette.mutedText,
-                                fontSize: AcoTypography.body,
+                        child: SizedBox(
+                          height: 46 * headerScale,
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: EdgeInsets.only(right: headerRightInset),
+                              child: AcoTopActions(
+                                palette: palette,
+                                onOpen: onOpen,
+                                scale: headerScale,
                               ),
                             ),
-                            const Positioned(
-                              top: -10,
-                              right: -24,
-                              child: Offstage(child: _GreenBadge(label: '77')),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      _SquareComposer(
+                        palette: palette,
+                        imageUrl: widget.avatarUrl,
+                      ),
+                      const SizedBox(height: 18),
+                      _SquareTabs(palette: palette, showLive: _showLive),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        height: 1,
+                        child: ColoredBox(color: palette.border),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.only(bottom: 96),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    if (_showLive)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: _liveListHorizontalInset,
+                        ),
+                        child: Column(children: _buildLiveContent(palette)),
+                      )
+                    else
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: _contentHorizontalInset,
+                        ),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 32),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _TopicChip(
+                                    palette: palette,
+                                    label: '买买买!!',
+                                    width: 164,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  _TopicChip(
+                                    palette: palette,
+                                    label: 'ALD! V587!',
+                                    width: 184,
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(height: 32),
+                            _PostCard(palette: palette),
                           ],
                         ),
-                        const SizedBox(width: 54),
-                        Text(
-                          '直播',
-                          style: TextStyle(
-                            color: _showLive
-                                ? palette.primaryText
-                                : palette.mutedText,
-                            fontSize: AcoTypography.body,
-                            fontWeight: _showLive
-                                ? FontWeight.w700
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(height: 1, child: ColoredBox(color: palette.border)),
-                  if (_showLive)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: _liveListHorizontalInset,
                       ),
-                      child: Column(children: _buildLiveContent(palette)),
-                    )
-                  else
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: _contentHorizontalInset,
-                      ),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 32),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                _TopicChip(
-                                  palette: palette,
-                                  label: '买买买!!',
-                                  width: 164,
-                                ),
-                                const SizedBox(width: 10),
-                                _TopicChip(
-                                  palette: palette,
-                                  label: 'ALD! V587!',
-                                  width: 184,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          _PostCard(palette: palette),
-                        ],
-                      ),
-                    ),
-                ]),
+                  ]),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         Positioned(
           right: 22,
@@ -711,35 +638,268 @@ class _SocialMessagesPage extends StatelessWidget {
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
   @override
-  Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(35, 20, 35, 24),
-    children: [
-      AcoRootHeader(palette: palette, onOpen: onOpen),
-      const SizedBox(height: 34),
-      Row(
-        children: [
-          const AcoAvatar(size: 64),
-          const SizedBox(width: 20),
-          Expanded(
-            child: AcoSearch(
-              palette: palette,
-              hint: '搜索帖文或消息',
-              height: 60,
-              submitIcon: CupertinoIcons.add,
-              onSubmit: () => _showNotice(context, '搜索', '正在搜索消息。'),
+  Widget build(BuildContext context) => Material(
+    type: MaterialType.transparency,
+    child: CustomScrollView(
+      slivers: [
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: _PinnedHeaderDelegate(
+            extent: 46 * .672 + 8 + 36,
+            backgroundColor: palette.background,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 35),
+                  child: AcoRootHeader(
+                    palette: palette,
+                    onOpen: onOpen,
+                    scale: .672,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SquareComposer(
+                  palette: palette,
+                  onSubmit: () => _showNotice(context, '搜索', '正在搜索消息。'),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
-      const SizedBox(height: 52),
-      for (final name in const ['克里斯蒂亚诺', 'Aco 社区', 'Builder'])
-        _MessageRow(
-          palette: palette,
-          name: name,
-          onTap: () =>
-              onOpen(name == 'Builder' ? AcoScreen.chatV2 : AcoScreen.chatV1),
         ),
-    ],
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate([
+              for (final message in _socialMockMessages)
+                _SocialMessageTile(
+                  palette: palette,
+                  name: message.name,
+                  message: message.message,
+                  onTap: () => onOpen(
+                    message.name == 'Builder'
+                        ? AcoScreen.chatV2
+                        : AcoScreen.chatV1,
+                  ),
+                ),
+            ]),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedHeaderDelegate({
+    required this.extent,
+    required this.backgroundColor,
+    required this.child,
+  });
+
+  final double extent;
+  final Color backgroundColor;
+  final Widget child;
+
+  @override
+  double get minExtent => extent;
+
+  @override
+  double get maxExtent => extent;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => ColoredBox(color: backgroundColor, child: child);
+
+  @override
+  bool shouldRebuild(covariant _PinnedHeaderDelegate oldDelegate) =>
+      extent != oldDelegate.extent ||
+      backgroundColor != oldDelegate.backgroundColor ||
+      child != oldDelegate.child;
+}
+
+const _socialMockMessages = [
+  _SocialMockMessage('克里斯蒂亚诺', '你好，股票账户已就位'),
+  _SocialMockMessage('Aco 社区', '你好，股票账户已就位'),
+  _SocialMockMessage('Builder', '你好，股票账户已就位'),
+  _SocialMockMessage('Satoshi', '你好，股票账户已就位'),
+  _SocialMockMessage('链上观察者', '你好，股票账户已就位'),
+  _SocialMockMessage('Nova', '你好，股票账户已就位'),
+  _SocialMockMessage('产品讨论组', '你好，股票账户已就位'),
+  _SocialMockMessage('Crypto Lab', '你好，股票账户已就位'),
+  _SocialMockMessage(
+    'Alice',
+    '这是一条很长的消息内容，用来测试聊天列表在消息较长时是否能够正确省略并保持右侧未读数和日期布局稳定。',
+  ),
+  _SocialMockMessage('Web3 研究院', '你好，股票账户已就位'),
+  _SocialMockMessage('Ming', '你好，股票账户已就位'),
+  _SocialMockMessage('DAO 社区', '你好，股票账户已就位'),
+  _SocialMockMessage('Block Runner', '你好，股票账户已就位'),
+];
+
+class _SocialMockMessage {
+  const _SocialMockMessage(this.name, this.message);
+
+  final String name;
+  final String message;
+}
+
+class _SquareComposer extends StatelessWidget {
+  const _SquareComposer({required this.palette, this.imageUrl, this.onSubmit});
+
+  final AcoPalette palette;
+  final String? imageUrl;
+  final VoidCallback? onSubmit;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: _squareComposerHorizontalInset,
+    ),
+    child: SizedBox(
+      height: 36,
+      child: OverflowBox(
+        alignment: Alignment.centerLeft,
+        maxWidth: double.infinity,
+        maxHeight: 36,
+        child: Transform.translate(
+          offset: const Offset(-11, 0),
+          child: SizedBox(
+            width: MediaQuery.sizeOf(context).width - 54,
+            child: Row(
+              children: [
+                AcoAvatar(size: 36, imageUrl: imageUrl),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Transform.translate(
+                    offset: const Offset(10, 0),
+                    child: AcoSearch(
+                      palette: palette,
+                      hint: '搜索帖文或消息',
+                      height: 35,
+                      variant: AcoSearchVariant.squareComposer,
+                      submitIcon: CupertinoIcons.add,
+                      showSubmit: true,
+                      onSubmit: onSubmit,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _SquareTabs extends StatelessWidget {
+  const _SquareTabs({required this.palette, required this.showLive});
+
+  final AcoPalette palette;
+  final bool showLive;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(
+      horizontal: _squareComposerHorizontalInset,
+    ),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '推荐',
+          style: TextStyle(
+            color: showLive ? palette.mutedText : palette.primaryText,
+            fontSize: AcoTypography.body,
+            fontWeight: showLive ? FontWeight.w400 : FontWeight.w700,
+          ),
+        ),
+        const SizedBox(width: 54),
+        Text(
+          '好友',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+        const SizedBox(width: 54),
+        Text(
+          '直播',
+          style: TextStyle(
+            color: showLive ? palette.primaryText : palette.mutedText,
+            fontSize: AcoTypography.body,
+            fontWeight: showLive ? FontWeight.w700 : FontWeight.w400,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SocialMessageTile extends StatelessWidget {
+  const _SocialMessageTile({
+    required this.palette,
+    required this.name,
+    required this.onTap,
+    required this.message,
+    this.avatarUrl,
+  });
+
+  final AcoPalette palette;
+  final String name;
+  final VoidCallback onTap;
+  final String message;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    minLeadingWidth: 34,
+    horizontalTitleGap: 12,
+    leading: AcoAvatar(size: 34, imageUrl: avatarUrl),
+    title: Text(
+      name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: palette.primaryText,
+        fontSize: AcoTypography.body - 1,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    subtitle: Text(
+      message,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        color: const Color(0xFFA2A4A8),
+        fontSize: AcoTypography.caption,
+      ),
+    ),
+    trailing: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        _GreenBadge(
+          label: '14',
+          color: palette.accent,
+          fontSize: AcoTypography.caption - 1,
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          '2026-08-05',
+          style: TextStyle(
+            color: const Color(0xFF9D9EA0),
+            fontSize: AcoTypography.caption - 2,
+          ),
+        ),
+      ],
+    ),
+    onTap: onTap,
   );
 }
 

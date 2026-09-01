@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart' show ListTile;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -1077,17 +1078,34 @@ void main() {
     expect((decoration.border! as Border).top.color, const Color(0xFF151515));
   });
 
-  testWidgets('keeps explore, DEX, and social root navigation unavailable', (
+  testWidgets('opens social messages from root navigation', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
 
-    for (final label in const ['探索', 'DEX', '社交']) {
-      await tester.tap(find.bySemanticsLabel(label).first);
-      await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('社交').first);
+    await tester.pumpAndSettle();
 
-      expect(find.text('Coming Soon'), findsNWidgets(2), reason: label);
-    }
+    expect(find.text('搜索帖文或消息'), findsOneWidget);
+    expect(find.text('Coming Soon'), findsNothing);
+    expect(find.byType(ListTile), findsAtLeastNWidgets(7));
+    final nickname = tester.widget<Text>(find.text('克里斯蒂亚诺'));
+    expect(nickname.style?.fontSize, AcoTypography.body - 1);
+    final message = tester.widget<Text>(find.text('你好，股票账户已就位').first);
+    expect(message.style?.color, const Color(0xFFA2A4A8));
+    expect(message.maxLines, 1);
+    expect(message.overflow, TextOverflow.ellipsis);
+    final date = tester.widget<Text>(find.text('2026-08-05').first);
+    expect(date.style?.color, const Color(0xFF9D9EA0));
+    expect(date.style?.fontSize, AcoTypography.caption - 2);
+    final search = tester.widget<AcoSearch>(find.byType(AcoSearch));
+    expect(search.height, 35);
+    expect(search.variant, AcoSearchVariant.squareComposer);
+    expect(search.showSubmit, isTrue);
+    expect(tester.getSize(find.byType(AcoAvatar).first), const Size(36, 36));
+    final listTileWidth = tester.getSize(find.byType(ListTile).first).width;
+    final searchWidth = tester.getSize(find.byType(AcoSearch)).width;
+    expect(listTileWidth, greaterThan(searchWidth));
   });
 
   testWidgets('opens the create live page from the square action button', (

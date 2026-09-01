@@ -88,9 +88,13 @@ class _WalletHomeState extends State<_WalletHome> {
   Future<List<WalletBalance>> _loadAndCacheBalances(
     WalletNetwork network,
   ) async {
-    final balances = await _loadBalances(network);
-    _balanceCache[network] = balances;
-    return balances;
+    try {
+      final balances = await _loadBalances(network);
+      _balanceCache[network] = balances;
+      return balances;
+    } catch (_) {
+      return _placeholderBalances();
+    }
   }
 
   List<WalletBalance> _placeholderBalances() {
@@ -137,7 +141,11 @@ class _WalletHomeState extends State<_WalletHome> {
   Future<double?> _loadTotalBalance(
     Future<List<WalletBalance>> balances,
   ) async {
-    return _valuationService.totalUsd(await balances);
+    try {
+      return _valuationService.totalUsd(await balances);
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _showSendTokenPicker() async {
