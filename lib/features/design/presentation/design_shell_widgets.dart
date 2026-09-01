@@ -868,28 +868,25 @@ void _showNotice(BuildContext context, String title, String message) {
   showCupertinoModalPopup<void>(
     context: context,
     builder: (sheetContext) {
-      final themeColor = CupertinoTheme.of(sheetContext).primaryColor;
+      const themeColor = _accentGreen;
       return CupertinoActionSheet(
         title: Text(
           title,
           style: TextStyle(
-            fontSize: AcoTypography.bodyEmphasis,
+            fontSize: AcoTypography.body,
             fontWeight: FontWeight.w700,
           ),
         ),
         message: Text(
           message,
-          style: TextStyle(fontSize: AcoTypography.bodySmall),
+          style: TextStyle(fontSize: AcoTypography.caption),
         ),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(sheetContext).pop(),
             child: Text(
               '知道了',
-              style: TextStyle(
-                color: themeColor,
-                fontSize: AcoTypography.bodyEmphasis,
-              ),
+              style: TextStyle(color: themeColor, fontSize: AcoTypography.body),
             ),
           ),
         ],
@@ -897,10 +894,7 @@ void _showNotice(BuildContext context, String title, String message) {
           onPressed: () => Navigator.of(sheetContext).pop(),
           child: Text(
             '取消',
-            style: TextStyle(
-              color: themeColor,
-              fontSize: AcoTypography.bodyEmphasis,
-            ),
+            style: TextStyle(color: themeColor, fontSize: AcoTypography.body),
           ),
         ),
       );

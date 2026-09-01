@@ -102,7 +102,7 @@ class _ProfilePage extends StatelessWidget {
             ),
           ),
           Transform.translate(
-            offset: const Offset(0, -6),
+            offset: const Offset(16, -6),
             child: _ProfileHeaderButton(
               iconAsset: 'assets/icons/profile_scan.png',
               palette: palette,
@@ -110,14 +110,15 @@ class _ProfilePage extends StatelessWidget {
               onPressed: () => onOpen(AcoScreen.scan),
             ),
           ),
-          const SizedBox(width: 2),
+          const SizedBox(width: 6),
           Transform.translate(
-            offset: const Offset(-12, -6),
+            offset: const Offset(16, -6),
             child: _ProfileHeaderButton(
               iconAsset: 'assets/icons/profile_qr_code.png',
               palette: palette,
               label: '个人二维码',
               filled: true,
+              onPressed: () => onOpen(AcoScreen.profileQr),
             ),
           ),
         ],
@@ -416,7 +417,7 @@ class _ProfileQrPage extends StatelessWidget {
             ),
           ],
         ),
-        const Spacer(),
+        const SizedBox(height: 64),
         Center(
           child: Container(
             width: 286,
@@ -450,7 +451,7 @@ class _ProfileQrPage extends StatelessWidget {
             ),
           ),
         ),
-        const Spacer(),
+        const SizedBox(height: 28),
         Text(
           '扫一扫上面的二维码图案，加我为朋友。',
           textAlign: TextAlign.center,

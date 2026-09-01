@@ -645,49 +645,274 @@ class _SocialMessagesPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     type: MaterialType.transparency,
-    child: CustomScrollView(
-      slivers: [
-        SliverPersistentHeader(
-          pinned: true,
-          delegate: _PinnedHeaderDelegate(
-            extent: 46 * .672 + 8 + 36,
-            backgroundColor: palette.background,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 35),
-                  child: AcoRootHeader(
-                    palette: palette,
-                    onOpen: onOpen,
-                    scale: .672,
+    child: RefreshIndicator(
+      onRefresh: () => Future<void>.delayed(const Duration(milliseconds: 650)),
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        slivers: [
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _PinnedHeaderDelegate(
+              extent: 46 * .672 + 8 + 36,
+              backgroundColor: palette.background,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 35),
+                    child: AcoRootHeader(
+                      palette: palette,
+                      onOpen: onOpen,
+                      scale: .672,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                _SquareComposer(
-                  palette: palette,
-                  imageUrl: avatarUrl,
-                  onSubmit: () => _showNotice(context, '搜索', '正在搜索消息。'),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  _MessageQuickActions(
+                    palette: palette,
+                    onContactsTap: () => Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) =>
+                            _ContactsPage(palette: palette, onOpen: onOpen),
+                      ),
+                    ),
+                    onSearchTap: () => Navigator.of(context).push(
+                      CupertinoPageRoute<void>(
+                        builder: (_) => _MessageSearchPage(
+                          palette: palette,
+                          onOpen: onOpen,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              for (final message in _socialMockMessages)
-                _SocialMessageTile(
-                  palette: palette,
-                  name: message.name,
-                  message: message.message,
-                  onTap: () => onOpen(
-                    message.name == 'Builder'
-                        ? AcoScreen.chatV2
-                        : AcoScreen.chatV1,
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                for (final message in _socialMockMessages)
+                  _SocialMessageTile(
+                    palette: palette,
+                    name: message.name,
+                    message: message.message,
+                    onTap: () => onOpen(
+                      message.name == 'Builder'
+                          ? AcoScreen.chatV2
+                          : AcoScreen.chatV1,
+                    ),
                   ),
+              ]),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ContactsPage extends StatelessWidget {
+  const _ContactsPage({required this.palette, required this.onOpen});
+
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: palette.background,
+    child: SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: AcoPageHeader(
+              palette: palette,
+              title: '通讯录',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+              itemCount: _socialMockMessages.length,
+              itemBuilder: (context, index) {
+                final contact = _socialMockMessages[index];
+                return _ContactListTile(
+                  palette: palette,
+                  name: contact.name,
+                  onTap: () => Navigator.of(context).push(
+                    CupertinoPageRoute<void>(
+                      builder: (_) => _ContactDetailPage(
+                        palette: palette,
+                        name: contact.name,
+                        onMessagePressed: () {
+                          final navigator = Navigator.of(context);
+                          navigator.pop();
+                          navigator.pop();
+                          onOpen(
+                            contact.name == 'Builder'
+                                ? AcoScreen.chatV2
+                                : AcoScreen.chatV1,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ContactDetailPage extends StatelessWidget {
+  const _ContactDetailPage({
+    required this.palette,
+    required this.name,
+    required this.onMessagePressed,
+  });
+
+  final AcoPalette palette;
+  final String name;
+  final VoidCallback onMessagePressed;
+
+  String get _handle => '@${name.toLowerCase().replaceAll(' ', '_')}';
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: palette.background,
+    child: SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        children: [
+          AcoPageHeader(
+            palette: palette,
+            title: '好友详情',
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
+              const AcoAvatar(size: 70),
+              const SizedBox(width: 18),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: AcoTypography.title,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _handle,
+                      style: TextStyle(
+                        color: palette.mutedText,
+                        fontSize: AcoTypography.body,
+                      ),
+                    ),
+                  ],
                 ),
-            ]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 30),
+          _ContactDetailActionRow(
+            palette: palette,
+            icon: CupertinoIcons.chat_bubble,
+            label: '发消息',
+            onTap: onMessagePressed,
+          ),
+          const SizedBox(height: 8),
+          _ContactDetailActionRow(
+            palette: palette,
+            icon: CupertinoIcons.phone,
+            label: '音频通话',
+            onTap: () => _showNotice(context, '音频通话', '通话功能暂未开放。'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ContactDetailActionRow extends StatelessWidget {
+  const _ContactDetailActionRow({
+    required this.palette,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final AcoPalette palette;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: const EdgeInsets.symmetric(vertical: 13),
+    color: const Color(0xFF191919),
+    borderRadius: BorderRadius.circular(12),
+    onPressed: onTap,
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, color: palette.accent, size: 19),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.body,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ContactListTile extends StatelessWidget {
+  const _ContactListTile({
+    required this.palette,
+    required this.name,
+    required this.onTap,
+  });
+
+  final AcoPalette palette;
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: const EdgeInsets.symmetric(vertical: 10),
+    onPressed: onTap,
+    child: Row(
+      children: [
+        AcoAvatar(size: 42),
+        const SizedBox(width: 20),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.body,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],
@@ -750,6 +975,324 @@ class _SocialMockMessage {
 
   final String name;
   final String message;
+}
+
+class _ChatHistoryMessage {
+  const _ChatHistoryMessage(this.text, {required this.mine});
+
+  final String text;
+  final bool mine;
+}
+
+const _chatV1History = [
+  _ChatHistoryMessage('我想看下怎么可以买呢，有点难度的，你说是不是', mine: true),
+  _ChatHistoryMessage('等发你个教程具体看下操作，说也说不清楚还是图文比较好操作', mine: false),
+  _ChatHistoryMessage('好的，收到后我再试一下。', mine: true),
+];
+
+const _chatV2History = [
+  _ChatHistoryMessage('我想看下怎么可以卖呢，交易在哪儿操作？', mine: true),
+  _ChatHistoryMessage('等发你个教程具体看下操作，说也说不清楚还是图文比较好操作', mine: false),
+  _ChatHistoryMessage('好的，收到后我再试一下。', mine: true),
+];
+
+class _MessageSearchPage extends StatefulWidget {
+  const _MessageSearchPage({required this.palette, required this.onOpen});
+
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+
+  @override
+  State<_MessageSearchPage> createState() => _MessageSearchPageState();
+}
+
+class _MessageSearchPageState extends State<_MessageSearchPage> {
+  final _controller = TextEditingController();
+  var _query = '';
+
+  List<_SocialMockMessage> get _results {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    return _socialMockMessages
+        .where((message) => message.message.toLowerCase().contains(query))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = _results;
+    return CupertinoPageScaffold(
+      backgroundColor: widget.palette.background,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: AcoPageHeader(
+                palette: widget.palette,
+                title: '搜索聊天',
+                onBack: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: _MessageSearchField(
+                controller: _controller,
+                palette: widget.palette,
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            Expanded(
+              child: _query.trim().isEmpty
+                  ? _SearchHint(palette: widget.palette, label: '搜索聊天内容')
+                  : results.isEmpty
+                  ? _SearchHint(palette: widget.palette, label: '没有找到相关聊天记录')
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                      itemCount: results.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 4),
+                      itemBuilder: (context, index) {
+                        final message = results[index];
+                        return _SocialMessageTile(
+                          palette: widget.palette,
+                          name: message.name,
+                          message: message.message,
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            widget.onOpen(
+                              message.name == 'Builder'
+                                  ? AcoScreen.chatV2
+                                  : AcoScreen.chatV1,
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatHistorySearchPage extends StatefulWidget {
+  const _ChatHistorySearchPage({
+    required this.palette,
+    required this.peerName,
+    required this.messages,
+  });
+
+  final AcoPalette palette;
+  final String peerName;
+  final List<_ChatHistoryMessage> messages;
+
+  @override
+  State<_ChatHistorySearchPage> createState() => _ChatHistorySearchPageState();
+}
+
+class _ChatHistorySearchPageState extends State<_ChatHistorySearchPage> {
+  final _controller = TextEditingController();
+  var _query = '';
+
+  List<_ChatHistoryMessage> get _results {
+    final query = _query.trim().toLowerCase();
+    if (query.isEmpty) return const [];
+    return widget.messages
+        .where((message) => message.text.toLowerCase().contains(query))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final results = _results;
+    return CupertinoPageScaffold(
+      backgroundColor: widget.palette.background,
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: AcoPageHeader(
+                palette: widget.palette,
+                title: '查找聊天记录',
+                onBack: () => Navigator.of(context).maybePop(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: _MessageSearchField(
+                controller: _controller,
+                palette: widget.palette,
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            ),
+            Expanded(
+              child: _query.trim().isEmpty
+                  ? _SearchHint(
+                      palette: widget.palette,
+                      label: '搜索与${widget.peerName}的聊天记录',
+                    )
+                  : results.isEmpty
+                  ? _SearchHint(palette: widget.palette, label: '没有找到相关聊天记录')
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                      itemCount: results.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 6),
+                      itemBuilder: (context, index) => _ChatHistoryResultTile(
+                        palette: widget.palette,
+                        peerName: widget.peerName,
+                        message: results[index],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatHistoryResultTile extends StatelessWidget {
+  const _ChatHistoryResultTile({
+    required this.palette,
+    required this.peerName,
+    required this.message,
+  });
+
+  final AcoPalette palette;
+  final String peerName;
+  final _ChatHistoryMessage message;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFF191919),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          message.mine ? '我' : peerName,
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption - 1,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          message.text,
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _SearchHint extends StatelessWidget {
+  const _SearchHint({required this.palette, required this.label});
+
+  final AcoPalette palette;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Text(
+      label,
+      style: TextStyle(
+        color: palette.mutedText,
+        fontSize: AcoTypography.caption,
+      ),
+    ),
+  );
+}
+
+class _MessageSearchField extends StatelessWidget {
+  const _MessageSearchField({
+    required this.controller,
+    required this.palette,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final AcoPalette palette;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 38,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(
+      color: const Color(0xFF191919),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: CupertinoTextField(
+            controller: controller,
+            autofocus: true,
+            maxLines: 1,
+            textInputAction: TextInputAction.search,
+            cursorColor: palette.primaryText,
+            placeholder: '搜索聊天内容',
+            placeholderStyle: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.caption,
+            ),
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.caption,
+            ),
+            decoration: null,
+            padding: EdgeInsets.zero,
+            onChanged: onChanged,
+            onSubmitted: onChanged,
+          ),
+        ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (context, value, _) {
+            if (value.text.isEmpty) return const SizedBox.shrink();
+            return CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(28, 28),
+              onPressed: () {
+                controller.clear();
+                onChanged('');
+              },
+              child: Icon(
+                CupertinoIcons.clear_circled_solid,
+                color: palette.mutedText,
+                size: 16,
+              ),
+            );
+          },
+        ),
+      ],
+    ),
+  );
 }
 
 class _SquareComposer extends StatelessWidget {
@@ -845,6 +1388,97 @@ class _SquareTabs extends StatelessWidget {
   );
 }
 
+class _MessageQuickActions extends StatelessWidget {
+  const _MessageQuickActions({
+    required this.palette,
+    required this.onContactsTap,
+    required this.onSearchTap,
+  });
+
+  final AcoPalette palette;
+  final VoidCallback onContactsTap;
+  final VoidCallback onSearchTap;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    child: SizedBox(
+      height: 36,
+      child: Row(
+        children: [
+          Expanded(
+            child: _MessageQuickTab(
+              icon: CupertinoIcons.person_2,
+              label: '通讯录',
+              palette: palette,
+              onPressed: onContactsTap,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _MessageQuickTab(
+              icon: CupertinoIcons.search,
+              label: '搜索',
+              palette: palette,
+              onPressed: onSearchTap,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _MessageQuickTab extends StatelessWidget {
+  const _MessageQuickTab({
+    required this.icon,
+    required this.label,
+    required this.palette,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final AcoPalette palette;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: SizedBox(
+        width: double.infinity,
+        height: 30,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF191919),
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: palette.primaryText, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.caption,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 class _SocialMessageTile extends StatelessWidget {
   const _SocialMessageTile({
     required this.palette,
@@ -862,7 +1496,9 @@ class _SocialMessageTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
+    dense: true,
     contentPadding: EdgeInsets.zero,
+    minVerticalPadding: 0,
     minLeadingWidth: 34,
     horizontalTitleGap: 12,
     leading: AcoAvatar(size: 34, imageUrl: avatarUrl),
@@ -922,6 +1558,8 @@ class _ChatPageState extends State<_ChatPage> {
   final _messageController = TextEditingController();
   var _emojiPickerVisible = false;
   var _morePanelVisible = false;
+  var _voiceInputActive = false;
+  var _voiceRecording = false;
 
   @override
   void dispose() {
@@ -930,6 +1568,11 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
+
+  String get _peerName => widget.version == 1 ? '克里斯蒂亚诺' : 'Builder';
+
+  List<_ChatHistoryMessage> get _chatHistory =>
+      widget.version == 1 ? _chatV1History : _chatV2History;
 
   void _hidePanels() {
     if (!_isPanelVisible) return;
@@ -955,13 +1598,27 @@ class _ChatPageState extends State<_ChatPage> {
     });
   }
 
+  void _toggleVoiceInput() {
+    _dismissKeyboard();
+    setState(() {
+      _voiceInputActive = !_voiceInputActive;
+      _emojiPickerVisible = false;
+      _morePanelVisible = false;
+    });
+  }
+
+  void _setVoiceRecording(bool isRecording) {
+    if (_voiceRecording == isRecording) return;
+    setState(() => _voiceRecording = isRecording);
+  }
+
   @override
   Widget build(BuildContext context) {
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final compactBottomBar = _isPanelVisible || keyboardInset > 0;
     return _DetailScaffold(
       palette: widget.palette,
-      title: widget.version == 1 ? '克里斯蒂亚诺' : 'Builder',
+      title: _peerName,
       headerRightPadding: 4,
       right: Semantics(
         button: true,
@@ -969,7 +1626,26 @@ class _ChatPageState extends State<_ChatPage> {
         child: CupertinoButton(
           padding: EdgeInsets.zero,
           minimumSize: const Size(51, 30),
-          onPressed: () => _showNotice(context, '更多', '暂无更多操作。'),
+          onPressed: () => Navigator.of(context).push<void>(
+            _AcoPageRoute<void>(
+              builder: (_) => CupertinoPageScaffold(
+                backgroundColor: widget.palette.background,
+                child: SafeArea(
+                  left: false,
+                  right: false,
+                  bottom: false,
+                  child: ColoredBox(
+                    color: widget.palette.background,
+                    child: _ChatMoreSettingsPage(
+                      palette: widget.palette,
+                      peerName: _peerName,
+                      messages: _chatHistory,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
           child: Image.asset(
             'assets/icons/chat_more_mark.png',
             width: 26,
@@ -978,83 +1654,258 @@ class _ChatPageState extends State<_ChatPage> {
           ),
         ),
       ),
-      child: AnimatedPadding(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        padding: EdgeInsets.only(bottom: keyboardInset),
-        child: Column(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _hidePanels,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
-                  children: [
-                    _ChatMessage(
-                      palette: widget.palette,
-                      text: widget.version == 1
-                          ? '我想看下怎么可以买呢，有点难度的，你说是不是'
-                          : '我想看下怎么可以卖呢，交易在哪儿操作？',
-                      mine: true,
+      child: Stack(
+        children: [
+          AnimatedPadding(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(bottom: keyboardInset),
+            child: Column(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _hidePanels,
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
+                      itemCount: _chatHistory.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 18),
+                      itemBuilder: (_, index) {
+                        final message = _chatHistory[index];
+                        return _ChatMessage(
+                          palette: widget.palette,
+                          text: message.text,
+                          mine: message.mine,
+                        );
+                      },
                     ),
-                    const SizedBox(height: 18),
-                    _ChatMessage(
-                      palette: widget.palette,
-                      text: '等发你个教程具体看下操作，说也说不清楚还是图文比较好操作',
-                      mine: false,
-                    ),
-                    const SizedBox(height: 18),
-                    _ChatMessage(
-                      palette: widget.palette,
-                      text: '好的，收到后我再试一下。',
-                      mine: true,
-                    ),
-                  ],
+                  ),
                 ),
+                SafeArea(
+                  top: false,
+                  bottom: !compactBottomBar,
+                  minimum: compactBottomBar
+                      ? EdgeInsets.zero
+                      : const EdgeInsets.only(bottom: 20),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      8,
+                      4,
+                      8,
+                      compactBottomBar ? 2 : 8,
+                    ),
+                    child: _ChatComposer(
+                      controller: _messageController,
+                      voiceInputActive: _voiceInputActive,
+                      onVoicePressed: _toggleVoiceInput,
+                      onRecordingChanged: _setVoiceRecording,
+                      onEmojiPressed: _toggleEmojiPicker,
+                      onMorePressed: _toggleMorePanel,
+                      onInputTapped: _hidePanels,
+                      onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
+                    ),
+                  ),
+                ),
+                if (_emojiPickerVisible)
+                  _AcoEmojiPicker(
+                    palette: widget.palette,
+                    controller: _messageController,
+                    onEmojiSelected: () =>
+                        setState(() => _emojiPickerVisible = false),
+                  ),
+                if (_morePanelVisible)
+                  _ChatMorePanel(
+                    onSelected: (label) {
+                      setState(() => _morePanelVisible = false);
+                      _showNotice(context, label, '$label功能暂未开放。');
+                    },
+                  ),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 360),
+                reverseDuration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutQuart,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: .9, end: 1).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: _voiceRecording
+                    ? const _VoiceRecordingOverlay(
+                        key: ValueKey('voice-recording'),
+                      )
+                    : const SizedBox(key: ValueKey('voice-recording-idle')),
               ),
             ),
-            SafeArea(
-              top: false,
-              bottom: !compactBottomBar,
-              minimum: compactBottomBar
-                  ? EdgeInsets.zero
-                  : const EdgeInsets.only(bottom: 20),
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(8, 4, 8, compactBottomBar ? 2 : 8),
-                child: _ChatComposer(
-                  controller: _messageController,
-                  onEmojiPressed: _toggleEmojiPicker,
-                  onMorePressed: _toggleMorePanel,
-                  onInputTapped: _hidePanels,
-                  onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
-                ),
-              ),
-            ),
-            if (_emojiPickerVisible)
-              _AcoEmojiPicker(
-                palette: widget.palette,
-                controller: _messageController,
-                onEmojiSelected: () =>
-                    setState(() => _emojiPickerVisible = false),
-              ),
-            if (_morePanelVisible)
-              _ChatMorePanel(
-                onSelected: (label) {
-                  setState(() => _morePanelVisible = false);
-                  _showNotice(context, label, '$label功能暂未开放。');
-                },
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
+class _ChatMoreSettingsPage extends StatefulWidget {
+  const _ChatMoreSettingsPage({
+    required this.palette,
+    required this.peerName,
+    required this.messages,
+  });
+
+  final AcoPalette palette;
+  final String peerName;
+  final List<_ChatHistoryMessage> messages;
+
+  @override
+  State<_ChatMoreSettingsPage> createState() => _ChatMoreSettingsPageState();
+}
+
+class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
+  var _isPinned = false;
+  var _isBlocked = false;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 28, 0),
+        child: AcoPageHeader(
+          palette: widget.palette,
+          title: '聊天信息',
+          onBack: () => Navigator.of(context).maybePop(),
+        ),
+      ),
+      Expanded(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          children: [
+            _ChatSettingsActionRow(
+              palette: widget.palette,
+              label: '查找聊天记录',
+              onTap: () => Navigator.of(context).push<void>(
+                CupertinoPageRoute<void>(
+                  builder: (_) => _ChatHistorySearchPage(
+                    palette: widget.palette,
+                    peerName: widget.peerName,
+                    messages: widget.messages,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            _ChatSettingsToggleRow(
+              palette: widget.palette,
+              label: '置顶聊天',
+              value: _isPinned,
+              onChanged: (value) => setState(() => _isPinned = value),
+            ),
+            const SizedBox(height: 6),
+            _ChatSettingsActionRow(
+              palette: widget.palette,
+              label: '清空聊天记录',
+              onTap: () => _showNotice(context, '清空聊天记录', '聊天记录已清空。'),
+            ),
+            const SizedBox(height: 6),
+            _ChatSettingsToggleRow(
+              palette: widget.palette,
+              label: '拉黑',
+              value: _isBlocked,
+              onChanged: (value) => setState(() => _isBlocked = value),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+class _ChatSettingsActionRow extends StatelessWidget {
+  const _ChatSettingsActionRow({
+    required this.palette,
+    required this.label,
+    required this.onTap,
+  });
+
+  final AcoPalette palette;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(16),
+    child: CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      minimumSize: const Size.fromHeight(46),
+      color: const Color(0xFF191919),
+      onPressed: onTap,
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: palette.primaryText, fontSize: 15),
+          ),
+          const Spacer(),
+          Icon(
+            CupertinoIcons.chevron_right,
+            color: palette.mutedText,
+            size: 16,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _ChatSettingsToggleRow extends StatelessWidget {
+  const _ChatSettingsToggleRow({
+    required this.palette,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final AcoPalette palette;
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 46,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    decoration: BoxDecoration(
+      color: const Color(0xFF191919),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Text(label, style: TextStyle(color: palette.primaryText, fontSize: 15)),
+        const Spacer(),
+        Transform.scale(
+          scale: .78,
+          child: CupertinoSwitch(
+            value: value,
+            activeTrackColor: palette.accent,
+            onChanged: onChanged,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class _ChatComposer extends StatelessWidget {
   const _ChatComposer({
     required this.controller,
+    required this.voiceInputActive,
+    required this.onVoicePressed,
+    required this.onRecordingChanged,
     required this.onEmojiPressed,
     required this.onMorePressed,
     required this.onInputTapped,
@@ -1062,6 +1913,9 @@ class _ChatComposer extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final bool voiceInputActive;
+  final VoidCallback onVoicePressed;
+  final ValueChanged<bool> onRecordingChanged;
   final VoidCallback onEmojiPressed;
   final VoidCallback onMorePressed;
   final VoidCallback onInputTapped;
@@ -1072,37 +1926,46 @@ class _ChatComposer extends StatelessWidget {
     height: 44,
     child: Row(
       children: [
-        _ComposerImageIcon(
-          assetPath: 'assets/icons/chat_voice.png',
-          onPressed: () {},
-        ),
+        if (voiceInputActive)
+          _ComposerCupertinoIcon(
+            icon: CupertinoIcons.keyboard,
+            label: '切换到文字输入',
+            onPressed: onVoicePressed,
+          )
+        else
+          _ComposerImageIcon(
+            assetPath: 'assets/icons/chat_voice.png',
+            onPressed: onVoicePressed,
+          ),
         const SizedBox(width: 8),
         Expanded(
-          child: Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-              color: const Color(0xFF191919),
-              borderRadius: BorderRadius.circular(5),
-            ),
-            child: CupertinoTextField(
-              controller: controller,
-              maxLines: 1,
-              textInputAction: TextInputAction.send,
-              cursorColor: _white,
-              padding: EdgeInsets.zero,
-              placeholder: '发送消息',
-              placeholderStyle: const TextStyle(
-                color: Color(0xFF888888),
-                fontSize: 16,
-              ),
-              style: const TextStyle(color: _white, fontSize: 16),
-              decoration: null,
-              onTap: onInputTapped,
-              onSubmitted: (_) => onSubmit(),
-            ),
-          ),
+          child: voiceInputActive
+              ? _HoldToTalkButton(onRecordingChanged: onRecordingChanged)
+              : Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  alignment: Alignment.centerLeft,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF191919),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: CupertinoTextField(
+                    controller: controller,
+                    maxLines: 1,
+                    textInputAction: TextInputAction.send,
+                    cursorColor: _white,
+                    padding: EdgeInsets.zero,
+                    placeholder: '发送消息',
+                    placeholderStyle: const TextStyle(
+                      color: Color(0xFF888888),
+                      fontSize: 16,
+                    ),
+                    style: const TextStyle(color: _white, fontSize: 16),
+                    decoration: null,
+                    onTap: onInputTapped,
+                    onSubmitted: (_) => onSubmit(),
+                  ),
+                ),
         ),
         const SizedBox(width: 8),
         _ComposerImageIcon(
@@ -1116,6 +1979,172 @@ class _ChatComposer extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+class _HoldToTalkButton extends StatefulWidget {
+  const _HoldToTalkButton({required this.onRecordingChanged});
+
+  final ValueChanged<bool> onRecordingChanged;
+
+  @override
+  State<_HoldToTalkButton> createState() => _HoldToTalkButtonState();
+}
+
+class _HoldToTalkButtonState extends State<_HoldToTalkButton> {
+  var _isRecording = false;
+
+  void _setRecording(bool value) {
+    setState(() => _isRecording = value);
+    widget.onRecordingChanged(value);
+  }
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: _isRecording ? '松开结束录音' : '按住说话',
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onLongPressStart: (_) => _setRecording(true),
+      onLongPressEnd: (_) => _setRecording(false),
+      onLongPressCancel: () => _setRecording(false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: _isRecording
+              ? const Color(0xFF303030)
+              : const Color(0xFF191919),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Text(
+          _isRecording ? '松开结束' : '按住说话',
+          style: const TextStyle(color: Color(0xFFD6D6D6), fontSize: 14),
+        ),
+      ),
+    ),
+  );
+}
+
+class _VoiceRecordingOverlay extends StatelessWidget {
+  const _VoiceRecordingOverlay({super.key});
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xB8000000),
+    child: Stack(
+      children: [
+        Align(
+          alignment: const Alignment(0, -.08),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 160,
+                height: 78,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF98EC63),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const _VoiceWaveform(),
+              ),
+              Positioned(
+                bottom: -7,
+                child: Transform.rotate(
+                  angle: .785398,
+                  child: const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: ColoredBox(color: Color(0xFF98EC63)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            height: 92,
+            width: double.infinity,
+            alignment: const Alignment(0, .45),
+            decoration: const BoxDecoration(
+              color: Color(0xFFE2E2E2),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.elliptical(240, 88),
+              ),
+            ),
+            child: const Text(
+              '松开 发送',
+              style: TextStyle(
+                color: Color(0xFF1C1C1C),
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: -28,
+          bottom: 132,
+          child: Container(
+            width: 196,
+            height: 76,
+            alignment: const Alignment(-.12, 0),
+            decoration: const BoxDecoration(
+              color: Color(0xFF666666),
+              borderRadius: BorderRadius.horizontal(
+                left: Radius.elliptical(76, 48),
+              ),
+            ),
+            child: const Text(
+              '取消',
+              style: TextStyle(
+                color: _white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _VoiceWaveform extends StatelessWidget {
+  const _VoiceWaveform();
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      for (final height in const <double>[8, 11, 8, 13, 9, 12, 8, 11, 9])
+        Container(
+          width: 3,
+          height: height,
+          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF387B2B),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      Container(width: 3, height: 22, color: const Color(0xFF387B2B)),
+      for (final height in const <double>[9, 11, 8, 12, 9, 13, 8, 11, 8])
+        Container(
+          width: 3,
+          height: height,
+          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+          decoration: BoxDecoration(
+            color: const Color(0xFF387B2B),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+    ],
   );
 }
 
@@ -1134,6 +2163,30 @@ class _ComposerImageIcon extends StatelessWidget {
   );
 }
 
+class _ComposerCupertinoIcon extends StatelessWidget {
+  const _ComposerCupertinoIcon({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(24, 24),
+      onPressed: onPressed,
+      child: Icon(icon, color: _white, size: 23),
+    ),
+  );
+}
+
 class _ChatMorePanel extends StatelessWidget {
   const _ChatMorePanel({required this.onSelected});
 
@@ -1144,12 +2197,11 @@ class _ChatMorePanel extends StatelessWidget {
     (label: '拍摄', assetPath: 'assets/icons/chat_more_camera.png'),
     (label: '语音通话', assetPath: 'assets/icons/chat_more_call.png'),
     (label: '转账', assetPath: 'assets/icons/chat_more_transfer.png'),
-    (label: '语音输入', assetPath: 'assets/icons/chat_more_voice_input.png'),
   ];
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 209,
+    height: 116,
     color: _black,
     padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
     child: GridView.builder(
