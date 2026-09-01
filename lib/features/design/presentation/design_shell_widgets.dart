@@ -811,7 +811,7 @@ class AcoSearch extends StatelessWidget {
   }
 }
 
-const _defaultAvatarAsset = 'assets/design_svg/source/images/img1.jpg';
+const _defaultAvatarAsset = 'assets/images/default_avatar.png';
 const _liveRoomHostAvatarAsset = 'assets/design_svg/source/images/img3.jpg';
 const _liveRoomListenerAvatarAsset = 'assets/design_svg/source/images/img5.jpg';
 
