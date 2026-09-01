@@ -978,10 +978,15 @@ class _SocialMockMessage {
 }
 
 class _ChatHistoryMessage {
-  const _ChatHistoryMessage(this.text, {required this.mine});
+  const _ChatHistoryMessage(this.text, {required this.mine})
+    : imageBytes = null;
+
+  const _ChatHistoryMessage.image(this.imageBytes, {required this.mine})
+    : text = '';
 
   final String text;
   final bool mine;
+  final Uint8List? imageBytes;
 }
 
 const _chatV1History = [
@@ -1560,6 +1565,9 @@ class _ChatPageState extends State<_ChatPage> {
   var _morePanelVisible = false;
   var _voiceInputActive = false;
   var _voiceRecording = false;
+  late final List<_ChatHistoryMessage> _chatHistory = List.of(
+    widget.version == 1 ? _chatV1History : _chatV2History,
+  );
 
   @override
   void dispose() {
@@ -1571,8 +1579,34 @@ class _ChatPageState extends State<_ChatPage> {
 
   String get _peerName => widget.version == 1 ? '克里斯蒂亚诺' : 'Builder';
 
-  List<_ChatHistoryMessage> get _chatHistory =>
-      widget.version == 1 ? _chatV1History : _chatV2History;
+  Future<void> _pickChatPhoto() async {
+    setState(() => _morePanelVisible = false);
+    try {
+      final photo = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1440,
+      );
+      if (photo == null) return;
+      final imageBytes = await photo.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _chatHistory.add(_ChatHistoryMessage.image(imageBytes, mine: true));
+      });
+    } catch (_) {
+      if (!mounted) return;
+      _showNotice(context, '照片选择失败', '请检查相册访问权限后重试。');
+    }
+  }
+
+  Future<void> _handleMorePanelSelection(String label) async {
+    if (label == '照片') {
+      await _pickChatPhoto();
+      return;
+    }
+    setState(() => _morePanelVisible = false);
+    _showNotice(context, label, '$label功能暂未开放。');
+  }
 
   void _hidePanels() {
     if (!_isPanelVisible) return;
@@ -1675,6 +1709,7 @@ class _ChatPageState extends State<_ChatPage> {
                         return _ChatMessage(
                           palette: widget.palette,
                           text: message.text,
+                          imageBytes: message.imageBytes,
                           mine: message.mine,
                         );
                       },
@@ -1714,12 +1749,7 @@ class _ChatPageState extends State<_ChatPage> {
                         setState(() => _emojiPickerVisible = false),
                   ),
                 if (_morePanelVisible)
-                  _ChatMorePanel(
-                    onSelected: (label) {
-                      setState(() => _morePanelVisible = false);
-                      _showNotice(context, label, '$label功能暂未开放。');
-                    },
-                  ),
+                  _ChatMorePanel(onSelected: _handleMorePanelSelection),
               ],
             ),
           ),
@@ -2190,7 +2220,7 @@ class _ComposerCupertinoIcon extends StatelessWidget {
 class _ChatMorePanel extends StatelessWidget {
   const _ChatMorePanel({required this.onSelected});
 
-  final ValueChanged<String> onSelected;
+  final Future<void> Function(String label) onSelected;
 
   static const _items = [
     (label: '照片', assetPath: 'assets/icons/chat_more_photo.png'),
@@ -2263,11 +2293,13 @@ class _ChatMessage extends StatelessWidget {
   const _ChatMessage({
     required this.palette,
     required this.text,
+    required this.imageBytes,
     required this.mine,
   });
 
   final AcoPalette palette;
   final String text;
+  final Uint8List? imageBytes;
   final bool mine;
 
   @override
@@ -2284,7 +2316,18 @@ class _ChatMessage extends StatelessWidget {
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: _Bubble(palette: palette, text: text, mine: mine),
+                child: imageBytes == null
+                    ? _Bubble(palette: palette, text: text, mine: mine)
+                    : ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: Image.memory(
+                          imageBytes!,
+                          width: 180,
+                          height: 180,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.medium,
+                        ),
+                      ),
               ),
             ),
             if (mine) ...[const SizedBox(width: 6), const AcoAvatar(size: 40)],
