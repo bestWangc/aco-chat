@@ -1,5 +1,3 @@
-import 'package:shared_preferences/shared_preferences.dart';
-
 class AppConfig {
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
@@ -10,73 +8,34 @@ class AppConfig {
     'ACO_API_BASE_URL',
     defaultValue: 'https://api.aco.chat/api/v1',
   );
-  static const directApiBaseUrl = String.fromEnvironment(
-    'ACO_DIRECT_API_BASE_URL',
-    defaultValue: 'https://api-direct.aco.chat/api/v1',
+  static const relayApiBaseUrl = String.fromEnvironment(
+    'ACO_RELAY_API_BASE_URL',
+    defaultValue: 'https://wvyyiw.aiuhz.com/api/v1',
   );
   static const websiteUrl = String.fromEnvironment(
     'ACO_WEBSITE_URL',
     defaultValue: 'https://aco.chat',
   );
-  static const _apiRouteCacheKey = 'network.api_route';
-  static const _apiRouteCacheUpdatedAtKey = 'network.api_route_updated_at';
-  static const _apiRouteCacheLifetime = Duration(hours: 12);
-  static String? _selectedApiBaseUrl;
-
   const AppConfig({this._apiBaseUrl});
 
   final String? _apiBaseUrl;
 
-  static bool get hasDirectApiRoute => directApiBaseUrl.isNotEmpty;
+  static String? _selectedApiBaseUrl;
 
-  static bool get isUsingDirectApiRoute =>
-      _selectedApiBaseUrl == directApiBaseUrl && hasDirectApiRoute;
+  static bool get isUsingRelayApiRoute =>
+      _selectedApiBaseUrl == relayApiBaseUrl;
 
-  static void preferDirectApiRoute() {
-    if (hasDirectApiRoute) _selectedApiBaseUrl = directApiBaseUrl;
-  }
-
-  static void useCloudflareApiRoute() {
+  static void usePrimaryApiRoute() {
     _selectedApiBaseUrl = cloudflareApiBaseUrl;
   }
 
-  static Future<void> restoreCachedApiRoute() async {
-    final preferences = await SharedPreferences.getInstance();
-    final cachedRoute = preferences.getString(_apiRouteCacheKey);
-    final cachedAt = preferences.getInt(_apiRouteCacheUpdatedAtKey);
-    final cacheIsFresh =
-        cachedAt != null &&
-        DateTime.now().difference(
-              DateTime.fromMillisecondsSinceEpoch(cachedAt),
-            ) <
-            _apiRouteCacheLifetime;
-    // Direct is always the primary route. A cached Cloudflare route only
-    // records a previous fallback and must not make the next launch start on
-    // the fallback again.
-    if (cacheIsFresh && cachedRoute == directApiBaseUrl && hasDirectApiRoute) {
-      _selectedApiBaseUrl = cachedRoute;
-      return;
-    }
-    preferDirectApiRoute();
+  static void useRelayApiRoute() {
+    if (relayApiBaseUrl.isNotEmpty) _selectedApiBaseUrl = relayApiBaseUrl;
   }
 
-  static Future<void> cacheSelectedApiRoute() async {
-    final selectedRoute = _selectedApiBaseUrl ?? cloudflareApiBaseUrl;
-    if (!_isSupportedApiRoute(selectedRoute)) return;
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setString(_apiRouteCacheKey, selectedRoute);
-    await preferences.setInt(
-      _apiRouteCacheUpdatedAtKey,
-      DateTime.now().millisecondsSinceEpoch,
-    );
-  }
-
-  static bool _isSupportedApiRoute(String? route) =>
-      route == cloudflareApiBaseUrl ||
-      (hasDirectApiRoute && route == directApiBaseUrl);
-
-  String get apiBaseUrl =>
-      _apiBaseUrl ?? _selectedApiBaseUrl ?? cloudflareApiBaseUrl;
+  String get apiBaseUrl => _apiBaseUrl ??
+      _selectedApiBaseUrl ??
+      cloudflareApiBaseUrl;
 
   /// Keeps credentials for local debug servers separate from production.
   String get accountStorageScope {
