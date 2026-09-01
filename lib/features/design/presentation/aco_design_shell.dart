@@ -318,6 +318,14 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       return;
     }
 
+    // 聊天详情是社交列表的直接下级页面，保留具体版本，避免被通用兜底路由到 Coming Soon。
+    if (screen == AcoScreen.chatV1 || screen == AcoScreen.chatV2) {
+      Navigator.of(context).push<Object?>(
+        _AcoPageRoute<Object?>(builder: (_) => _buildSecondaryScreen(screen)),
+      );
+      return;
+    }
+
     final target = switch (screen) {
       AcoScreen.squareFeed || AcoScreen.createLive => AcoScreen.squareFeed,
       AcoScreen.send => AcoScreen.send,
@@ -337,6 +345,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.profileLanguage => AcoScreen.profileLanguage,
       AcoScreen.addTokenV2 => AcoScreen.addTokenV2,
       AcoScreen.voiceRoom => AcoScreen.voiceRoom,
+      AcoScreen.chatV1 => AcoScreen.chatV1,
+      AcoScreen.chatV2 => AcoScreen.chatV2,
       _ => AcoScreen.comingSoon,
     };
     final destination = screen == AcoScreen.createLive

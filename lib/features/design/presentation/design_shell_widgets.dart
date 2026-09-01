@@ -176,6 +176,7 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.socialMessages => _SocialMessagesPage(
         palette: palette,
         onOpen: onOpen,
+        avatarUrl: avatarUrl,
       ),
       AcoScreen.chatV1 => _ChatPage(palette: palette, version: 1),
       AcoScreen.chatV2 => _ChatPage(palette: palette, version: 2),

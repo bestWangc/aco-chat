@@ -634,9 +634,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 }
 
 class _SocialMessagesPage extends StatelessWidget {
-  const _SocialMessagesPage({required this.palette, required this.onOpen});
+  const _SocialMessagesPage({
+    required this.palette,
+    required this.onOpen,
+    this.avatarUrl,
+  });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+  final String? avatarUrl;
   @override
   Widget build(BuildContext context) => Material(
     type: MaterialType.transparency,
@@ -660,6 +665,7 @@ class _SocialMessagesPage extends StatelessWidget {
                 const SizedBox(height: 8),
                 _SquareComposer(
                   palette: palette,
+                  imageUrl: avatarUrl,
                   onSubmit: () => _showNotice(context, '搜索', '正在搜索消息。'),
                 ),
               ],
@@ -910,68 +916,155 @@ class _ChatPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _DetailScaffold(
     palette: palette,
-    title: '添加代币',
+    title: version == 1 ? '克里斯蒂亚诺' : 'Builder',
+    headerRightPadding: 4,
+    right: Semantics(
+      button: true,
+      label: '更多',
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(51, 30),
+        onPressed: () => _showNotice(context, '更多', '暂无更多操作。'),
+        child: Image.asset(
+          'assets/icons/chat_more_mark.png',
+          width: 26,
+          height: 8,
+          fit: BoxFit.contain,
+        ),
+      ),
+    ),
     child: Column(
       children: [
-        const SizedBox(height: 30),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
             children: [
-              _Bubble(
+              _ChatMessage(
                 palette: palette,
                 text: version == 1
                     ? '我想看下怎么可以买呢，有点难度的，你说是不是'
                     : '我想看下怎么可以卖呢，交易在哪儿操作？',
                 mine: true,
               ),
-              const SizedBox(width: 12),
-              const AcoAvatar(size: 48),
-            ],
-          ),
-        ),
-        const SizedBox(height: 28),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: palette.surfaceRaised,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  'A',
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: AcoTypography.displaySmall,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              _Bubble(
+              const SizedBox(height: 18),
+              _ChatMessage(
                 palette: palette,
                 text: '等发你个教程具体看下操作，说也说不清楚还是图文比较好操作',
                 mine: false,
               ),
+              const SizedBox(height: 18),
+              _ChatMessage(palette: palette, text: '好的，收到后我再试一下。', mine: true),
             ],
           ),
         ),
-        const Spacer(),
-        AcoSearch(
-          palette: palette,
-          hint: '发送消息',
-          height: 60,
-          submitIcon: CupertinoIcons.arrow_up,
-          onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
+        SafeArea(
+          top: false,
+          minimum: const EdgeInsets.only(bottom: 20),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+            child: _ChatComposer(
+              onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
+            ),
+          ),
         ),
       ],
     ),
+  );
+}
+
+class _ChatComposer extends StatelessWidget {
+  const _ChatComposer({required this.onSubmit});
+
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 48,
+    child: Row(
+      children: [
+        _ComposerImageIcon(
+          assetPath: 'assets/icons/chat_voice.png',
+          onPressed: () {},
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.centerLeft,
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A1A),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              '发送消息',
+              style: TextStyle(color: Color(0xFF888888), fontSize: 16),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        _ComposerImageIcon(
+          assetPath: 'assets/icons/chat_emoji.png',
+          onPressed: () {},
+        ),
+        const SizedBox(width: 8),
+        _ComposerImageIcon(
+          assetPath: 'assets/icons/chat_add.png',
+          onPressed: onSubmit,
+        ),
+      ],
+    ),
+  );
+}
+
+class _ComposerImageIcon extends StatelessWidget {
+  const _ComposerImageIcon({required this.assetPath, required this.onPressed});
+
+  final String assetPath;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: const Size(24, 24),
+    onPressed: onPressed,
+    child: Image.asset(assetPath, width: 24, height: 24),
+  );
+}
+
+class _ChatMessage extends StatelessWidget {
+  const _ChatMessage({
+    required this.palette,
+    required this.text,
+    required this.mine,
+  });
+
+  final AcoPalette palette;
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final maxBubbleWidth = (constraints.maxWidth - 46).clamp(0.0, 245.0);
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            if (!mine) ...[const AcoAvatar(size: 40), const SizedBox(width: 6)],
+            Flexible(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                child: _Bubble(palette: palette, text: text, mine: mine),
+              ),
+            ),
+            if (mine) ...[const SizedBox(width: 6), const AcoAvatar(size: 40)],
+          ],
+        ),
+      );
+    },
   );
 }
 

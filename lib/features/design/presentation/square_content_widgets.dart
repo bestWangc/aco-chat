@@ -510,22 +510,91 @@ class _Bubble extends StatelessWidget {
   final String text;
   final bool mine;
   @override
-  Widget build(BuildContext context) => Container(
-    constraints: const BoxConstraints(maxWidth: 390),
-    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-    decoration: BoxDecoration(
-      color: mine ? _lime : palette.surfaceRaised,
-      borderRadius: BorderRadius.circular(5),
-    ),
-    child: Text(
+  Widget build(BuildContext context) {
+    final textWidget = Text(
       text,
-      style: TextStyle(
-        color: mine ? _black : palette.primaryText,
-        height: 1.4,
-        fontSize: AcoTypography.bodyEmphasis,
+      style: TextStyle(color: _black, height: 1.4, fontSize: 16),
+    );
+    if (!mine) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 390),
+        child: CustomPaint(
+          painter: const _OtherBubblePainter(),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+            child: textWidget,
+          ),
+        ),
+      );
+    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 390),
+      child: CustomPaint(
+        painter: const _MineBubblePainter(),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 14, 6),
+          child: textWidget,
+        ),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class _OtherBubblePainter extends CustomPainter {
+  const _OtherBubblePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const tailWidth = 6.0;
+    final bubbleLeft = tailWidth;
+    final paint = Paint()..color = const Color(0xFFDDDDDD);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(bubbleLeft, 0, size.width - tailWidth, size.height),
+        const Radius.circular(3),
+      ),
+      paint,
+    );
+    final tailCenter = size.height - 20;
+    final tail = Path()
+      ..moveTo(bubbleLeft + 1, tailCenter - 6)
+      ..lineTo(0, tailCenter)
+      ..lineTo(bubbleLeft + 1, tailCenter + 6)
+      ..close();
+    canvas.drawPath(tail, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _OtherBubblePainter oldDelegate) => false;
+}
+
+class _MineBubblePainter extends CustomPainter {
+  const _MineBubblePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const tailWidth = 6.0;
+    final bubbleWidth = size.width - tailWidth;
+    final paint = Paint()..color = _accentGreen;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(0, 0, bubbleWidth, size.height),
+        const Radius.circular(3),
+      ),
+      paint,
+    );
+    // The message row aligns the avatar to the bubble's bottom edge.
+    final tailCenter = size.height - 20;
+    final tail = Path()
+      ..moveTo(bubbleWidth - 1, tailCenter - 6)
+      ..lineTo(size.width, tailCenter)
+      ..lineTo(bubbleWidth - 1, tailCenter + 6)
+      ..close();
+    canvas.drawPath(tail, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _MineBubblePainter oldDelegate) => false;
 }
 
 class _LiveCard extends StatelessWidget {
