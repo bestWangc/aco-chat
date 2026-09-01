@@ -236,7 +236,7 @@ class AcoScreenPage extends StatelessWidget {
         initialLanguage: language,
         onLanguageChanged: onLanguageChanged,
       ),
-      AcoScreen.comingSoon => _ComingSoonPage(palette: palette),
+      AcoScreen.comingSoon => const _ComingSoonPage(),
       AcoScreen.createLive => _CreateLivePage(
         palette: palette,
         walletLoginFuture: walletLoginFuture,

@@ -816,17 +816,33 @@ class _ChatPage extends StatelessWidget {
 }
 
 class _ComingSoonPage extends StatelessWidget {
-  const _ComingSoonPage({required this.palette});
-  final AcoPalette palette;
+  const _ComingSoonPage();
 
   @override
   Widget build(BuildContext context) => Center(
-    child: Text(
-      'Coming Soon',
-      style: TextStyle(
-        color: palette.mutedText,
-        fontSize: AcoTypography.displaySmall,
-        fontWeight: FontWeight.w600,
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Image.asset(
+              'assets/images/coming_soon_mark.png',
+              fit: BoxFit.contain,
+              semanticLabel: 'Aco 标志',
+            ),
+          ),
+          const SizedBox(height: 28),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 210),
+            child: Image.asset(
+              'assets/images/coming_soon_wordmark.png',
+              fit: BoxFit.contain,
+              semanticLabel: 'Coming Soon',
+            ),
+          ),
+        ],
       ),
     ),
   );
