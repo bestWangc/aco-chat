@@ -84,6 +84,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   int _lastRoomSnapshotVersion = 0;
   int _roomLoadSequence = 0;
   final Map<String, int> _latestRealtimeEventVersions = <String, int>{};
+  int _lastRealtimeEventVersion = 0;
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
@@ -266,6 +267,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final event = LiveRealtimeEventParser.parse(rawEvent);
     if (event == null) return;
     final eventKey = _stateEventKey(event);
+    if (event.eventVersion > 0 &&
+        _lastRealtimeEventVersion > 0 &&
+        event.eventVersion > _lastRealtimeEventVersion + 1) {
+      _scheduleRoomReconcile();
+    }
+    if (event.eventVersion > _lastRealtimeEventVersion) {
+      _lastRealtimeEventVersion = event.eventVersion;
+    }
     if (eventKey != null && event.eventVersion > 0) {
       final previousVersion = _latestRealtimeEventVersions[eventKey];
       if (previousVersion != null && event.eventVersion <= previousVersion) {
@@ -299,7 +308,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyCheckInEvent(deadline, checkedInCount, userId);
       case LiveCheckInStartedEvent(:final deadline):
         _applyCheckInStarted(deadline);
-        _scheduleRoomReconcile();
       case LiveRaisedHandCountEvent(:final count):
         _applyRaisedHandCount(count);
       case LiveParticipantMuteEvent(:final userId, :final muted):
