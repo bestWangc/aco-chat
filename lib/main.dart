@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
@@ -10,9 +11,9 @@ import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:http/http.dart' as http;
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:http/http.dart' as http;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +21,7 @@ Future<void> main() async {
   await WalletPreferences.removeLegacyPlaceholderData();
   final identity = await WalletPreferences.walletIdentity();
   final walletConfigured = await WalletPreferences.load() && identity != null;
-  await AppConfig.restoreCachedApiRoute();
+  AppConfig.usePrimaryApiRoute();
   final accountProfileFuture = walletConfigured
       ? WalletAccountAuthentication.signInSilently(identity.address)
       : null;
@@ -59,19 +60,13 @@ class WalletAccountAuthentication {
   /// A network failure leaves the local wallet usable and is retried next launch.
   static Future<AccountProfile?> signInSilently(String walletAddress) async {
     try {
-      final profile = await _signInSilently(walletAddress);
-      await AppConfig.cacheSelectedApiRoute();
-      return profile;
-    } on AccountApiException {
-      rethrow;
+      return await _signInSilently(walletAddress);
     } on Object catch (error) {
-      if (!AppConfig.isUsingDirectApiRoute || !_isNetworkError(error)) {
-        rethrow;
+      if (!AppConfig.isUsingRelayApiRoute && _isNetworkError(error)) {
+        AppConfig.useRelayApiRoute();
+        return _signInSilently(walletAddress);
       }
-      AppConfig.useCloudflareApiRoute();
-      final profile = await _signInSilently(walletAddress);
-      await AppConfig.cacheSelectedApiRoute();
-      return profile;
+      rethrow;
     }
   }
 
@@ -79,10 +74,7 @@ class WalletAccountAuthentication {
     final client = AccountApiClient();
     try {
       final session = AccountSession(client);
-      final signIn = session.signInSilently(walletAddress);
-      final result = AppConfig.isUsingDirectApiRoute
-          ? await signIn.timeout(const Duration(seconds: 2))
-          : await signIn;
+      final result = await session.signInSilently(walletAddress);
       return result.user;
     } finally {
       client.close();
