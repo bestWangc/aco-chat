@@ -297,10 +297,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyChatMute(muted);
       case LiveParticipantCountEvent(:final count):
         _applyParticipantCount(count);
-      case LiveParticipantJoinedEvent(:final userId, :final nickname):
-        if (_knownParticipantIds.add(userId)) {
-          _appendChatMessage(nickname: '', text: '欢迎 $nickname 进入直播间');
-        }
+      case LiveParticipantJoinedEvent(:final userId):
+        _knownParticipantIds.add(userId);
       case LiveCheckInEvent(
         :final deadline,
         :final checkedInCount,
@@ -587,37 +585,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final participantIds = participants.map(
       (participant) => participant.userId,
     );
-    final firstSnapshot = _knownParticipantIds.isEmpty;
-    final newParticipants = firstSnapshot
-        ? participants
-              .where(
-                (participant) =>
-                    displayedRoom.viewerRole == 'listener' &&
-                    participant.userId == displayedRoom.viewerUserId,
-              )
-              .toList(growable: false)
-        : participants
-              .where(
-                (participant) =>
-                    !_knownParticipantIds.contains(participant.userId),
-              )
-              .toList(growable: false);
     _knownParticipantIds
       ..clear()
       ..addAll(participantIds);
-    if (newParticipants.isNotEmpty) {
-      final timestamp = DateTime.now();
-      _appendMessages(
-        newParticipants.indexed.map(
-          (entry) => LiveMessage(
-            id: -timestamp.microsecondsSinceEpoch - entry.$1,
-            nickname: '',
-            text: '欢迎 ${entry.$2.nickname} 进入直播间',
-            createdAt: timestamp,
-          ),
-        ),
-      );
-    }
     final localMuteOverride = _localMuteOverride;
     if (localMuteOverride != null && room.viewerMuted == localMuteOverride) {
       _localMuteOverride = null;
@@ -1390,10 +1360,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         createdAt: now,
       ),
     );
-  }
-
-  void _appendMessages(Iterable<LiveMessage> incomingMessages) {
-    _chatBuffer.appendAll(incomingMessages);
   }
 
   @override
