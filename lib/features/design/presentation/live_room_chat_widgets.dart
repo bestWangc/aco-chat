@@ -74,8 +74,8 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
   }
 }
 
-class _RoomEmojiPicker extends StatelessWidget {
-  const _RoomEmojiPicker({
+class _AcoEmojiPicker extends StatelessWidget {
+  const _AcoEmojiPicker({
     required this.palette,
     required this.controller,
     required this.onEmojiSelected,
@@ -85,42 +85,98 @@ class _RoomEmojiPicker extends StatelessWidget {
   final TextEditingController controller;
   final VoidCallback onEmojiSelected;
 
+  static const _commonEmoji = [
+    '😀',
+    '😃',
+    '😄',
+    '😁',
+    '😆',
+    '😅',
+    '😂',
+    '🤣',
+    '😊',
+    '😇',
+    '🙂',
+    '🙃',
+    '😉',
+    '😍',
+    '🥰',
+    '😘',
+    '😋',
+    '😜',
+    '🤪',
+    '🤭',
+    '🤗',
+    '🤔',
+    '🤫',
+    '🤐',
+    '😐',
+    '😑',
+    '😶',
+    '🙄',
+    '😏',
+    '😣',
+    '😥',
+    '😮',
+    '😭',
+    '😤',
+    '😡',
+    '😱',
+    '😴',
+    '🤒',
+    '🤮',
+    '💩',
+    '👍',
+    '👎',
+    '👏',
+    '🙏',
+    '💪',
+    '👌',
+    '🤝',
+    '❤️',
+    '🔥',
+    '🎉',
+    '🎂',
+    '☺️',
+    '💯',
+    '✅',
+    '❌',
+    '👀',
+  ];
+
+  void _insertEmoji(String value) {
+    final selection = controller.selection;
+    final start = selection.isValid ? selection.start : controller.text.length;
+    final end = selection.isValid ? selection.end : controller.text.length;
+    controller.value = controller.value.copyWith(
+      text: controller.text.replaceRange(start, end, value),
+      selection: TextSelection.collapsed(offset: start + value.length),
+      composing: TextRange.empty,
+    );
+    onEmojiSelected();
+  }
+
   @override
   Widget build(BuildContext context) => SizedBox(
     height: _roomEmojiPickerHeight,
-    child: emoji.EmojiPicker(
-      textEditingController: controller,
-      onEmojiSelected: (_, _) => onEmojiSelected(),
-      config: emoji.Config(
-        height: _roomEmojiPickerHeight,
-        checkPlatformCompatibility: false,
-        // Keep the chat picker focused on high-frequency expressions. The
-        // recent tab remains available while the rarely used food, travel,
-        // objects, symbols and flags categories are intentionally omitted.
-        emojiSet: (locale) => getDefaultEmojiLocale(locale)
-            .where(
-              (category) =>
-                  category.category == emoji.Category.RECENT ||
-                  category.category == emoji.Category.SMILEYS,
-            )
-            .toList(growable: false),
-        emojiViewConfig: emoji.EmojiViewConfig(
-          backgroundColor: palette.surfaceRaised,
-          columns: 8,
-          emojiSizeMax: 28,
-          buttonMode: emoji.ButtonMode.CUPERTINO,
+    child: ColoredBox(
+      color: palette.surfaceRaised,
+      child: GridView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 8,
+          crossAxisSpacing: 2,
+          mainAxisSpacing: 2,
         ),
-        categoryViewConfig: emoji.CategoryViewConfig(
-          initCategory: emoji.Category.SMILEYS,
-          backgroundColor: palette.surfaceRaised,
-          indicatorColor: palette.accent,
-          iconColor: palette.mutedText,
-          iconColorSelected: palette.accent,
-          backspaceColor: palette.primaryText,
-          dividerColor: _transparent,
-        ),
-        bottomActionBarConfig: const emoji.BottomActionBarConfig(
-          enabled: false,
+        itemCount: _commonEmoji.length,
+        itemBuilder: (_, index) => CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: () => _insertEmoji(_commonEmoji[index]),
+          child: Text(
+            _commonEmoji[index],
+            style: const TextStyle(fontSize: 28),
+          ),
         ),
       ),
     ),

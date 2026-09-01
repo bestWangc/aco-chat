@@ -193,7 +193,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: _RoomEmojiPicker(
+                child: _AcoEmojiPicker(
                   palette: palette,
                   controller: _messageController,
                   onEmojiSelected: () =>

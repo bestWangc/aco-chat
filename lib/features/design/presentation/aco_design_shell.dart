@@ -25,8 +25,6 @@ import 'package:aco_chat/services/wallet_valuation_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:aco_chat/services/wallet_transfer_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart' as emoji;
-import 'package:emoji_picker_flutter/locales/default_emoji_set_locale.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'

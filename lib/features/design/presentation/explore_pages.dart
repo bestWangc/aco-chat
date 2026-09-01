@@ -909,77 +909,167 @@ class _SocialMessageTile extends StatelessWidget {
   );
 }
 
-class _ChatPage extends StatelessWidget {
+class _ChatPage extends StatefulWidget {
   const _ChatPage({required this.palette, required this.version});
   final AcoPalette palette;
   final int version;
+
   @override
-  Widget build(BuildContext context) => _DetailScaffold(
-    palette: palette,
-    title: version == 1 ? '克里斯蒂亚诺' : 'Builder',
-    headerRightPadding: 4,
-    right: Semantics(
-      button: true,
-      label: '更多',
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        minimumSize: const Size(51, 30),
-        onPressed: () => _showNotice(context, '更多', '暂无更多操作。'),
-        child: Image.asset(
-          'assets/icons/chat_more_mark.png',
-          width: 26,
-          height: 8,
-          fit: BoxFit.contain,
+  State<_ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<_ChatPage> {
+  final _messageController = TextEditingController();
+  var _emojiPickerVisible = false;
+  var _morePanelVisible = false;
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
+
+  void _hidePanels() {
+    if (!_isPanelVisible) return;
+    setState(() {
+      _emojiPickerVisible = false;
+      _morePanelVisible = false;
+    });
+  }
+
+  void _toggleEmojiPicker() {
+    _dismissKeyboard();
+    setState(() {
+      _emojiPickerVisible = !_emojiPickerVisible;
+      _morePanelVisible = false;
+    });
+  }
+
+  void _toggleMorePanel() {
+    _dismissKeyboard();
+    setState(() {
+      _morePanelVisible = !_morePanelVisible;
+      _emojiPickerVisible = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final compactBottomBar = _isPanelVisible || keyboardInset > 0;
+    return _DetailScaffold(
+      palette: widget.palette,
+      title: widget.version == 1 ? '克里斯蒂亚诺' : 'Builder',
+      headerRightPadding: 4,
+      right: Semantics(
+        button: true,
+        label: '更多',
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(51, 30),
+          onPressed: () => _showNotice(context, '更多', '暂无更多操作。'),
+          child: Image.asset(
+            'assets/icons/chat_more_mark.png',
+            width: 26,
+            height: 8,
+            fit: BoxFit.contain,
+          ),
         ),
       ),
-    ),
-    child: Column(
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
-            children: [
-              _ChatMessage(
-                palette: palette,
-                text: version == 1
-                    ? '我想看下怎么可以买呢，有点难度的，你说是不是'
-                    : '我想看下怎么可以卖呢，交易在哪儿操作？',
-                mine: true,
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: Column(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _hidePanels,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
+                  children: [
+                    _ChatMessage(
+                      palette: widget.palette,
+                      text: widget.version == 1
+                          ? '我想看下怎么可以买呢，有点难度的，你说是不是'
+                          : '我想看下怎么可以卖呢，交易在哪儿操作？',
+                      mine: true,
+                    ),
+                    const SizedBox(height: 18),
+                    _ChatMessage(
+                      palette: widget.palette,
+                      text: '等发你个教程具体看下操作，说也说不清楚还是图文比较好操作',
+                      mine: false,
+                    ),
+                    const SizedBox(height: 18),
+                    _ChatMessage(
+                      palette: widget.palette,
+                      text: '好的，收到后我再试一下。',
+                      mine: true,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 18),
-              _ChatMessage(
-                palette: palette,
-                text: '等发你个教程具体看下操作，说也说不清楚还是图文比较好操作',
-                mine: false,
-              ),
-              const SizedBox(height: 18),
-              _ChatMessage(palette: palette, text: '好的，收到后我再试一下。', mine: true),
-            ],
-          ),
-        ),
-        SafeArea(
-          top: false,
-          minimum: const EdgeInsets.only(bottom: 20),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-            child: _ChatComposer(
-              onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
             ),
-          ),
+            SafeArea(
+              top: false,
+              bottom: !compactBottomBar,
+              minimum: compactBottomBar
+                  ? EdgeInsets.zero
+                  : const EdgeInsets.only(bottom: 20),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(8, 4, 8, compactBottomBar ? 2 : 8),
+                child: _ChatComposer(
+                  controller: _messageController,
+                  onEmojiPressed: _toggleEmojiPicker,
+                  onMorePressed: _toggleMorePanel,
+                  onInputTapped: _hidePanels,
+                  onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
+                ),
+              ),
+            ),
+            if (_emojiPickerVisible)
+              _AcoEmojiPicker(
+                palette: widget.palette,
+                controller: _messageController,
+                onEmojiSelected: () =>
+                    setState(() => _emojiPickerVisible = false),
+              ),
+            if (_morePanelVisible)
+              _ChatMorePanel(
+                onSelected: (label) {
+                  setState(() => _morePanelVisible = false);
+                  _showNotice(context, label, '$label功能暂未开放。');
+                },
+              ),
+          ],
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _ChatComposer extends StatelessWidget {
-  const _ChatComposer({required this.onSubmit});
+  const _ChatComposer({
+    required this.controller,
+    required this.onEmojiPressed,
+    required this.onMorePressed,
+    required this.onInputTapped,
+    required this.onSubmit,
+  });
 
+  final TextEditingController controller;
+  final VoidCallback onEmojiPressed;
+  final VoidCallback onMorePressed;
+  final VoidCallback onInputTapped;
   final VoidCallback onSubmit;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 48,
+    height: 44,
     child: Row(
       children: [
         _ComposerImageIcon(
@@ -989,28 +1079,40 @@ class _ChatComposer extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Container(
-            height: 40,
+            height: 32,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFF191919),
+              borderRadius: BorderRadius.circular(5),
             ),
-            child: const Text(
-              '发送消息',
-              style: TextStyle(color: Color(0xFF888888), fontSize: 16),
+            child: CupertinoTextField(
+              controller: controller,
+              maxLines: 1,
+              textInputAction: TextInputAction.send,
+              cursorColor: _white,
+              padding: EdgeInsets.zero,
+              placeholder: '发送消息',
+              placeholderStyle: const TextStyle(
+                color: Color(0xFF888888),
+                fontSize: 16,
+              ),
+              style: const TextStyle(color: _white, fontSize: 16),
+              decoration: null,
+              onTap: onInputTapped,
+              onSubmitted: (_) => onSubmit(),
             ),
           ),
         ),
         const SizedBox(width: 8),
         _ComposerImageIcon(
           assetPath: 'assets/icons/chat_emoji.png',
-          onPressed: () {},
+          onPressed: onEmojiPressed,
         ),
         const SizedBox(width: 8),
         _ComposerImageIcon(
           assetPath: 'assets/icons/chat_add.png',
-          onPressed: onSubmit,
+          onPressed: onMorePressed,
         ),
       ],
     ),
@@ -1029,6 +1131,79 @@ class _ComposerImageIcon extends StatelessWidget {
     minimumSize: const Size(24, 24),
     onPressed: onPressed,
     child: Image.asset(assetPath, width: 24, height: 24),
+  );
+}
+
+class _ChatMorePanel extends StatelessWidget {
+  const _ChatMorePanel({required this.onSelected});
+
+  final ValueChanged<String> onSelected;
+
+  static const _items = [
+    (label: '照片', assetPath: 'assets/icons/chat_more_photo.png'),
+    (label: '拍摄', assetPath: 'assets/icons/chat_more_camera.png'),
+    (label: '语音通话', assetPath: 'assets/icons/chat_more_call.png'),
+    (label: '转账', assetPath: 'assets/icons/chat_more_transfer.png'),
+    (label: '语音输入', assetPath: 'assets/icons/chat_more_voice_input.png'),
+  ];
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 209,
+    color: _black,
+    padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+    child: GridView.builder(
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _items.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 16,
+        childAspectRatio: .77,
+      ),
+      itemBuilder: (context, index) {
+        final item = _items[index];
+        return Semantics(
+          button: true,
+          label: item.label,
+          child: CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            onPressed: () => onSelected(item.label),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF191919),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: Image.asset(item.assetPath, fit: BoxFit.contain),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  item.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF9D9EA0),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
   );
 }
 
