@@ -1065,8 +1065,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (mounted) setState(() => _checkingIn = true);
     try {
       await _accountSession.confirmLiveCheckIn(live.id);
-      _locallyConfirmedCheckInDeadline = _room?.checkIn?.deadline;
-      await _loadRoom(silent: true);
+      final room = _room;
+      final checkIn = room?.checkIn;
+      if (room != null && checkIn != null && mounted) {
+        _locallyConfirmedCheckInDeadline = checkIn.deadline;
+        setState(() {
+          _room = _copyRoom(
+            room,
+            participantCount: room.participantCount,
+            checkIn: LiveCheckIn(
+              deadline: checkIn.deadline,
+              checkedInCount: checkIn.checkedInCount,
+              viewerChecked: true,
+            ),
+          );
+        });
+      }
       if (mounted) _showNotice(context, '签到成功', '已完成本次直播签到。');
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '签到失败', error.message);
