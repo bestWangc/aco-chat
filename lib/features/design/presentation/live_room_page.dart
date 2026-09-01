@@ -68,6 +68,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _emojiPickerVisible = false;
   bool _sending = false;
   bool _transferringHost = false;
+  bool _hostTransferred = false;
   bool _roomLoading = false;
   bool _leaving = false;
   bool _allowPop = false;
@@ -1181,7 +1182,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       Text(label, style: const TextStyle(fontSize: AcoTypography.body));
 
   Future<void> _handleBack() async {
-    if (_room?.viewerRole == 'host') {
+    if (_room?.viewerRole == 'host' && !_hostTransferred) {
       await _confirmEndLive();
       return;
     }
@@ -1216,6 +1217,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     setState(() => _transferringHost = true);
     try {
       await _accountSession.transferLiveHost(live.id, speaker.userId);
+      // The room snapshot may briefly retain the old role. Record the
+      // successful transfer immediately so leaving cannot end the live.
+      _hostTransferred = true;
       // The room-state broadcast changes this participant from host to
       // listener. Keep the page open so the former host can continue watching.
       await _loadRoom(silent: true);
