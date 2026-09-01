@@ -506,6 +506,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _applyRoomSnapshot(LiveRoom room) {
     if (!mounted) return;
     if (room.snapshotVersion < _lastRoomSnapshotVersion) return;
+    // A room request can begin before a realtime mutation and finish after it.
+    // Do not let that stale snapshot erase state already applied from a newer
+    // realtime event, such as an active check-in.
+    if (room.snapshotVersion > 0 &&
+        room.snapshotVersion < _lastRealtimeEventVersion) {
+      return;
+    }
     _lastRoomSnapshotVersion = room.snapshotVersion;
     if (room.live.status == 'ended') {
       _closeRoom(true);
