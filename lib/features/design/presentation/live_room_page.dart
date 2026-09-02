@@ -82,10 +82,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   DateTime? _locallyConfirmedCheckInDeadline;
   DateTime? _realtimeCheckInDeadline;
   int? _realtimeCheckInCount;
-  int _lastRoomSnapshotVersion = 0;
   int _roomLoadSequence = 0;
+  int _realtimeMutationGeneration = 0;
   final Map<String, int> _latestRealtimeEventVersions = <String, int>{};
-  int _lastRealtimeEventVersion = 0;
   int _scrollToLatestSignal = 0;
   int _reentryCooldownSeconds = 0;
   LiveRoom? _room;
@@ -95,8 +94,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   late final LiveRealtimeClient _realtimeClient;
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
-  Timer? _roomReconcileTimer;
   Timer? _hostHeartbeatTimer;
+  Timer? _roomSnapshotCalibrationTimer;
+  bool _roomSnapshotCalibrationInFlight = false;
   Room? _liveKitRoom;
   EventsListener<RoomEvent>? _liveKitEventListener;
   bool _liveKitConnecting = false;
@@ -126,17 +126,26 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
     _realtimeClient = LiveRealtimeClient(
       onEvent: _handleRealtimeEvent,
+      onConnected: () {
+        if (mounted && !_leaving) {
+          // One authoritative snapshot per successful WebSocket connection,
+          // including reconnects. This callback is separate from the
+          // reconnecting-state callback so the initial connection is not
+          // accidentally reconciled twice.
+          unawaited(_loadRoom(silent: true));
+          _scheduleRoomSnapshotCalibration();
+        }
+      },
       onReconnectingChanged: (reconnecting) {
         if (mounted) {
           setState(() {
             _networkReconnecting = reconnecting;
             if (reconnecting) _realtimeParticipantCount = null;
+            if (reconnecting) {
+              _roomSnapshotCalibrationTimer?.cancel();
+              _roomSnapshotCalibrationTimer = null;
+            }
           });
-          if (!reconnecting) {
-            // A reconnect can miss presence events. Reconcile from the
-            // authoritative room snapshot before rendering the recovered UI.
-            unawaited(_loadRoom(silent: true));
-          }
         }
       },
       onReconnectStopped: () {
@@ -172,6 +181,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     if (live == null) return;
     final requestSequence = ++_roomLoadSequence;
+    final requestGeneration = _realtimeMutationGeneration;
     if (!silent && mounted) setState(() => _roomLoading = true);
     try {
       final room = await _accountSession.liveRoom(
@@ -184,7 +194,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         'role=${room.viewerRole} hostMuted=${room.host.muted} '
         'viewerMuted=${room.viewerMuted} resetRole=$resetRole',
       );
-      if (requestSequence == _roomLoadSequence) {
+      if (requestSequence == _roomLoadSequence &&
+          requestGeneration == _realtimeMutationGeneration) {
         _applyRoomSnapshot(room);
       }
     } on AccountApiException catch (error) {
@@ -232,6 +243,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (state == AppLifecycleState.paused) {
       _hostHeartbeatTimer?.cancel();
       _hostHeartbeatTimer = null;
+      _roomSnapshotCalibrationTimer?.cancel();
+      _roomSnapshotCalibrationTimer = null;
       return;
     }
     if (state != AppLifecycleState.resumed) return;
@@ -240,9 +253,35 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (room?.viewerRole != 'host') return;
     _ensureHostHeartbeat(room!);
     unawaited(_sendHostHeartbeat());
+    _scheduleRoomSnapshotCalibration();
   }
 
-  Future<void> _connectRealtime({bool refreshRoom = true}) async {
+  void _scheduleRoomSnapshotCalibration() {
+    _roomSnapshotCalibrationTimer?.cancel();
+    if (!mounted || _leaving || _networkReconnecting) return;
+    final jitter = math.Random().nextInt(61);
+    _roomSnapshotCalibrationTimer = Timer(
+      Duration(minutes: 5, seconds: jitter),
+      () async {
+        _roomSnapshotCalibrationTimer = null;
+        if (!mounted ||
+            _leaving ||
+            _networkReconnecting ||
+            _roomSnapshotCalibrationInFlight) {
+          return;
+        }
+        _roomSnapshotCalibrationInFlight = true;
+        try {
+          await _loadRoom(silent: true);
+        } finally {
+          _roomSnapshotCalibrationInFlight = false;
+          _scheduleRoomSnapshotCalibration();
+        }
+      },
+    );
+  }
+
+  Future<void> _connectRealtime({bool refreshRoom = false}) async {
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
     if (refreshRoom) await _loadRoom(silent: true);
@@ -268,14 +307,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final event = LiveRealtimeEventParser.parse(rawEvent);
     if (event == null) return;
     final eventKey = _stateEventKey(event);
-    if (event.eventVersion > 0 &&
-        _lastRealtimeEventVersion > 0 &&
-        event.eventVersion > _lastRealtimeEventVersion + 1) {
-      _scheduleRoomReconcile();
-    }
-    if (event.eventVersion > _lastRealtimeEventVersion) {
-      _lastRealtimeEventVersion = event.eventVersion;
-    }
     if (eventKey != null && event.eventVersion > 0) {
       final previousVersion = _latestRealtimeEventVersions[eventKey];
       if (previousVersion != null && event.eventVersion <= previousVersion) {
@@ -283,6 +314,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       }
       _latestRealtimeEventVersions[eventKey] = event.eventVersion;
     }
+    if (eventKey != null) _realtimeMutationGeneration++;
     if (_networkReconnecting && mounted) {
       setState(() {
         _networkReconnecting = false;
@@ -299,6 +331,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyParticipantCount(count);
       case LiveParticipantJoinedEvent(:final userId):
         _knownParticipantIds.add(userId);
+      case LiveParticipantLeftEvent(
+        :final userId,
+        :final speakers,
+        :final listeners,
+      ):
+        _knownParticipantIds.remove(userId);
+        _applySpeakerLists(speakers, listeners);
       case LiveCheckInEvent(
         :final deadline,
         :final checkedInCount,
@@ -313,27 +352,89 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyParticipantMute(userId, muted);
       case LiveKickedEvent():
         unawaited(_handleKicked());
+      case LiveEndedEvent():
+        _closeRoom(true);
+      case LiveHostAbsentEvent(:final absent):
+        _applyHostPresence(!absent);
       case LiveSpeakerInviteEvent(:final invited):
         if (invited) {
           _showPendingSpeakerInvite();
-          _scheduleRoomReconcile();
         }
+      case LiveSpeakerListsChangedEvent(:final speakers, :final listeners):
+        _applySpeakerLists(speakers, listeners);
+      case LiveHostTransferredEvent(:final viewerRole, :final host):
+        _applyHostTransfer(viewerRole, host);
     }
   }
 
-  String? _stateEventKey(LiveRealtimeEvent event) => switch (event) {
-    LiveRoomSnapshotEvent() => 'room.snapshot',
-    LiveAudioMuteEvent() => 'room.audio_mute',
-    LiveChatMuteEvent() => 'room.chat_mute',
-    LiveParticipantCountEvent() => 'room.participant_count',
-    LiveCheckInEvent(:final userId) => 'room.check_in:$userId',
-    LiveCheckInStartedEvent() => 'room.check_in_started',
-    LiveRaisedHandCountEvent() => 'room.raised_hand_count',
-    LiveParticipantMuteEvent(:final userId) => 'room.participant_mute:$userId',
-    LiveParticipantJoinedEvent() ||
-    LiveKickedEvent() ||
-    LiveSpeakerInviteEvent() => null,
-  };
+  void _applySpeakerLists(
+    List<LiveParticipant> speakers,
+    List<LiveParticipant> listeners,
+  ) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        speakers: speakers,
+        listeners: listeners,
+      ),
+    );
+  }
+
+  void _applyHostTransfer(String viewerRole, LiveParticipant? host) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        host: host,
+        viewerRole: viewerRole,
+      ),
+    );
+    _hostTransferred = viewerRole == 'host';
+  }
+
+  void _applyHostPresence(bool active) {
+    final room = _room;
+    if (room == null || !mounted || room.hostActive == active) return;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        hostActive: active,
+      ),
+    );
+  }
+
+  String? _stateEventKey(LiveRealtimeEvent event) {
+    if (event is LiveRoomSnapshotEvent) return null;
+    if (event.versionScope.isNotEmpty) return event.versionScope;
+    return switch (event) {
+      LiveRoomSnapshotEvent() => null,
+      LiveAudioMuteEvent() => 'audio_mute',
+      LiveChatMuteEvent() => 'chat_mute',
+      LiveParticipantCountEvent() => 'participant_count',
+      LiveCheckInEvent(:final checkInId) => 'check_in:$checkInId:result',
+      LiveCheckInStartedEvent(:final checkInId) =>
+        'check_in:$checkInId:started',
+      LiveRaisedHandCountEvent() => 'raised_hand_count',
+      LiveParticipantMuteEvent(:final userId) => 'participant_mute:$userId',
+      LiveParticipantJoinedEvent() => 'participant_members',
+      LiveParticipantLeftEvent() => 'participant_members',
+      LiveKickedEvent() => 'kicked',
+      LiveEndedEvent() => 'room_lifecycle',
+      LiveSpeakerInviteEvent(:final userId) => 'speaker_invite:$userId',
+      LiveSpeakerListsChangedEvent() => 'speakers',
+      LiveHostTransferredEvent() => 'host_transfer',
+      LiveHostAbsentEvent() => 'host_presence',
+    };
+  }
 
   void _showPendingSpeakerInvite() {
     if (!mounted ||
@@ -344,13 +445,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _speakerInviteDialogVisible = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_showSpeakerInviteDialog());
-    });
-  }
-
-  void _scheduleRoomReconcile() {
-    _roomReconcileTimer?.cancel();
-    _roomReconcileTimer = Timer(const Duration(milliseconds: 300), () {
-      if (mounted) unawaited(_loadRoom(silent: true));
     });
   }
 
@@ -375,7 +469,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         hostActive: room.hostActive,
         viewerUserId: room.viewerUserId,
         viewerRole: room.viewerRole,
-        snapshotVersion: room.snapshotVersion,
         participantCount: safeParticipantCount,
         speakers: room.speakers,
         listeners: room.listeners,
@@ -453,7 +546,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       hostActive: room.hostActive,
       viewerUserId: room.viewerUserId,
       viewerRole: room.viewerRole,
-      snapshotVersion: room.snapshotVersion,
       participantCount: room.participantCount,
       // The room-level event only changes the global control state. Individual
       // participant mute flags come from the next room snapshot; preserving
@@ -488,7 +580,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       hostActive: room.hostActive,
       viewerUserId: room.viewerUserId,
       viewerRole: room.viewerRole,
-      snapshotVersion: room.snapshotVersion,
       participantCount: room.participantCount,
       speakers: room.speakers,
       listeners: room.listeners,
@@ -505,8 +596,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _applyRoomSnapshot(LiveRoom room) {
     if (!mounted) return;
-    if (room.snapshotVersion < _lastRoomSnapshotVersion) return;
-    _lastRoomSnapshotVersion = room.snapshotVersion;
     if (room.live.status == 'ended') {
       _closeRoom(true);
       return;
@@ -633,13 +722,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     List<LiveParticipant>? speakers,
     List<LiveParticipant>? listeners,
     bool? viewerMuted,
+    String? viewerRole,
+    bool? hostActive,
   }) => LiveRoom(
     live: room.live,
     host: host ?? room.host,
-    hostActive: room.hostActive,
+    hostActive: hostActive ?? room.hostActive,
     viewerUserId: room.viewerUserId,
-    viewerRole: room.viewerRole,
-    snapshotVersion: room.snapshotVersion,
+    viewerRole: viewerRole ?? room.viewerRole,
     participantCount: participantCount,
     speakers: speakers ?? room.speakers,
     listeners: listeners ?? room.listeners,
@@ -1250,8 +1340,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     unawaited(_setLiveRoomWakelock(false));
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
-    _roomReconcileTimer?.cancel();
     _hostHeartbeatTimer?.cancel();
+    _roomSnapshotCalibrationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _chatBuffer.dispose();
     unawaited(_realtimeClient.dispose());
