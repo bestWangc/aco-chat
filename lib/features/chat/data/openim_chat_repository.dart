@@ -1,12 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 
 import '../domain/chat_repository.dart';
 
 /// OpenIM SDK 适配层。业务页面只依赖 [ChatRepository]。
 final class OpenIMChatRepository implements ChatRepository {
-  OpenIMChatRepository({OpenIM? sdk}) : _sdk = sdk ?? OpenIM.iMManager;
+  OpenIMChatRepository({IMManager? sdk}) : _sdk = sdk ?? OpenIM.iMManager;
 
-  final OpenIM _sdk;
+  final IMManager _sdk;
 
   @override
   Future<void> initialize({
@@ -15,18 +17,19 @@ final class OpenIMChatRepository implements ChatRepository {
     required String dataDir,
   }) async {
     await _sdk.initSDK(
+      platformID: Platform.isIOS ? IMPlatform.ios : IMPlatform.android,
       apiAddr: apiAddr,
       wsAddr: wsAddr,
       dataDir: dataDir,
-      // 6 is the SDK's test-level logging value; production should lower it.
+      listener: OnConnectListener(),
       logLevel: 6,
       isLogStandardOutput: true,
     );
   }
 
   @override
-  Future<void> login({required String userId, required String userSig}) {
-    return _sdk.login(userID: userId, userSig: userSig);
+  Future<void> login({required String userId, required String userSig}) async {
+    await _sdk.login(userID: userId, token: userSig);
   }
 
   @override
