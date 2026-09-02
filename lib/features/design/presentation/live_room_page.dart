@@ -364,8 +364,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         if (invited) {
           _showPendingSpeakerInvite();
         }
-      case LiveSpeakerListsChangedEvent(:final speakers, :final listeners):
-        _applySpeakerLists(speakers, listeners);
+      case LiveSpeakerListsChangedEvent(
+        :final speakers,
+        :final listeners,
+        :final removed,
+      ):
+        _applySpeakerLists(speakers, listeners, removed: removed);
       case LiveHostTransferredEvent(:final viewerRole, :final host):
         _applyHostTransfer(viewerRole, host);
     }
@@ -373,8 +377,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _applySpeakerLists(
     List<LiveParticipant> speakers,
-    List<LiveParticipant> listeners,
-  ) {
+    List<LiveParticipant> listeners, {
+    bool removed = false,
+  }) {
     final room = _room;
     if (room == null || !mounted) return;
     final wasListener = room.viewerRole == 'listener';
@@ -385,14 +390,30 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final viewerIsListener = listeners.any(
       (participant) => participant.userId == viewerId,
     );
-    final viewerRole = viewerIsSpeaker
-        ? 'speaker'
-        : viewerIsListener
-        ? 'listener'
-        : room.viewerRole;
+    var viewerRole = room.viewerRole;
+    LiveParticipant? viewerParticipant;
+    if (viewerIsSpeaker) {
+      viewerRole = 'speaker';
+      viewerParticipant = speakers.firstWhere(
+        (participant) => participant.userId == viewerId,
+      );
+    } else if (viewerIsListener) {
+      viewerRole = 'listener';
+      viewerParticipant = listeners.firstWhere(
+        (participant) => participant.userId == viewerId,
+      );
+    } else if (removed && room.viewerRole == 'speaker') {
+      viewerRole = 'listener';
+    }
     final viewerHandRaised = listeners.any(
       (participant) => participant.userId == viewerId && participant.handRaised,
     );
+    var viewerMuted = room.viewerMuted;
+    if (viewerParticipant != null) {
+      viewerMuted = viewerParticipant.muted;
+    } else if (removed && viewerRole == 'listener') {
+      viewerMuted = false;
+    }
     setState(() {
       _room = _copyRoom(
         room,
@@ -402,9 +423,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         listeners: listeners,
         viewerRole: viewerRole,
         canRaiseHand: viewerRole == 'listener',
+        // A speaker-removed event may carry only the preview listener list;
+        // when this user is omitted, the role transition still makes the
+        // previous speaker mute flag stale.
+        viewerMuted: viewerMuted,
       );
       _handRaised = viewerRole == 'listener' && viewerHandRaised;
-      if (wasListener && viewerRole == 'speaker' && _localMuteOverride == null) {
+      if (wasListener &&
+          viewerRole == 'speaker' &&
+          _localMuteOverride == null) {
         _muted = false;
       }
     });
