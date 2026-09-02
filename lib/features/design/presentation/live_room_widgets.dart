@@ -227,7 +227,6 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
         ),
       );
     }
-    final background = checked ? palette.surfaceRaised : palette.accent;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -241,12 +240,12 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
           height: 56,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: background,
+            color: checked ? palette.surfaceRaised : null,
             shape: BoxShape.circle,
             border: Border.all(
               color: checked
                   ? palette.mutedText.withValues(alpha: .25)
-                  : palette.accent.withValues(alpha: .72),
+                  : _transparent,
               width: 2,
             ),
             boxShadow: [
@@ -259,24 +258,32 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
               ),
             ],
           ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '签到',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: checked ? palette.mutedText : _white,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                shadows: const [
-                  Shadow(
-                    color: Color(0x99000000),
-                    blurRadius: 2,
-                    offset: Offset(0, 1),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (!checked)
+                Positioned.fill(
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/check_in_button.png',
+                      fit: BoxFit.cover,
+                      semanticLabel: '签到按钮',
+                    ),
                   ),
-                ],
+                ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  checked ? '已签到' : '签到',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: checked ? palette.mutedText : _black,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
