@@ -10,11 +10,13 @@ typedef LiveRealtimeEventHandler = void Function(Object? event);
 class LiveRealtimeClient {
   LiveRealtimeClient({
     required this.onEvent,
+    required this.onConnected,
     required this.onReconnectingChanged,
     required this.onReconnectStopped,
   });
 
   final LiveRealtimeEventHandler onEvent;
+  final void Function() onConnected;
   final void Function(bool reconnecting) onReconnectingChanged;
   final void Function() onReconnectStopped;
 
@@ -51,6 +53,7 @@ class LiveRealtimeClient {
       _reconnectAttempt = 0;
       _stopped = false;
       onReconnectingChanged(false);
+      onConnected();
     } on AccountApiException catch (error) {
       if (error.statusCode == 404 || error.statusCode == 409) {
         _reconnectTimer?.cancel();

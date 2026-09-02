@@ -735,8 +735,13 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     try {
       await AudioManager.instance.setSpeakerOutputPreferred(
         true,
-        force: defaultTargetPlatform == TargetPlatform.iOS,
+        force: true,
       );
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        await _VoiceRoomPageState._liveAudioRouteChannel.invokeMethod<bool>(
+          'forceSpeaker',
+        );
+      }
       debugPrint(
         'LiveKit speaker output requested: platform=$defaultTargetPlatform '
         'preferred=${AudioManager.instance.isSpeakerOutputPreferred} '
