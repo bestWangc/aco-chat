@@ -52,7 +52,7 @@ class _LiveRoomOverview extends StatelessWidget {
             ),
             if (isHost && room.checkIn != null)
               Positioned(
-                top: 36,
+                top: 24,
                 left: 12,
                 child: _LiveRoomCheckInButton(
                   palette: palette,
@@ -66,7 +66,7 @@ class _LiveRoomOverview extends StatelessWidget {
                 !checkingIn &&
                 !room.checkIn!.viewerChecked)
               Positioned(
-                top: 36,
+                top: 24,
                 right: 14,
                 child: _LiveRoomCheckInButton(
                   palette: palette,
