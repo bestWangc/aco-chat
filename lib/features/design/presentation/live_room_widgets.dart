@@ -1243,13 +1243,7 @@ class _SpeakingRing extends StatelessWidget {
   );
 }
 
-enum _LiveMemberAction {
-  approveSpeaker,
-  toggleMute,
-  removeSpeaker,
-  transferHost,
-  kick,
-}
+enum _LiveMemberAction { toggleMute, removeSpeaker, transferHost, kick }
 
 class _LiveRoomMembersSheet extends StatefulWidget {
   const _LiveRoomMembersSheet({

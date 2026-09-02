@@ -99,6 +99,15 @@ final class LiveRaisedHandCountEvent extends LiveRealtimeEvent {
   final int count;
 }
 
+final class LiveRaisedHandRejectedEvent extends LiveRealtimeEvent {
+  const LiveRaisedHandRejectedEvent({
+    required this.userId,
+    super.eventVersion,
+    super.versionScope,
+  });
+  final int userId;
+}
+
 final class LiveParticipantMuteEvent extends LiveRealtimeEvent {
   const LiveParticipantMuteEvent({
     required this.userId,
@@ -168,9 +177,14 @@ final class LiveHostTransferredEvent extends LiveRealtimeEvent {
 
 abstract final class LiveRealtimeEventParser {
   static LiveRealtimeEvent? parse(Object? rawEvent) {
-    if (rawEvent is! String) return null;
+    final payload = switch (rawEvent) {
+      String value => value,
+      List<int> value => utf8.decode(value, allowMalformed: true),
+      _ => null,
+    };
+    if (payload == null) return null;
     try {
-      final decoded = jsonDecode(rawEvent);
+      final decoded = jsonDecode(payload);
       if (decoded is! Map<String, dynamic> || decoded['type'] is! String) {
         return null;
       }
@@ -299,6 +313,17 @@ abstract final class LiveRealtimeEventParser {
                   versionScope: versionScope,
                 )
               : null;
+        case 'room.raised_hand_rejected':
+          final rejected = decoded['raised_hand_rejected'];
+          if (rejected is! Map<String, dynamic> ||
+              rejected['user_id'] is! num) {
+            return null;
+          }
+          return LiveRaisedHandRejectedEvent(
+            userId: (rejected['user_id'] as num).toInt(),
+            eventVersion: eventVersion,
+            versionScope: versionScope,
+          );
         case 'room.participant_mute':
           final mute = decoded['participant_mute'];
           if (mute is! Map<String, dynamic> ||

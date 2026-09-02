@@ -348,6 +348,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyCheckInStarted(deadline);
       case LiveRaisedHandCountEvent(:final count):
         _applyRaisedHandCount(count);
+      case LiveRaisedHandRejectedEvent(:final userId):
+        if (_room?.viewerUserId == userId && mounted) {
+          setState(() => _handRaised = false);
+        }
       case LiveParticipantMuteEvent(:final userId, :final muted):
         _applyParticipantMute(userId, muted);
       case LiveKickedEvent():
@@ -373,15 +377,20 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   ) {
     final room = _room;
     if (room == null || !mounted) return;
-    setState(
-      () => _room = _copyRoom(
+    final viewerId = room.viewerUserId;
+    final viewerHandRaised = listeners.any(
+      (participant) => participant.userId == viewerId && participant.handRaised,
+    );
+    setState(() {
+      _room = _copyRoom(
         room,
         participantCount: room.participantCount,
         checkIn: room.checkIn,
         speakers: speakers,
         listeners: listeners,
-      ),
-    );
+      );
+      _handRaised = viewerHandRaised;
+    });
   }
 
   void _applyHostTransfer(String viewerRole, LiveParticipant? host) {
@@ -424,6 +433,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       LiveCheckInStartedEvent(:final checkInId) =>
         'check_in:$checkInId:started',
       LiveRaisedHandCountEvent() => 'raised_hand_count',
+      LiveRaisedHandRejectedEvent(:final userId) =>
+        'raised_hand_rejected:$userId',
       LiveParticipantMuteEvent(:final userId) => 'participant_mute:$userId',
       LiveParticipantJoinedEvent() => 'participant_members',
       LiveParticipantLeftEvent() => 'participant_members',
@@ -437,12 +448,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   void _showPendingSpeakerInvite() {
-    if (!mounted ||
-        _room?.viewerRole != 'listener' ||
-        _speakerInviteDialogVisible) {
+    // The server already filters invite events to the target participant.
+    // Relying on the local role snapshot here can hide a valid invite while
+    // that snapshot is briefly stale during realtime updates.
+    if (!mounted || _speakerInviteDialogVisible) {
       return;
     }
     _speakerInviteDialogVisible = true;
+    // The realtime callback can arrive while the UI is otherwise idle. A
+    // post-frame callback alone does not schedule a frame, so it may not run
+    // until the user taps or scrolls. Trigger a frame explicitly.
+    setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) unawaited(_showSpeakerInviteDialog());
     });
@@ -900,9 +916,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         actions: [
           if (member.role == 'listener')
             CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(
-                sheetContext,
-              ).pop(_LiveMemberAction.approveSpeaker),
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_inviteSpeakerImmediately(member));
+              },
               child: const Text(
                 '邀请上麦',
                 style: TextStyle(fontSize: AcoTypography.bodySmall),
@@ -963,13 +980,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
     try {
       switch (action) {
-        case _LiveMemberAction.approveSpeaker:
-          debugPrint(
-            'Live invite speaker: live=${live.id} target=${member.userId} '
-            'beforeHostMuted=${_room?.host.muted} localMuted=$_muted',
-          );
-          await _accountSession.inviteLiveSpeaker(live.id, member.userId);
-          if (mounted) _showNotice(context, '邀请已发送', '等待对方确认上麦。');
         case _LiveMemberAction.toggleMute:
           await _accountSession.setLiveSpeakerMute(
             live.id,
@@ -983,6 +993,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         case _LiveMemberAction.kick:
           await _accountSession.kickLiveMember(live.id, member.userId);
       }
+      await _loadRoom(silent: true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '操作失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '操作失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _inviteSpeakerImmediately(LiveParticipant member) async {
+    final live = widget.live;
+    if (live == null || _leaving) return;
+    debugPrint(
+      'Live invite speaker: live=${live.id} target=${member.userId} '
+      'beforeHostMuted=${_room?.host.muted} localMuted=$_muted',
+    );
+    try {
+      await _accountSession.inviteLiveSpeaker(live.id, member.userId);
+      if (mounted) _showNotice(context, '邀请已发送', '等待对方确认上麦。');
       await _loadRoom(silent: true);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '操作失败', error.localizedMessage);
