@@ -323,6 +323,14 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_openim_sdk:
+    dependency: "direct main"
+    description:
+      name: flutter_openim_sdk
+      sha256: d67753a3db7bfc4cc3d8c9ccb34a3dfb86e03060122ae6f68ce4d0f5261b9df4
+      url: "https://pub.dev"
+    source: hosted
+    version: "3.8.3+hotfix.14"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
