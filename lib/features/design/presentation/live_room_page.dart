@@ -377,6 +377,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   ) {
     final room = _room;
     if (room == null || !mounted) return;
+    final wasListener = room.viewerRole == 'listener';
     final viewerId = room.viewerUserId;
     final viewerIsSpeaker = speakers.any(
       (participant) => participant.userId == viewerId,
@@ -403,6 +404,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         canRaiseHand: viewerRole == 'listener',
       );
       _handRaised = viewerRole == 'listener' && viewerHandRaised;
+      if (wasListener && viewerRole == 'speaker' && _localMuteOverride == null) {
+        _muted = false;
+      }
     });
     unawaited(_syncLiveKitPublishPermission(_room!));
   }

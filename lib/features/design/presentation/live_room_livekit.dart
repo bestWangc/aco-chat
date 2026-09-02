@@ -635,16 +635,20 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
   }
 
   Future<bool> _setLocalMicrophoneEnabled(bool enabled) async {
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
+    if (defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.android) {
       if (enabled) {
-        // The communication session is configured once before Room.connect.
-        // Reapplying it on every mute toggle can reset iOS's AudioUnit.
-        await AudioManager.instance.setEngineAvailability(
-          AudioEngineAvailability.defaultAvailability,
-        );
+        // The communication session is configured before Room.connect.
+        // Reapplying iOS's engine availability on every toggle can reset its
+        // AudioUnit; Android only needs the speaker route reapplied here.
+        if (defaultTargetPlatform == TargetPlatform.iOS) {
+          await AudioManager.instance.setEngineAvailability(
+            AudioEngineAvailability.defaultAvailability,
+          );
+        }
       }
       await _setSpeakerOutputPreferred();
-      if (enabled) {
+      if (enabled && defaultTargetPlatform == TargetPlatform.iOS) {
         // WebRTC may reset the iOS route while the audio device starts.
         unawaited(
           Future<void>.delayed(
@@ -735,8 +739,13 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     try {
       await AudioManager.instance.setSpeakerOutputPreferred(
         true,
-        force: defaultTargetPlatform == TargetPlatform.iOS,
+        force: true,
       );
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        await _VoiceRoomPageState._liveAudioRouteChannel.invokeMethod<bool>(
+          'forceSpeaker',
+        );
+      }
       debugPrint(
         'LiveKit speaker output requested: platform=$defaultTargetPlatform '
         'preferred=${AudioManager.instance.isSpeakerOutputPreferred} '
