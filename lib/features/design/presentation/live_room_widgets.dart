@@ -235,29 +235,8 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? widget.onPressed : null,
-        child: Container(
-          width: 56,
-          height: 56,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: checked ? palette.surfaceRaised : null,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: checked
-                  ? palette.mutedText.withValues(alpha: .25)
-                  : _transparent,
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (checked ? _black : palette.accent).withValues(
-                  alpha: .28,
-                ),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
+        child: SizedBox.square(
+          dimension: 72,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -278,8 +257,8 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: checked ? palette.mutedText : _black,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ),
