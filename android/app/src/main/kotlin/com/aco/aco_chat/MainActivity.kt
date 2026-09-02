@@ -92,7 +92,19 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/live-audio-route")
             .setMethodCallHandler { call, result ->
                 if (call.method != "routeInfo") {
-                    result.notImplemented()
+                    if (call.method == "forceSpeaker") {
+                        val audioManager = getSystemService(AudioManager::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            val speaker = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+                                .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                            result.success(speaker != null && audioManager.setCommunicationDevice(speaker))
+                        } else {
+                            audioManager.isSpeakerphoneOn = true
+                            result.success(audioManager.isSpeakerphoneOn)
+                        }
+                    } else {
+                        result.notImplemented()
+                    }
                     return@setMethodCallHandler
                 }
                 val audioManager = getSystemService(AudioManager::class.java)
