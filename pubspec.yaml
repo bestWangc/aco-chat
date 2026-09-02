@@ -48,6 +48,7 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   http: ^1.6.0
   livekit_client: ^2.11.0
+  flutter_openim_sdk: 3.8.3+hotfix.14
   web_socket_channel: ^3.0.3
   video_player: ^2.14.0
   wakelock_plus: ^1.7.0
