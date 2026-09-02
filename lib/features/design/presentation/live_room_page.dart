@@ -1186,7 +1186,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (room?.viewerRole != 'host' || live == null) return;
     try {
       final users = await _accountSession.raisedLiveHands(live.id);
-      if (!mounted || users.isEmpty) return;
+      if (!mounted) return;
+      if (users.isEmpty) {
+        // The list endpoint is authoritative for pending requests. Clear a
+        // stale realtime count so the host indicator cannot remain visible.
+        _applyRaisedHandCount(0);
+        return;
+      }
       _showRaisedHandRequestsDialog(users);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '无法加载举手列表', error.message);
@@ -1342,6 +1348,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (live == null) return;
     try {
       await _accountSession.rejectAllRaisedLiveHands(live.id);
+      // The count broadcast can be delayed or lost while the dialog is open.
+      // The successful mutation itself is enough to clear the host indicator.
+      _applyRaisedHandCount(0);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '拒绝失败', error.message);
     } catch (_) {
