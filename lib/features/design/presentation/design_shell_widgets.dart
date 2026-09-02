@@ -924,3 +924,66 @@ void showAcoAlertNotice(BuildContext context, String title, String message) {
     },
   );
 }
+
+void showCheckInSuccessDialog(BuildContext context) {
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: _black.withValues(alpha: .55),
+    pageBuilder: (dialogContext, _, _) => Center(
+      child: SizedBox(
+        width: 300,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF202020),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(
+                dimension: 80,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/check_in_success.png',
+                    fit: BoxFit.cover,
+                    semanticLabel: '签到成功',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '签到成功',
+                style: TextStyle(
+                  color: _white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: 240,
+                height: 32,
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  borderRadius: BorderRadius.circular(16),
+                  color: _accentGreen,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    '我知道了',
+                    style: TextStyle(
+                      color: _black,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}

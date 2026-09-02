@@ -1218,7 +1218,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           );
         });
       }
-      if (mounted) _showNotice(context, '签到成功', '已完成本次直播签到。');
+      if (mounted) showCheckInSuccessDialog(context);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '签到失败', error.message);
     } catch (_) {

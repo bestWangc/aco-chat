@@ -52,7 +52,7 @@ class _LiveRoomOverview extends StatelessWidget {
             ),
             if (isHost && room.checkIn != null)
               Positioned(
-                top: 36,
+                top: 24,
                 left: 12,
                 child: _LiveRoomCheckInButton(
                   palette: palette,
@@ -66,7 +66,7 @@ class _LiveRoomOverview extends StatelessWidget {
                 !checkingIn &&
                 !room.checkIn!.viewerChecked)
               Positioned(
-                top: 36,
+                top: 24,
                 right: 14,
                 child: _LiveRoomCheckInButton(
                   palette: palette,
@@ -227,7 +227,6 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
         ),
       );
     }
-    final background = checked ? palette.surfaceRaised : palette.accent;
     return Semantics(
       button: true,
       enabled: enabled,
@@ -236,47 +235,34 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? widget.onPressed : null,
-        child: Container(
-          width: 56,
-          height: 56,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: background,
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: checked
-                  ? palette.mutedText.withValues(alpha: .25)
-                  : palette.accent.withValues(alpha: .72),
-              width: 2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: (checked ? _black : palette.accent).withValues(
-                  alpha: .28,
+        child: SizedBox.square(
+          dimension: 72,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              if (!checked)
+                Positioned.fill(
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/check_in_button.png',
+                      fit: BoxFit.cover,
+                      semanticLabel: '签到按钮',
+                    ),
+                  ),
                 ),
-                blurRadius: 14,
-                offset: const Offset(0, 6),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  checked ? '已签到' : '签到',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: checked ? palette.mutedText : _black,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
               ),
             ],
-          ),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              '签到',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: checked ? palette.mutedText : _white,
-                fontSize: 15,
-                fontWeight: FontWeight.w800,
-                shadows: const [
-                  Shadow(
-                    color: Color(0x99000000),
-                    blurRadius: 2,
-                    offset: Offset(0, 1),
-                  ),
-                ],
-              ),
-            ),
           ),
         ),
       ),
