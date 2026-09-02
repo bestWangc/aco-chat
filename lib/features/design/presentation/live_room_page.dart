@@ -396,15 +396,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _applyHostTransfer(String viewerRole, LiveParticipant? host) {
     final room = _room;
     if (room == null || !mounted) return;
-    setState(
-      () => _room = _copyRoom(
+    setState(() {
+      _room = _copyRoom(
         room,
         participantCount: room.participantCount,
         checkIn: room.checkIn,
         host: host,
         viewerRole: viewerRole,
-      ),
-    );
+        canRaiseHand: viewerRole == 'listener',
+      );
+      if (viewerRole != 'listener') _handRaised = false;
+    });
     _hostTransferred = viewerRole == 'host';
   }
 
@@ -740,6 +742,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     bool? viewerMuted,
     String? viewerRole,
     bool? hostActive,
+    bool? canRaiseHand,
   }) => LiveRoom(
     live: room.live,
     host: host ?? room.host,
@@ -750,7 +753,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     speakers: speakers ?? room.speakers,
     listeners: listeners ?? room.listeners,
     raisedHandCount: raisedHandCount ?? room.raisedHandCount,
-    canRaiseHand: room.canRaiseHand,
+    canRaiseHand: canRaiseHand ?? room.canRaiseHand,
     viewerMuted: viewerMuted ?? room.viewerMuted,
     chatMuted: room.chatMuted,
     audioMuted: room.audioMuted,
