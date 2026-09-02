@@ -378,6 +378,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final room = _room;
     if (room == null || !mounted) return;
     final viewerId = room.viewerUserId;
+    final viewerIsSpeaker = speakers.any(
+      (participant) => participant.userId == viewerId,
+    );
+    final viewerIsListener = listeners.any(
+      (participant) => participant.userId == viewerId,
+    );
+    final viewerRole = viewerIsSpeaker
+        ? 'speaker'
+        : viewerIsListener
+        ? 'listener'
+        : room.viewerRole;
     final viewerHandRaised = listeners.any(
       (participant) => participant.userId == viewerId && participant.handRaised,
     );
@@ -388,9 +399,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         checkIn: room.checkIn,
         speakers: speakers,
         listeners: listeners,
+        viewerRole: viewerRole,
+        canRaiseHand: viewerRole == 'listener',
       );
-      _handRaised = viewerHandRaised;
+      _handRaised = viewerRole == 'listener' && viewerHandRaised;
     });
+    unawaited(_syncLiveKitPublishPermission(_room!));
   }
 
   void _applyHostTransfer(String viewerRole, LiveParticipant? host) {
