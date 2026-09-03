@@ -57,7 +57,10 @@ final class OpenIMChatRepository implements ChatRepository {
         OnFriendshipListener(
           onFriendApplicationAdded: (info) {
             friendRequestNotifier.value = info;
-            developer.log('收到好友申请: ${info.fromUserID}', name: 'OpenIM.friendship');
+            developer.log(
+              '收到好友申请: ${info.fromUserID}',
+              name: 'OpenIM.friendship',
+            );
           },
         ),
       );
@@ -66,14 +69,13 @@ final class OpenIMChatRepository implements ChatRepository {
       // failed session; the API polling fallback still delivers requests.
       developer.log('好友监听器注册延迟失败: $error', name: 'OpenIM.friendship');
     }
-    await _sdk.setListenerForService(
-      OnListenerForService(
-        onFriendApplicationAdded: (info) {
-          friendRequestNotifier.value = info;
-          developer.log('收到服务通道好友申请: ${info.fromUserID}', name: 'OpenIM.friendship');
-        },
-      ),
-    );
+    // flutter_openim_sdk 3.8.3+hotfix.14 exposes setListenerForService in
+    // Dart, but the Android plugin does not implement the corresponding
+    // native method (the Java method is commented out). Calling it therefore
+    // raises NoSuchMethodException on Android and can interrupt login setup.
+    // Friendship events are delivered through setFriendshipListener, which is
+    // implemented on both supported platforms, so keep a single canonical
+    // event path here.
   }
 
   @override
