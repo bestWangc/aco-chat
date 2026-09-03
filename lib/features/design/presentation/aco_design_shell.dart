@@ -187,32 +187,6 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _applyAccountProfile(widget.accountProfile);
     _loadWalletName();
     unawaited(_checkForAppUpdate());
-    OpenIMChatRepository.friendRequestNotifier.addListener(_onFriendRequest);
-  }
-
-  void _onFriendRequest() {
-    final info = OpenIMChatRepository.friendRequestNotifier.value;
-    if (!mounted || info == null) return;
-    OpenIMChatRepository.friendRequestNotifier.value = null;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      showCupertinoDialog<void>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('新的好友申请'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text('${info.fromUserID} 请求添加你为好友'),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('知道了'),
-            ),
-          ],
-        ),
-      );
-    });
   }
 
   Future<void> _checkForAppUpdate() async {
@@ -296,7 +270,6 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
 
   @override
   void dispose() {
-    OpenIMChatRepository.friendRequestNotifier.removeListener(_onFriendRequest);
     if (_ownsThemeNotifier) _isDark.dispose();
     _displayName.dispose();
     _walletName.dispose();

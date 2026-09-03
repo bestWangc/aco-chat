@@ -666,20 +666,24 @@ class _SocialMessagesPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  _MessageQuickActions(
-                    palette: palette,
-                    onContactsTap: () => Navigator.of(context).push(
+                  ValueListenableBuilder<FriendApplicationInfo?>(
+                    valueListenable: OpenIMChatRepository.friendRequestNotifier,
+                    builder: (_, request, __) => _MessageQuickActions(
+                      hasFriendRequest: request != null,
+                      palette: palette,
+                      onContactsTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
                         builder: (_) =>
                             _ContactsPage(palette: palette, onOpen: onOpen),
                       ),
                     ),
-                    onSearchTap: () => Navigator.of(context).push(
+                      onSearchTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
                         builder: (_) => _MessageSearchPage(
                           palette: palette,
                           onOpen: onOpen,
                         ),
+                      ),
                       ),
                     ),
                   ),
@@ -1529,11 +1533,13 @@ class _MessageQuickActions extends StatelessWidget {
     required this.palette,
     required this.onContactsTap,
     required this.onSearchTap,
+    this.hasFriendRequest = false,
   });
 
   final AcoPalette palette;
   final VoidCallback onContactsTap;
   final VoidCallback onSearchTap;
+  final bool hasFriendRequest;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1548,6 +1554,7 @@ class _MessageQuickActions extends StatelessWidget {
               label: '通讯录',
               palette: palette,
               onPressed: onContactsTap,
+              badge: hasFriendRequest,
             ),
           ),
           const SizedBox(width: 8),
@@ -1571,12 +1578,14 @@ class _MessageQuickTab extends StatelessWidget {
     required this.label,
     required this.palette,
     required this.onPressed,
+    this.badge = false,
   });
 
   final IconData icon;
   final String label;
   final AcoPalette palette;
   final VoidCallback onPressed;
+  final bool badge;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -1594,19 +1603,19 @@ class _MessageQuickTab extends StatelessWidget {
             color: const Color(0xFF191919),
             borderRadius: BorderRadius.circular(5),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              Icon(icon, color: palette.primaryText, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.caption,
-                  fontWeight: FontWeight.w600,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, color: palette.primaryText, size: 16),
+                  const SizedBox(width: 6),
+                  Text(label, style: TextStyle(color: palette.primaryText, fontSize: AcoTypography.caption, fontWeight: FontWeight.w600)),
+                ],
               ),
+              if (badge)
+                const Positioned(right: 8, top: 4, child: SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: _danger, shape: BoxShape.circle)))),
             ],
           ),
         ),
