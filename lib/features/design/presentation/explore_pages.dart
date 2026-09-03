@@ -619,7 +619,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                         ),
                         const SizedBox(width: 54),
                         Text(
-                          '直播',
+                          '会议',
                           style: TextStyle(
                             color: _showLive
                                 ? palette.primaryText
