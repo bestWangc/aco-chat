@@ -271,6 +271,20 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<List<FriendContact>> listFriendRequests({
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('friends/requests'),
+      headers: _authorizedHeaders(token),
+    );
+    final items = _body(response)['items'] as List<dynamic>? ?? const [];
+    return items
+        .cast<Map<String, dynamic>>()
+        .map(FriendContact.fromJson)
+        .toList(growable: false);
+  }
+
   Future<AccountProfile> profileByAccountId({
     required String accountId,
     required String token,

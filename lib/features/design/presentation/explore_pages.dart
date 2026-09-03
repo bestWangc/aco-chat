@@ -713,11 +713,22 @@ class _ContactsPage extends StatefulWidget {
 
 class _ContactsPageState extends State<_ContactsPage> {
   late Future<List<FriendContact>> _friends;
+  late Future<List<FriendContact>> _requests;
 
   @override
   void initState() {
     super.initState();
     _friends = _loadFriends();
+    _requests = _loadRequests();
+  }
+
+  Future<List<FriendContact>> _loadRequests() async {
+    final client = AccountApiClient();
+    try {
+      return await AccountSession(client).listFriendRequests();
+    } finally {
+      client.close();
+    }
   }
 
   Future<List<FriendContact>> _loadFriends() async {
@@ -731,8 +742,12 @@ class _ContactsPageState extends State<_ContactsPage> {
 
   Future<void> _refresh() async {
     final future = _loadFriends();
-    setState(() => _friends = future);
-    await future;
+    final requests = _loadRequests();
+    setState(() {
+      _friends = future;
+      _requests = requests;
+    });
+    await Future.wait([future, requests]);
   }
 
   @override
@@ -758,7 +773,9 @@ class _ContactsPageState extends State<_ContactsPage> {
                   return const Center(child: CupertinoActivityIndicator());
                 }
                 if (snapshot.hasError) {
-                  debugPrint('[OpenIM] contacts load failed: ${snapshot.error}');
+                  debugPrint(
+                    '[OpenIM] contacts load failed: ${snapshot.error}',
+                  );
                   return _ContactsStateMessage(
                     message: '通讯录加载失败，点击重试',
                     onRetry: () => setState(() => _friends = _loadFriends()),
@@ -773,9 +790,28 @@ class _ContactsPageState extends State<_ContactsPage> {
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-                    itemCount: friends.length,
+                    itemCount: friends.length + 1,
                     itemBuilder: (context, index) {
-                      final friend = friends[index];
+                      if (index == 0) {
+                        return FutureBuilder<List<FriendContact>>(
+                          future: _requests,
+                          builder: (context, requestSnapshot) {
+                            final count = requestSnapshot.data?.length ?? 0;
+                            if (count == 0) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                '新的好友申请（$count）',
+                                style: TextStyle(
+                                  color: widget.palette.accent,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      }
+                      final friend = friends[index - 1];
                       final name = friend.nickname.isEmpty
                           ? friend.accountId
                           : friend.nickname;
@@ -818,10 +854,7 @@ class _ContactsStateMessage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-    child: CupertinoButton(
-      onPressed: onRetry,
-      child: Text(message),
-    ),
+    child: CupertinoButton(onPressed: onRetry, child: Text(message)),
   );
 }
 
