@@ -295,7 +295,14 @@ class _ScanPageState extends State<_ScanPage> {
     try {
       await _accountSession.addFriend(profile.accountId);
       if (!mounted) return;
-      setState(() => _error = '已添加 ${profile.nickname} 为好友。');
+      setState(() {
+        _result = null;
+        _profile = null;
+        _error = null;
+      });
+      await _controller.start();
+      if (!mounted) return;
+      _showNotice(context, '好友申请已发送', '已向 ${profile.nickname} 发送好友申请。');
     } on AccountApiException catch (error) {
       if (mounted) setState(() => _error = error.localizedMessage);
     } on StateError {

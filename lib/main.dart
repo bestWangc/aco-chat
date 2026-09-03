@@ -115,10 +115,12 @@ class WalletAccountAuthentication {
       _cachedOpenIMToken = token;
       final chat = OpenIMChatRepository();
       final dataDirectory = await getApplicationSupportDirectory();
+      final openIMDirectory = Directory('${dataDirectory.path}/openim');
+      await openIMDirectory.create(recursive: true);
       await chat.initialize(
         apiAddr: token.apiAddr,
         wsAddr: token.wsAddr,
-        dataDir: '${dataDirectory.path}/openim',
+        dataDir: openIMDirectory.path,
       );
       await chat.login(userId: userId, userSig: token.token);
     } catch (error) {

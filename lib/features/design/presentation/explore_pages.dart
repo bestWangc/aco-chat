@@ -729,7 +729,12 @@ class _ContactsPageState extends State<_ContactsPage> {
   Future<List<FriendContact>> _loadRequests() async {
     final client = AccountApiClient();
     try {
-      return await AccountSession(client).listFriendRequests();
+      final requests = await AccountSession(client).listFriendRequests();
+      if (requests.isNotEmpty) {
+        OpenIMChatRepository.friendRequestNotifier.value =
+            FriendApplicationInfo(fromUserID: requests.first.accountId);
+      }
+      return requests;
     } on AccountApiException catch (error) {
       // Older API containers do not have the requests route yet. Keep the
       // contacts page usable until the server is upgraded.
