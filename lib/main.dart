@@ -6,8 +6,8 @@ import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
-import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
+import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:flutter/cupertino.dart';
@@ -76,14 +76,14 @@ class WalletAccountAuthentication {
     try {
       final session = AccountSession(client);
       final result = await session.signInSilently(walletAddress);
-      unawaited(connectOpenIM(result.user.accountId));
+      unawaited(_connectOpenIM(result.user.accountId));
       return result.user;
     } finally {
       client.close();
     }
   }
 
-  static Future<void> connectOpenIM(String userId) async {
+  static Future<void> _connectOpenIM(String userId) async {
     final client = AccountApiClient();
     try {
       final session = AccountSession(client);
@@ -261,7 +261,7 @@ class _AcoAppState extends State<AcoApp> {
             )
             .timeout(const Duration(seconds: 15));
         unawaited(
-          WalletAccountAuthentication.connectOpenIM(result.user.accountId),
+          WalletAccountAuthentication._connectOpenIM(result.user.accountId),
         );
         return result.user;
       }
