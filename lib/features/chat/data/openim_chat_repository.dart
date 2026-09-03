@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:developer' as developer;
 
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 
@@ -26,6 +27,14 @@ final class OpenIMChatRepository implements ChatRepository {
       // Android console with heartbeat ping/pong messages.
       logLevel: 3,
       isLogStandardOutput: false,
+    );
+    await _sdk.friendshipManager.setFriendshipListener(
+      OnFriendshipListener(
+        onFriendApplicationAdded: (info) => developer.log(
+          '收到好友申请: ${info.fromUserID}',
+          name: 'OpenIM.friendship',
+        ),
+      ),
     );
   }
 
