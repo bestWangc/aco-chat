@@ -500,13 +500,20 @@ class _ScanResult extends StatelessWidget {
             style: TextStyle(color: palette.mutedText),
           ),
         const SizedBox(height: 18),
-        if (profile != null && error == null)
-          AcoLimeButton(
-            label: addingFriend ? '添加中…' : '添加好友',
-            onPressed: addingFriend ? () {} : onAddFriend,
-          )
-        else
-          AcoLimeButton(label: '继续扫描', onPressed: onContinue),
+        SizedBox(
+          width: 280,
+          child: profile != null && error == null
+              ? AcoLimeButton(
+                  label: addingFriend ? '添加中…' : '添加好友',
+                  onPressed: addingFriend ? () {} : onAddFriend,
+                  backgroundColor: palette.accent,
+                )
+              : AcoLimeButton(
+                  label: '继续扫描',
+                  onPressed: onContinue,
+                  backgroundColor: palette.accent,
+                ),
+        ),
         if (profile != null && error != null) ...[
           const SizedBox(height: 12),
           Text(error!, style: TextStyle(color: palette.mutedText)),
