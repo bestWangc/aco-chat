@@ -59,6 +59,7 @@ class WalletAccountAuthentication {
   const WalletAccountAuthentication._();
 
   static OpenIMToken? _cachedOpenIMToken;
+  static Future<void>? _openIMConnectFuture;
 
   /// Restores the server account for [walletAddress] without showing a login UI.
   /// A network failure leaves the local wallet usable and is retried next launch.
@@ -87,6 +88,18 @@ class WalletAccountAuthentication {
   }
 
   static Future<void> _connectOpenIM(String userId) async {
+    final running = _openIMConnectFuture;
+    if (running != null) return running;
+    final future = _connectOpenIMOnce(userId);
+    _openIMConnectFuture = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_openIMConnectFuture, future)) _openIMConnectFuture = null;
+    }
+  }
+
+  static Future<void> _connectOpenIMOnce(String userId) async {
     final client = AccountApiClient();
     try {
       final session = AccountSession(client);

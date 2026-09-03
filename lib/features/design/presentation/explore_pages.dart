@@ -730,6 +730,11 @@ class _ContactsPageState extends State<_ContactsPage> {
     final client = AccountApiClient();
     try {
       return await AccountSession(client).listFriendRequests();
+    } on AccountApiException catch (error) {
+      // Older API containers do not have the requests route yet. Keep the
+      // contacts page usable until the server is upgraded.
+      if (error.statusCode == 404) return const <FriendContact>[];
+      rethrow;
     } finally {
       client.close();
     }
@@ -786,15 +791,12 @@ class _ContactsPageState extends State<_ContactsPage> {
                   );
                 }
                 final friends = snapshot.data ?? const <FriendContact>[];
-                if (friends.isEmpty) {
-                  return const _ContactsStateMessage(message: '暂无好友');
-                }
                 return RefreshIndicator(
                   onRefresh: _refresh,
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-                    itemCount: friends.length + 1,
+                    itemCount: friends.length + 2,
                     itemBuilder: (context, index) {
                       if (index == 0) {
                         return FutureBuilder<List<FriendContact>>(
@@ -802,20 +804,20 @@ class _ContactsPageState extends State<_ContactsPage> {
                           builder: (context, requestSnapshot) {
                             final count = requestSnapshot.data?.length ?? 0;
                             if (count == 0) return const SizedBox.shrink();
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                '新的好友申请（$count）',
-                                style: TextStyle(
-                                  color: widget.palette.accent,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                            final request = requestSnapshot.data!.first;
+                            return _ContactListTile(
+                              palette: widget.palette,
+                              name: '${request.nickname.isEmpty ? request.accountId : request.nickname} 请求添加你为好友',
+                              avatarUrl: request.avatarUrl,
+                              onTap: () {},
                             );
                           },
                         );
                       }
-                      final friend = friends[index - 1];
+                      if (index == 1 && friends.isEmpty) {
+                        return const _ContactsStateMessage(message: '暂无好友');
+                      }
+                      final friend = friends[index - 2];
                       final name = friend.nickname.isEmpty
                           ? friend.accountId
                           : friend.nickname;
