@@ -1324,7 +1324,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       Text(label, style: const TextStyle(fontSize: AcoTypography.body));
 
   Future<void> _handleBack() async {
-    if (_room?.viewerRole == 'host' && !_hostTransferred) {
+    if (_room?.live.status == 'live' &&
+        _room?.viewerRole == 'host' &&
+        !_hostTransferred) {
       await _confirmEndLive();
       return;
     }
