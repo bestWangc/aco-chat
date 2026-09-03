@@ -284,7 +284,7 @@ class AccountApiClient {
     );
   }
 
-  Future<AccountProfile> addFriend({
+  Future<void> addFriend({
     required String accountId,
     required String token,
   }) async {
@@ -293,9 +293,7 @@ class AccountApiClient {
       headers: _authorizedHeaders(token),
       body: jsonEncode({'account_id': accountId}),
     );
-    return AccountProfile.fromJson(
-      _body(response)['user'] as Map<String, dynamic>,
-    );
+    _body(response);
   }
 
   Future<AccountProfile> updateProfile({

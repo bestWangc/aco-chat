@@ -158,7 +158,7 @@ class AccountSession {
     return _apiClient.profileByAccountId(accountId: accountId, token: token);
   }
 
-  Future<AccountProfile> addFriend(String accountId) async {
+  Future<void> addFriend(String accountId) async {
     final token = await _requireToken();
     return _apiClient.addFriend(accountId: accountId, token: token);
   }
