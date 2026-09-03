@@ -720,8 +720,20 @@ class _ContactsPageState extends State<_ContactsPage> {
     _friends = _loadFriends();
   }
 
-  Future<List<FriendInfo>> _loadFriends() =>
-      OpenIM.iMManager.friendshipManager.getFriendList(filterBlack: true);
+  Future<List<FriendInfo>> _loadFriends() async {
+    // Silent wallet login starts the OpenIM connection in the background. The
+    // contacts page can be opened before that handshake finishes, so wait a
+    // short time for the SDK login state instead of failing immediately.
+    for (var attempt = 0;
+        attempt < 20 && !OpenIM.iMManager.isLogined;
+        attempt++) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    }
+    if (!OpenIM.iMManager.isLogined) {
+      throw StateError('OpenIM 尚未登录');
+    }
+    return OpenIM.iMManager.friendshipManager.getFriendList(filterBlack: true);
+  }
 
   Future<void> _refresh() async {
     final future = _loadFriends();
@@ -752,6 +764,7 @@ class _ContactsPageState extends State<_ContactsPage> {
                   return const Center(child: CupertinoActivityIndicator());
                 }
                 if (snapshot.hasError) {
+                  debugPrint('[OpenIM] contacts load failed: ${snapshot.error}');
                   return _ContactsStateMessage(
                     message: '通讯录加载失败，点击重试',
                     onRetry: () => setState(() => _friends = _loadFriends()),
