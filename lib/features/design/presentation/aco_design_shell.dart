@@ -480,10 +480,13 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                     ),
                   ),
                 ),
-                AcoBottomNav(
-                  selected: _selectedNav,
-                  dark: dark,
-                  onSelected: (index) {
+                ValueListenableBuilder<FriendApplicationInfo?>(
+                  valueListenable: OpenIMChatRepository.friendRequestNotifier,
+                  builder: (_, request, __) => AcoBottomNav(
+                    selected: _selectedNav,
+                    dark: dark,
+                    showSocialBadge: request != null,
+                    onSelected: (index) {
                     const destinations = [
                       AcoScreen.walletHome,
                       AcoScreen.comingSoon,
@@ -496,7 +499,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       _rootScreen = destinations[index];
                       if (index == 3) _liveListRevision++;
                     });
-                  },
+                    },
+                  ),
                 ),
               ],
             ),

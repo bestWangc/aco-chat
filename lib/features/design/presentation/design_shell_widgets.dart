@@ -283,6 +283,7 @@ class AcoBottomNav extends StatelessWidget {
     required this.selected,
     required this.dark,
     required this.onSelected,
+    this.showSocialBadge = false,
     this.backgroundColor,
     super.key,
   });
@@ -290,6 +291,7 @@ class AcoBottomNav extends StatelessWidget {
   final int selected;
   final bool dark;
   final ValueChanged<int> onSelected;
+  final bool showSocialBadge;
   final Color? backgroundColor;
 
   @override
@@ -322,6 +324,7 @@ class AcoBottomNav extends StatelessWidget {
                           index: index,
                           selected: selected == index,
                           palette: palette,
+                          showBadge: showSocialBadge && index == 4,
                         ),
                       ),
                     ),
@@ -340,11 +343,13 @@ class _FigmaNavItem extends StatelessWidget {
     required this.index,
     required this.selected,
     required this.palette,
+    this.showBadge = false,
   });
 
   final int index;
   final bool selected;
   final AcoPalette palette;
+  final bool showBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +382,9 @@ class _FigmaNavItem extends StatelessWidget {
           // immediately. This avoids SVG-specific offsets.
           SizedBox(
             height: 24,
-            child: Align(
+            child: Stack(
+              children: [
+                Align(
               alignment: Alignment.bottomCenter,
               child: Transform.translate(
                 offset: const Offset(0, 4),
@@ -387,6 +394,10 @@ class _FigmaNavItem extends StatelessWidget {
                   child: icon,
                 ),
               ),
+                ),
+                if (showBadge)
+                  Positioned(right: 0, top: 0, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: _danger, shape: BoxShape.circle))),
+              ],
             ),
           ),
           const SizedBox(height: 14),
