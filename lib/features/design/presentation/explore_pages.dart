@@ -712,7 +712,7 @@ class _ContactsPage extends StatefulWidget {
 }
 
 class _ContactsPageState extends State<_ContactsPage> {
-  late Future<List<FriendInfo>> _friends;
+  late Future<List<FriendContact>> _friends;
 
   @override
   void initState() {
@@ -720,19 +720,13 @@ class _ContactsPageState extends State<_ContactsPage> {
     _friends = _loadFriends();
   }
 
-  Future<List<FriendInfo>> _loadFriends() async {
-    // Silent wallet login starts the OpenIM connection in the background. The
-    // contacts page can be opened before that handshake finishes, so wait a
-    // short time for the SDK login state instead of failing immediately.
-    for (var attempt = 0;
-        attempt < 20 && !OpenIM.iMManager.isLogined;
-        attempt++) {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
+  Future<List<FriendContact>> _loadFriends() async {
+    final client = AccountApiClient();
+    try {
+      return await AccountSession(client).listFriends();
+    } finally {
+      client.close();
     }
-    if (!OpenIM.iMManager.isLogined) {
-      throw StateError('OpenIM 尚未登录');
-    }
-    return OpenIM.iMManager.friendshipManager.getFriendList(filterBlack: true);
   }
 
   Future<void> _refresh() async {
@@ -757,7 +751,7 @@ class _ContactsPageState extends State<_ContactsPage> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<FriendInfo>>(
+            child: FutureBuilder<List<FriendContact>>(
               future: _friends,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -770,7 +764,7 @@ class _ContactsPageState extends State<_ContactsPage> {
                     onRetry: () => setState(() => _friends = _loadFriends()),
                   );
                 }
-                final friends = snapshot.data ?? const <FriendInfo>[];
+                final friends = snapshot.data ?? const <FriendContact>[];
                 if (friends.isEmpty) {
                   return const _ContactsStateMessage(message: '暂无好友');
                 }
@@ -782,11 +776,13 @@ class _ContactsPageState extends State<_ContactsPage> {
                     itemCount: friends.length,
                     itemBuilder: (context, index) {
                       final friend = friends[index];
-                      final name = friend.getShowName();
+                      final name = friend.nickname.isEmpty
+                          ? friend.accountId
+                          : friend.nickname;
                       return _ContactListTile(
                         palette: widget.palette,
                         name: name,
-                        avatarUrl: friend.faceURL,
+                        avatarUrl: friend.avatarUrl,
                         onTap: () => Navigator.of(context).push(
                           CupertinoPageRoute<void>(
                             builder: (_) => _ContactDetailPage(

@@ -37,6 +37,27 @@ class AccountProfile {
   };
 }
 
+class FriendContact {
+  const FriendContact({
+    required this.accountId,
+    required this.nickname,
+    required this.avatarUrl,
+    required this.status,
+  });
+
+  final String accountId;
+  final String nickname;
+  final String avatarUrl;
+  final String status;
+
+  factory FriendContact.fromJson(Map<String, dynamic> json) => FriendContact(
+    accountId: json['account_id'] as String,
+    nickname: (json['nickname'] as String?)?.trim() ?? '',
+    avatarUrl: (json['avatar_url'] as String?) ?? '',
+    status: (json['status'] as String?) ?? 'accepted',
+  );
+}
+
 class WalletAddress {
   const WalletAddress({required this.address, this.id, this.accountId});
 

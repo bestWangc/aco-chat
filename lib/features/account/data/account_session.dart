@@ -174,6 +174,10 @@ class AccountSession {
     return _apiClient.listLives(token: tokens.accessToken);
   }
 
+  Future<List<FriendContact>> listFriends() async {
+    return _apiClient.listFriends(token: await _requireToken());
+  }
+
   Future<LiveSession> createLive({
     required String title,
     required Uint8List coverBytes,
