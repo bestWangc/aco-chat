@@ -11,6 +11,9 @@ final class OpenIMChatRepository implements ChatRepository {
 
   final IMManager _sdk;
 
+  Future<List<ConversationInfo>> conversations() =>
+      _sdk.conversationManager.getAllConversationList();
+
   @override
   Future<void> initialize({
     required String apiAddr,

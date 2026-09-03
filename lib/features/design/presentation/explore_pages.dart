@@ -691,17 +691,7 @@ class _SocialMessagesPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
-                for (final message in _socialMockMessages)
-                  _SocialMessageTile(
-                    palette: palette,
-                    name: message.name,
-                    message: message.message,
-                    onTap: () => onOpen(
-                      message.name == 'Builder'
-                          ? AcoScreen.chatV2
-                          : AcoScreen.chatV1,
-                    ),
-                  ),
+                _OpenIMConversationList(palette: palette, onOpen: onOpen),
               ]),
             ),
           ),
@@ -711,15 +701,37 @@ class _SocialMessagesPage extends StatelessWidget {
   );
 }
 
-class _ContactsPage extends StatelessWidget {
+class _ContactsPage extends StatefulWidget {
   const _ContactsPage({required this.palette, required this.onOpen});
 
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
 
   @override
+  State<_ContactsPage> createState() => _ContactsPageState();
+}
+
+class _ContactsPageState extends State<_ContactsPage> {
+  late Future<List<FriendInfo>> _friends;
+
+  @override
+  void initState() {
+    super.initState();
+    _friends = _loadFriends();
+  }
+
+  Future<List<FriendInfo>> _loadFriends() =>
+      OpenIM.iMManager.friendshipManager.getFriendList(filterBlack: true);
+
+  Future<void> _refresh() async {
+    final future = _loadFriends();
+    setState(() => _friends = future);
+    await future;
+  }
+
+  @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
-    backgroundColor: palette.background,
+    backgroundColor: widget.palette.background,
     child: SafeArea(
       bottom: false,
       child: Column(
@@ -727,37 +739,57 @@ class _ContactsPage extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: AcoPageHeader(
-              palette: palette,
+              palette: widget.palette,
               title: '通讯录',
               onBack: () => Navigator.of(context).maybePop(),
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-              itemCount: _socialMockMessages.length,
-              itemBuilder: (context, index) {
-                final contact = _socialMockMessages[index];
-                return _ContactListTile(
-                  palette: palette,
-                  name: contact.name,
-                  onTap: () => Navigator.of(context).push(
-                    CupertinoPageRoute<void>(
-                      builder: (_) => _ContactDetailPage(
-                        palette: palette,
-                        name: contact.name,
-                        onMessagePressed: () {
-                          final navigator = Navigator.of(context);
-                          navigator.pop();
-                          navigator.pop();
-                          onOpen(
-                            contact.name == 'Builder'
-                                ? AcoScreen.chatV2
-                                : AcoScreen.chatV1,
-                          );
-                        },
-                      ),
-                    ),
+            child: FutureBuilder<List<FriendInfo>>(
+              future: _friends,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CupertinoActivityIndicator());
+                }
+                if (snapshot.hasError) {
+                  return _ContactsStateMessage(
+                    message: '通讯录加载失败，点击重试',
+                    onRetry: () => setState(() => _friends = _loadFriends()),
+                  );
+                }
+                final friends = snapshot.data ?? const <FriendInfo>[];
+                if (friends.isEmpty) {
+                  return const _ContactsStateMessage(message: '暂无好友');
+                }
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                    itemCount: friends.length,
+                    itemBuilder: (context, index) {
+                      final friend = friends[index];
+                      final name = friend.getShowName();
+                      return _ContactListTile(
+                        palette: widget.palette,
+                        name: name,
+                        avatarUrl: friend.faceURL,
+                        onTap: () => Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) => _ContactDetailPage(
+                              palette: widget.palette,
+                              name: name,
+                              onMessagePressed: () {
+                                final navigator = Navigator.of(context);
+                                navigator.pop();
+                                navigator.pop();
+                                widget.onOpen(AcoScreen.chatV1);
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 );
               },
@@ -767,6 +799,61 @@ class _ContactsPage extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _ContactsStateMessage extends StatelessWidget {
+  const _ContactsStateMessage({required this.message, this.onRetry});
+
+  final String message;
+  final VoidCallback? onRetry;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: CupertinoButton(
+      onPressed: onRetry,
+      child: Text(message),
+    ),
+  );
+}
+
+class _OpenIMConversationList extends StatelessWidget {
+  const _OpenIMConversationList({required this.palette, required this.onOpen});
+
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<ConversationInfo>>(
+      future: OpenIM.iMManager.conversationManager.getAllConversationList(),
+      builder: (context, snapshot) {
+        final conversations = snapshot.data ?? const <ConversationInfo>[];
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CupertinoActivityIndicator()),
+          );
+        }
+        if (conversations.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('暂无会话')),
+          );
+        }
+        return Column(
+          children: [
+            for (final conversation in conversations)
+              _SocialMessageTile(
+                palette: palette,
+                name: conversation.showName ?? conversation.userID ?? '会话',
+                message: conversation.latestMsg?.textElem?.content ?? '',
+                onTap: () => onOpen(AcoScreen.chatV1),
+              ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _ContactDetailPage extends StatelessWidget {
@@ -889,11 +976,13 @@ class _ContactListTile extends StatelessWidget {
     required this.palette,
     required this.name,
     required this.onTap,
+    this.avatarUrl,
   });
 
   final AcoPalette palette;
   final String name;
   final VoidCallback onTap;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
@@ -901,7 +990,7 @@ class _ContactListTile extends StatelessWidget {
     onPressed: onTap,
     child: Row(
       children: [
-        AcoAvatar(size: 42),
+        AcoAvatar(size: 42, imageUrl: avatarUrl),
         const SizedBox(width: 20),
         Expanded(
           child: Text(
