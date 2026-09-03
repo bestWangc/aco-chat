@@ -214,7 +214,9 @@ class AccountApiClient {
     required int platformId,
   }) async {
     final response = await _httpClient.get(
-      _uri('auth/openim-token?platform_id=$platformId'),
+      _uri(
+        'auth/openim-token',
+      ).replace(queryParameters: {'platform_id': '$platformId'}),
       headers: _authorizedHeaders(token),
     );
     return OpenIMToken.fromJson(_body(response));
