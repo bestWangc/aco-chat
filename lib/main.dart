@@ -13,6 +13,7 @@ import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -57,6 +58,8 @@ class ThemePreferences {
 class WalletAccountAuthentication {
   const WalletAccountAuthentication._();
 
+  static OpenIMToken? _cachedOpenIMToken;
+
   /// Restores the server account for [walletAddress] without showing a login UI.
   /// A network failure leaves the local wallet usable and is retried next launch.
   static Future<AccountProfile?> signInSilently(String walletAddress) async {
@@ -87,12 +90,22 @@ class WalletAccountAuthentication {
     final client = AccountApiClient();
     try {
       final session = AccountSession(client);
-      final token = await session.openIMToken();
+      final cached = _cachedOpenIMToken;
+      OpenIMToken token;
+      if (cached != null &&
+          cached.userId == userId &&
+          !cached.expiresWithin(const Duration(minutes: 10))) {
+        token = cached;
+      } else {
+        token = await session.openIMToken();
+      }
+      _cachedOpenIMToken = token;
       final chat = OpenIMChatRepository();
+      final dataDirectory = await getApplicationSupportDirectory();
       await chat.initialize(
         apiAddr: token.apiAddr,
         wsAddr: token.wsAddr,
-        dataDir: Directory.systemTemp.path,
+        dataDir: '${dataDirectory.path}/openim',
       );
       await chat.login(userId: userId, userSig: token.token);
     } catch (error) {
@@ -131,7 +144,7 @@ class AcoApp extends StatefulWidget {
   State<AcoApp> createState() => _AcoAppState();
 }
 
-class _AcoAppState extends State<AcoApp> {
+class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final ValueNotifier<bool> _isDark = ValueNotifier<bool>(
     widget.initialIsDark,
@@ -144,11 +157,21 @@ class _AcoAppState extends State<AcoApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _accountProfile = null;
     final profileFuture = widget.accountProfileFuture;
     _walletLoginFuture = profileFuture;
     if (profileFuture != null) {
       unawaited(_resolveAccountProfile(profileFuture));
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _accountProfile != null) {
+      unawaited(
+        WalletAccountAuthentication._connectOpenIM(_accountProfile!.accountId),
+      );
     }
   }
 
@@ -277,6 +300,7 @@ class _AcoAppState extends State<AcoApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _isDark.dispose();
     super.dispose();
   }

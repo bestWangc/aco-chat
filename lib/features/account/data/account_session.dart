@@ -89,10 +89,22 @@ class AccountSession {
     final tokens = await _tokenStore.read();
     if (tokens == null) throw StateError('No active account is available');
     final platformId = defaultTargetPlatform == TargetPlatform.iOS ? 1 : 2;
-    return _apiClient.openIMToken(
-      token: tokens.accessToken,
-      platformId: platformId,
-    );
+    try {
+      return await _apiClient.openIMToken(
+        token: tokens.accessToken,
+        platformId: platformId,
+      );
+    } on AccountApiException catch (error) {
+      if (error.statusCode != 401) rethrow;
+      final refreshed = await _apiClient.refreshAccessToken(
+        tokens.refreshToken,
+      );
+      await _tokenStore.write(refreshed.tokens);
+      return _apiClient.openIMToken(
+        token: refreshed.tokens.accessToken,
+        platformId: platformId,
+      );
+    }
   }
 
   /// Links a further wallet address to the signed-in account.

@@ -22,8 +22,10 @@ final class OpenIMChatRepository implements ChatRepository {
       wsAddr: wsAddr,
       dataDir: dataDir,
       listener: OnConnectListener(),
-      logLevel: 6,
-      isLogStandardOutput: true,
+      // Keep warnings/errors for production diagnostics without flooding the
+      // Android console with heartbeat ping/pong messages.
+      logLevel: 3,
+      isLogStandardOutput: false,
     );
   }
 

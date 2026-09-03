@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 const _shortAccountIdLength = 17;
 
 String displayAccountId(String accountId) {
@@ -109,6 +111,25 @@ class OpenIMToken {
   final String token;
   final String apiAddr;
   final String wsAddr;
+
+  bool expiresWithin(Duration window) {
+    final parts = token.split('.');
+    if (parts.length != 3) return true;
+    try {
+      final payload =
+          jsonDecode(
+                utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))),
+              )
+              as Map<String, dynamic>;
+      final exp = (payload['exp'] as num?)?.toInt();
+      if (exp == null) return true;
+      return DateTime.fromMillisecondsSinceEpoch(
+        exp * 1000,
+      ).isBefore(DateTime.now().add(window));
+    } catch (_) {
+      return true;
+    }
+  }
 
   factory OpenIMToken.fromJson(Map<String, dynamic> json) => OpenIMToken(
     userId: json['user_id'] as String,
