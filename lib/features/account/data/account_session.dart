@@ -6,7 +6,8 @@ import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
-import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, compute, defaultTargetPlatform, kIsWeb;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists the server account currently associated with this device.
@@ -82,6 +83,16 @@ class AccountSession {
       }
       return null;
     }
+  }
+
+  Future<OpenIMToken> openIMToken() async {
+    final tokens = await _tokenStore.read();
+    if (tokens == null) throw StateError('No active account is available');
+    final platformId = defaultTargetPlatform == TargetPlatform.iOS ? 1 : 2;
+    return _apiClient.openIMToken(
+      token: tokens.accessToken,
+      platformId: platformId,
+    );
   }
 
   /// Links a further wallet address to the signed-in account.

@@ -98,6 +98,26 @@ class AccountRefreshResult {
       );
 }
 
+class OpenIMToken {
+  const OpenIMToken({
+    required this.userId,
+    required this.token,
+    required this.apiAddr,
+    required this.wsAddr,
+  });
+  final String userId;
+  final String token;
+  final String apiAddr;
+  final String wsAddr;
+
+  factory OpenIMToken.fromJson(Map<String, dynamic> json) => OpenIMToken(
+    userId: json['user_id'] as String,
+    token: json['token'] as String,
+    apiAddr: json['api_addr'] as String,
+    wsAddr: json['ws_addr'] as String,
+  );
+}
+
 class LiveSession {
   const LiveSession({
     required this.id,

@@ -209,6 +209,17 @@ class AccountApiClient {
     return AccountRefreshResult.fromJson(_body(response));
   }
 
+  Future<OpenIMToken> openIMToken({
+    required String token,
+    required int platformId,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('auth/openim-token?platform_id=$platformId'),
+      headers: _authorizedHeaders(token),
+    );
+    return OpenIMToken.fromJson(_body(response));
+  }
+
   Future<WalletAddress> addWallet({
     required String accountId,
     required String walletAddress,
