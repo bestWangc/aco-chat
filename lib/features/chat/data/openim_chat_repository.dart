@@ -30,7 +30,21 @@ final class OpenIMChatRepository implements ChatRepository {
         apiAddr: apiAddr,
         wsAddr: wsAddr,
         dataDir: dataDir,
-        listener: OnConnectListener(),
+        listener: OnConnectListener(
+          onConnecting: () => developer.log('连接中', name: 'OpenIM.connection'),
+          onConnectSuccess: () =>
+              developer.log('连接成功', name: 'OpenIM.connection'),
+          onConnectFailed: (code, message) => developer.log(
+            '连接失败 code=$code message=$message',
+            name: 'OpenIM.connection',
+          ),
+          onUserTokenExpired: () =>
+              developer.log('用户 token 已过期', name: 'OpenIM.connection'),
+          onUserTokenInvalid: () =>
+              developer.log('用户 token 无效', name: 'OpenIM.connection'),
+          onKickedOffline: () =>
+              developer.log('账号被踢下线', name: 'OpenIM.connection'),
+        ),
         logLevel: 3,
         isLogStandardOutput: false,
       );
@@ -64,6 +78,7 @@ final class OpenIMChatRepository implements ChatRepository {
           },
         ),
       );
+      developer.log('好友监听器注册成功', name: 'OpenIM.friendship');
     } catch (error) {
       // A transient native 10004 here must not turn a successful login into a
       // failed session; the API polling fallback still delivers requests.
