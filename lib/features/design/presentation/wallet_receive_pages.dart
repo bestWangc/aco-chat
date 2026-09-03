@@ -224,9 +224,10 @@ class _ReceivePageContent extends StatelessWidget {
 }
 
 class _ScanPage extends StatefulWidget {
-  const _ScanPage({required this.palette});
+  const _ScanPage({required this.palette, this.currentAccountId});
 
   final AcoPalette palette;
+  final String? currentAccountId;
 
   @override
   State<_ScanPage> createState() => _ScanPageState();
@@ -234,7 +235,11 @@ class _ScanPage extends StatefulWidget {
 
 class _ScanPageState extends State<_ScanPage> {
   final _controller = MobileScannerController();
+  final _accountSession = AccountSession(AccountApiClient());
   String? _result;
+  AccountProfile? _profile;
+  String? _error;
+  bool _addingFriend = false;
 
   @override
   void dispose() {
@@ -242,17 +247,62 @@ class _ScanPageState extends State<_ScanPage> {
     super.dispose();
   }
 
-  void _handleCapture(BarcodeCapture capture) {
+  Future<void> _handleCapture(BarcodeCapture capture) async {
     if (_result != null || capture.barcodes.isEmpty) return;
     final value = capture.barcodes.first.rawValue;
     if (value == null || value.isEmpty) return;
-    _controller.stop();
+    await _controller.stop();
+    if (!mounted) return;
+    final accountId = _profileAccountIdFromQr(value);
+    if (accountId == null) {
+      setState(() {
+        _result = value;
+        _error = '该二维码不是 Aco 个人二维码。';
+      });
+      return;
+    }
+    if (accountId == widget.currentAccountId) {
+      setState(() {
+        _result = value;
+        _error = '不能添加自己为好友。';
+      });
+      return;
+    }
     setState(() => _result = value);
+    try {
+      final profile = await _accountSession.profileByAccountId(accountId);
+      if (mounted) setState(() => _profile = profile);
+    } on AccountApiException catch (error) {
+      if (mounted) setState(() => _error = error.localizedMessage);
+    } on StateError {
+      if (mounted) setState(() => _error = '请先登录后再添加好友。');
+    }
   }
 
   Future<void> _continueScanning() async {
-    setState(() => _result = null);
+    setState(() {
+      _result = null;
+      _profile = null;
+      _error = null;
+    });
     await _controller.start();
+  }
+
+  Future<void> _addFriend() async {
+    final profile = _profile;
+    if (profile == null || _addingFriend) return;
+    setState(() => _addingFriend = true);
+    try {
+      await _accountSession.addFriend(profile.accountId);
+      if (!mounted) return;
+      setState(() => _error = '已添加 ${profile.nickname} 为好友。');
+    } on AccountApiException catch (error) {
+      if (mounted) setState(() => _error = error.localizedMessage);
+    } on StateError {
+      if (mounted) setState(() => _error = '请先登录后再添加好友。');
+    } finally {
+      if (mounted) setState(() => _addingFriend = false);
+    }
   }
 
   @override
@@ -327,6 +377,10 @@ class _ScanPageState extends State<_ScanPage> {
               _ScanResult(
                 palette: widget.palette,
                 value: value,
+                profile: _profile,
+                error: _error,
+                addingFriend: _addingFriend,
+                onAddFriend: _addFriend,
                 onContinue: _continueScanning,
               )
             else
@@ -386,11 +440,19 @@ class _ScanResult extends StatelessWidget {
   const _ScanResult({
     required this.palette,
     required this.value,
+    required this.profile,
+    required this.error,
+    required this.addingFriend,
+    required this.onAddFriend,
     required this.onContinue,
   });
 
   final AcoPalette palette;
   final String value;
+  final AccountProfile? profile;
+  final String? error;
+  final bool addingFriend;
+  final VoidCallback onAddFriend;
   final VoidCallback onContinue;
 
   @override
@@ -405,7 +467,7 @@ class _ScanResult extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          '已识别二维码',
+          profile == null ? '已识别二维码' : '添加好友',
           style: TextStyle(
             color: palette.primaryText,
             fontSize: AcoTypography.bodyEmphasis,
@@ -413,18 +475,54 @@ class _ScanResult extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Text(
-          value,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: palette.mutedText),
-        ),
+        if (profile case final friend?) ...[
+          AcoAvatar(size: 56, imageUrl: friend.avatarUrl),
+          const SizedBox(height: 10),
+          Text(
+            friend.nickname,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.bodyEmphasis,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '@${friend.username}',
+            style: TextStyle(color: palette.mutedText),
+          ),
+        ] else
+          Text(
+            error == null ? value : error!,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: palette.mutedText),
+          ),
         const SizedBox(height: 18),
-        AcoLimeButton(label: '继续扫描', onPressed: onContinue),
+        if (profile != null && error == null)
+          AcoLimeButton(
+            label: addingFriend ? '添加中…' : '添加好友',
+            onPressed: addingFriend ? () {} : onAddFriend,
+          )
+        else
+          AcoLimeButton(label: '继续扫描', onPressed: onContinue),
+        if (profile != null && error != null) ...[
+          const SizedBox(height: 12),
+          Text(error!, style: TextStyle(color: palette.mutedText)),
+        ],
       ],
     ),
   );
+}
+
+String? _profileAccountIdFromQr(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'aco' || uri.host != 'profile') {
+    return null;
+  }
+  final accountId = uri.queryParameters['uid']?.trim();
+  return accountId == null || accountId.isEmpty ? null : accountId;
 }
 
 class _ReceiveAction extends StatelessWidget {

@@ -246,6 +246,33 @@ class AccountApiClient {
     return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
   }
 
+  Future<AccountProfile> profileByAccountId({
+    required String accountId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('users/${Uri.encodeComponent(accountId)}'),
+      headers: _authorizedHeaders(token),
+    );
+    return AccountProfile.fromJson(
+      _body(response)['user'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<AccountProfile> addFriend({
+    required String accountId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('friends'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'account_id': accountId}),
+    );
+    return AccountProfile.fromJson(
+      _body(response)['user'] as Map<String, dynamic>,
+    );
+  }
+
   Future<AccountProfile> updateProfile({
     required String username,
     required String nickname,

@@ -130,6 +130,16 @@ class AccountSession {
     return AccountProfile.fromJson(jsonDecode(value) as Map<String, dynamic>);
   }
 
+  Future<AccountProfile> profileByAccountId(String accountId) async {
+    final token = await _requireToken();
+    return _apiClient.profileByAccountId(accountId: accountId, token: token);
+  }
+
+  Future<AccountProfile> addFriend(String accountId) async {
+    final token = await _requireToken();
+    return _apiClient.addFriend(accountId: accountId, token: token);
+  }
+
   /// Lists lives when an account is available.
   ///
   /// The square/live feed is also reachable while the app is still restoring
