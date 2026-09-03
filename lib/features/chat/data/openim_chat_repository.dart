@@ -2,11 +2,14 @@ import 'dart:io';
 import 'dart:developer' as developer;
 
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
+import 'package:flutter/foundation.dart';
 
 import '../domain/chat_repository.dart';
 
 /// OpenIM SDK 适配层。业务页面只依赖 [ChatRepository]。
 final class OpenIMChatRepository implements ChatRepository {
+  static final ValueNotifier<FriendApplicationInfo?> friendRequestNotifier =
+      ValueNotifier<FriendApplicationInfo?>(null);
   OpenIMChatRepository({IMManager? sdk}) : _sdk = sdk ?? OpenIM.iMManager;
 
   final IMManager _sdk;
@@ -33,10 +36,13 @@ final class OpenIMChatRepository implements ChatRepository {
     );
     await _sdk.friendshipManager.setFriendshipListener(
       OnFriendshipListener(
-        onFriendApplicationAdded: (info) => developer.log(
-          '收到好友申请: ${info.fromUserID}',
-          name: 'OpenIM.friendship',
-        ),
+        onFriendApplicationAdded: (info) {
+          friendRequestNotifier.value = info;
+          developer.log(
+            '收到好友申请: ${info.fromUserID}',
+            name: 'OpenIM.friendship',
+          );
+        },
       ),
     );
   }
