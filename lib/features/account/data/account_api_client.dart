@@ -310,6 +310,28 @@ class AccountApiClient {
     _body(response);
   }
 
+  Future<void> acceptFriend({
+    required String accountId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('friends/${Uri.encodeComponent(accountId)}/accept'),
+      headers: _authorizedHeaders(token),
+    );
+    _body(response);
+  }
+
+  Future<void> refuseFriend({
+    required String accountId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('friends/${Uri.encodeComponent(accountId)}/request'),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode != 204) _body(response);
+  }
+
   Future<AccountProfile> updateProfile({
     required String username,
     required String nickname,
@@ -515,6 +537,7 @@ class AccountApiClient {
         queryParameters: {
           'page': '$page',
           'page_size': '20',
+          'include_total': page == 1 ? 'true' : 'false',
           if (keyword.trim().isNotEmpty) 'keyword': keyword.trim(),
         },
       ),

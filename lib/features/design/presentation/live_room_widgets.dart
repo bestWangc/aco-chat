@@ -1330,7 +1330,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
           }
         }
         _page = result.page;
-        _total = result.total;
+        if (result.total != null) _total = result.total!;
         _hasMore = result.hasMore;
       });
     } catch (_) {

@@ -293,14 +293,18 @@ class LiveMembersPage {
     required this.page,
     required this.pageSize,
     required this.total,
+    this.serverHasMore,
   });
 
   final List<LiveParticipant> members;
   final int page;
   final int pageSize;
-  final int total;
+  final int? total;
 
-  bool get hasMore => page * pageSize < total;
+  final bool? serverHasMore;
+
+  bool get hasMore =>
+      serverHasMore ?? (total != null && page * pageSize < total!);
 
   factory LiveMembersPage.fromJson(Map<String, dynamic> json) =>
       LiveMembersPage(
@@ -310,7 +314,8 @@ class LiveMembersPage {
             .toList(growable: false),
         page: (json['page'] as num?)?.toInt() ?? 1,
         pageSize: (json['page_size'] as num?)?.toInt() ?? 30,
-        total: (json['total'] as num?)?.toInt() ?? 0,
+        total: (json['total'] as num?)?.toInt(),
+        serverHasMore: json['has_more'] as bool?,
       );
 }
 
