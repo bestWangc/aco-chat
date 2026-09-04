@@ -666,24 +666,21 @@ class _SocialMessagesPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  ValueListenableBuilder<FriendApplicationInfo?>(
-                    valueListenable: OpenIMChatRepository.friendRequestNotifier,
-                    builder: (_, request, __) => _MessageQuickActions(
-                      hasFriendRequest: request != null,
-                      palette: palette,
-                      onContactsTap: () => Navigator.of(context).push(
+                  _MessageQuickActions(
+                    hasFriendRequest: false,
+                    palette: palette,
+                    onContactsTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
                         builder: (_) =>
                             _ContactsPage(palette: palette, onOpen: onOpen),
                       ),
                     ),
-                      onSearchTap: () => Navigator.of(context).push(
+                    onSearchTap: () => Navigator.of(context).push(
                       CupertinoPageRoute<void>(
                         builder: (_) => _MessageSearchPage(
                           palette: palette,
                           onOpen: onOpen,
                         ),
-                      ),
                       ),
                     ),
                   ),
@@ -695,8 +692,273 @@ class _SocialMessagesPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+                _FriendRequestChatSection(palette: palette),
                 _OpenIMConversationList(palette: palette, onOpen: onOpen),
               ]),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _FriendRequestChatSection extends StatefulWidget {
+  const _FriendRequestChatSection({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  State<_FriendRequestChatSection> createState() =>
+      _FriendRequestChatSectionState();
+}
+
+Future<List<FriendContact>> _fetchFriendRequests() async {
+  final client = AccountApiClient();
+  try {
+    return await AccountSession(client).listFriendRequests();
+  } finally {
+    client.close();
+  }
+}
+
+class _FriendRequestChatSectionState extends State<_FriendRequestChatSection> {
+  late Future<List<FriendContact>> _requests;
+
+  @override
+  void initState() {
+    super.initState();
+    _requests = _load();
+    OpenIMChatRepository.friendRequestNotifier.addListener(_reload);
+  }
+
+  void _reload() {
+    if (mounted) {
+      setState(() {
+        _requests = _load();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    OpenIMChatRepository.friendRequestNotifier.removeListener(_reload);
+    super.dispose();
+  }
+
+  Future<List<FriendContact>> _load() async {
+    return _fetchFriendRequests();
+  }
+
+  Future<void> _openRequestsPage(BuildContext context) async {
+    // Mark the badge as read immediately when the request list is opened.
+    OpenIMChatRepository.friendRequestNotifier.value = null;
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (_) => _FriendRequestsPage(palette: widget.palette),
+      ),
+    );
+    // Treat the request list as read even if an SDK event arrived while it
+    // was open. This keeps the bottom navigation badge in sync on return.
+    OpenIMChatRepository.friendRequestNotifier.value = null;
+    if (!mounted) return;
+    setState(() {
+      _requests = _load();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<FriendContact>>(
+    future: _requests,
+    builder: (context, snapshot) {
+      final requests = snapshot.data ?? const <FriendContact>[];
+      if (requests.isEmpty) return const SizedBox.shrink();
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: _ContactListTile(
+          palette: widget.palette,
+          name: '有新的好友请求（${requests.length}）',
+          onTap: () {
+            _openRequestsPage(context);
+          },
+          backgroundColor: widget.palette.accent,
+          borderRadius: BorderRadius.circular(6),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 6,
+          ),
+          nameMaxLines: 2,
+          showAvatar: false,
+          avatarSize: 30,
+          avatarGap: 0,
+          nameFontSize: 14,
+          nameColor: const Color(0xFF000000),
+          trailing: Icon(
+            CupertinoIcons.chevron_right,
+            color: const Color(0xFF000000),
+            size: 16,
+          ),
+        ),
+      );
+    },
+  );
+}
+
+class _FriendRequestsPage extends StatefulWidget {
+  const _FriendRequestsPage({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  State<_FriendRequestsPage> createState() => _FriendRequestsPageState();
+}
+
+class _FriendRequestsPageState extends State<_FriendRequestsPage> {
+  late Future<List<FriendContact>> _requests;
+
+  @override
+  void initState() {
+    super.initState();
+    OpenIMChatRepository.friendRequestNotifier.value = null;
+    _requests = _load();
+  }
+
+  Future<List<FriendContact>> _load() async {
+    return _fetchFriendRequests();
+  }
+
+  Future<void> _respond(FriendContact request, bool accept) async {
+    final client = AccountApiClient();
+    try {
+      final session = AccountSession(client);
+      if (accept) {
+        await session.acceptFriend(request.accountId);
+        // Notify the requester in the newly established conversation.
+        try {
+          final message = await OpenIM.iMManager.messageManager
+              .createTextMessage(text: '我通过了你的好友请求');
+          await OpenIM.iMManager.messageManager.sendMessage(
+            message: message,
+            userID: request.accountId,
+            offlinePushInfo: OfflinePushInfo(title: '好友申请', desc: '我通过了你的好友请求'),
+          );
+        } catch (error) {
+          // Acceptance is already persisted; a transient IM send failure
+          // should not make the request appear unprocessed.
+          debugPrint('[OpenIM] accept friend sync failed: $error');
+        }
+        OpenIMChatRepository.conversationRevision.value++;
+      } else {
+        await session.refuseFriend(request.accountId);
+      }
+      if (mounted) {
+        final refreshed = await _load();
+        final visible = refreshed
+            .where((item) => item.accountId != request.accountId)
+            .toList(growable: false);
+        setState(() {
+          _requests = Future.value(visible);
+        });
+      }
+      OpenIMChatRepository.friendRequestNotifier.value = null;
+    } finally {
+      client.close();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    child: SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: AcoPageHeader(
+              palette: widget.palette,
+              title: '好友请求',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<FriendContact>>(
+              future: _requests,
+              builder: (context, snapshot) {
+                final requests = snapshot.data ?? const <FriendContact>[];
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CupertinoActivityIndicator());
+                }
+                if (requests.isEmpty) {
+                  return const _ContactsStateMessage(message: '暂无好友请求');
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
+                  itemCount: requests.length,
+                  itemBuilder: (_, index) {
+                    final request = requests[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: _ContactListTile(
+                        palette: widget.palette,
+                        name:
+                            '${request.nickname.isEmpty ? request.accountId : request.nickname} 请求添加你为好友',
+                        avatarUrl: request.avatarUrl,
+                        onTap: () => _respond(request, true),
+                        backgroundColor: const Color(0xFF151515),
+                        borderRadius: BorderRadius.circular(10),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 6,
+                        ),
+                        nameMaxLines: 2,
+                        avatarSize: 30,
+                        avatarGap: 8,
+                        nameFontSize: 14,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              onPressed: () => _respond(request, false),
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF292929),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  CupertinoIcons.xmark,
+                                  color: widget.palette.mutedText,
+                                  size: 15,
+                                ),
+                              ),
+                            ),
+                            CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              onPressed: () => _respond(request, true),
+                              child: Container(
+                                width: 30,
+                                height: 30,
+                                decoration: BoxDecoration(
+                                  color: widget.palette.accent,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  CupertinoIcons.check_mark,
+                                  color: Color(0xFF000000),
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ),
         ],
@@ -717,32 +979,13 @@ class _ContactsPage extends StatefulWidget {
 
 class _ContactsPageState extends State<_ContactsPage> {
   late Future<List<FriendContact>> _friends;
-  late Future<List<FriendContact>> _requests;
 
   @override
   void initState() {
     super.initState();
+    // Opening the contacts page marks the current friend requests as seen.
+    OpenIMChatRepository.friendRequestNotifier.value = null;
     _friends = _loadFriends();
-    _requests = _loadRequests();
-  }
-
-  Future<List<FriendContact>> _loadRequests() async {
-    final client = AccountApiClient();
-    try {
-      final requests = await AccountSession(client).listFriendRequests();
-      if (requests.isNotEmpty) {
-        OpenIMChatRepository.friendRequestNotifier.value =
-            FriendApplicationInfo(fromUserID: requests.first.accountId);
-      }
-      return requests;
-    } on AccountApiException catch (error) {
-      // Older API containers do not have the requests route yet. Keep the
-      // contacts page usable until the server is upgraded.
-      if (error.statusCode == 404) return const <FriendContact>[];
-      rethrow;
-    } finally {
-      client.close();
-    }
   }
 
   Future<List<FriendContact>> _loadFriends() async {
@@ -756,12 +999,8 @@ class _ContactsPageState extends State<_ContactsPage> {
 
   Future<void> _refresh() async {
     final future = _loadFriends();
-    final requests = _loadRequests();
-    setState(() {
-      _friends = future;
-      _requests = requests;
-    });
-    await Future.wait([future, requests]);
+    setState(() => _friends = future);
+    await future;
   }
 
   @override
@@ -801,28 +1040,12 @@ class _ContactsPageState extends State<_ContactsPage> {
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 24),
-                    itemCount: friends.length + 2,
+                    itemCount: friends.isEmpty ? 1 : friends.length,
                     itemBuilder: (context, index) {
-                      if (index == 0) {
-                        return FutureBuilder<List<FriendContact>>(
-                          future: _requests,
-                          builder: (context, requestSnapshot) {
-                            final count = requestSnapshot.data?.length ?? 0;
-                            if (count == 0) return const SizedBox.shrink();
-                            final request = requestSnapshot.data!.first;
-                            return _ContactListTile(
-                              palette: widget.palette,
-                              name: '${request.nickname.isEmpty ? request.accountId : request.nickname} 请求添加你为好友',
-                              avatarUrl: request.avatarUrl,
-                              onTap: () {},
-                            );
-                          },
-                        );
-                      }
-                      if (index == 1 && friends.isEmpty) {
+                      if (friends.isEmpty) {
                         return const _ContactsStateMessage(message: '暂无好友');
                       }
-                      final friend = friends[index - 2];
+                      final friend = friends[index];
                       final name = friend.nickname.isEmpty
                           ? friend.accountId
                           : friend.nickname;
@@ -869,16 +1092,62 @@ class _ContactsStateMessage extends StatelessWidget {
   );
 }
 
-class _OpenIMConversationList extends StatelessWidget {
+class _OpenIMConversationList extends StatefulWidget {
   const _OpenIMConversationList({required this.palette, required this.onOpen});
 
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
 
   @override
+  State<_OpenIMConversationList> createState() =>
+      _OpenIMConversationListState();
+}
+
+class _OpenIMConversationListState extends State<_OpenIMConversationList> {
+  late Future<List<ConversationInfo>> _conversations;
+
+  @override
+  void initState() {
+    super.initState();
+    _conversations = _load();
+    OpenIMChatRepository.conversationRevision.addListener(_reload);
+    OpenIMChatRepository.conversationReady.addListener(_reload);
+  }
+
+  Future<List<ConversationInfo>> _load() async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        return await OpenIM.iMManager.conversationManager
+            .getAllConversationList();
+      } catch (error) {
+        final isResourceNotReady =
+            error.toString().contains('10004') ||
+            error.toString().contains('Resource initialization incomplete');
+        if (!isResourceNotReady || attempt == 2) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      }
+    }
+    return const <ConversationInfo>[];
+  }
+
+  void _reload() {
+    if (!mounted) return;
+    setState(() {
+      _conversations = _load();
+    });
+  }
+
+  @override
+  void dispose() {
+    OpenIMChatRepository.conversationRevision.removeListener(_reload);
+    OpenIMChatRepository.conversationReady.removeListener(_reload);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<ConversationInfo>>(
-      future: OpenIM.iMManager.conversationManager.getAllConversationList(),
+      future: _conversations,
       builder: (context, snapshot) {
         final conversations = snapshot.data ?? const <ConversationInfo>[];
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -897,10 +1166,10 @@ class _OpenIMConversationList extends StatelessWidget {
           children: [
             for (final conversation in conversations)
               _SocialMessageTile(
-                palette: palette,
+                palette: widget.palette,
                 name: conversation.showName ?? conversation.userID ?? '会话',
                 message: conversation.latestMsg?.textElem?.content ?? '',
-                onTap: () => onOpen(AcoScreen.chatV1),
+                onTap: () => widget.onOpen(AcoScreen.chatV1),
               ),
           ],
         );
@@ -1030,34 +1299,65 @@ class _ContactListTile extends StatelessWidget {
     required this.name,
     required this.onTap,
     this.avatarUrl,
+    this.trailing,
+    this.backgroundColor,
+    this.borderRadius,
+    this.contentPadding = const EdgeInsets.symmetric(vertical: 10),
+    this.nameMaxLines = 1,
+    this.avatarSize = 42,
+    this.nameFontSize,
+    this.avatarGap = 20,
+    this.showAvatar = true,
+    this.nameColor,
   });
 
   final AcoPalette palette;
   final String name;
   final VoidCallback onTap;
   final String? avatarUrl;
+  final Widget? trailing;
+  final Color? backgroundColor;
+  final BorderRadius? borderRadius;
+  final EdgeInsets contentPadding;
+  final int nameMaxLines;
+  final double avatarSize;
+  final double? nameFontSize;
+  final double avatarGap;
+  final bool showAvatar;
+  final Color? nameColor;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
-    padding: const EdgeInsets.symmetric(vertical: 10),
+    padding: EdgeInsets.zero,
     onPressed: onTap,
-    child: Row(
-      children: [
-        AcoAvatar(size: 42, imageUrl: avatarUrl),
-        const SizedBox(width: 20),
-        Expanded(
-          child: Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: AcoTypography.body,
-              fontWeight: FontWeight.w500,
+    child: Container(
+      width: double.infinity,
+      padding: contentPadding,
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: borderRadius,
+      ),
+      child: Row(
+        children: [
+          if (showAvatar) ...[
+            AcoAvatar(size: avatarSize, imageUrl: avatarUrl),
+            SizedBox(width: avatarGap),
+          ],
+          Expanded(
+            child: Text(
+              name,
+              maxLines: nameMaxLines,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: nameColor ?? palette.primaryText,
+                fontSize: nameFontSize ?? AcoTypography.body,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-        ),
-      ],
+          if (trailing != null) trailing!,
+        ],
+      ),
     ),
   );
 }
@@ -1618,11 +1918,31 @@ class _MessageQuickTab extends StatelessWidget {
                 children: [
                   Icon(icon, color: palette.primaryText, size: 16),
                   const SizedBox(width: 6),
-                  Text(label, style: TextStyle(color: palette.primaryText, fontSize: AcoTypography.caption, fontWeight: FontWeight.w600)),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.caption,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
               if (badge)
-                const Positioned(right: 8, top: 4, child: SizedBox(width: 8, height: 8, child: DecoratedBox(decoration: BoxDecoration(color: _danger, shape: BoxShape.circle)))),
+                const Positioned(
+                  right: 8,
+                  top: 4,
+                  child: SizedBox(
+                    width: 8,
+                    height: 8,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: _danger,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),

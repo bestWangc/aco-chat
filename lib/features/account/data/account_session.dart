@@ -163,6 +163,20 @@ class AccountSession {
     return _apiClient.addFriend(accountId: accountId, token: token);
   }
 
+  Future<void> acceptFriend(String accountId) async {
+    return _apiClient.acceptFriend(
+      accountId: accountId,
+      token: await _requireToken(),
+    );
+  }
+
+  Future<void> refuseFriend(String accountId) async {
+    return _apiClient.refuseFriend(
+      accountId: accountId,
+      token: await _requireToken(),
+    );
+  }
+
   /// Lists lives when an account is available.
   ///
   /// The square/live feed is also reachable while the app is still restoring

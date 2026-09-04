@@ -511,7 +511,7 @@ class _ScanResult extends StatelessWidget {
           width: 280,
           child: profile != null && error == null
               ? AcoLimeButton(
-                  label: addingFriend ? '添加中…' : '添加好友',
+                  label: addingFriend ? '发送中…' : '添加好友',
                   onPressed: addingFriend ? () {} : onAddFriend,
                   backgroundColor: palette.accent,
                 )

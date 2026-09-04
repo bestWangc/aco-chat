@@ -396,7 +396,18 @@ class _FigmaNavItem extends StatelessWidget {
               ),
                 ),
                 if (showBadge)
-                  Positioned(right: 0, top: 0, child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: _danger, shape: BoxShape.circle))),
+                  Positioned(
+                    right: 16,
+                    top: 0,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: _danger,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

@@ -23,7 +23,6 @@ Future<void> main() async {
   await WalletPreferences.removeLegacyPlaceholderData();
   final identity = await WalletPreferences.walletIdentity();
   final walletConfigured = await WalletPreferences.load() && identity != null;
-  AppConfig.usePrimaryApiRoute();
   final accountProfileFuture = walletConfigured
       ? WalletAccountAuthentication.signInSilently(identity.address)
       : null;
@@ -80,7 +79,10 @@ class WalletAccountAuthentication {
     try {
       final session = AccountSession(client);
       final result = await session.signInSilently(walletAddress);
-      unawaited(_connectOpenIM(result.user.accountId));
+      // Complete account restoration only after OpenIM has finished its
+      // initialization attempt. Otherwise the first screen can call SDK
+      // methods while its local resources are still being created.
+      await _connectOpenIM(result.user.accountId);
       return result.user;
     } finally {
       client.close();
@@ -298,9 +300,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
               mnemonic: mnemonic,
             )
             .timeout(const Duration(seconds: 15));
-        unawaited(
-          WalletAccountAuthentication._connectOpenIM(result.user.accountId),
-        );
+        await WalletAccountAuthentication._connectOpenIM(result.user.accountId);
         return result.user;
       }
     } finally {
