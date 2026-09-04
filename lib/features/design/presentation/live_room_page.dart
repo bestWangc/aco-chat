@@ -1481,19 +1481,23 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       if (room == null) {
         throw StateError('LiveKit room is not connected');
       }
-      await room.localParticipant?.publishData(
+      final publishFuture = room.localParticipant?.publishData(
         payload,
         reliable: true,
         topic: 'chat',
       );
+      // Reliable publication may wait on mobile networks; update the local
+      // conversation immediately so sending does not feel blocked.
       _appendChatMessage(nickname: _localChatNickname, text: text);
-      if (!mounted) return;
-      setState(() {
-        _messageController.clear();
-        // Sending is an explicit request to return to the active conversation,
-        // even when the viewer was reading older messages.
-        _scrollToLatestSignal++;
-      });
+      if (mounted) {
+        setState(() {
+          _messageController.clear();
+          // Sending is an explicit request to return to the active conversation,
+          // even when the viewer was reading older messages.
+          _scrollToLatestSignal++;
+        });
+      }
+      await publishFuture;
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '发送失败', error.message);
     } catch (_) {

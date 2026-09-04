@@ -46,6 +46,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       await _disconnectLiveKitRoomSafely(previousRoom);
       await _prepareLiveKitAudioSession();
       var preConnectListener = room.createListener()
+        ..on<DataReceivedEvent>(_handleLiveKitData)
         ..on<TrackSubscribedEvent>((event) {
           if (event.track is RemoteAudioTrack) {
             debugPrint(
@@ -74,6 +75,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         liveKitUrl = _VoiceRoomPageState._liveKitFallbackUrl;
         preConnectListener.dispose();
         preConnectListener = room.createListener()
+          ..on<DataReceivedEvent>(_handleLiveKitData)
           ..on<TrackSubscribedEvent>((event) {
             if (event.track is RemoteAudioTrack) {
               debugPrint(
