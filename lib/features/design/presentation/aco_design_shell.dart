@@ -397,6 +397,10 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       dark: _isDark.value,
       isRoot: false,
       onOpen: _open,
+      chatUserID: OpenIMChatRepository.pendingConversation?.userID,
+      chatName: OpenIMChatRepository.pendingConversation?.showName,
+      chatConversationID:
+          OpenIMChatRepository.pendingConversation?.conversationID,
       onThemeToggle: _toggleTheme,
       onWalletReady: _completeAddedWallet,
       onWalletSelected: _selectWallet,
@@ -487,18 +491,18 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                     dark: dark,
                     showSocialBadge: request != null,
                     onSelected: (index) {
-                    const destinations = [
-                      AcoScreen.walletHome,
-                      AcoScreen.comingSoon,
-                      AcoScreen.comingSoon,
-                      AcoScreen.squareFeed,
-                      AcoScreen.socialMessages,
-                    ];
-                    setState(() {
-                      _selectedNav = index;
-                      _rootScreen = destinations[index];
-                      if (index == 3) _liveListRevision++;
-                    });
+                      const destinations = [
+                        AcoScreen.walletHome,
+                        AcoScreen.comingSoon,
+                        AcoScreen.comingSoon,
+                        AcoScreen.squareFeed,
+                        AcoScreen.socialMessages,
+                      ];
+                      setState(() {
+                        _selectedNav = index;
+                        _rootScreen = destinations[index];
+                        if (index == 3) _liveListRevision++;
+                      });
                     },
                   ),
                 ),

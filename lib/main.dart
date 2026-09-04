@@ -79,10 +79,9 @@ class WalletAccountAuthentication {
     try {
       final session = AccountSession(client);
       final result = await session.signInSilently(walletAddress);
-      // Complete account restoration only after OpenIM has finished its
-      // initialization attempt. Otherwise the first screen can call SDK
-      // methods while its local resources are still being created.
-      await _connectOpenIM(result.user.accountId);
+      // OpenIM is optional for entering the app. Start it in the background;
+      // SDK-dependent screens wait for the readiness signal before calling it.
+      unawaited(_connectOpenIM(result.user.accountId));
       return result.user;
     } finally {
       client.close();
@@ -90,9 +89,28 @@ class WalletAccountAuthentication {
   }
 
   static Future<void> _connectOpenIM(String userId) async {
+    // App resume can invoke this method repeatedly. Calling OpenIM login for
+    // an already active account creates a second session and the server kicks
+    // the previous one offline.
+    if (OpenIMChatRepository.conversationReady.value) return;
+    OpenIMChatRepository.reconnectHandler = () async {
+      // A kicked/invalid session must obtain a fresh token; reusing the
+      // cached token would create a reconnect loop.
+      _cachedOpenIMToken = null;
+      await _connectOpenIM(userId);
+      // If the kick happened while the original login was still finishing,
+      // the first call may have been deduplicated. Ensure a second login is
+      // started after that in-flight attempt completes.
+      if (!OpenIMChatRepository.conversationReady.value) {
+        await _connectOpenIM(userId);
+      }
+    };
     final running = _openIMConnectFuture;
     if (running != null) return running;
-    final future = _connectOpenIMOnce(userId);
+    final future = _connectOpenIMOnce(userId).timeout(
+      const Duration(seconds: 15),
+      onTimeout: () => debugPrint('[OpenIM] initialization timed out'),
+    );
     _openIMConnectFuture = future;
     try {
       await future;
@@ -300,7 +318,9 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
               mnemonic: mnemonic,
             )
             .timeout(const Duration(seconds: 15));
-        await WalletAccountAuthentication._connectOpenIM(result.user.accountId);
+        unawaited(
+          WalletAccountAuthentication._connectOpenIM(result.user.accountId),
+        );
         return result.user;
       }
     } finally {

@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:io';
 
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/foundation.dart';
@@ -12,10 +13,16 @@ final class OpenIMChatRepository implements ChatRepository {
   static String? _currentUserID;
   static final ValueNotifier<FriendApplicationInfo?> friendRequestNotifier =
       ValueNotifier<FriendApplicationInfo?>(null);
+  static final ValueNotifier<Message?> messageNotifier =
+      ValueNotifier<Message?>(null);
   static final ValueNotifier<int> conversationRevision = ValueNotifier<int>(0);
   static final ValueNotifier<bool> conversationReady = ValueNotifier<bool>(
     false,
   );
+  static Future<void> Function()? reconnectHandler;
+
+  /// Conversation selected from the list, consumed by the detail route.
+  static ConversationInfo? pendingConversation;
   OpenIMChatRepository({IMManager? sdk}) : _sdk = sdk ?? OpenIM.iMManager;
 
   final IMManager _sdk;
@@ -43,18 +50,22 @@ final class OpenIMChatRepository implements ChatRepository {
             '连接失败 code=$code message=$message',
             name: 'OpenIM.connection',
           ),
-          onUserTokenExpired: () =>
-              developer.log('用户 token 已过期', name: 'OpenIM.connection'),
-          onUserTokenInvalid: () =>
-              developer.log('用户 token 无效', name: 'OpenIM.connection'),
-          onKickedOffline: () =>
-              developer.log('账号被踢下线', name: 'OpenIM.connection'),
+          onUserTokenExpired: _handleConnectionLost,
+          onUserTokenInvalid: _handleConnectionLost,
+          onKickedOffline: _handleConnectionLost,
         ),
         logLevel: 3,
         isLogStandardOutput: false,
       );
       _sdkInitialized = true;
     }
+  }
+
+  static void _handleConnectionLost() {
+    conversationReady.value = false;
+    developer.log('OpenIM 连接失效，准备重连', name: 'OpenIM.connection');
+    final reconnect = reconnectHandler;
+    if (reconnect != null) unawaited(reconnect());
   }
 
   @override
@@ -74,6 +85,17 @@ final class OpenIMChatRepository implements ChatRepository {
     }
     await Future<void>.delayed(const Duration(seconds: 1));
     try {
+      try {
+        await _sdk.messageManager.setAdvancedMsgListener(
+          OnAdvancedMsgListener(
+            onRecvNewMessage: (message) => messageNotifier.value = message,
+            onRecvOfflineNewMessage: (message) =>
+                messageNotifier.value = message,
+          ),
+        );
+      } catch (error) {
+        developer.log('消息监听器注册失败: $error', name: 'OpenIM.message');
+      }
       await _sdk.friendshipManager.setFriendshipListener(
         OnFriendshipListener(
           onFriendApplicationAdded: (info) {

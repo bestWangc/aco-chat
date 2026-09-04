@@ -1059,6 +1059,12 @@ class _ContactsPageState extends State<_ContactsPage> {
                               palette: widget.palette,
                               name: name,
                               onMessagePressed: () {
+                                OpenIMChatRepository.pendingConversation =
+                                    ConversationInfo(
+                                      conversationID: 'si_${friend.accountId}',
+                                      userID: friend.accountId,
+                                      showName: name,
+                                    );
                                 final navigator = Navigator.of(context);
                                 navigator.pop();
                                 navigator.pop();
@@ -1104,6 +1110,7 @@ class _OpenIMConversationList extends StatefulWidget {
 }
 
 class _OpenIMConversationListState extends State<_OpenIMConversationList> {
+  static List<ConversationInfo> _cachedConversations = const [];
   late Future<List<ConversationInfo>> _conversations;
 
   @override
@@ -1115,15 +1122,75 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   }
 
   Future<List<ConversationInfo>> _load() async {
+    if (!OpenIMChatRepository.conversationReady.value) {
+      return _cachedConversations;
+    }
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        return await OpenIM.iMManager.conversationManager
+        final conversations = await OpenIM.iMManager.conversationManager
             .getAllConversationList();
+        final userIDs = conversations
+            .map((conversation) => conversation.userID)
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+        if (userIDs.isNotEmpty) {
+          try {
+            final users = await OpenIM.iMManager.userManager.getUsersInfo(
+              userIDList: userIDs,
+            );
+            final profiles = {
+              for (final user in users)
+                if (user.userID != null) user.userID!: user,
+            };
+            for (final conversation in conversations) {
+              final profile = profiles[conversation.userID];
+              if (profile == null) continue;
+              if (profile.nickname?.trim().isNotEmpty == true) {
+                conversation.showName = profile.nickname!.trim();
+              }
+              conversation.faceURL = profile.faceURL;
+            }
+          } catch (error) {
+            debugPrint('[OpenIM] conversation profile load failed: $error');
+          }
+          // The application API is the source of truth for profile fields;
+          // OpenIM may legitimately return the account ID as nickname.
+          final client = AccountApiClient();
+          try {
+            final friends = await AccountSession(client).listFriends();
+            final profiles = {
+              for (final friend in friends) friend.accountId: friend,
+            };
+            for (final conversation in conversations) {
+              final friend = profiles[conversation.userID];
+              if (friend == null) continue;
+              if (friend.nickname.isNotEmpty) {
+                conversation.showName = friend.nickname;
+              }
+              if (friend.avatarUrl.isNotEmpty) {
+                conversation.faceURL = friend.avatarUrl;
+              }
+            }
+          } catch (error) {
+            debugPrint('[API] conversation profile load failed: $error');
+          } finally {
+            client.close();
+          }
+        }
+        _cachedConversations = List<ConversationInfo>.unmodifiable(
+          conversations,
+        );
+        return conversations;
       } catch (error) {
         final isResourceNotReady =
             error.toString().contains('10004') ||
             error.toString().contains('Resource initialization incomplete');
-        if (!isResourceNotReady || attempt == 2) rethrow;
+        if (!isResourceNotReady || attempt == 2) {
+          if (isResourceNotReady) return const <ConversationInfo>[];
+          rethrow;
+        }
         await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
       }
     }
@@ -1149,14 +1216,23 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
     return FutureBuilder<List<ConversationInfo>>(
       future: _conversations,
       builder: (context, snapshot) {
-        final conversations = snapshot.data ?? const <ConversationInfo>[];
+        final conversations = snapshot.data ?? _cachedConversations;
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Padding(
             padding: EdgeInsets.all(24),
             child: Center(child: CupertinoActivityIndicator()),
           );
         }
-        if (conversations.isEmpty) {
+        if (conversations.isEmpty &&
+            !OpenIMChatRepository.conversationReady.value) {
+          return const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CupertinoActivityIndicator()),
+          );
+        }
+        if (conversations.isEmpty &&
+            snapshot.connectionState == ConnectionState.done &&
+            OpenIMChatRepository.conversationReady.value) {
           return const Padding(
             padding: EdgeInsets.all(24),
             child: Center(child: Text('暂无会话')),
@@ -1169,7 +1245,13 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
                 palette: widget.palette,
                 name: conversation.showName ?? conversation.userID ?? '会话',
                 message: conversation.latestMsg?.textElem?.content ?? '',
-                onTap: () => widget.onOpen(AcoScreen.chatV1),
+                avatarUrl: conversation.faceURL,
+                unreadCount: conversation.unreadCount,
+                timestamp: conversation.latestMsgSendTime,
+                onTap: () {
+                  OpenIMChatRepository.pendingConversation = conversation;
+                  widget.onOpen(AcoScreen.chatV1);
+                },
               ),
           ],
         );
@@ -1430,18 +1512,6 @@ class _ChatHistoryMessage {
   final bool mine;
   final Uint8List? imageBytes;
 }
-
-const _chatV1History = [
-  _ChatHistoryMessage('我想看下怎么可以买呢，有点难度的，你说是不是', mine: true),
-  _ChatHistoryMessage('等发你个教程具体看下操作，说也说不清楚还是图文比较好操作', mine: false),
-  _ChatHistoryMessage('好的，收到后我再试一下。', mine: true),
-];
-
-const _chatV2History = [
-  _ChatHistoryMessage('我想看下怎么可以卖呢，交易在哪儿操作？', mine: true),
-  _ChatHistoryMessage('等发你个教程具体看下操作，说也说不清楚还是图文比较好操作', mine: false),
-  _ChatHistoryMessage('好的，收到后我再试一下。', mine: true),
-];
 
 class _MessageSearchPage extends StatefulWidget {
   const _MessageSearchPage({required this.palette, required this.onOpen});
@@ -1951,6 +2021,14 @@ class _MessageQuickTab extends StatelessWidget {
   );
 }
 
+String _formatConversationDate(int? timestamp) {
+  if (timestamp == null || timestamp <= 0) return '';
+  final value = timestamp > 100000000000 ? timestamp : timestamp * 1000;
+  final date = DateTime.fromMillisecondsSinceEpoch(value);
+  String twoDigits(int number) => number.toString().padLeft(2, '0');
+  return '${date.year}-${twoDigits(date.month)}-${twoDigits(date.day)}';
+}
+
 class _SocialMessageTile extends StatelessWidget {
   const _SocialMessageTile({
     required this.palette,
@@ -1958,6 +2036,8 @@ class _SocialMessageTile extends StatelessWidget {
     required this.onTap,
     required this.message,
     this.avatarUrl,
+    this.unreadCount = 0,
+    this.timestamp,
   });
 
   final AcoPalette palette;
@@ -1965,6 +2045,8 @@ class _SocialMessageTile extends StatelessWidget {
   final VoidCallback onTap;
   final String message;
   final String? avatarUrl;
+  final int unreadCount;
+  final int? timestamp;
 
   @override
   Widget build(BuildContext context) => ListTile(
@@ -1993,34 +2075,48 @@ class _SocialMessageTile extends StatelessWidget {
         fontSize: AcoTypography.caption,
       ),
     ),
-    trailing: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        _GreenBadge(
-          label: '14',
-          color: palette.accent,
-          fontSize: AcoTypography.caption - 1,
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          '2026-08-05',
-          style: TextStyle(
-            color: const Color(0xFF9D9EA0),
-            fontSize: AcoTypography.caption - 2,
+    trailing: SizedBox(
+      width: 82,
+      height: 52,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (unreadCount > 0)
+            _GreenBadge(
+              label: unreadCount > 99 ? '99+' : '$unreadCount',
+              color: palette.accent,
+              fontSize: AcoTypography.caption - 1,
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            ),
+          const SizedBox(height: 5),
+          Text(
+            _formatConversationDate(timestamp),
+            style: TextStyle(
+              color: const Color(0xFF9D9EA0),
+              fontSize: AcoTypography.caption - 2,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
     onTap: onTap,
   );
 }
 
 class _ChatPage extends StatefulWidget {
-  const _ChatPage({required this.palette, required this.version});
+  const _ChatPage({
+    required this.palette,
+    required this.version,
+    this.peerUserID,
+    this.peerName,
+    this.conversationID,
+  });
   final AcoPalette palette;
   final int version;
+  final String? peerUserID;
+  final String? peerName;
+  final String? conversationID;
 
   @override
   State<_ChatPage> createState() => _ChatPageState();
@@ -2032,19 +2128,178 @@ class _ChatPageState extends State<_ChatPage> {
   var _morePanelVisible = false;
   var _voiceInputActive = false;
   var _voiceRecording = false;
-  late final List<_ChatHistoryMessage> _chatHistory = List.of(
-    widget.version == 1 ? _chatV1History : _chatV2History,
-  );
+  final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
+  Future<void>? _loadFuture;
+  String? _error;
+  String? _resolvedConversationID;
+  String? _resolvedPeerName;
+  String? _resolvedPeerAvatar;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFuture = _loadHistory();
+    OpenIMChatRepository.conversationReady.addListener(_onReady);
+    OpenIMChatRepository.messageNotifier.addListener(_onMessage);
+  }
+
+  void _onMessage() {
+    final message = OpenIMChatRepository.messageNotifier.value;
+    final text = message?.textElem?.content;
+    if (!mounted || message == null || text == null || text.isEmpty) return;
+    if (message.sendID != widget.peerUserID) return;
+    if (_chatHistory.any((item) => item.text == text && !item.mine)) return;
+    setState(() => _chatHistory.add(_ChatHistoryMessage(text, mine: false)));
+  }
+
+  void _onReady() {
+    if (!mounted || !OpenIMChatRepository.conversationReady.value) return;
+    if (_error == '聊天服务正在连接，请稍候重试') {
+      setState(() {
+        _error = null;
+        _loadFuture = _loadHistory();
+      });
+    }
+  }
+
+  Future<void> _loadPeerProfile(String userID) async {
+    try {
+      final users = await OpenIM.iMManager.userManager.getUsersInfo(
+        userIDList: <String>[userID],
+      );
+      final user = users.isEmpty ? null : users.first;
+      final nickname = user?.nickname?.trim();
+      if (nickname?.isNotEmpty == true) _resolvedPeerName = nickname;
+      if (user?.faceURL?.isNotEmpty == true) {
+        _resolvedPeerAvatar = user!.faceURL;
+      }
+    } catch (error) {
+      debugPrint('[OpenIM] user profile load failed: $error');
+    }
+
+    final client = AccountApiClient();
+    try {
+      final friends = await AccountSession(client).listFriends();
+      for (final friend in friends) {
+        if (friend.accountId != userID) continue;
+        if (friend.nickname.isNotEmpty) _resolvedPeerName = friend.nickname;
+        if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
+        break;
+      }
+    } catch (error) {
+      debugPrint('[API] chat profile load failed: $error');
+    } finally {
+      client.close();
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadHistory() async {
+    final userID = widget.peerUserID;
+    if (userID == null || userID.isEmpty) return;
+    if (!OpenIMChatRepository.conversationReady.value) {
+      _error = '聊天服务正在连接，请稍候重试';
+      return;
+    }
+    try {
+      await _loadPeerProfile(userID);
+      final conversation = await OpenIM.iMManager.conversationManager
+          .getOneConversation(
+            sourceID: userID,
+            sessionType: ConversationType.single,
+          );
+      _resolvedConversationID = conversation.conversationID;
+      final result = await OpenIM.iMManager.messageManager
+          .getAdvancedHistoryMessageList(
+            conversationID: _resolvedConversationID!,
+            count: 40,
+          );
+      final messages = result.messageList ?? const <Message>[];
+      try {
+        await OpenIM.iMManager.conversationManager
+            .markConversationMessageAsRead(
+              conversationID:
+                  _resolvedConversationID ??
+                  widget.conversationID ??
+                  'si_$userID',
+            );
+      } catch (error) {
+        debugPrint('[OpenIM] mark read failed: $error');
+      }
+      if (!mounted) return;
+      setState(() {
+        _chatHistory
+          ..clear()
+          ..addAll(
+            messages
+                .where((m) => m.textElem?.content?.isNotEmpty == true)
+                .map(
+                  (m) => _ChatHistoryMessage(
+                    m.textElem!.content!,
+                    mine: m.sendID != userID,
+                  ),
+                ),
+          );
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '聊天记录加载失败，点击重试');
+      debugPrint('[OpenIM] history load failed: $error');
+    }
+  }
+
+  Future<void> _sendText() async {
+    final text = _messageController.text.trim();
+    final userID = widget.peerUserID;
+    if (text.isEmpty || userID == null || userID.isEmpty) return;
+    if (!OpenIMChatRepository.conversationReady.value) {
+      _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
+      return;
+    }
+    _messageController.clear();
+    try {
+      final message = await OpenIM.iMManager.messageManager.createTextMessage(
+        text: text,
+      );
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: userID,
+        offlinePushInfo: OfflinePushInfo(title: '新消息', desc: text),
+      );
+      debugPrint(
+        '[OpenIM] message sent clientMsgID=${sent.clientMsgID} '
+        'serverMsgID=${sent.serverMsgID} status=${sent.status} '
+        'to=$userID',
+      );
+      if (!mounted) return;
+      setState(
+        () => _chatHistory.add(
+          _ChatHistoryMessage(sent.textElem?.content ?? text, mine: true),
+        ),
+      );
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      if (!mounted) return;
+      _showNotice(context, '发送失败', '请稍后重试');
+      debugPrint('[OpenIM] send failed: $error');
+    }
+  }
 
   @override
   void dispose() {
+    OpenIMChatRepository.conversationReady.removeListener(_onReady);
+    OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
     _messageController.dispose();
     super.dispose();
   }
 
   bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
 
-  String get _peerName => widget.version == 1 ? '克里斯蒂亚诺' : 'Builder';
+  String get _peerName {
+    final name = _resolvedPeerName ?? widget.peerName?.trim();
+    return name?.isNotEmpty == true ? name! : (widget.peerUserID ?? '聊天');
+  }
 
   Future<void> _pickChatPhoto() async {
     setState(() => _morePanelVisible = false);
@@ -2167,17 +2422,44 @@ class _ChatPageState extends State<_ChatPage> {
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: _hidePanels,
-                    child: ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
-                      itemCount: _chatHistory.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 18),
-                      itemBuilder: (_, index) {
-                        final message = _chatHistory[index];
-                        return _ChatMessage(
-                          palette: widget.palette,
-                          text: message.text,
-                          imageBytes: message.imageBytes,
-                          mine: message.mine,
+                    child: FutureBuilder<void>(
+                      future: _loadFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CupertinoActivityIndicator(),
+                          );
+                        }
+                        if (_error != null) {
+                          return Center(
+                            child: CupertinoButton(
+                              onPressed: () => setState(() {
+                                _error = null;
+                                _loadFuture = _loadHistory();
+                              }),
+                              child: Text(_error!),
+                            ),
+                          );
+                        }
+                        if (_chatHistory.isEmpty) {
+                          return const Center(child: Text('暂无消息'));
+                        }
+                        return ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
+                          itemCount: _chatHistory.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 18),
+                          itemBuilder: (_, index) {
+                            final message = _chatHistory[index];
+                            return _ChatMessage(
+                              palette: widget.palette,
+                              text: message.text,
+                              imageBytes: message.imageBytes,
+                              mine: message.mine,
+                              avatarUrl: _resolvedPeerAvatar,
+                            );
+                          },
                         );
                       },
                     ),
@@ -2204,7 +2486,7 @@ class _ChatPageState extends State<_ChatPage> {
                       onEmojiPressed: _toggleEmojiPicker,
                       onMorePressed: _toggleMorePanel,
                       onInputTapped: _hidePanels,
-                      onSubmit: () => _showNotice(context, '消息已发送', '已发送至对方。'),
+                      onSubmit: _sendText,
                     ),
                   ),
                 ),
@@ -2762,12 +3044,14 @@ class _ChatMessage extends StatelessWidget {
     required this.text,
     required this.imageBytes,
     required this.mine,
+    this.avatarUrl,
   });
 
   final AcoPalette palette;
   final String text;
   final Uint8List? imageBytes;
   final bool mine;
+  final String? avatarUrl;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -2779,7 +3063,10 @@ class _ChatMessage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (!mine) ...[const AcoAvatar(size: 40), const SizedBox(width: 6)],
+            if (!mine) ...[
+              AcoAvatar(size: 40, imageUrl: avatarUrl),
+              const SizedBox(width: 6),
+            ],
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),

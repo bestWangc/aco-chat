@@ -18,6 +18,9 @@ class AcoScreenPage extends StatelessWidget {
     this.onWalletSelected,
     this.displayName,
     this.accountId,
+    this.chatUserID,
+    this.chatName,
+    this.chatConversationID,
     this.walletLoginFuture,
     this.username,
     this.avatarUrl,
@@ -51,6 +54,9 @@ class AcoScreenPage extends StatelessWidget {
   final Future<void> Function(WalletIdentity)? onWalletSelected;
   final String? displayName;
   final String? accountId;
+  final String? chatUserID;
+  final String? chatName;
+  final String? chatConversationID;
   final Future<AccountProfile?>? walletLoginFuture;
   final String? username;
   final String? avatarUrl;
@@ -181,8 +187,20 @@ class AcoScreenPage extends StatelessWidget {
         onOpen: onOpen,
         avatarUrl: avatarUrl,
       ),
-      AcoScreen.chatV1 => _ChatPage(palette: palette, version: 1),
-      AcoScreen.chatV2 => _ChatPage(palette: palette, version: 2),
+      AcoScreen.chatV1 => _ChatPage(
+        palette: palette,
+        version: 1,
+        peerUserID: chatUserID,
+        peerName: chatName,
+        conversationID: chatConversationID,
+      ),
+      AcoScreen.chatV2 => _ChatPage(
+        palette: palette,
+        version: 2,
+        peerUserID: chatUserID,
+        peerName: chatName,
+        conversationID: chatConversationID,
+      ),
       AcoScreen.liveStream => _LiveStreamPage(palette: palette, onOpen: onOpen),
       AcoScreen.voiceRoom => _VoiceRoomPage(palette: palette, live: live),
       AcoScreen.mining => _MiningPage(palette: palette),
@@ -385,15 +403,15 @@ class _FigmaNavItem extends StatelessWidget {
             child: Stack(
               children: [
                 Align(
-              alignment: Alignment.bottomCenter,
-              child: Transform.translate(
-                offset: const Offset(0, 4),
-                child: SizedBox(
-                  width: iconSize.width,
-                  height: iconSize.height,
-                  child: icon,
-                ),
-              ),
+                  alignment: Alignment.bottomCenter,
+                  child: Transform.translate(
+                    offset: const Offset(0, 4),
+                    child: SizedBox(
+                      width: iconSize.width,
+                      height: iconSize.height,
+                      child: icon,
+                    ),
+                  ),
                 ),
                 if (showBadge)
                   Positioned(
