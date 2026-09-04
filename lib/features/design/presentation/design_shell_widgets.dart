@@ -492,7 +492,7 @@ class AcoTopActions extends StatelessWidget {
     mainAxisSize: MainAxisSize.min,
     children: [
       _AcoDesignActionButton(
-        asset: 'assets/icons/source_scan.svg',
+        asset: 'assets/icons/source_scan_custom.png',
         palette: palette,
         scale: scale,
         label: '扫描二维码',
@@ -500,7 +500,7 @@ class AcoTopActions extends StatelessWidget {
       ),
       SizedBox(width: 6 * scale),
       _AcoDesignActionButton(
-        asset: 'assets/icons/source_person.svg',
+        asset: 'assets/icons/source_person_custom.png',
         palette: palette,
         scale: scale,
         label: '账户',
@@ -533,15 +533,17 @@ class _AcoDesignActionButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: Size(44 * scale, 44 * scale),
       onPressed: onPressed,
-      child: SvgPicture.asset(
-        asset,
-        // Keep the original aspect ratios while reducing the visual weight;
-        // the surrounding 44pt button remains the touch target.
-        width: (asset.contains('source_scan') ? 22 : 22.5) * scale,
-        height: (asset.contains('source_scan') ? 27 : 25) * scale,
+      child: ColorFiltered(
         colorFilter: ColorFilter.mode(
           palette.dark ? _white : palette.primaryText,
           BlendMode.srcIn,
+        ),
+        child: Image.asset(
+          asset,
+          // Keep the original aspect ratios while reducing the visual weight;
+          // the surrounding 44pt button remains the touch target.
+          width: (asset.contains('source_scan') ? 26 : 27) * scale,
+          height: 26 * scale,
         ),
       ),
     ),
