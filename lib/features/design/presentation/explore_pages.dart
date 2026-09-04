@@ -991,7 +991,9 @@ class _ContactsPageState extends State<_ContactsPage> {
   Future<List<FriendContact>> _loadFriends() async {
     final client = AccountApiClient();
     try {
-      return await AccountSession(client).listFriends();
+      return await AccountSession(
+        client,
+      ).listFriends().timeout(const Duration(seconds: 8));
     } finally {
       client.close();
     }
@@ -1031,7 +1033,9 @@ class _ContactsPageState extends State<_ContactsPage> {
                   );
                   return _ContactsStateMessage(
                     message: '通讯录加载失败，点击重试',
-                    onRetry: () => setState(() => _friends = _loadFriends()),
+                    onRetry: () => setState(() {
+                      _friends = _loadFriends();
+                    }),
                   );
                 }
                 final friends = snapshot.data ?? const <FriendContact>[];
@@ -1112,6 +1116,7 @@ class _OpenIMConversationList extends StatefulWidget {
 class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   static List<ConversationInfo> _cachedConversations = const [];
   late Future<List<ConversationInfo>> _conversations;
+  Timer? _reloadTimer;
 
   @override
   void initState() {
@@ -1119,6 +1124,27 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
     _conversations = _load();
     OpenIMChatRepository.conversationRevision.addListener(_reload);
     OpenIMChatRepository.conversationReady.addListener(_reload);
+    OpenIMChatRepository.messageNotifier.addListener(_updateLatestMessage);
+  }
+
+  void _updateLatestMessage() {
+    final message = OpenIMChatRepository.messageNotifier.value;
+    if (!mounted || message == null) return;
+    final peerID = message.sendID == OpenIMChatRepository.currentUserID
+        ? message.recvID
+        : message.sendID;
+    if (peerID == null) return;
+    ConversationInfo? conversation;
+    for (final item in _cachedConversations) {
+      if (item.userID == peerID) {
+        conversation = item;
+        break;
+      }
+    }
+    if (conversation == null) return;
+    conversation.latestMsg = message;
+    conversation.latestMsgSendTime = message.sendTime ?? message.createTime;
+    setState(() {});
   }
 
   Future<List<ConversationInfo>> _load() async {
@@ -1128,7 +1154,8 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
         final conversations = await OpenIM.iMManager.conversationManager
-            .getAllConversationList();
+            .getAllConversationList()
+            .timeout(const Duration(seconds: 3));
         final userIDs = conversations
             .map((conversation) => conversation.userID)
             .whereType<String>()
@@ -1137,9 +1164,9 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
             .toList();
         if (userIDs.isNotEmpty) {
           try {
-            final users = await OpenIM.iMManager.userManager.getUsersInfo(
-              userIDList: userIDs,
-            );
+            final users = await OpenIM.iMManager.userManager
+                .getUsersInfo(userIDList: userIDs)
+                .timeout(const Duration(seconds: 3));
             final profiles = {
               for (final user in users)
                 if (user.userID != null) user.userID!: user,
@@ -1159,7 +1186,9 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
           // OpenIM may legitimately return the account ID as nickname.
           final client = AccountApiClient();
           try {
-            final friends = await AccountSession(client).listFriends();
+            final friends = await AccountSession(
+              client,
+            ).listFriends().timeout(const Duration(seconds: 5));
             final profiles = {
               for (final friend in friends) friend.accountId: friend,
             };
@@ -1179,10 +1208,13 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
             client.close();
           }
         }
+        if (conversations.isEmpty && _cachedConversations.isNotEmpty) {
+          return _cachedConversations;
+        }
         _cachedConversations = List<ConversationInfo>.unmodifiable(
           conversations,
         );
-        return conversations;
+        return _cachedConversations;
       } catch (error) {
         final isResourceNotReady =
             error.toString().contains('10004') ||
@@ -1199,8 +1231,12 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
 
   void _reload() {
     if (!mounted) return;
-    setState(() {
-      _conversations = _load();
+    _reloadTimer?.cancel();
+    _reloadTimer = Timer(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      setState(() {
+        _conversations = _load();
+      });
     });
   }
 
@@ -1208,6 +1244,8 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   void dispose() {
     OpenIMChatRepository.conversationRevision.removeListener(_reload);
     OpenIMChatRepository.conversationReady.removeListener(_reload);
+    OpenIMChatRepository.messageNotifier.removeListener(_updateLatestMessage);
+    _reloadTimer?.cancel();
     super.dispose();
   }
 
@@ -1217,7 +1255,8 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
       future: _conversations,
       builder: (context, snapshot) {
         final conversations = snapshot.data ?? _cachedConversations;
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            conversations.isEmpty) {
           return const Padding(
             padding: EdgeInsets.all(24),
             child: Center(child: CupertinoActivityIndicator()),
@@ -1249,7 +1288,18 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
                 unreadCount: conversation.unreadCount,
                 timestamp: conversation.latestMsgSendTime,
                 onTap: () {
+                  conversation.unreadCount = 0;
                   OpenIMChatRepository.pendingConversation = conversation;
+                  OpenIMChatRepository.conversationRevision.value++;
+                  unawaited(
+                    OpenIM.iMManager.conversationManager
+                        .markConversationMessageAsRead(
+                          conversationID: conversation.conversationID,
+                        )
+                        .catchError((error) {
+                          debugPrint('[OpenIM] mark read failed: $error');
+                        }),
+                  );
                   widget.onOpen(AcoScreen.chatV1);
                 },
               ),
@@ -2124,16 +2174,21 @@ class _ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<_ChatPage> {
   final _messageController = TextEditingController();
+  final _chatScrollController = ScrollController();
   var _emojiPickerVisible = false;
   var _morePanelVisible = false;
   var _voiceInputActive = false;
   var _voiceRecording = false;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
+  final List<Message> _historyMessages = <Message>[];
+  final List<Message> _pendingSentMessages = <Message>[];
   Future<void>? _loadFuture;
   String? _error;
   String? _resolvedConversationID;
   String? _resolvedPeerName;
   String? _resolvedPeerAvatar;
+  bool _loadingOlder = false;
+  bool _historyEnd = false;
 
   @override
   void initState() {
@@ -2141,6 +2196,16 @@ class _ChatPageState extends State<_ChatPage> {
     _loadFuture = _loadHistory();
     OpenIMChatRepository.conversationReady.addListener(_onReady);
     OpenIMChatRepository.messageNotifier.addListener(_onMessage);
+    _chatScrollController.addListener(_onChatScroll);
+  }
+
+  void _onChatScroll() {
+    if (_chatScrollController.hasClients &&
+        _chatScrollController.position.maxScrollExtent > 0 &&
+        _chatScrollController.position.pixels >=
+            _chatScrollController.position.maxScrollExtent - 40) {
+      unawaited(_loadOlderMessages());
+    }
   }
 
   void _onMessage() {
@@ -2149,7 +2214,9 @@ class _ChatPageState extends State<_ChatPage> {
     if (!mounted || message == null || text == null || text.isEmpty) return;
     if (message.sendID != widget.peerUserID) return;
     if (_chatHistory.any((item) => item.text == text && !item.mine)) return;
+    _historyMessages.add(message);
     setState(() => _chatHistory.add(_ChatHistoryMessage(text, mine: false)));
+    _scrollToBottom();
   }
 
   void _onReady() {
@@ -2212,9 +2279,29 @@ class _ChatPageState extends State<_ChatPage> {
       final result = await OpenIM.iMManager.messageManager
           .getAdvancedHistoryMessageList(
             conversationID: _resolvedConversationID!,
-            count: 40,
+            count: 30,
           );
       final messages = result.messageList ?? const <Message>[];
+      final loadedIDs = {
+        for (final message in messages)
+          if (message.clientMsgID?.isNotEmpty == true) message.clientMsgID,
+      };
+      final pending = _pendingSentMessages
+          .where(
+            (message) =>
+                message.clientMsgID?.isNotEmpty == true &&
+                !loadedIDs.contains(message.clientMsgID),
+          )
+          .toList();
+      _pendingSentMessages.removeWhere(
+        (message) => loadedIDs.contains(message.clientMsgID),
+      );
+      _historyMessages
+        ..clear()
+        ..addAll(messages)
+        ..addAll(pending);
+      _sortHistoryMessages();
+      _historyEnd = result.isEnd ?? messages.length < 30;
       try {
         await OpenIM.iMManager.conversationManager
             .markConversationMessageAsRead(
@@ -2223,6 +2310,8 @@ class _ChatPageState extends State<_ChatPage> {
                   widget.conversationID ??
                   'si_$userID',
             );
+        OpenIMChatRepository.pendingConversation?.unreadCount = 0;
+        OpenIMChatRepository.conversationRevision.value++;
       } catch (error) {
         debugPrint('[OpenIM] mark read failed: $error');
       }
@@ -2231,7 +2320,7 @@ class _ChatPageState extends State<_ChatPage> {
         _chatHistory
           ..clear()
           ..addAll(
-            messages
+            _historyMessages
                 .where((m) => m.textElem?.content?.isNotEmpty == true)
                 .map(
                   (m) => _ChatHistoryMessage(
@@ -2242,6 +2331,9 @@ class _ChatPageState extends State<_ChatPage> {
           );
         _error = null;
       });
+      // Initial positioning should be instantaneous; animating from the
+      // first message to the latest one makes opening a chat feel like a
+      // whole-page scroll.
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '聊天记录加载失败，点击重试');
@@ -2249,10 +2341,72 @@ class _ChatPageState extends State<_ChatPage> {
     }
   }
 
+  Future<void> _loadOlderMessages() async {
+    if (_loadingOlder || _historyEnd || _historyMessages.isEmpty) return;
+    final userID = widget.peerUserID;
+    final conversationID = _resolvedConversationID;
+    if (userID == null || conversationID == null) return;
+    _loadingOlder = true;
+    final oldMaxExtent = _chatScrollController.hasClients
+        ? _chatScrollController.position.maxScrollExtent
+        : 0.0;
+    try {
+      final result = await OpenIM.iMManager.messageManager
+          .getAdvancedHistoryMessageList(
+            conversationID: conversationID,
+            startMsg: _historyMessages.first,
+            count: 30,
+          );
+      final older = result.messageList ?? const <Message>[];
+      if (older.isEmpty) {
+        _historyEnd = true;
+        return;
+      }
+      _historyMessages.insertAll(0, older);
+      _sortHistoryMessages();
+      if (!mounted) return;
+      setState(() {
+        _chatHistory
+          ..clear()
+          ..addAll(
+            _historyMessages
+                .where((m) => m.textElem?.content?.isNotEmpty == true)
+                .map(
+                  (m) => _ChatHistoryMessage(
+                    m.textElem!.content!,
+                    mine: m.sendID != userID,
+                  ),
+                ),
+          );
+      });
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_chatScrollController.hasClients) return;
+        final delta =
+            _chatScrollController.position.maxScrollExtent - oldMaxExtent;
+        if (delta > 0) {
+          _chatScrollController.jumpTo(
+            (_chatScrollController.position.pixels + delta).clamp(
+              0.0,
+              _chatScrollController.position.maxScrollExtent,
+            ),
+          );
+        }
+      });
+      _historyEnd = result.isEnd ?? older.length < 30;
+    } catch (error) {
+      debugPrint('[OpenIM] older messages load failed: $error');
+    } finally {
+      _loadingOlder = false;
+    }
+  }
+
   Future<void> _sendText() async {
     final text = _messageController.text.trim();
     final userID = widget.peerUserID;
     if (text.isEmpty || userID == null || userID.isEmpty) return;
+    final shouldFollowNewMessage =
+        !_chatScrollController.hasClients ||
+        _chatScrollController.position.pixels <= 80;
     if (!OpenIMChatRepository.conversationReady.value) {
       _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
       return;
@@ -2273,11 +2427,26 @@ class _ChatPageState extends State<_ChatPage> {
         'to=$userID',
       );
       if (!mounted) return;
+      _historyMessages.add(sent);
+      _pendingSentMessages.add(sent);
       setState(
         () => _chatHistory.add(
           _ChatHistoryMessage(sent.textElem?.content ?? text, mine: true),
         ),
       );
+      // The composer/keyboard can resize the viewport in a later frame. Use
+      // a short scroll when the user was already following the conversation.
+      // When reading older messages, preserve their position like WeChat.
+      _scrollToBottom(force: shouldFollowNewMessage, animate: false);
+      if (shouldFollowNewMessage) {
+        // The keyboard inset animation can finish after the list's first
+        // layout. Re-check once it settles so the new bubble is not hidden.
+        Future<void>.delayed(const Duration(milliseconds: 240), () {
+          if (mounted) {
+            _scrollToBottom(force: true, animate: false);
+          }
+        });
+      }
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
       if (!mounted) return;
@@ -2286,12 +2455,47 @@ class _ChatPageState extends State<_ChatPage> {
     }
   }
 
+  void _sortHistoryMessages() {
+    _historyMessages.sort((a, b) {
+      final aTime = a.sendTime ?? a.createTime ?? 0;
+      final bTime = b.sendTime ?? b.createTime ?? 0;
+      return aTime.compareTo(bTime);
+    });
+  }
+
   @override
   void dispose() {
     OpenIMChatRepository.conversationReady.removeListener(_onReady);
     OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
+    _chatScrollController.removeListener(_onChatScroll);
     _messageController.dispose();
+    _chatScrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToBottom({bool force = false, bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      void applyScroll() {
+        if (!mounted || !_chatScrollController.hasClients) return;
+        final position = _chatScrollController.position;
+        if (!force && position.pixels > 80) {
+          return;
+        }
+        final target = 0.0;
+        if ((target - position.pixels).abs() < 1) return;
+        if (!animate) {
+          _chatScrollController.jumpTo(target);
+        } else {
+          _chatScrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+
+      applyScroll();
+    });
   }
 
   bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
@@ -2426,7 +2630,8 @@ class _ChatPageState extends State<_ChatPage> {
                       future: _loadFuture,
                       builder: (context, snapshot) {
                         if (snapshot.connectionState ==
-                            ConnectionState.waiting) {
+                                ConnectionState.waiting &&
+                            _chatHistory.isEmpty) {
                           return const Center(
                             child: CupertinoActivityIndicator(),
                           );
@@ -2446,12 +2651,17 @@ class _ChatPageState extends State<_ChatPage> {
                           return const Center(child: Text('暂无消息'));
                         }
                         return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 16),
+                          controller: _chatScrollController,
+                          reverse: true,
+                          // Keep the last bubble above the composer when the
+                          // list is scrolled to its end.
+                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 10),
                           itemCount: _chatHistory.length,
                           separatorBuilder: (_, _) =>
                               const SizedBox(height: 18),
                           itemBuilder: (_, index) {
-                            final message = _chatHistory[index];
+                            final message =
+                                _chatHistory[_chatHistory.length - 1 - index];
                             return _ChatMessage(
                               palette: widget.palette,
                               text: message.text,

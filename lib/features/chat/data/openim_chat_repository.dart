@@ -11,6 +11,7 @@ import '../domain/chat_repository.dart';
 final class OpenIMChatRepository implements ChatRepository {
   static bool _sdkInitialized = false;
   static String? _currentUserID;
+  static String? get currentUserID => _currentUserID;
   static final ValueNotifier<FriendApplicationInfo?> friendRequestNotifier =
       ValueNotifier<FriendApplicationInfo?>(null);
   static final ValueNotifier<Message?> messageNotifier =
@@ -88,9 +89,8 @@ final class OpenIMChatRepository implements ChatRepository {
       try {
         await _sdk.messageManager.setAdvancedMsgListener(
           OnAdvancedMsgListener(
-            onRecvNewMessage: (message) => messageNotifier.value = message,
-            onRecvOfflineNewMessage: (message) =>
-                messageNotifier.value = message,
+            onRecvNewMessage: _handleIncomingMessage,
+            onRecvOfflineNewMessage: _handleIncomingMessage,
           ),
         );
       } catch (error) {
@@ -131,6 +131,11 @@ final class OpenIMChatRepository implements ChatRepository {
     // Friendship events are delivered through setFriendshipListener, which is
     // implemented on both supported platforms, so keep a single canonical
     // event path here.
+  }
+
+  static void _handleIncomingMessage(Message message) {
+    messageNotifier.value = message;
+    conversationRevision.value++;
   }
 
   @override
