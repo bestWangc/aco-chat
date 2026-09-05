@@ -202,13 +202,13 @@ class _RoomComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final textColor = chatMuted ? palette.mutedText : palette.primaryText;
     return SizedBox(
-      height: 42,
+      height: 38,
       child: Container(
         decoration: BoxDecoration(
           color: chatMuted
               ? palette.surfaceRaised.withValues(alpha: 0.72)
               : palette.surfaceRaised,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
           children: [
@@ -323,17 +323,6 @@ class _RoomBottomBar extends StatelessWidget {
           ),
           child: Row(
             children: [
-              if (showHandControl) ...[
-                _RoomControl(
-                  iconAsset: 'assets/icons/live_hand.png',
-                  label: handRaised ? '已举手' : '举手',
-                  background: palette.surfaceRaised,
-                  foreground: palette.primaryText,
-                  onPressed: handRaised ? null : onHand,
-                  large: true,
-                ),
-                const SizedBox(width: 8),
-              ],
               Expanded(
                 child: _RoomComposer(
                   palette: palette,
@@ -343,6 +332,17 @@ class _RoomBottomBar extends StatelessWidget {
                   onSubmitted: onSubmitted,
                 ),
               ),
+              if (showHandControl) ...[
+                const SizedBox(width: 8),
+                _RoomControl(
+                  iconAsset: 'assets/icons/live_hand.png',
+                  label: handRaised ? '已举手' : '举手',
+                  background: palette.surfaceRaised,
+                  foreground: palette.primaryText,
+                  onPressed: handRaised ? null : onHand,
+                  large: true,
+                ),
+              ],
               const SizedBox(width: 8),
               _RoomControl(
                 icon: _micIcon,
@@ -410,28 +410,36 @@ class _RoomControl extends StatelessWidget {
   final bool large;
   final double? iconSize;
 
+  Widget _buildIcon(double size) {
+    final image = iconImage;
+    if (image != null) {
+      return Image(
+        image: image,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+      );
+    }
+    final asset = iconAsset;
+    if (asset != null) {
+      return Image.asset(
+        asset,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        color: foreground,
+        colorBlendMode: BlendMode.srcIn,
+      );
+    }
+    return Icon(icon, color: foreground, size: size);
+  }
+
   @override
   Widget build(BuildContext context) {
     final controlSize = large ? 56.0 : 48.0;
     final resolvedIconSize = iconSize ?? (large ? 20.0 : 17.0);
-    final iconWidget = iconImage != null
-        ? Image(
-            image: iconImage!,
-            width: resolvedIconSize,
-            height: resolvedIconSize,
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-          )
-        : iconAsset == null
-        ? Icon(icon, color: foreground, size: resolvedIconSize)
-        : Image.asset(
-            iconAsset!,
-            width: resolvedIconSize,
-            height: resolvedIconSize,
-            fit: BoxFit.contain,
-            color: foreground,
-            colorBlendMode: BlendMode.srcIn,
-          );
+    final iconWidget = _buildIcon(resolvedIconSize);
     return Semantics(
       button: true,
       label: label,
@@ -443,10 +451,19 @@ class _RoomControl extends StatelessWidget {
           onPressed: onPressed,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: background,
+              color: Color.lerp(background, _black, .28),
               shape: BoxShape.circle,
             ),
-            child: Center(child: iconWidget),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: background,
+                  shape: BoxShape.circle,
+                ),
+                child: Center(child: iconWidget),
+              ),
+            ),
           ),
         ),
       ),
