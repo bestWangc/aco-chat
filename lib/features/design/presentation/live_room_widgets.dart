@@ -153,8 +153,18 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
     final palette = widget.palette;
     final checkIn = widget.checkIn;
     final checked = checkIn.viewerChecked;
-    final enabled = !checked && widget.onPressed != null;
     final remaining = checkIn.deadline.difference(DateTime.now());
+    final expired = remaining <= Duration.zero;
+    final enabled = !checked && !expired && widget.onPressed != null;
+    var semanticLabel = '立即签到';
+    var buttonLabel = '签到';
+    if (checked) {
+      semanticLabel = '已签到';
+      buttonLabel = '已签到';
+    } else if (expired) {
+      semanticLabel = '签到已结束';
+      buttonLabel = '已结束';
+    }
     final minutes = remaining.inMinutes.clamp(0, 99).toString().padLeft(2, '0');
     final seconds = (remaining.inSeconds % 60)
         .clamp(0, 59)
@@ -229,7 +239,7 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
     return Semantics(
       button: true,
       enabled: enabled,
-      label: checked ? '已签到' : '立即签到',
+      label: semanticLabel,
       onTap: enabled ? widget.onPressed : null,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -252,7 +262,7 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  checked ? '已签到' : '签到',
+                  buttonLabel,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: checked ? palette.mutedText : _black,
