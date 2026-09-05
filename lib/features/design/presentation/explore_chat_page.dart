@@ -21,6 +21,8 @@ class _ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<_ChatPage> {
+  static const _chatImageMaxBytes = 1536 * 1024;
+
   final _messageController = TextEditingController();
   final _chatScrollController = ScrollController();
   var _emojiPickerVisible = false;
@@ -37,6 +39,18 @@ class _ChatPageState extends State<_ChatPage> {
   String? _resolvedPeerAvatar;
   bool _loadingOlder = false;
   bool _historyEnd = false;
+  bool _markingMessagesAsRead = false;
+
+  String? get _currentConversationID {
+    if (_resolvedConversationID?.isNotEmpty == true) {
+      return _resolvedConversationID;
+    }
+    if (widget.conversationID?.isNotEmpty == true) {
+      return widget.conversationID;
+    }
+    final userID = widget.peerUserID;
+    return userID?.isNotEmpty == true ? 'si_$userID' : null;
+  }
 
   @override
   void initState() {
@@ -72,7 +86,30 @@ class _ChatPageState extends State<_ChatPage> {
         _ChatHistoryMessage.fromOpenIM(message, mine: false),
       ),
     );
+    unawaited(_markCurrentConversationAsRead());
     _scrollToBottom();
+  }
+
+  Future<void> _markCurrentConversationAsRead() async {
+    if (_markingMessagesAsRead) return;
+    final conversationID = _currentConversationID;
+    if (conversationID == null) return;
+
+    _markingMessagesAsRead = true;
+    try {
+      await OpenIM.iMManager.conversationManager.markConversationMessageAsRead(
+        conversationID: conversationID,
+      );
+      final pendingConversation = OpenIMChatRepository.pendingConversation;
+      if (pendingConversation?.conversationID == conversationID) {
+        pendingConversation?.unreadCount = 0;
+      }
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      debugPrint('[OpenIM] mark read failed: $error');
+    } finally {
+      _markingMessagesAsRead = false;
+    }
   }
 
   void _onReady() {
@@ -158,19 +195,7 @@ class _ChatPageState extends State<_ChatPage> {
         ..addAll(pending);
       _sortHistoryMessages();
       _historyEnd = result.isEnd ?? messages.length < 30;
-      try {
-        await OpenIM.iMManager.conversationManager
-            .markConversationMessageAsRead(
-              conversationID:
-                  _resolvedConversationID ??
-                  widget.conversationID ??
-                  'si_$userID',
-            );
-        OpenIMChatRepository.pendingConversation?.unreadCount = 0;
-        OpenIMChatRepository.conversationRevision.value++;
-      } catch (error) {
-        debugPrint('[OpenIM] mark read failed: $error');
-      }
+      await _markCurrentConversationAsRead();
       if (!mounted) return;
       setState(() {
         _chatHistory
@@ -358,15 +383,25 @@ class _ChatPageState extends State<_ChatPage> {
     return name?.isNotEmpty == true ? name! : (widget.peerUserID ?? '聊天');
   }
 
-  Future<void> _pickChatPhoto() async {
+  Future<void> _pickChatImage(ImageSource source) async {
     setState(() => _morePanelVisible = false);
+    File? pickedImage;
     try {
       final photo = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-        maxWidth: 1440,
+        source: source,
+        imageQuality: 70,
+        maxWidth: 1280,
+        maxHeight: 1280,
       );
       if (photo == null) return;
+      pickedImage = File(photo.path);
+      final photoSize = await photo.length();
+      if (photoSize > _chatImageMaxBytes) {
+        if (mounted) {
+          _showNotice(context, '图片过大', '请重新选择一张不超过 1.5 MB 的图片。');
+        }
+        return;
+      }
       final imageBytes = await photo.readAsBytes();
       final userID = widget.peerUserID;
       if (userID == null || userID.isEmpty) return;
@@ -390,8 +425,12 @@ class _ChatPageState extends State<_ChatPage> {
           _ChatHistoryMessage.image(
             mine: true,
             imageBytes: imageBytes,
-            imagePath: sent.pictureElem?.sourcePath ?? photo.path,
             imageUrl: _ChatHistoryMessage.imageUrlOf(sent.pictureElem),
+            previewImageUrl: _ChatHistoryMessage.previewImageUrlOf(
+              sent.pictureElem,
+            ),
+            shouldCacheThumbnail:
+                sent.pictureElem?.snapshotPicture?.url?.isNotEmpty == true,
           ),
         );
       });
@@ -401,12 +440,27 @@ class _ChatPageState extends State<_ChatPage> {
       if (!mounted) return;
       _showNotice(context, '图片发送失败', '请稍后重试。');
       debugPrint('[OpenIM] image send failed: $error');
+    } finally {
+      await _deletePickedImage(pickedImage);
+    }
+  }
+
+  Future<void> _deletePickedImage(File? image) async {
+    if (image == null || !await image.exists()) return;
+    try {
+      await image.delete();
+    } catch (error) {
+      debugPrint('[Chat] picked image cleanup failed: $error');
     }
   }
 
   Future<void> _handleMorePanelSelection(String label) async {
     if (label == '照片') {
-      await _pickChatPhoto();
+      await _pickChatImage(ImageSource.gallery);
+      return;
+    }
+    if (label == '拍摄') {
+      await _pickChatImage(ImageSource.camera);
       return;
     }
     setState(() => _morePanelVisible = false);
@@ -534,7 +588,7 @@ class _ChatPageState extends State<_ChatPage> {
                           reverse: true,
                           // Reserve space so the latest bubble stays above the
                           // composer at the bottom of the reversed list.
-                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 10),
+                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 28),
                           itemCount: _chatHistory.length,
                           separatorBuilder: (_, _) =>
                               const SizedBox(height: 18),
@@ -547,6 +601,9 @@ class _ChatPageState extends State<_ChatPage> {
                               imageBytes: message.imageBytes,
                               imagePath: message.imagePath,
                               imageUrl: message.imageUrl,
+                              previewImageUrl: message.previewImageUrl,
+                              shouldCacheThumbnail:
+                                  message.shouldCacheThumbnail,
                               mine: message.mine,
                               avatarUrl: _resolvedPeerAvatar,
                               ownAvatarUrl: widget.ownAvatarUrl,
@@ -866,12 +923,16 @@ class _ChatMorePanel extends StatelessWidget {
 }
 
 class _ChatMessage extends StatelessWidget {
+  static const _maxImageExtent = 215.0;
+
   const _ChatMessage({
     required this.palette,
     required this.text,
     required this.imageBytes,
     required this.imagePath,
     required this.imageUrl,
+    required this.previewImageUrl,
+    required this.shouldCacheThumbnail,
     required this.mine,
     this.avatarUrl,
     this.ownAvatarUrl,
@@ -882,9 +943,14 @@ class _ChatMessage extends StatelessWidget {
   final Uint8List? imageBytes;
   final String? imagePath;
   final String? imageUrl;
+  final String? previewImageUrl;
+  final bool shouldCacheThumbnail;
   final bool mine;
   final String? avatarUrl;
   final String? ownAvatarUrl;
+
+  bool get _isImageMessage =>
+      imageBytes != null || imagePath != null || imageUrl != null;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -894,7 +960,9 @@ class _ChatMessage extends StatelessWidget {
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: _isImageMessage
+              ? CrossAxisAlignment.start
+              : CrossAxisAlignment.end,
           children: [
             if (!mine) ...[
               AcoAvatar(size: 40, imageUrl: avatarUrl),
@@ -903,7 +971,7 @@ class _ChatMessage extends StatelessWidget {
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: _messageBody(),
+                child: _messageBody(context, maxWidth: maxBubbleWidth),
               ),
             ),
             if (mine) ...[
@@ -916,49 +984,107 @@ class _ChatMessage extends StatelessWidget {
     },
   );
 
-  Widget _messageBody() {
-    if (imageBytes != null) {
-      return _image(
-        Image.memory(
-          imageBytes!,
-          width: 180,
-          height: 180,
-          fit: BoxFit.cover,
-          filterQuality: FilterQuality.medium,
-        ),
+  Widget _messageBody(BuildContext context, {required double maxWidth}) {
+    final bytes = imageBytes;
+    if (bytes != null) {
+      final image = Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
       );
-    }
-
-    final localImage = imagePath == null ? null : File(imagePath!);
-    if (localImage?.existsSync() ?? false) {
       return _image(
-        Image.file(
-          localImage!,
-          width: 180,
-          height: 180,
-          fit: BoxFit.cover,
-          errorBuilder: (_, error, stackTrace) => const _ImageUnavailable(),
-        ),
+        context,
+        image,
+        maxWidth: maxWidth,
+        previewImage: image.image,
       );
     }
 
     if (imageUrl != null) {
+      final previewUrl = previewImageUrl ?? imageUrl!;
       return _image(
-        Image.network(
-          imageUrl!,
-          width: 180,
-          height: 180,
-          fit: BoxFit.cover,
-          errorBuilder: (_, error, stackTrace) => const _ImageUnavailable(),
-        ),
+        context,
+        shouldCacheThumbnail
+            ? _CachedChatThumbnail(url: imageUrl!)
+            : Image.network(
+                imageUrl!,
+                fit: BoxFit.contain,
+                errorBuilder: (_, error, stackTrace) =>
+                    const _ImageUnavailable(),
+              ),
+        maxWidth: maxWidth,
+        previewImage: NetworkImage(previewUrl),
       );
     }
+
+    if (imagePath != null) return const _ImageUnavailable();
 
     return _Bubble(palette: palette, text: text, mine: mine);
   }
 
-  Widget _image(Image image) =>
-      ClipRRect(borderRadius: BorderRadius.circular(5), child: image);
+  Widget _image(
+    BuildContext context,
+    Widget thumbnail, {
+    required double maxWidth,
+    required ImageProvider previewImage,
+  }) => Semantics(
+    button: true,
+    label: '查看原图',
+    child: GestureDetector(
+      onTap: () => Navigator.of(context).push<void>(
+        CupertinoPageRoute<void>(
+          builder: (_) => _ChatImagePreview(image: previewImage),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: math.min(maxWidth, _maxImageExtent),
+            maxHeight: _maxImageExtent,
+          ),
+          child: thumbnail,
+        ),
+      ),
+    ),
+  );
+}
+
+class _ChatImagePreview extends StatelessWidget {
+  const _ChatImagePreview({required this.image});
+
+  final ImageProvider image;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: const Color(0xFF000000),
+    child: SafeArea(
+      child: Stack(
+        children: [
+          Center(
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 4,
+              child: Image(image: image, fit: BoxFit.contain),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: CupertinoButton(
+              padding: const EdgeInsets.all(10),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Icon(
+                CupertinoIcons.xmark,
+                color: Color(0xFFFFFFFF),
+                size: 22,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _ImageUnavailable extends StatelessWidget {

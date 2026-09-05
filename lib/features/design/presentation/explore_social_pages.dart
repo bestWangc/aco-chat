@@ -228,6 +228,12 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
         });
       }
       OpenIMChatRepository.friendRequestNotifier.value = null;
+    } catch (error) {
+      if (!mounted) return;
+      final message = error is AccountApiException
+          ? error.localizedMessage
+          : '请检查网络后重试。';
+      _showNotice(context, accept ? '通过失败' : '拒绝失败', message);
     } finally {
       client.close();
     }

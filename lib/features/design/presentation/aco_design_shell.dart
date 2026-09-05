@@ -30,7 +30,7 @@ import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'
-    show ListTile, Material, MaterialType, RefreshIndicator;
+    show InteractiveViewer, ListTile, Material, MaterialType, RefreshIndicator;
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -38,6 +38,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:livekit_client/livekit_client.dart' hide ConnectionState;
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -65,6 +66,7 @@ part 'explore_social_widgets.dart';
 part 'explore_social_pages.dart';
 part 'explore_square_pages.dart';
 part 'explore_chat_page.dart';
+part 'chat_thumbnail_cache.dart';
 part 'wallet_welcome_page.dart';
 part 'wallet_setup_flow.dart';
 part 'wallet_home_page.dart';
@@ -495,7 +497,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                 ),
                 ValueListenableBuilder<FriendApplicationInfo?>(
                   valueListenable: OpenIMChatRepository.friendRequestNotifier,
-                  builder: (_, request, __) => AcoBottomNav(
+                  builder: (_, request, _) => AcoBottomNav(
                     selected: _selectedNav,
                     dark: dark,
                     showSocialBadge: request != null,

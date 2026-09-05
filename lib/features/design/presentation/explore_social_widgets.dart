@@ -30,13 +30,17 @@ class _ChatHistoryMessage {
   const _ChatHistoryMessage(this.text, {required this.mine})
     : imageBytes = null,
       imagePath = null,
-      imageUrl = null;
+      imageUrl = null,
+      previewImageUrl = null,
+      shouldCacheThumbnail = false;
 
   const _ChatHistoryMessage.image({
     required this.mine,
     this.imageBytes,
     this.imagePath,
     this.imageUrl,
+    this.previewImageUrl,
+    this.shouldCacheThumbnail = false,
   }) : text = '';
 
   static bool isDisplayable(Message message) =>
@@ -48,6 +52,9 @@ class _ChatHistoryMessage {
       picture?.bigPicture?.url ??
       picture?.sourcePicture?.url;
 
+  static String? previewImageUrlOf(PictureElem? picture) =>
+      picture?.sourcePicture?.url ?? picture?.bigPicture?.url;
+
   factory _ChatHistoryMessage.fromOpenIM(
     Message message, {
     required bool mine,
@@ -55,10 +62,13 @@ class _ChatHistoryMessage {
     final text = message.textElem?.content;
     if (text?.isNotEmpty == true) return _ChatHistoryMessage(text!, mine: mine);
     final picture = message.pictureElem;
+    final thumbnailUrl = picture?.snapshotPicture?.url;
     return _ChatHistoryMessage.image(
       mine: mine,
       imagePath: picture?.sourcePath,
       imageUrl: imageUrlOf(picture),
+      previewImageUrl: previewImageUrlOf(picture),
+      shouldCacheThumbnail: thumbnailUrl?.isNotEmpty == true,
     );
   }
 
@@ -67,6 +77,8 @@ class _ChatHistoryMessage {
   final Uint8List? imageBytes;
   final String? imagePath;
   final String? imageUrl;
+  final String? previewImageUrl;
+  final bool shouldCacheThumbnail;
 }
 
 class _SocialMessageTile extends StatelessWidget {
