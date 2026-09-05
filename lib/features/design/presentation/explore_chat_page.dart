@@ -4,12 +4,14 @@ class _ChatPage extends StatefulWidget {
   const _ChatPage({
     required this.palette,
     required this.version,
+    this.ownAvatarUrl,
     this.peerUserID,
     this.peerName,
     this.conversationID,
   });
   final AcoPalette palette;
   final int version;
+  final String? ownAvatarUrl;
   final String? peerUserID;
   final String? peerName;
   final String? conversationID;
@@ -511,6 +513,7 @@ class _ChatPageState extends State<_ChatPage> {
                               imageBytes: message.imageBytes,
                               mine: message.mine,
                               avatarUrl: _resolvedPeerAvatar,
+                              ownAvatarUrl: widget.ownAvatarUrl,
                             );
                           },
                         );
@@ -833,6 +836,7 @@ class _ChatMessage extends StatelessWidget {
     required this.imageBytes,
     required this.mine,
     this.avatarUrl,
+    this.ownAvatarUrl,
   });
 
   final AcoPalette palette;
@@ -840,6 +844,7 @@ class _ChatMessage extends StatelessWidget {
   final Uint8List? imageBytes;
   final bool mine;
   final String? avatarUrl;
+  final String? ownAvatarUrl;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -872,7 +877,10 @@ class _ChatMessage extends StatelessWidget {
                       ),
               ),
             ),
-            if (mine) ...[const SizedBox(width: 6), const AcoAvatar(size: 40)],
+            if (mine) ...[
+              const SizedBox(width: 6),
+              AcoAvatar(size: 40, imageUrl: ownAvatarUrl),
+            ],
           ],
         ),
       );

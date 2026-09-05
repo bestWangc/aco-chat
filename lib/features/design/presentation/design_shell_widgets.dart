@@ -190,6 +190,7 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.chatV1 => _ChatPage(
         palette: palette,
         version: 1,
+        ownAvatarUrl: avatarUrl,
         peerUserID: chatUserID,
         peerName: chatName,
         conversationID: chatConversationID,
@@ -197,6 +198,7 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.chatV2 => _ChatPage(
         palette: palette,
         version: 2,
+        ownAvatarUrl: avatarUrl,
         peerUserID: chatUserID,
         peerName: chatName,
         conversationID: chatConversationID,
