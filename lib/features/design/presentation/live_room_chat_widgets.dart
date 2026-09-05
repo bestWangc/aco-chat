@@ -351,9 +351,7 @@ class _RoomBottomBar extends StatelessWidget {
               if (showHandControl) ...[
                 const SizedBox(width: 8),
                 _RoomControl(
-                  iconImage: const AssetImage(
-                    'assets/icons/live_hand_custom.png',
-                  ),
+                  iconAsset: 'assets/icons/live_hand.png',
                   label: handRaised ? '已举手' : '举手',
                   background: palette.surfaceRaised,
                   foreground: palette.primaryText,

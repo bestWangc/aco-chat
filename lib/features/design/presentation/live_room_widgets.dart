@@ -769,7 +769,13 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     final effectiveSpeakers = speakers
         .map(_withViewerMute)
         .toList(growable: false);
-    final effectiveListeners = listeners.map(_withViewerMute).toList();
+    final effectiveListeners = listeners.map(_withViewerMute).toList()
+      ..sort((left, right) {
+        final leftIsViewer = left.userId == viewerUserId;
+        final rightIsViewer = right.userId == viewerUserId;
+        if (leftIsViewer == rightIsViewer) return 0;
+        return leftIsViewer ? -1 : 1;
+      });
     if (kDebugMode && effectiveListeners.length < 12) {
       for (var index = effectiveListeners.length; index < 12; index++) {
         effectiveListeners.add(
