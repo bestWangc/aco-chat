@@ -323,6 +323,27 @@ class _RoomBottomBar extends StatelessWidget {
           ),
           child: Row(
             children: [
+              if (showHandControl) ...[
+                _RoomControl(
+                  iconAsset: 'assets/icons/live_hand.png',
+                  label: handRaised ? '已举手' : '举手',
+                  background: palette.surfaceRaised,
+                  foreground: palette.primaryText,
+                  onPressed: handRaised ? null : onHand,
+                  large: true,
+                ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: _RoomComposer(
+                  palette: palette,
+                  controller: controller,
+                  chatMuted: chatMuted,
+                  onEmojiPressed: onEmojiPressed,
+                  onSubmitted: onSubmitted,
+                ),
+              ),
+              const SizedBox(width: 8),
               _RoomControl(
                 icon: _micIcon,
                 iconAsset: _micIconAsset,
@@ -338,27 +359,6 @@ class _RoomBottomBar extends StatelessWidget {
                 large: true,
                 iconSize: 26,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _RoomComposer(
-                  palette: palette,
-                  controller: controller,
-                  chatMuted: chatMuted,
-                  onEmojiPressed: onEmojiPressed,
-                  onSubmitted: onSubmitted,
-                ),
-              ),
-              if (showHandControl) ...[
-                const SizedBox(width: 8),
-                _RoomControl(
-                  iconAsset: 'assets/icons/live_hand.png',
-                  label: handRaised ? '已举手' : '举手',
-                  background: palette.surfaceRaised,
-                  foreground: palette.primaryText,
-                  onPressed: handRaised ? null : onHand,
-                  large: true,
-                ),
-              ],
             ],
           ),
         ),
