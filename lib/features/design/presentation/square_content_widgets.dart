@@ -513,7 +513,11 @@ class _Bubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final textWidget = Text(
       text,
-      style: TextStyle(color: _black, height: 1.4, fontSize: 16),
+      style: TextStyle(
+        color: mine ? _black : _white,
+        height: 1.4,
+        fontSize: 16,
+      ),
     );
     if (!mine) {
       return ConstrainedBox(
@@ -547,7 +551,7 @@ class _OtherBubblePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const tailWidth = 6.0;
     final bubbleLeft = tailWidth;
-    final paint = Paint()..color = const Color(0xFFDDDDDD);
+    final paint = Paint()..color = const Color(0xFF2C2C2C);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(bubbleLeft, 0, size.width - tailWidth, size.height),
@@ -575,7 +579,7 @@ class _MineBubblePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const tailWidth = 6.0;
     final bubbleWidth = size.width - tailWidth;
-    final paint = Paint()..color = _accentGreen;
+    final paint = Paint()..color = const Color(0xFF28B561);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(0, 0, bubbleWidth, size.height),

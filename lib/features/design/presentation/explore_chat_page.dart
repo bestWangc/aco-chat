@@ -518,28 +518,34 @@ class _ChatPageState extends State<_ChatPage> {
                     ),
                   ),
                 ),
-                SafeArea(
-                  top: false,
-                  bottom: !compactBottomBar,
-                  minimum: compactBottomBar
-                      ? EdgeInsets.zero
-                      : const EdgeInsets.only(bottom: 20),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      8,
-                      4,
-                      8,
-                      compactBottomBar ? 2 : 8,
-                    ),
-                    child: _ChatComposer(
-                      controller: _messageController,
-                      voiceInputActive: _voiceInputActive,
-                      onVoicePressed: _toggleVoiceInput,
-                      onRecordingChanged: _setVoiceRecording,
-                      onEmojiPressed: _toggleEmojiPicker,
-                      onMorePressed: _toggleMorePanel,
-                      onInputTapped: _hidePanels,
-                      onSubmit: _sendText,
+                DecoratedBox(
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF1E1D1B),
+                    border: Border(top: BorderSide(color: Color(0xFF2D2D2D))),
+                  ),
+                  child: SafeArea(
+                    top: false,
+                    bottom: !compactBottomBar,
+                    minimum: compactBottomBar
+                        ? EdgeInsets.zero
+                        : const EdgeInsets.only(bottom: 20),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        8,
+                        8,
+                        8,
+                        compactBottomBar ? 2 : 8,
+                      ),
+                      child: _ChatComposer(
+                        controller: _messageController,
+                        voiceInputActive: _voiceInputActive,
+                        onVoicePressed: _toggleVoiceInput,
+                        onRecordingChanged: _setVoiceRecording,
+                        onEmojiPressed: _toggleEmojiPicker,
+                        onMorePressed: _toggleMorePanel,
+                        onInputTapped: _hidePanels,
+                        onSubmit: _sendText,
+                      ),
                     ),
                   ),
                 ),
@@ -705,17 +711,22 @@ class _VoiceWaveform extends StatelessWidget {
 }
 
 class _ComposerImageIcon extends StatelessWidget {
-  const _ComposerImageIcon({required this.assetPath, required this.onPressed});
+  const _ComposerImageIcon({
+    required this.assetPath,
+    required this.onPressed,
+    this.size = 24,
+  });
 
   final String assetPath;
   final VoidCallback onPressed;
+  final double size;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: EdgeInsets.zero,
-    minimumSize: const Size(24, 24),
+    minimumSize: Size(size, size),
     onPressed: onPressed,
-    child: Image.asset(assetPath, width: 24, height: 24),
+    child: Image.asset(assetPath, width: size, height: size),
   );
 }
 

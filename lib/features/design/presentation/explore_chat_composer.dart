@@ -33,21 +33,26 @@ class _ChatComposer extends StatelessWidget {
             onPressed: onVoicePressed,
           )
         else
-          _ComposerImageIcon(
-            assetPath: 'assets/icons/chat_voice.png',
-            onPressed: onVoicePressed,
+          Padding(
+            padding: const EdgeInsets.only(left: 8),
+            child: _ComposerImageIcon(
+              assetPath: 'assets/icons/chat_voice.png',
+              onPressed: onVoicePressed,
+              size: 26,
+            ),
           ),
         const SizedBox(width: 8),
         Expanded(
           child: voiceInputActive
               ? _HoldToTalkButton(onRecordingChanged: onRecordingChanged)
               : Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: 40,
+                  padding: const EdgeInsets.fromLTRB(16, 0, 12, 0),
                   alignment: Alignment.centerLeft,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF191919),
-                    borderRadius: BorderRadius.circular(5),
+                    color: const Color(0xFF2C2C2C),
+                    border: Border.all(color: const Color(0xFF464646)),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: CupertinoTextField(
                     controller: controller,
@@ -71,11 +76,13 @@ class _ChatComposer extends StatelessWidget {
         _ComposerImageIcon(
           assetPath: 'assets/icons/chat_emoji.png',
           onPressed: onEmojiPressed,
+          size: 26,
         ),
         const SizedBox(width: 8),
         _ComposerImageIcon(
           assetPath: 'assets/icons/chat_add.png',
           onPressed: onMorePressed,
+          size: 26,
         ),
       ],
     ),
