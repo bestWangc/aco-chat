@@ -85,6 +85,15 @@ class AcoScreenPage extends StatelessWidget {
     final currentDisplayName = displayName;
     final currentAccountId = accountId;
     final currentUsername = username;
+    final isProfileUnavailable =
+        currentDisplayName == null ||
+        currentAccountId == null ||
+        currentUsername == null;
+    final VoidCallback? profileOnBack = isRoot
+        ? null
+        : () => Navigator.of(context).maybePop();
+    final VoidCallback secondaryProfileOnBack = () =>
+        Navigator.of(context).maybePop();
     final page = switch (screen) {
       AcoScreen.walletHome => _WalletHome(
         palette: palette,
@@ -207,10 +216,8 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.voiceRoom => _VoiceRoomPage(palette: palette, live: live),
       AcoScreen.mining => _MiningPage(palette: palette),
       AcoScreen.profile =>
-        currentDisplayName == null ||
-                currentAccountId == null ||
-                currentUsername == null
-            ? _ProfileLoadingPage(palette: palette)
+        isProfileUnavailable
+            ? _ProfileUnavailablePage(palette: palette, onBack: profileOnBack)
             : _ProfilePage(
                 palette: palette,
                 onOpen: onOpen,
@@ -220,13 +227,14 @@ class AcoScreenPage extends StatelessWidget {
                 avatarUrl: avatarUrl ?? '',
                 hasAppUpdate: hasAppUpdate,
                 onOpenAppUpdate: onOpenAppUpdate ?? () async => false,
-                onBack: isRoot ? null : () => Navigator.of(context).maybePop(),
+                onBack: profileOnBack,
               ),
       AcoScreen.profileEdit =>
-        currentDisplayName == null ||
-                currentAccountId == null ||
-                currentUsername == null
-            ? _ProfileLoadingPage(palette: palette)
+        isProfileUnavailable
+            ? _ProfileUnavailablePage(
+                palette: palette,
+                onBack: secondaryProfileOnBack,
+              )
             : _ProfileEditPage(
                 palette: palette,
                 initialName: currentDisplayName,
@@ -238,17 +246,18 @@ class AcoScreenPage extends StatelessWidget {
                 onAvatarUrlChanged: onAvatarUrlChanged,
               ),
       AcoScreen.profileQr =>
-        currentDisplayName == null ||
-                currentAccountId == null ||
-                currentUsername == null
-            ? _ProfileLoadingPage(palette: palette)
+        isProfileUnavailable
+            ? _ProfileUnavailablePage(
+                palette: palette,
+                onBack: secondaryProfileOnBack,
+              )
             : _ProfileQrPage(
                 palette: palette,
                 displayName: currentDisplayName,
                 accountId: currentAccountId,
                 username: currentUsername,
                 avatarUrl: avatarUrl ?? '',
-                onBack: () => Navigator.of(context).maybePop(),
+                onBack: secondaryProfileOnBack,
               ),
       AcoScreen.profileTheme => _ThemeSettingsPage(
         palette: palette,

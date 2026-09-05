@@ -814,6 +814,26 @@ void main() {
     expect(find.text('打赏记录'), findsNothing);
   });
 
+  testWidgets('shows connection diagnostics when profile data is unavailable', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.profile,
+          dark: true,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+        ),
+      ),
+    );
+
+    expect(find.text('个人资料暂不可用'), findsOneWidget);
+    expect(find.text('连接诊断'), findsOneWidget);
+    expect(find.bySemanticsLabel('返回'), findsOneWidget);
+  });
+
   testWidgets('disables the personal QR code entry from the profile page', (
     WidgetTester tester,
   ) async {

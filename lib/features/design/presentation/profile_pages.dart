@@ -189,65 +189,65 @@ class _ProfilePage extends StatelessWidget {
       ),
     ],
   );
+}
 
-  Future<void> _showConnectionDiagnostics(
-    BuildContext context,
-    AcoPalette palette,
-  ) async {
-    final config = const AppConfig();
-    final diagnostics = await AccountApiClient.runConnectionDiagnostics();
-    if (!context.mounted) return;
-    final request = AccountApiClient.lastRequest ?? '暂无请求记录';
-    final status = AccountApiClient.lastStatusCode?.toString() ?? '暂无';
-    final duration = AccountApiClient.lastRequestDurationMilliseconds;
-    final serverTiming = AccountApiClient.lastServerTiming;
-    final response = AccountApiClient.lastResponseBody ?? '暂无返回内容';
-    final error = AccountApiClient.lastError;
-    final diagnosticText =
-        'API：${config.apiBaseUrl}\n'
-        '版本：${AppConfig.appVersion}\n'
-        '请求：$request\n'
-        '状态：$status\n'
-        '耗时：${duration == null ? '暂无' : '${duration}ms'}\n'
-        '${serverTiming == null ? '' : '服务端：$serverTiming\n'}'
-        '返回：$response'
-        '${error == null ? '' : '\n错误：$error'}\n\n'
-        '链路探测：\n$diagnostics';
-    showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('连接诊断'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: SizedBox(
-            height: 260,
-            child: SingleChildScrollView(
-              child: Text(
-                diagnosticText,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.caption,
-                ),
-                textAlign: TextAlign.left,
+Future<void> _showConnectionDiagnostics(
+  BuildContext context,
+  AcoPalette palette,
+) async {
+  final config = const AppConfig();
+  final diagnostics = await AccountApiClient.runConnectionDiagnostics();
+  if (!context.mounted) return;
+  final request = AccountApiClient.lastRequest ?? '暂无请求记录';
+  final status = AccountApiClient.lastStatusCode?.toString() ?? '暂无';
+  final duration = AccountApiClient.lastRequestDurationMilliseconds;
+  final serverTiming = AccountApiClient.lastServerTiming;
+  final response = AccountApiClient.lastResponseBody ?? '暂无返回内容';
+  final error = AccountApiClient.lastError;
+  final diagnosticText =
+      'API：${config.apiBaseUrl}\n'
+      '版本：${AppConfig.appVersion}\n'
+      '请求：$request\n'
+      '状态：$status\n'
+      '耗时：${duration == null ? '暂无' : '${duration}ms'}\n'
+      '${serverTiming == null ? '' : '服务端：$serverTiming\n'}'
+      '返回：$response'
+      '${error == null ? '' : '\n错误：$error'}\n\n'
+      '链路探测：\n$diagnostics';
+  showCupertinoDialog<void>(
+    context: context,
+    builder: (dialogContext) => CupertinoAlertDialog(
+      title: const Text('连接诊断'),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: SizedBox(
+          height: 260,
+          child: SingleChildScrollView(
+            child: Text(
+              diagnosticText,
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.caption,
               ),
+              textAlign: TextAlign.left,
             ),
           ),
         ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: diagnosticText));
-            },
-            child: const Text('复制'),
-          ),
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
       ),
-    );
-  }
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: diagnosticText));
+          },
+          child: const Text('复制'),
+        ),
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('关闭'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _AvatarCropPage extends StatefulWidget {
@@ -465,21 +465,49 @@ class _ProfileQrPage extends StatelessWidget {
   );
 }
 
-class _ProfileLoadingPage extends StatelessWidget {
-  const _ProfileLoadingPage({required this.palette});
+class _ProfileUnavailablePage extends StatelessWidget {
+  const _ProfileUnavailablePage({required this.palette, this.onBack});
 
   final AcoPalette palette;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      AcoPageHeader(palette: palette),
+      AcoPageHeader(palette: palette, onBack: onBack),
       Expanded(
         child: Center(
-          child: Icon(
-            CupertinoIcons.person_crop_circle,
-            color: palette.mutedText,
-            size: 44,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                CupertinoIcons.person_crop_circle,
+                color: palette.mutedText,
+                size: 44,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '个人资料暂不可用',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.body,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '请检查网络连接或查看诊断信息。',
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
+              ),
+              const SizedBox(height: 12),
+              CupertinoButton(
+                onPressed: () => _showConnectionDiagnostics(context, palette),
+                child: const Text('连接诊断'),
+              ),
+            ],
           ),
         ),
       ),
