@@ -1256,34 +1256,40 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _showRaisedHandRequestsDialog(List<LiveParticipant> users) {
     showCupertinoDialog<void>(
       context: context,
-      builder: (dialogContext) => Center(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 320,
-            maxHeight: math.min(420, MediaQuery.sizeOf(context).height * .62),
-          ),
-          child: CupertinoPopupSurface(
-            child: _RaisedHandRequests(
-              palette: widget.palette,
-              users: users,
-              onClose: () => Navigator.of(dialogContext).pop(),
-              onApprove: (userId) {
-                Navigator.of(dialogContext).pop();
-                unawaited(_approveSpeaker(userId));
-              },
-              onReject: (userId) {
-                Navigator.of(dialogContext).pop();
-                unawaited(_rejectSpeakerRequest(userId));
-              },
-              onRejectAll: () {
-                Navigator.of(dialogContext).pop();
-                unawaited(_rejectAllSpeakerRequests());
-              },
-              maxHeight: math.min(320, MediaQuery.sizeOf(context).height * .5),
+      builder: (dialogContext) {
+        final screenHeight = MediaQuery.sizeOf(context).height;
+        final dialogHeight = math.min(420.0, screenHeight * .62);
+        final listHeight = math.min(320.0, screenHeight * .5);
+        return Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 320,
+              minHeight: dialogHeight,
+              maxHeight: dialogHeight,
+            ),
+            child: CupertinoPopupSurface(
+              child: _RaisedHandRequests(
+                palette: widget.palette,
+                users: users,
+                onClose: () => Navigator.of(dialogContext).pop(),
+                onApprove: (userId) {
+                  Navigator.of(dialogContext).pop();
+                  unawaited(_approveSpeaker(userId));
+                },
+                onReject: (userId) {
+                  Navigator.of(dialogContext).pop();
+                  unawaited(_rejectSpeakerRequest(userId));
+                },
+                onRejectAll: () {
+                  Navigator.of(dialogContext).pop();
+                  unawaited(_rejectAllSpeakerRequests());
+                },
+                height: listHeight,
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 

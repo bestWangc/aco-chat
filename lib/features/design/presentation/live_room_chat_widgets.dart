@@ -474,7 +474,7 @@ class _RoomMessage extends StatelessWidget {
           : palette.dark
           ? palette.accent
           : palette.primaryText,
-      fontSize: AcoTypography.bodySmall,
+      fontSize: 15,
       fontWeight: isSystemMessage ? FontWeight.w500 : FontWeight.w400,
       height: 1.2,
     );
@@ -494,7 +494,7 @@ class _RoomMessage extends StatelessWidget {
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 280),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: decoration,
         child: Text(
           isSystemMessage ? text : '$name:  $text',

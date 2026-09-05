@@ -278,7 +278,7 @@ class _RaisedHandRequests extends StatelessWidget {
     required this.onApprove,
     required this.onReject,
     required this.onRejectAll,
-    this.maxHeight = 248,
+    required this.height,
   });
 
   final AcoPalette palette;
@@ -287,12 +287,11 @@ class _RaisedHandRequests extends StatelessWidget {
   final ValueChanged<int> onApprove;
   final ValueChanged<int> onReject;
   final VoidCallback onRejectAll;
-  final double maxHeight;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     if (users.isEmpty) return const SizedBox.shrink();
-    final listMaxHeight = math.min(maxHeight, users.length * 57.0);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xF21F1F1F),
@@ -320,7 +319,7 @@ class _RaisedHandRequests extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: listMaxHeight),
+              constraints: BoxConstraints.tightFor(height: height),
               child: ListView.separated(
                 padding: EdgeInsets.zero,
                 shrinkWrap: true,
