@@ -47,7 +47,7 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
     if (roomMessages == null || roomMessages.isEmpty) {
       return Center(
         child: Text(
-          widget.hasLive ? '还没有弹幕，来说点什么吧。' : '请选择直播间后查看弹幕。',
+          widget.hasLive ? '还没有弹幕，来说点什么吧。' : '请选择会议后查看弹幕。',
           style: TextStyle(
             color: widget.palette.mutedText,
             fontSize: AcoTypography.bodySmall,

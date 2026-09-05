@@ -236,7 +236,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
           _liveKitReconnecting = false;
           if (mounted) setState(() {});
           if (!_leaving && !_liveKitReconnectStopped && mounted) {
-            _showNotice(context, '语音连接中断', '连接已停止自动重试，请重新进入直播间。');
+            _showNotice(context, '语音连接中断', '连接已停止自动重试，请重新进入会议。');
           }
         });
       if (defaultTargetPlatform == TargetPlatform.android) {
@@ -319,7 +319,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         );
       }
       if (mounted && showError) {
-        _showNotice(context, '语音连接失败', '无法连接直播语音，请稍后重试。');
+        _showNotice(context, '语音连接失败', '无法连接会议语音，请稍后重试。');
       }
     } finally {
       _liveKitConnecting = false;
@@ -361,7 +361,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       );
     }
     if (mounted && !_leaving) {
-      _showNotice(context, '语音连接中断', '网络不稳定，已停止自动重试，请重新进入直播间。');
+      _showNotice(context, '语音连接中断', '网络不稳定，已停止自动重试，请重新进入会议。');
     }
   }
 
@@ -735,10 +735,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       return;
     }
     try {
-      await AudioManager.instance.setSpeakerOutputPreferred(
-        true,
-        force: true,
-      );
+      await AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
       if (defaultTargetPlatform == TargetPlatform.android) {
         await _VoiceRoomPageState._liveAudioRouteChannel.invokeMethod<bool>(
           'forceSpeaker',

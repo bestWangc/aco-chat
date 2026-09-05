@@ -97,7 +97,7 @@ class _LivePageState extends State<LivePage> {
                 const SizedBox(height: 24),
                 const Center(
                   child: Text(
-                    '正在直播',
+                    '正在进行',
                     style: TextStyle(
                       color: _white,
                       fontSize: AcoTypography.titleLarge,
@@ -117,14 +117,14 @@ class _LivePageState extends State<LivePage> {
                     }
                     if (snapshot.hasError) {
                       return _LiveListState(
-                        message: '直播列表加载失败，请检查网络后重试。',
+                        message: '会议列表加载失败，请检查网络后重试。',
                         actionLabel: '重试',
                         onPressed: _retry,
                       );
                     }
                     final sessions = snapshot.data ?? const <LiveSession>[];
                     if (sessions.isEmpty) {
-                      return const _LiveListState(message: '暂无直播');
+                      return const _LiveListState(message: '暂无会议');
                     }
                     return Column(
                       children: [
@@ -204,7 +204,7 @@ class _SquareTabs extends StatelessWidget {
         child: const SizedBox(
           width: 34,
           child: Text(
-            '直播',
+            '会议',
             style: TextStyle(color: _muted, fontSize: AcoTypography.body),
           ),
         ),

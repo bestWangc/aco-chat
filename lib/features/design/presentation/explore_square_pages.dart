@@ -69,19 +69,19 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   Future<void> _openLiveRoom(LiveSession session) async {
     switch (session.status) {
       case 'scheduled':
-        showAcoAlertNotice(context, '预约直播', '该直播尚未开始。');
+        showAcoAlertNotice(context, '预约会议', '该会议尚未开始。');
         return;
       case 'ended':
         if (session.canExportCheckIns) {
           unawaited(_confirmCheckInExport(session));
         } else {
-          showAcoAlertNotice(context, '直播已结束', '该直播已经结束。');
+          showAcoAlertNotice(context, '会议已结束', '该会议已经结束。');
         }
         return;
       case 'live':
         break;
       default:
-        showAcoAlertNotice(context, '直播不可用', '该直播暂时无法进入。');
+        showAcoAlertNotice(context, '会议不可用', '该会议暂时无法进入。');
         return;
     }
     // Hosts can re-enter their own password-protected live without being
@@ -128,9 +128,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           await _refreshLives();
           if (!mounted) return;
           if (ended == LiveRoomExitReason.kicked) {
-            showAcoAlertNotice(context, '你被踢出直播间', '10分钟内不能再次进入该直播间。');
+            showAcoAlertNotice(context, '你已被移出会议', '10分钟内不能再次进入该会议。');
           } else if (ended == true) {
-            showAcoAlertNotice(context, '直播已结束', '主持人已结束直播。');
+            showAcoAlertNotice(context, '会议已结束', '主持人已结束会议。');
           }
         });
   }
@@ -145,12 +145,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       if (mounted) {
         showAcoAlertNotice(
           context,
-          error.isLiveKick ? '暂时无法进入直播间' : '无法进入直播间',
+          error.isLiveKick ? '暂时无法进入会议' : '无法进入会议',
           error.localizedMessage,
         );
       }
     } catch (_) {
-      if (mounted) showAcoAlertNotice(context, '无法进入直播间', '请检查网络后重试。');
+      if (mounted) showAcoAlertNotice(context, '无法进入会议', '请检查网络后重试。');
     }
     return false;
   }
@@ -163,12 +163,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       if (mounted) {
         showAcoAlertNotice(
           context,
-          error.isLiveKick ? '暂时无法进入直播间' : '无法进入直播间',
+          error.isLiveKick ? '暂时无法进入会议' : '无法进入会议',
           error.localizedMessage,
         );
       }
     } catch (_) {
-      if (mounted) showAcoAlertNotice(context, '无法进入直播间', '请检查网络后重试。');
+      if (mounted) showAcoAlertNotice(context, '无法进入会议', '请检查网络后重试。');
     }
     return false;
   }
@@ -179,7 +179,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => CupertinoAlertDialog(
-          title: const Text('输入直播密码'),
+          title: const Text('输入会议密码'),
           content: Padding(
             padding: const EdgeInsets.only(top: 12),
             child: CupertinoTextField(
@@ -192,7 +192,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   Navigator.of(dialogContext).pop(value.trim());
                 }
               },
-              placeholder: '请输入直播密码',
+              placeholder: '请输入会议密码',
             ),
           ),
           actions: [
@@ -219,7 +219,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         title: const Text('下载签到数据'),
         content: const Padding(
           padding: EdgeInsets.only(top: 8),
-          child: Text('直播已结束，是否要下载签到数据？'),
+          child: Text('会议已结束，是否要下载签到数据？'),
         ),
         actions: [
           CupertinoDialogAction(
@@ -264,7 +264,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                 name: filename,
               ),
             ],
-            subject: '直播签到记录 - ${session.title}',
+            subject: '会议签到记录 - ${session.title}',
           ),
         );
       }
@@ -315,14 +315,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         if (snapshot.hasError) {
           return _LiveListMessage(
             palette: palette,
-            message: '直播列表加载失败，请检查网络后重试。',
+            message: '会议列表加载失败，请检查网络后重试。',
             actionLabel: '重试',
             onPressed: _retryLoadingLives,
           );
         }
         final sessions = snapshot.data ?? const <LiveSession>[];
         if (sessions.isEmpty) {
-          return _LiveListMessage(palette: palette, message: '暂无直播，去创建一场吧。');
+          return _LiveListMessage(palette: palette, message: '暂无会议，去创建一场吧。');
         }
         return Column(
           children: [
@@ -454,7 +454,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           bottom: 0,
           child: Semantics(
             button: true,
-            label: '创建直播',
+            label: '创建会议',
             child: CupertinoButton(
               key: const Key('create-live-button'),
               padding: EdgeInsets.zero,
@@ -558,7 +558,7 @@ class _SquareTabs extends StatelessWidget {
         ),
         const SizedBox(width: 54),
         Text(
-          '直播',
+          '会议',
           style: TextStyle(
             color: showLive ? palette.primaryText : palette.mutedText,
             fontSize: AcoTypography.body,

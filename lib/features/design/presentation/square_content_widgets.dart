@@ -623,7 +623,7 @@ class _LiveCard extends StatelessWidget {
   String get _statusLabel {
     switch (session.status) {
       case 'live':
-        return '直播中';
+        return '进行中';
       case 'scheduled':
         return '预约中';
       case 'ended':
@@ -709,7 +709,7 @@ class _LiveCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                '我的直播',
+                                '我的会议',
                                 style: TextStyle(
                                   color: palette.accent,
                                   fontSize: AcoTypography.caption,
@@ -745,7 +745,7 @@ class _LiveCard extends StatelessWidget {
               AcoIconButton(
                 icon: CupertinoIcons.pencil,
                 palette: palette,
-                label: '修改直播',
+                label: '修改会议',
                 size: 20,
                 onPressed: onEdit!,
               ),

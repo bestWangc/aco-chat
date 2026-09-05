@@ -9,9 +9,9 @@ class _LiveStreamPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _DetailScaffold(
     palette: palette,
-    title: '正在直播',
+    title: '正在进行',
     right: AcoTopActions(palette: palette, onOpen: onOpen),
-    child: _LiveListMessage(palette: palette, message: '请前往广场查看实时直播列表。'),
+    child: _LiveListMessage(palette: palette, message: '请前往广场查看实时会议列表。'),
   );
 }
 
@@ -149,7 +149,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         }
       },
       onReconnectStopped: () {
-        if (mounted) _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入直播间。');
+        if (mounted) _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入会议。');
       },
     );
     WidgetsBinding.instance.addObserver(this);
@@ -200,11 +200,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       }
     } on AccountApiException catch (error) {
       if (requestSequence == _roomLoadSequence && !silent && mounted) {
-        _showNotice(context, '无法进入直播间', error.localizedMessage);
+        _showNotice(context, '无法进入会议', error.localizedMessage);
       }
     } catch (_) {
       if (requestSequence == _roomLoadSequence && !silent && mounted) {
-        _showNotice(context, '无法进入直播间', '请检查网络后重试。');
+        _showNotice(context, '无法进入会议', '请检查网络后重试。');
       }
     } finally {
       if (requestSequence == _roomLoadSequence && !silent && mounted) {
@@ -889,10 +889,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final shouldEnd = await showCupertinoDialog<bool>(
       context: context,
       builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('结束直播'),
+        title: const Text('结束会议'),
         content: const Padding(
           padding: EdgeInsets.only(top: 8),
-          child: Text('确定要结束这场直播吗？'),
+          child: Text('确定要结束这场会议吗？'),
         ),
         actions: [
           CupertinoDialogAction(
@@ -903,7 +903,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('结束直播'),
+            child: const Text('结束会议'),
           ),
         ],
       ),
@@ -1007,7 +1007,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             onPressed: () =>
                 Navigator.of(sheetContext).pop(_LiveMemberAction.kick),
             child: const Text(
-              '踢出直播间',
+              '移出会议',
               style: TextStyle(fontSize: AcoTypography.bodySmall),
             ),
           ),
@@ -1112,7 +1112,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         title: const Text('踢出成员'),
         content: Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Text('确定要将 ${member.nickname} 移出本场直播吗？'),
+          child: Text('确定要将 ${member.nickname} 移出本场会议吗？'),
         ),
         actions: [
           CupertinoDialogAction(
@@ -1308,7 +1308,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 Navigator.of(sheetContext).pop();
                 unawaited(_confirmEndLive());
               },
-              child: _hostActionLabel('结束直播'),
+              child: _hostActionLabel('结束会议'),
             ),
           ],
           cancelButton: CupertinoActionSheetAction(
@@ -1367,7 +1367,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       // The room-state broadcast changes this participant from host to
       // listener. Keep the page open so the former host can continue watching.
       await _loadRoom(silent: true);
-      if (mounted) _showNotice(context, '转让成功', '你已变为听众，仍可留在直播间。');
+      if (mounted) _showNotice(context, '转让成功', '你已变为听众，仍可留在会议。');
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '转让失败', error.message);
     } catch (_) {

@@ -206,7 +206,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     final bytes = await image.readAsBytes();
     if (!mounted) return;
     if (bytes.lengthInBytes > _maxCoverSizeBytes) {
-      _showNotice(context, '图片过大', '请选择小于 3 MB 的直播封面。');
+      _showNotice(context, '图片过大', '请选择小于 3 MB 的会议封面。');
       return;
     }
 
@@ -328,7 +328,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     final canConfirm = _canConfirm && !_submitting;
     return _DetailScaffold(
       palette: palette,
-      title: _isEditing ? '修改直播' : '创建直播',
+      title: _isEditing ? '修改会议' : '创建会议',
       child: Column(
         children: [
           Expanded(
@@ -356,7 +356,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                           onChanged: (_) => setState(() {}),
                           onSubmitted: (_) => _dismissKeyboard(),
                           onTapOutside: (_) => _dismissKeyboard(),
-                          placeholder: '输入直播主题',
+                          placeholder: '输入会议主题',
                           placeholderStyle: TextStyle(
                             color: palette.mutedText,
                             fontSize: AcoTypography.body,
@@ -475,7 +475,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                               const SizedBox(height: 4),
                               if (hasCover)
                                 Text(
-                                  '已选择直播封面',
+                                  '已选择会议封面',
                                   style: TextStyle(
                                     color: palette.mutedText,
                                     fontSize: AcoTypography.caption,

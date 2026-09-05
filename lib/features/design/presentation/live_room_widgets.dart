@@ -519,12 +519,19 @@ class _LiveRoomHeaderActions extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Image.memory(
-                _viewerCountIcon,
-                width: 18,
-                height: 18,
+              Image.asset(
+                'assets/icons/live_viewers_custom.png',
+                width: 14,
+                height: 12,
                 fit: BoxFit.contain,
                 filterQuality: FilterQuality.high,
+                errorBuilder: (_, _, _) => Image.memory(
+                  _viewerCountIcon,
+                  width: 14,
+                  height: 12,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                ),
               ),
               const SizedBox(width: 3),
               Text(
@@ -671,7 +678,6 @@ class _LiveRoomHostCard extends StatelessWidget {
         assetPath: _liveRoomHostAvatarAsset,
         imageUrl: host.avatarUrl,
       ),
-      if (active) const Positioned.fill(child: _SpeakingRing()),
       Positioned(
         right: -3,
         bottom: -3,
@@ -897,7 +903,6 @@ class _LiveRoomParticipantCard extends StatelessWidget {
                       child: avatar,
                     )
                   : avatar,
-              if (isSpeaking) const Positioned.fill(child: _SpeakingRing()),
               if (isSpeaking)
                 const Positioned(right: -2, bottom: -2, child: _SpeakingBadge())
               else if (participant.role != 'speaker' || participant.muted)
@@ -1207,23 +1212,6 @@ class _MemberRoleBadge extends StatelessWidget {
         fontSize: 11,
         height: 1.1,
         fontWeight: FontWeight.w500,
-      ),
-    ),
-  );
-}
-
-class _SpeakingRing extends StatelessWidget {
-  const _SpeakingRing();
-
-  @override
-  Widget build(BuildContext context) => IgnorePointer(
-    child: DecoratedBox(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF9BEF00), width: 3),
-        boxShadow: const [
-          BoxShadow(color: Color(0x669BEF00), blurRadius: 6, spreadRadius: 1),
-        ],
       ),
     ),
   );

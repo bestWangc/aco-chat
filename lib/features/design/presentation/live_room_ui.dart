@@ -214,7 +214,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                               const CupertinoActivityIndicator(radius: 14),
                               const SizedBox(height: 14),
                               Text(
-                                '正在准备重新进入直播间',
+                                '正在准备重新进入会议',
                                 style: TextStyle(
                                   color: _white,
                                   fontSize: AcoTypography.bodyEmphasis,

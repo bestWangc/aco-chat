@@ -316,7 +316,7 @@ void main() {
       ),
     );
 
-    expect(find.text('请选择直播间后查看弹幕。'), findsOneWidget);
+    expect(find.text('请选择会议后查看弹幕。'), findsOneWidget);
     expect(find.text('Mia:  大家晚上好！'), findsNothing);
   });
 
@@ -362,19 +362,19 @@ void main() {
       CupertinoApp(
         home: Builder(
           builder: (context) => CupertinoButton(
-            onPressed: () => showAcoAlertNotice(context, '预约直播', '该直播尚未开始。'),
-            child: const Text('预约直播'),
+            onPressed: () => showAcoAlertNotice(context, '预约会议', '该会议尚未开始。'),
+            child: const Text('预约会议'),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('预约直播'));
+    await tester.tap(find.text('预约会议'));
     await tester.pumpAndSettle();
 
     expect(find.byType(CupertinoAlertDialog), findsOneWidget);
     expect(find.byType(CupertinoActionSheet), findsNothing);
-    expect(find.text('该直播尚未开始。'), findsOneWidget);
+    expect(find.text('该会议尚未开始。'), findsOneWidget);
   });
 
   testWidgets('shows an ended notice when a non-host opens an ended live', (
@@ -411,9 +411,9 @@ void main() {
     await tester.tap(find.text('已结束的直播'));
     await tester.pumpAndSettle();
 
-    expect(find.text('直播已结束'), findsOneWidget);
-    expect(find.text('该直播已经结束。'), findsOneWidget);
-    expect(find.text('该直播尚未开始。'), findsNothing);
+    expect(find.text('会议已结束'), findsOneWidget);
+    expect(find.text('该会议已经结束。'), findsOneWidget);
+    expect(find.text('该会议尚未开始。'), findsNothing);
   });
 
   testWidgets('asks a host before downloading ended-live check-in data', (
@@ -452,9 +452,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('下载签到数据'), findsOneWidget);
-    expect(find.text('直播已结束，是否要下载签到数据？'), findsOneWidget);
+    expect(find.text('会议已结束，是否要下载签到数据？'), findsOneWidget);
     expect(find.text('确认'), findsOneWidget);
-    expect(find.text('该直播已经结束。'), findsNothing);
+    expect(find.text('该会议已经结束。'), findsNothing);
 
     await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
@@ -496,7 +496,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.bySemanticsLabel('修改直播'), findsOneWidget);
+    expect(find.bySemanticsLabel('修改会议'), findsOneWidget);
   });
 
   testWidgets('uses the muted microphone treatment in light mode', (
@@ -1118,7 +1118,7 @@ void main() {
     await tester.tap(find.byKey(const Key('create-live-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('创建直播'), findsOneWidget);
+    expect(find.text('创建会议'), findsOneWidget);
     expect(find.text('预约时间'), findsOneWidget);
     expect(find.text('上传封面'), findsOneWidget);
   });

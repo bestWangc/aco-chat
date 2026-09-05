@@ -760,7 +760,7 @@ void _showComposer(BuildContext context) => showCupertinoModalPopup<void>(
             context,
           ).push<void>(CupertinoPageRoute(builder: (_) => const LivePage()));
         },
-        child: const Text('开启直播'),
+        child: const Text('开启会议'),
       ),
     ],
     cancelButton: CupertinoActionSheetAction(

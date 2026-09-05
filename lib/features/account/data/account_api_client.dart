@@ -45,10 +45,10 @@ class AccountApiException implements Exception {
     if (normalized.contains('invalid username')) return '用户名格式不正确。';
     if (normalized == 'invalid live password' ||
         normalized.contains('live password')) {
-      return '直播间密码错误，请重新输入。';
+      return '会议密码错误，请重新输入。';
     }
     if (normalized.contains('live is not currently active')) {
-      return '该直播当前未开始或已结束。';
+      return '该会议当前未开始或已结束。';
     }
     if (normalized == 'avatar image is required') return '请选择头像图片。';
     if (normalized.contains('avatar image must be') &&
@@ -72,7 +72,7 @@ class AccountApiException implements Exception {
       return '资料更新失败，请稍后重试。';
     }
     if (isLiveKick) {
-      return '你已被踢出直播间，10分钟内不能再次进入。';
+      return '你已被移出会议，10分钟内不能再次进入。';
     }
     if (normalized.contains('unauthorized') || statusCode == 401) {
       return '登录状态已失效，请重新登录。';
