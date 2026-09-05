@@ -98,12 +98,31 @@ class AccountApiClient {
   static String? lastServerTiming;
 
   static Future<String> runConnectionDiagnostics() async {
-    final baseUri = Uri.parse(const AppConfig().apiBaseUrl);
+    final relayBaseUrl = AppConfig.relayApiBaseUrl;
+    final reports = <Future<String>>[
+      _runConnectionDiagnostic(
+        '主 API',
+        Uri.parse(AppConfig.cloudflareApiBaseUrl),
+      ),
+      relayBaseUrl.isEmpty
+          ? Future.value('[国内中转]\n未配置')
+          : _runConnectionDiagnostic('国内中转', Uri.parse(relayBaseUrl)),
+    ];
+    return (await Future.wait(reports)).join('\n\n');
+  }
+
+  static Future<String> _runConnectionDiagnostic(
+    String routeName,
+    Uri baseUri,
+  ) async {
     final host = baseUri.host;
     final port = baseUri.hasPort
         ? baseUri.port
         : (baseUri.scheme == 'http' ? 80 : 443);
-    final lines = <String>['目标：${baseUri.scheme}://$host:$port'];
+    final lines = <String>[
+      '[$routeName]',
+      '目标：${baseUri.scheme}://$host:$port',
+    ];
     try {
       final addresses = await InternetAddress.lookup(
         host,
@@ -118,8 +137,6 @@ class AccountApiClient {
 
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 8);
     final healthUri = baseUri.replace(path: '/healthz', query: '');
-    lastRequest = healthUri.toString();
-    lastError = null;
     try {
       final request = await client
           .getUrl(healthUri)
@@ -128,22 +145,16 @@ class AccountApiClient {
         const Duration(seconds: 10),
       );
       final body = await response.transform(utf8.decoder).join();
-      lastStatusCode = response.statusCode;
-      lastResponseBody = body;
       lines.add('TLS/TCP：成功');
       lines.add('HTTP：${response.statusCode}');
       if (body.isNotEmpty) lines.add('响应：$body');
     } on HandshakeException catch (error) {
-      lastError = error.toString();
       lines.add('TLS：失败（$error）');
     } on TimeoutException catch (error) {
-      lastError = error.toString();
       lines.add('连接：超时（$error）');
     } on SocketException catch (error) {
-      lastError = error.toString();
       lines.add('TCP：失败（$error）');
     } on Object catch (error) {
-      lastError = error.toString();
       lines.add('连接：失败（$error）');
     } finally {
       client.close(force: true);
