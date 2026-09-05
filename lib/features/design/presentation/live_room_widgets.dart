@@ -77,10 +77,9 @@ class _LiveRoomOverview extends StatelessWidget {
               ),
             if (isHost && (room.raisedHandCount ?? 0) > 0)
               Positioned(
-                top: 36,
+                top: 28,
                 right: 14,
                 child: _RaisedHandIndicator(
-                  palette: palette,
                   count: room.raisedHandCount!,
                   onPressed: onShowRaisedHandRequests,
                 ),
@@ -357,18 +356,11 @@ class _RaisedHandRequestsHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      Container(
+      Image.asset(
+        'assets/icons/live_hand_custom.png',
         width: 28,
         height: 28,
-        decoration: BoxDecoration(
-          color: palette.accent,
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          CupertinoIcons.hand_raised_fill,
-          color: _black,
-          size: 15,
-        ),
+        fit: BoxFit.contain,
       ),
       const SizedBox(width: 8),
       Expanded(
@@ -562,13 +554,8 @@ class _LiveRoomHeaderActions extends StatelessWidget {
 }
 
 class _RaisedHandIndicator extends StatelessWidget {
-  const _RaisedHandIndicator({
-    required this.palette,
-    required this.count,
-    required this.onPressed,
-  });
+  const _RaisedHandIndicator({required this.count, required this.onPressed});
 
-  final AcoPalette palette;
   final int count;
   final VoidCallback onPressed;
 
@@ -583,42 +570,26 @@ class _RaisedHandIndicator extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: const Color(0xFF181818),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(24),
         ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(3, 3, 7, 3),
+          padding: const EdgeInsets.fromLTRB(7, 4, 14, 4),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: palette.accent,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: ColorFiltered(
-                    colorFilter: const ColorFilter.mode(
-                      Color(0xFF111111),
-                      BlendMode.srcIn,
-                    ),
-                    child: Image.asset(
-                      'assets/icons/live_hand.png',
-                      width: 13,
-                      height: 13,
-                      fit: BoxFit.contain,
-                    ),
-                  ),
-                ),
+              Image.asset(
+                'assets/icons/live_hand_custom.png',
+                width: 32,
+                height: 32,
+                fit: BoxFit.contain,
               ),
-              const SizedBox(width: 5),
+              const SizedBox(width: 8),
               Text(
                 '$count',
-                style: TextStyle(
+                style: const TextStyle(
                   color: CupertinoColors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -644,7 +615,7 @@ class _LiveRoomHostCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(top: 26, bottom: 12),
+    padding: const EdgeInsets.only(top: 6, bottom: 12),
     child: Column(
       children: [
         _buildHostAvatar(),
@@ -653,7 +624,7 @@ class _LiveRoomHostCard extends StatelessWidget {
           host.nickname,
           style: TextStyle(
             color: palette.primaryText,
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -673,7 +644,7 @@ class _LiveRoomHostCard extends StatelessWidget {
     clipBehavior: Clip.none,
     children: [
       AcoAvatar(
-        size: 76,
+        size: 88,
         assetPath: _liveRoomHostAvatarAsset,
         imageUrl: host.avatarUrl,
       ),
@@ -681,13 +652,9 @@ class _LiveRoomHostCard extends StatelessWidget {
         right: -3,
         bottom: -3,
         child: Container(
-          width: 27,
-          height: 27,
-          decoration: BoxDecoration(
-            color: muted ? palette.surfaceRaised : palette.accent,
-            shape: BoxShape.circle,
-            border: Border.all(color: palette.background, width: 3),
-          ),
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
           child: _buildStatusBadge(),
         ),
       ),
@@ -697,12 +664,17 @@ class _LiveRoomHostCard extends StatelessWidget {
   Widget _buildStatusBadge() {
     if (active) return const Center(child: _SpeakingBadge());
     if (muted) {
-      return _MutedMicrophoneBadge(background: palette.surfaceRaised);
+      return Image.asset(
+        'assets/icons/live_mic_disabled.png',
+        width: 24,
+        height: 24,
+        fit: BoxFit.contain,
+      );
     }
     return Image.asset(
-      'assets/icons/live_mic.png',
-      width: 21,
-      height: 21,
+      'assets/icons/live_mic_enabled.png',
+      width: 28,
+      height: 28,
       fit: BoxFit.contain,
     );
   }
@@ -797,9 +769,21 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     final effectiveSpeakers = speakers
         .map(_withViewerMute)
         .toList(growable: false);
-    final effectiveListeners = listeners
-        .map(_withViewerMute)
-        .toList(growable: false);
+    final effectiveListeners = listeners.map(_withViewerMute).toList();
+    if (kDebugMode && effectiveListeners.length < 12) {
+      for (var index = effectiveListeners.length; index < 12; index++) {
+        effectiveListeners.add(
+          LiveParticipant(
+            userId: -1000 - index,
+            nickname: '听众${(index + 1).toString().padLeft(2, '0')}',
+            avatarUrl: '',
+            role: 'listener',
+            handRaised: false,
+            muted: true,
+          ),
+        );
+      }
+    }
     final activeSpeakers = effectiveSpeakers.where(
       (participant) =>
           !participant.muted &&
@@ -816,26 +800,25 @@ class _LiveRoomParticipantSection extends StatelessWidget {
           participant.muted,
     );
     // Keep people who are actively speaking visible even when the room has
-    // more speakers than the ten available audience-grid slots.
+    // more speakers than the twelve available audience-grid slots.
     final visibleSpeakers = [
       ...activeSpeakers,
       ...unmutedSpeakers,
       ...mutedSpeakers,
-    ].take(10).toList(growable: false);
+    ].take(12).toList(growable: false);
     final participants = [
       ...visibleSpeakers,
-      ...effectiveListeners.take(10 - visibleSpeakers.length),
+      ...effectiveListeners.take(12 - visibleSpeakers.length),
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final useFiveColumns = constraints.maxWidth >= 300;
-          final columns = useFiveColumns ? 5 : 4;
+          const columns = 4;
           const spacing = 8.0;
           final cardWidth =
               (constraints.maxWidth - spacing * (columns - 1)) / columns;
-          final avatarSize = useFiveColumns ? 48.0 : 54.0;
+          const avatarSize = 54.0;
           return Wrap(
             alignment: WrapAlignment.start,
             spacing: spacing,
@@ -908,9 +891,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
                 Positioned(
                   right: -2,
                   bottom: -2,
-                  child: _MutedMicrophoneBadge(
-                    background: palette.surfaceRaised,
-                  ),
+                  child: const _MutedMicrophoneBadge(),
                 )
               else
                 const Positioned(
@@ -928,18 +909,8 @@ class _LiveRoomParticipantCard extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(
               color: palette.primaryText,
-              fontSize: AcoTypography.bodySmall,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            participant.role == 'speaker'
-                ? (participant.muted ? '静音' : '发言中')
-                : '听众',
-            style: TextStyle(
-              color: palette.mutedText,
-              fontSize: AcoTypography.caption,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
             ),
           ),
         ],
@@ -1122,24 +1093,14 @@ class _LiveRoomNetworkNotice extends StatelessWidget {
 }
 
 class _MutedMicrophoneBadge extends StatelessWidget {
-  const _MutedMicrophoneBadge({required this.background});
-
-  final Color background;
+  const _MutedMicrophoneBadge();
 
   @override
-  Widget build(BuildContext context) => Container(
-    width: 21,
-    height: 21,
-    decoration: BoxDecoration(color: background, shape: BoxShape.circle),
-    child: ColorFiltered(
-      colorFilter: const ColorFilter.mode(Color(0xFFFF3347), BlendMode.srcIn),
-      child: Image.asset(
-        'assets/icons/live_muted_red.png',
-        width: 17,
-        height: 21,
-        fit: BoxFit.contain,
-      ),
-    ),
+  Widget build(BuildContext context) => Image.asset(
+    'assets/icons/live_mic_disabled.png',
+    width: 20,
+    height: 20,
+    fit: BoxFit.contain,
   );
 }
 
@@ -1181,9 +1142,9 @@ class _LiveMicrophoneBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Image.asset(
-    'assets/icons/live_speaking.png',
-    width: 21,
-    height: 21,
+    'assets/icons/live_mic_enabled.png',
+    width: 20,
+    height: 20,
     fit: BoxFit.contain,
   );
 }
@@ -1519,17 +1480,17 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     final showMuted = member.role == 'listener' || (isSpeaker && member.muted);
     if (showMuted) {
       return Image.asset(
-        'assets/icons/live_muted_red.png',
+        'assets/icons/live_mic_disabled.png',
         width: 18,
-        height: 23,
+        height: 18,
         fit: BoxFit.contain,
       );
     }
     if (isSpeaker) {
       return Image.asset(
-        'assets/icons/live_mic_open.png',
+        'assets/icons/live_mic_enabled.png',
         width: 18,
-        height: 23,
+        height: 18,
         fit: BoxFit.contain,
       );
     }

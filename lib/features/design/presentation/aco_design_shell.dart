@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
@@ -40,6 +41,7 @@ import 'package:livekit_client/livekit_client.dart' hide ConnectionState;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:video_player/video_player.dart';

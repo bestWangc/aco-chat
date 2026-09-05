@@ -29,6 +29,11 @@ class _ChatPageState extends State<_ChatPage> {
   var _morePanelVisible = false;
   var _voiceInputActive = false;
   var _voiceRecording = false;
+  final _voiceRecorder = AudioRecorder();
+  Timer? _voiceRecordingTimer;
+  var _voiceFinishing = false;
+  String? _voiceRecordingPath;
+  DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
   final List<Message> _historyMessages = <Message>[];
   final List<Message> _pendingSentMessages = <Message>[];
@@ -348,6 +353,8 @@ class _ChatPageState extends State<_ChatPage> {
     _chatScrollController.removeListener(_onChatScroll);
     _messageController.dispose();
     _chatScrollController.dispose();
+    _voiceRecordingTimer?.cancel();
+    _voiceRecorder.dispose();
     super.dispose();
   }
 
@@ -463,6 +470,20 @@ class _ChatPageState extends State<_ChatPage> {
       await _pickChatImage(ImageSource.camera);
       return;
     }
+    if (label == '语音通话') {
+      setState(() => _morePanelVisible = false);
+      if (!mounted) return;
+      await Navigator.of(context).push<void>(
+        _AcoPageRoute<void>(
+          builder: (_) => _VoiceCallPage(
+            name: _peerName,
+            avatarUrl: _resolvedPeerAvatar ?? widget.ownAvatarUrl,
+            incoming: false,
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _morePanelVisible = false);
     _showNotice(context, label, '$label功能暂未开放。');
   }
@@ -500,9 +521,91 @@ class _ChatPageState extends State<_ChatPage> {
     });
   }
 
-  void _setVoiceRecording(bool isRecording) {
-    if (_voiceRecording == isRecording) return;
-    setState(() => _voiceRecording = isRecording);
+  Future<void> _setVoiceRecording(_VoiceRecordingAction action) async {
+    switch (action) {
+      case _VoiceRecordingAction.start:
+        if (!await _voiceRecorder.hasPermission() || !mounted) return;
+        final directory = await getTemporaryDirectory();
+        final path =
+            '${directory.path}/aco_voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
+        await _voiceRecorder.start(
+          const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
+          path: path,
+        );
+        _voiceRecordingPath = path;
+        _voiceRecordingStartedAt = DateTime.now();
+        _voiceRecordingTimer?.cancel();
+        _voiceRecordingTimer = Timer(
+          const Duration(seconds: 60),
+          () => unawaited(_finishVoiceRecording(send: true)),
+        );
+        if (mounted) setState(() => _voiceRecording = true);
+      case _VoiceRecordingAction.send:
+        await _finishVoiceRecording(send: true);
+      case _VoiceRecordingAction.cancel:
+        await _finishVoiceRecording(send: false);
+    }
+  }
+
+  Future<void> _finishVoiceRecording({required bool send}) async {
+    if (_voiceFinishing || (!_voiceRecording && _voiceRecordingPath == null)) {
+      return;
+    }
+    _voiceFinishing = true;
+    try {
+      final path = await _voiceRecorder.stop() ?? _voiceRecordingPath;
+      _voiceRecordingTimer?.cancel();
+      _voiceRecordingTimer = null;
+      final startedAt = _voiceRecordingStartedAt;
+      _voiceRecordingPath = null;
+      _voiceRecordingStartedAt = null;
+      if (mounted) setState(() => _voiceRecording = false);
+      if (path == null) return;
+      final file = File(path);
+      if (!send || startedAt == null) {
+        if (await file.exists()) await file.delete();
+        return;
+      }
+      final userID = widget.peerUserID;
+      if (userID == null ||
+          userID.isEmpty ||
+          !OpenIMChatRepository.conversationReady.value) {
+        if (await file.exists()) await file.delete();
+        if (mounted) _showNotice(context, '发送失败', '聊天连接未就绪。');
+        return;
+      }
+      try {
+        final duration = DateTime.now()
+            .difference(startedAt)
+            .inSeconds
+            .clamp(1, 60);
+        final message = await OpenIM.iMManager.messageManager
+            .createSoundMessageFromFullPath(
+              soundPath: path,
+              duration: duration,
+            );
+        final sent = await OpenIM.iMManager.messageManager.sendMessage(
+          message: message,
+          userID: userID,
+          offlinePushInfo: OfflinePushInfo(title: '新语音消息', desc: '[语音]'),
+        );
+        if (!mounted) return;
+        _historyMessages.add(sent);
+        _pendingSentMessages.add(sent);
+        setState(
+          () => _chatHistory.add(_ChatHistoryMessage('[语音消息]', mine: true)),
+        );
+        _scrollToBottom(force: true, animate: false);
+        OpenIMChatRepository.conversationRevision.value++;
+      } catch (error) {
+        if (mounted) _showNotice(context, '语音发送失败', '请稍后重试。');
+        debugPrint('[OpenIM] voice send failed: $error');
+      } finally {
+        if (await file.exists()) await file.delete();
+      }
+    } finally {
+      _voiceFinishing = false;
+    }
   }
 
   @override
@@ -773,36 +876,395 @@ class _VoiceRecordingOverlay extends StatelessWidget {
   );
 }
 
-class _VoiceWaveform extends StatelessWidget {
+class _VoiceCallPage extends StatefulWidget {
+  const _VoiceCallPage({
+    required this.name,
+    this.avatarUrl,
+    this.incoming = false,
+  });
+
+  final String name;
+  final String? avatarUrl;
+  final bool incoming;
+
+  @override
+  State<_VoiceCallPage> createState() => _VoiceCallPageState();
+}
+
+class _VoiceCallPageState extends State<_VoiceCallPage> {
+  var _microphoneEnabled = true;
+  var _speakerEnabled = false;
+  var _connected = false;
+  Duration _callDuration = Duration.zero;
+  Timer? _callTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.incoming) return;
+    // Until call signaling is wired up, present the connected state after a
+    // short invite period so the dial screen can be previewed end to end.
+    _callTimer = Timer(const Duration(seconds: 2), _connectCall);
+  }
+
+  void _connectCall() {
+    if (!mounted) return;
+    setState(() => _connected = true);
+    _callTimer?.cancel();
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _callDuration += const Duration(seconds: 1));
+    });
+  }
+
+  void _acceptCall() => _connectCall();
+
+  @override
+  void dispose() {
+    _callTimer?.cancel();
+    super.dispose();
+  }
+
+  String get _statusLabel {
+    if (_connected) {
+      final minutes = _callDuration.inMinutes.toString().padLeft(2, '0');
+      final seconds = (_callDuration.inSeconds % 60).toString().padLeft(2, '0');
+      return '$minutes:$seconds';
+    }
+    if (widget.incoming) return '邀请你语音通话...';
+    return '等待对方接受邀请.';
+  }
+
+  List<Color> get _backgroundColors {
+    if (widget.incoming) {
+      return const [Color(0xFF151515), Color(0xFF171B24)];
+    }
+    return const [Color(0xFF263D1B), Color(0xFF0C100C)];
+  }
+
+  double get _overlayOpacity => widget.incoming ? .42 : .2;
+
+  double get _statusFontSize => _connected ? 20 : 18;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: const Color(0xFF1A2417),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: _backgroundColors,
+            ),
+          ),
+        ),
+        if (widget.avatarUrl?.isNotEmpty == true)
+          ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 34, sigmaY: 34),
+            child: Opacity(
+              opacity: .18,
+              child: Image.network(
+                widget.avatarUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF000000).withValues(alpha: _overlayOpacity),
+          ),
+        ),
+        SafeArea(
+          child: Column(
+            children: [
+              SizedBox(
+                height: 68,
+                child: widget.incoming
+                    ? Align(
+                        alignment: Alignment.topLeft,
+                        child: CupertinoButton(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                          onPressed: Navigator.of(context).pop,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4A4A4D),
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: 18,
+                                vertical: 10,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    CupertinoIcons.bell_slash_fill,
+                                    color: _white,
+                                    size: 18,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Text(
+                                    '忽略',
+                                    style: TextStyle(
+                                      color: _white,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          CupertinoButton(
+                            padding: const EdgeInsets.all(20),
+                            onPressed: Navigator.of(context).pop,
+                            child: const Icon(
+                              CupertinoIcons.chevron_down,
+                              color: _white,
+                              size: 28,
+                            ),
+                          ),
+                          if (_connected)
+                            CupertinoButton(
+                              padding: const EdgeInsets.all(20),
+                              onPressed: () {},
+                              child: const Icon(
+                                CupertinoIcons.person_add,
+                                color: _white,
+                                size: 25,
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 68),
+                        ],
+                      ),
+              ),
+              const Spacer(flex: 2),
+              _VoiceCallAvatar(name: widget.name, avatarUrl: widget.avatarUrl),
+              const SizedBox(height: 22),
+              Text(
+                widget.name,
+                style: const TextStyle(
+                  color: _white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _statusLabel,
+                style: TextStyle(
+                  color: const Color(0xFFB8B8B8),
+                  fontSize: _statusFontSize,
+                ),
+              ),
+              const Spacer(flex: 3),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (widget.incoming && !_connected) ...[
+                    _VoiceCallControl(
+                      icon: CupertinoIcons.phone_down_fill,
+                      label: '拒绝',
+                      active: false,
+                      destructive: true,
+                      onPressed: Navigator.of(context).pop,
+                    ),
+                    _VoiceCallControl(
+                      icon: CupertinoIcons.phone_fill,
+                      label: '接听',
+                      active: true,
+                      onPressed: _acceptCall,
+                    ),
+                  ] else ...[
+                    _VoiceCallControl(
+                      icon: _microphoneEnabled
+                          ? CupertinoIcons.mic_fill
+                          : CupertinoIcons.mic_slash_fill,
+                      label: _microphoneEnabled ? '麦克风已开' : '麦克风已关',
+                      active: _microphoneEnabled,
+                      onPressed: () => setState(
+                        () => _microphoneEnabled = !_microphoneEnabled,
+                      ),
+                    ),
+                    _VoiceCallControl(
+                      icon: CupertinoIcons.phone_down_fill,
+                      label: _connected ? '挂断' : '取消',
+                      active: false,
+                      destructive: true,
+                      onPressed: Navigator.of(context).pop,
+                    ),
+                    _VoiceCallControl(
+                      icon: _speakerEnabled
+                          ? CupertinoIcons.speaker_3_fill
+                          : CupertinoIcons.speaker_slash_fill,
+                      label: _speakerEnabled ? '扬声器已开' : '扬声器已关',
+                      active: _speakerEnabled,
+                      onPressed: () =>
+                          setState(() => _speakerEnabled = !_speakerEnabled),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 28),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _VoiceCallAvatar extends StatelessWidget {
+  const _VoiceCallAvatar({required this.name, this.avatarUrl});
+
+  final String name;
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 104,
+    height: 104,
+    decoration: BoxDecoration(
+      color: const Color(0xFF78B844),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: avatarUrl?.isNotEmpty == true
+        ? Image.network(avatarUrl!, fit: BoxFit.cover)
+        : Center(
+            child: Text(
+              name.characters.firstOrNull ?? '?',
+              style: const TextStyle(color: _white, fontSize: 64),
+            ),
+          ),
+  );
+}
+
+class _VoiceCallControl extends StatelessWidget {
+  const _VoiceCallControl({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final bool destructive;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: Container(
+          width: 86,
+          height: 86,
+          decoration: BoxDecoration(
+            color: destructive
+                ? const Color(0xFFE84D50)
+                : active
+                ? const Color(0xFFF4F4F4)
+                : const Color(0xFF111111).withValues(alpha: .8),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: destructive || !active ? _white : _black,
+            size: 34,
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Text(label, style: const TextStyle(color: _white, fontSize: 16)),
+    ],
+  );
+}
+
+class _VoiceWaveform extends StatefulWidget {
   const _VoiceWaveform();
 
   @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      for (final height in const <double>[8, 11, 8, 13, 9, 12, 8, 11, 9])
-        Container(
-          width: 3,
-          height: height,
-          margin: const EdgeInsets.symmetric(horizontal: 1.5),
-          decoration: BoxDecoration(
-            color: const Color(0xFF387B2B),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-      Container(width: 3, height: 22, color: const Color(0xFF387B2B)),
-      for (final height in const <double>[9, 11, 8, 12, 9, 13, 8, 11, 8])
-        Container(
-          width: 3,
-          height: height,
-          margin: const EdgeInsets.symmetric(horizontal: 1.5),
-          decoration: BoxDecoration(
-            color: const Color(0xFF387B2B),
-            borderRadius: BorderRadius.circular(2),
-          ),
-        ),
-    ],
+  State<_VoiceWaveform> createState() => _VoiceWaveformState();
+}
+
+class _VoiceWaveformState extends State<_VoiceWaveform>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 720),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: _controller,
+    builder: (context, child) {
+      const baseHeights = <double>[
+        8,
+        11,
+        8,
+        13,
+        9,
+        12,
+        8,
+        11,
+        9,
+        22,
+        9,
+        11,
+        8,
+        12,
+        9,
+        13,
+        8,
+        11,
+        8,
+      ];
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          for (var index = 0; index < baseHeights.length; index++)
+            Container(
+              width: 3,
+              height:
+                  baseHeights[index] *
+                  (.72 +
+                      .28 *
+                          math
+                              .sin(
+                                _controller.value * math.pi * 2 + index * .75,
+                              )
+                              .abs()),
+              margin: const EdgeInsets.symmetric(horizontal: 1.5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF387B2B),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+        ],
+      );
+    },
   );
 }
 

@@ -351,7 +351,9 @@ class _RoomBottomBar extends StatelessWidget {
               if (showHandControl) ...[
                 const SizedBox(width: 8),
                 _RoomControl(
-                  iconAsset: 'assets/icons/live_hand.png',
+                  iconImage: const AssetImage(
+                    'assets/icons/live_hand_custom.png',
+                  ),
                   label: handRaised ? '已举手' : '举手',
                   background: palette.surfaceRaised,
                   foreground: palette.primaryText,
@@ -469,11 +471,7 @@ class _RoomMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSystemMessage = name.isEmpty;
     final messageStyle = TextStyle(
-      color: isSystemMessage
-          ? palette.accent
-          : palette.dark
-          ? palette.accent
-          : palette.primaryText,
+      color: isSystemMessage ? palette.accent : _white,
       fontSize: 15,
       fontWeight: isSystemMessage ? FontWeight.w500 : FontWeight.w400,
       height: 1.2,
@@ -488,7 +486,7 @@ class _RoomMessage extends StatelessWidget {
             color: palette.dark
                 ? const Color(0xFF3D3D3D)
                 : palette.surfaceRaised,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(28),
           );
     return Align(
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
@@ -496,11 +494,20 @@ class _RoomMessage extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 280),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: decoration,
-        child: Text(
-          isSystemMessage ? text : '$name:  $text',
-          textAlign: isSystemMessage ? TextAlign.center : TextAlign.start,
-          style: messageStyle,
-        ),
+        child: isSystemMessage
+            ? Text(text, textAlign: TextAlign.center, style: messageStyle)
+            : RichText(
+                text: TextSpan(
+                  style: messageStyle,
+                  children: [
+                    TextSpan(
+                      text: '$name:  ',
+                      style: TextStyle(color: palette.accent),
+                    ),
+                    TextSpan(text: text),
+                  ],
+                ),
+              ),
       ),
     );
   }

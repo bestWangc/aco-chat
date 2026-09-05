@@ -15,7 +15,7 @@ class _ChatComposer extends StatelessWidget {
   final TextEditingController controller;
   final bool voiceInputActive;
   final VoidCallback onVoicePressed;
-  final ValueChanged<bool> onRecordingChanged;
+  final ValueChanged<_VoiceRecordingAction> onRecordingChanged;
   final VoidCallback onEmojiPressed;
   final VoidCallback onMorePressed;
   final VoidCallback onInputTapped;
@@ -92,7 +92,7 @@ class _ChatComposer extends StatelessWidget {
 class _HoldToTalkButton extends StatefulWidget {
   const _HoldToTalkButton({required this.onRecordingChanged});
 
-  final ValueChanged<bool> onRecordingChanged;
+  final ValueChanged<_VoiceRecordingAction> onRecordingChanged;
 
   @override
   State<_HoldToTalkButton> createState() => _HoldToTalkButtonState();
@@ -100,10 +100,35 @@ class _HoldToTalkButton extends StatefulWidget {
 
 class _HoldToTalkButtonState extends State<_HoldToTalkButton> {
   var _isRecording = false;
+  var _cancelled = false;
 
-  void _setRecording(bool value) {
-    setState(() => _isRecording = value);
-    widget.onRecordingChanged(value);
+  Color get _backgroundColor {
+    if (_isRecording || _cancelled) return const Color(0xFF303030);
+    return const Color(0xFF2C2C2C);
+  }
+
+  String get _label {
+    if (_cancelled) return '松开取消';
+    if (_isRecording) return '松开结束';
+    return '按住说话';
+  }
+
+  void _startRecording() {
+    if (_isRecording) return;
+    setState(() {
+      _isRecording = true;
+      _cancelled = false;
+    });
+    widget.onRecordingChanged(_VoiceRecordingAction.start);
+  }
+
+  void _finishRecording() {
+    if (!_isRecording) return;
+    final cancelled = _cancelled;
+    setState(() => _isRecording = false);
+    widget.onRecordingChanged(
+      cancelled ? _VoiceRecordingAction.cancel : _VoiceRecordingAction.send,
+    );
   }
 
   @override
@@ -112,24 +137,32 @@ class _HoldToTalkButtonState extends State<_HoldToTalkButton> {
     label: _isRecording ? '松开结束录音' : '按住说话',
     child: GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onLongPressStart: (_) => _setRecording(true),
-      onLongPressEnd: (_) => _setRecording(false),
-      onLongPressCancel: () => _setRecording(false),
+      onLongPressStart: (_) => _startRecording(),
+      onLongPressMoveUpdate: (details) {
+        if (_isRecording && details.localOffsetFromOrigin.dy < -60) {
+          if (!_cancelled) setState(() => _cancelled = true);
+        } else if (_cancelled && details.localOffsetFromOrigin.dy > -30) {
+          setState(() => _cancelled = false);
+        }
+      },
+      onLongPressEnd: (_) => _finishRecording(),
+      onLongPressCancel: _finishRecording,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        height: 32,
+        height: 40,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: _isRecording
-              ? const Color(0xFF303030)
-              : const Color(0xFF191919),
-          borderRadius: BorderRadius.circular(5),
+          color: _backgroundColor,
+          border: Border.all(color: const Color(0xFF464646)),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
-          _isRecording ? '松开结束' : '按住说话',
-          style: const TextStyle(color: Color(0xFFD6D6D6), fontSize: 14),
+          _label,
+          style: const TextStyle(color: Color(0xFF888888), fontSize: 16),
         ),
       ),
     ),
   );
 }
+
+enum _VoiceRecordingAction { start, send, cancel }
