@@ -485,6 +485,13 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   late Future<List<ConversationInfo>> _conversations;
   Timer? _reloadTimer;
 
+  String _latestMessagePreview(Message? message) {
+    final text = message?.textElem?.content;
+    if (text?.isNotEmpty == true) return text!;
+    if (message?.pictureElem != null) return '[图片]';
+    return '';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -650,7 +657,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
               _SocialMessageTile(
                 palette: widget.palette,
                 name: conversation.showName ?? conversation.userID ?? '会话',
-                message: conversation.latestMsg?.textElem?.content ?? '',
+                message: _latestMessagePreview(conversation.latestMsg),
                 avatarUrl: conversation.faceURL,
                 unreadCount: conversation.unreadCount,
                 timestamp: conversation.latestMsgSendTime,

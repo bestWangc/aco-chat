@@ -58,12 +58,20 @@ class _ChatPageState extends State<_ChatPage> {
 
   void _onMessage() {
     final message = OpenIMChatRepository.messageNotifier.value;
-    final text = message?.textElem?.content;
-    if (!mounted || message == null || text == null || text.isEmpty) return;
+    if (!mounted || message == null) return;
     if (message.sendID != widget.peerUserID) return;
-    if (_chatHistory.any((item) => item.text == text && !item.mine)) return;
+    if (!_ChatHistoryMessage.isDisplayable(message)) return;
+    final clientMsgID = message.clientMsgID;
+    if (clientMsgID?.isNotEmpty == true &&
+        _historyMessages.any((item) => item.clientMsgID == clientMsgID)) {
+      return;
+    }
     _historyMessages.add(message);
-    setState(() => _chatHistory.add(_ChatHistoryMessage(text, mine: false)));
+    setState(
+      () => _chatHistory.add(
+        _ChatHistoryMessage.fromOpenIM(message, mine: false),
+      ),
+    );
     _scrollToBottom();
   }
 
@@ -169,10 +177,10 @@ class _ChatPageState extends State<_ChatPage> {
           ..clear()
           ..addAll(
             _historyMessages
-                .where((m) => m.textElem?.content?.isNotEmpty == true)
+                .where(_ChatHistoryMessage.isDisplayable)
                 .map(
-                  (m) => _ChatHistoryMessage(
-                    m.textElem!.content!,
+                  (m) => _ChatHistoryMessage.fromOpenIM(
+                    m,
                     mine: m.sendID != userID,
                   ),
                 ),
@@ -215,10 +223,10 @@ class _ChatPageState extends State<_ChatPage> {
           ..clear()
           ..addAll(
             _historyMessages
-                .where((m) => m.textElem?.content?.isNotEmpty == true)
+                .where(_ChatHistoryMessage.isDisplayable)
                 .map(
-                  (m) => _ChatHistoryMessage(
-                    m.textElem!.content!,
+                  (m) => _ChatHistoryMessage.fromOpenIM(
+                    m,
                     mine: m.sendID != userID,
                   ),
                 ),
@@ -360,13 +368,39 @@ class _ChatPageState extends State<_ChatPage> {
       );
       if (photo == null) return;
       final imageBytes = await photo.readAsBytes();
+      final userID = widget.peerUserID;
+      if (userID == null || userID.isEmpty) return;
+      if (!OpenIMChatRepository.conversationReady.value) {
+        if (!mounted) return;
+        _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
+        return;
+      }
+      final message = await OpenIM.iMManager.messageManager
+          .createImageMessageFromFullPath(imagePath: photo.path);
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: userID,
+        offlinePushInfo: OfflinePushInfo(title: '新消息', desc: '[图片]'),
+      );
       if (!mounted) return;
+      _historyMessages.add(sent);
+      _pendingSentMessages.add(sent);
       setState(() {
-        _chatHistory.add(_ChatHistoryMessage.image(imageBytes, mine: true));
+        _chatHistory.add(
+          _ChatHistoryMessage.image(
+            mine: true,
+            imageBytes: imageBytes,
+            imagePath: sent.pictureElem?.sourcePath ?? photo.path,
+            imageUrl: _ChatHistoryMessage.imageUrlOf(sent.pictureElem),
+          ),
+        );
       });
-    } catch (_) {
+      _scrollToBottom(force: true, animate: false);
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
       if (!mounted) return;
-      _showNotice(context, '照片选择失败', '请检查相册访问权限后重试。');
+      _showNotice(context, '图片发送失败', '请稍后重试。');
+      debugPrint('[OpenIM] image send failed: $error');
     }
   }
 
@@ -511,6 +545,8 @@ class _ChatPageState extends State<_ChatPage> {
                               palette: widget.palette,
                               text: message.text,
                               imageBytes: message.imageBytes,
+                              imagePath: message.imagePath,
+                              imageUrl: message.imageUrl,
                               mine: message.mine,
                               avatarUrl: _resolvedPeerAvatar,
                               ownAvatarUrl: widget.ownAvatarUrl,
@@ -834,6 +870,8 @@ class _ChatMessage extends StatelessWidget {
     required this.palette,
     required this.text,
     required this.imageBytes,
+    required this.imagePath,
+    required this.imageUrl,
     required this.mine,
     this.avatarUrl,
     this.ownAvatarUrl,
@@ -842,6 +880,8 @@ class _ChatMessage extends StatelessWidget {
   final AcoPalette palette;
   final String text;
   final Uint8List? imageBytes;
+  final String? imagePath;
+  final String? imageUrl;
   final bool mine;
   final String? avatarUrl;
   final String? ownAvatarUrl;
@@ -863,18 +903,7 @@ class _ChatMessage extends StatelessWidget {
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: imageBytes == null
-                    ? _Bubble(palette: palette, text: text, mine: mine)
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: Image.memory(
-                          imageBytes!,
-                          width: 180,
-                          height: 180,
-                          fit: BoxFit.cover,
-                          filterQuality: FilterQuality.medium,
-                        ),
-                      ),
+                child: _messageBody(),
               ),
             ),
             if (mine) ...[
@@ -885,6 +914,66 @@ class _ChatMessage extends StatelessWidget {
         ),
       );
     },
+  );
+
+  Widget _messageBody() {
+    if (imageBytes != null) {
+      return _image(
+        Image.memory(
+          imageBytes!,
+          width: 180,
+          height: 180,
+          fit: BoxFit.cover,
+          filterQuality: FilterQuality.medium,
+        ),
+      );
+    }
+
+    final localImage = imagePath == null ? null : File(imagePath!);
+    if (localImage?.existsSync() ?? false) {
+      return _image(
+        Image.file(
+          localImage!,
+          width: 180,
+          height: 180,
+          fit: BoxFit.cover,
+          errorBuilder: (_, error, stackTrace) => const _ImageUnavailable(),
+        ),
+      );
+    }
+
+    if (imageUrl != null) {
+      return _image(
+        Image.network(
+          imageUrl!,
+          width: 180,
+          height: 180,
+          fit: BoxFit.cover,
+          errorBuilder: (_, error, stackTrace) => const _ImageUnavailable(),
+        ),
+      );
+    }
+
+    return _Bubble(palette: palette, text: text, mine: mine);
+  }
+
+  Widget _image(Image image) =>
+      ClipRRect(borderRadius: BorderRadius.circular(5), child: image);
+}
+
+class _ImageUnavailable extends StatelessWidget {
+  const _ImageUnavailable();
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(
+    color: Color(0xFF2C2C2C),
+    child: SizedBox(
+      width: 180,
+      height: 180,
+      child: Center(
+        child: Icon(CupertinoIcons.photo, color: Color(0xFFAAAAAA)),
+      ),
+    ),
   );
 }
 

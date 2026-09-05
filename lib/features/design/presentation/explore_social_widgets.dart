@@ -28,14 +28,45 @@ class _SocialMockMessage {
 
 class _ChatHistoryMessage {
   const _ChatHistoryMessage(this.text, {required this.mine})
-    : imageBytes = null;
+    : imageBytes = null,
+      imagePath = null,
+      imageUrl = null;
 
-  const _ChatHistoryMessage.image(this.imageBytes, {required this.mine})
-    : text = '';
+  const _ChatHistoryMessage.image({
+    required this.mine,
+    this.imageBytes,
+    this.imagePath,
+    this.imageUrl,
+  }) : text = '';
+
+  static bool isDisplayable(Message message) =>
+      message.textElem?.content?.isNotEmpty == true ||
+      message.pictureElem != null;
+
+  static String? imageUrlOf(PictureElem? picture) =>
+      picture?.snapshotPicture?.url ??
+      picture?.bigPicture?.url ??
+      picture?.sourcePicture?.url;
+
+  factory _ChatHistoryMessage.fromOpenIM(
+    Message message, {
+    required bool mine,
+  }) {
+    final text = message.textElem?.content;
+    if (text?.isNotEmpty == true) return _ChatHistoryMessage(text!, mine: mine);
+    final picture = message.pictureElem;
+    return _ChatHistoryMessage.image(
+      mine: mine,
+      imagePath: picture?.sourcePath,
+      imageUrl: imageUrlOf(picture),
+    );
+  }
 
   final String text;
   final bool mine;
   final Uint8List? imageBytes;
+  final String? imagePath;
+  final String? imageUrl;
 }
 
 class _SocialMessageTile extends StatelessWidget {
