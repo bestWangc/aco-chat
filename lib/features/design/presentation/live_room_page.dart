@@ -63,6 +63,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   );
   static Future<void>? _liveKitInitialization;
 
+  bool get _supportsBackgroundAudio =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
   bool _muted = false;
   bool _handRaised = false;
   bool _emojiPickerVisible = false;

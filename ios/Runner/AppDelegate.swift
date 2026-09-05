@@ -3,6 +3,7 @@ import flutter_webrtc
 import LocalAuthentication
 import UIKit
 import AVFoundation
+import MediaPlayer
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -16,6 +17,29 @@ import AVFoundation
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     prepareWebRTCAudioDevice()
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoLiveAudioBackground") {
+      let channel = FlutterMethodChannel(
+        name: "aco/live-audio-background",
+        binaryMessenger: registrar.messenger()
+      )
+      channel.setMethodCallHandler { call, result in
+        switch call.method {
+        case "start":
+          let args = call.arguments as? [String: Any]
+          var info = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+          info[MPMediaItemPropertyTitle] = args?["title"] as? String ?? "会议"
+          info[MPMediaItemPropertyArtist] = "Aco Chat"
+          info[MPNowPlayingInfoPropertyPlaybackRate] = 1.0
+          MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+          result(nil)
+        case "stop":
+          MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+          result(nil)
+        default:
+          result(FlutterMethodNotImplemented)
+        }
+      }
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoLiveAudioRoute") {
       let channel = FlutterMethodChannel(
         name: "aco/live-audio-route",

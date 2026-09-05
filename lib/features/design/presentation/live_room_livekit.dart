@@ -239,9 +239,11 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
             _showNotice(context, '语音连接中断', '连接已停止自动重试，请重新进入会议。');
           }
         });
-      if (defaultTargetPlatform == TargetPlatform.android) {
+      if (_supportsBackgroundAudio) {
         await _VoiceRoomPageState._liveAudioBackgroundChannel
-            .invokeMethod<void>('start');
+            .invokeMethod<void>('start', <String, Object?>{
+              'title': live.title,
+            });
       }
       if (!joinInfo.canPublish) {
         await _startListenerAudioWarmup();
@@ -311,7 +313,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         _liveKitSpeakingParticipantIds.clear();
         unawaited(_disconnectLiveKitRoomSafely(room));
       }
-      if (defaultTargetPlatform == TargetPlatform.android) {
+      if (_supportsBackgroundAudio) {
         unawaited(
           _VoiceRoomPageState._liveAudioBackgroundChannel.invokeMethod<void>(
             'stop',
@@ -355,7 +357,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     if (identical(room, _liveKitRoom)) {
       _liveKitRoom = null;
     }
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (_supportsBackgroundAudio) {
       await _VoiceRoomPageState._liveAudioBackgroundChannel.invokeMethod<void>(
         'stop',
       );
@@ -423,7 +425,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         defaultTargetPlatform != TargetPlatform.android) {
       return;
     }
-    if (defaultTargetPlatform == TargetPlatform.android) {
+    if (_supportsBackgroundAudio) {
       await _setSpeakerOutputPreferred();
       return;
     }

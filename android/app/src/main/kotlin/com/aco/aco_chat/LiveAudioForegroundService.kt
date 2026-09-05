@@ -23,7 +23,7 @@ class LiveAudioForegroundService : Service() {
             manager.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_ID,
-                    "直播语音",
+                    "会议语音",
                     NotificationManager.IMPORTANCE_LOW,
                 ).apply { setShowBadge(false) },
             )
@@ -39,8 +39,8 @@ class LiveAudioForegroundService : Service() {
     private fun notification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(applicationInfo.icon)
-            .setContentTitle("正在播放直播")
-            .setContentText("直播语音在后台继续播放")
+            .setContentTitle("会议中")
+            .setContentText("会议语音在后台继续播放")
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
