@@ -827,7 +827,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
       ...effectiveListeners.take(10 - visibleSpeakers.length),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 0),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final useFiveColumns = constraints.maxWidth >= 300;

@@ -116,9 +116,10 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                   },
                   child: LayoutBuilder(
                     builder: (context, constraints) {
+                      const overviewChatGap = 6.0;
                       final overviewMaxHeight = math.max(
                         0.0,
-                        constraints.maxHeight - 14,
+                        constraints.maxHeight - overviewChatGap,
                       );
                       return Column(
                         children: [
@@ -132,7 +133,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                                 child: roomOverview,
                               ),
                             ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: overviewChatGap),
                           Expanded(
                             child: _RoomChatHistory(
                               palette: palette,
