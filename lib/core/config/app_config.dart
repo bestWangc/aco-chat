@@ -10,7 +10,7 @@ class AppConfig {
   );
   static const relayApiBaseUrl = String.fromEnvironment(
     'ACO_RELAY_API_BASE_URL',
-    defaultValue: 'https://wvyyiw.aiuhz.com/api/v1',
+    defaultValue: 'https://wyyiw.qxctf.com/api/v1',
   );
   static const websiteUrl = String.fromEnvironment(
     'ACO_WEBSITE_URL',
