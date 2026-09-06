@@ -5,6 +5,7 @@ class _DetailScaffold extends StatelessWidget {
     required this.palette,
     required this.child,
     this.title,
+    this.titleWidget,
     this.right,
     this.onBack,
     this.titleFollowsBack = false,
@@ -15,6 +16,7 @@ class _DetailScaffold extends StatelessWidget {
   final AcoPalette palette;
   final Widget child;
   final String? title;
+  final Widget? titleWidget;
   final Widget? right;
   final VoidCallback? onBack;
   final bool titleFollowsBack;
@@ -34,6 +36,7 @@ class _DetailScaffold extends StatelessWidget {
         child: AcoPageHeader(
           palette: palette,
           title: title,
+          titleWidget: titleWidget,
           right: right,
           titleFollowsBack: titleFollowsBack,
           titleFontSize: titleFontSize,

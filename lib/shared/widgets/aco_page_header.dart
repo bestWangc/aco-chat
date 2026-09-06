@@ -27,6 +27,7 @@ class AcoPageHeader extends StatelessWidget {
   const AcoPageHeader({
     required this.palette,
     this.title,
+    this.titleWidget,
     this.onBack,
     this.right,
     this.backButtonKey,
@@ -38,6 +39,7 @@ class AcoPageHeader extends StatelessWidget {
 
   final AcoPalette palette;
   final String? title;
+  final Widget? titleWidget;
   final VoidCallback? onBack;
   final Widget? right;
   final Key? backButtonKey;
@@ -47,18 +49,20 @@ class AcoPageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleText = title == null
-        ? null
-        : Text(
-            title!,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: titleFontSize,
-              fontWeight: FontWeight.w600,
-            ),
-          );
+    final titleText =
+        titleWidget ??
+        (title == null
+            ? null
+            : Text(
+                title!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: titleFontSize,
+                  fontWeight: FontWeight.w600,
+                ),
+              ));
     final backButton = onBack == null
         ? null
         : Transform.translate(

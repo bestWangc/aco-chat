@@ -44,6 +44,7 @@ class _ChatPageState extends State<_ChatPage> {
   String? _resolvedConversationID;
   String? _resolvedPeerName;
   String? _resolvedPeerAvatar;
+  int _resolvedPeerIdentity = 0;
   bool _loadingOlder = false;
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
@@ -146,11 +147,20 @@ class _ChatPageState extends State<_ChatPage> {
 
     final client = AccountApiClient();
     try {
+      final profile = await AccountSession(client).profileByAccountId(userID);
+      if (profile.nickname.isNotEmpty) _resolvedPeerName = profile.nickname;
+      if (profile.avatarUrl.isNotEmpty) _resolvedPeerAvatar = profile.avatarUrl;
+      _resolvedPeerIdentity = profile.identity;
+    } catch (error) {
+      debugPrint('[API] chat profile load failed: $error');
+    }
+    try {
       final friends = await AccountSession(client).listFriends();
       for (final friend in friends) {
         if (friend.accountId != userID) continue;
         if (friend.nickname.isNotEmpty) _resolvedPeerName = friend.nickname;
         if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
+        _resolvedPeerIdentity = friend.identity;
         break;
       }
     } catch (error) {
@@ -643,7 +653,11 @@ class _ChatPageState extends State<_ChatPage> {
     final compactBottomBar = _isPanelVisible || keyboardInset > 0;
     return _DetailScaffold(
       palette: widget.palette,
-      title: _peerName,
+      titleWidget: _ChatHeaderTitle(
+        palette: widget.palette,
+        name: _peerName,
+        identity: _resolvedPeerIdentity,
+      ),
       headerRightPadding: 4,
       right: Semantics(
         button: true,
@@ -763,9 +777,9 @@ class _ChatPageState extends State<_ChatPage> {
                     child: Padding(
                       padding: EdgeInsets.fromLTRB(
                         8,
+                        5,
                         8,
-                        8,
-                        compactBottomBar ? 2 : 8,
+                        compactBottomBar ? 5 : 8,
                       ),
                       child: _ChatComposer(
                         controller: _messageController,
@@ -815,6 +829,47 @@ class _ChatPageState extends State<_ChatPage> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatHeaderTitle extends StatelessWidget {
+  const _ChatHeaderTitle({
+    required this.palette,
+    required this.name,
+    required this.identity,
+  });
+
+  final AcoPalette palette;
+  final String name;
+  final int identity;
+
+  @override
+  Widget build(BuildContext context) {
+    final identityIconAsset = _identityNodeAsset(identity);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.bodyEmphasis,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (identityIconAsset != null) ...[
+            const SizedBox(width: 5),
+            Image.asset(identityIconAsset, height: 20, fit: BoxFit.contain),
+          ],
         ],
       ),
     );
@@ -1339,7 +1394,10 @@ class _ChatMorePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     height: 116,
-    color: _black,
+    decoration: const BoxDecoration(
+      color: Color(0xFF1E1D1B),
+      border: Border(top: BorderSide(color: Color(0xFF515151))),
+    ),
     padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
     child: GridView.builder(
       physics: const NeverScrollableScrollPhysics(),
@@ -1366,7 +1424,7 @@ class _ChatMorePanel extends StatelessWidget {
                   width: 60,
                   height: 60,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF191919),
+                    color: const Color(0xFF2C2C2C),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Center(
@@ -1667,10 +1725,15 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
                 ),
                 const SizedBox(width: 8),
               ],
-              Icon(
-                _playing ? CupertinoIcons.pause_fill : CupertinoIcons.volume_up,
-                color: foreground,
-                size: 23,
+              Transform.flip(
+                flipX: widget.mine && !_playing,
+                child: Icon(
+                  _playing
+                      ? CupertinoIcons.pause_fill
+                      : CupertinoIcons.volume_up,
+                  color: foreground,
+                  size: 23,
+                ),
               ),
               if (!widget.mine) ...[
                 const SizedBox(width: 8),

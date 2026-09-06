@@ -15,18 +15,21 @@ class AccountProfile {
     required this.username,
     required this.nickname,
     required this.avatarUrl,
+    this.identity = 0,
   });
 
   final String accountId;
   final String username;
   final String nickname;
   final String avatarUrl;
+  final int identity;
 
   factory AccountProfile.fromJson(Map<String, dynamic> json) => AccountProfile(
     accountId: json['account_id'] as String,
     username: json['username'] as String,
     nickname: json['nickname'] as String,
     avatarUrl: json['avatar_url'] as String? ?? '',
+    identity: (json['identity'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, String> toJson() => {
@@ -43,18 +46,21 @@ class FriendContact {
     required this.nickname,
     required this.avatarUrl,
     required this.status,
+    this.identity = 0,
   });
 
   final String accountId;
   final String nickname;
   final String avatarUrl;
   final String status;
+  final int identity;
 
   factory FriendContact.fromJson(Map<String, dynamic> json) => FriendContact(
     accountId: json['account_id'] as String,
     nickname: (json['nickname'] as String?)?.trim() ?? '',
     avatarUrl: (json['avatar_url'] as String?) ?? '',
     status: (json['status'] as String?) ?? 'accepted',
+    identity: (json['identity'] as num?)?.toInt() ?? 0,
   );
 }
 
