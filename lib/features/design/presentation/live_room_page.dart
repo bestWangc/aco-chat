@@ -17,6 +17,13 @@ class _LiveStreamPage extends StatelessWidget {
 
 enum LiveRoomExitReason { kicked }
 
+int _parseLiveMessageIdentity(Object? payloadIdentity, String? metadata) {
+  if (payloadIdentity is num) return payloadIdentity.toInt();
+  final parsedPayloadIdentity = int.tryParse('$payloadIdentity');
+  if (parsedPayloadIdentity != null) return parsedPayloadIdentity;
+  return int.tryParse(metadata ?? '') ?? 0;
+}
+
 class _VoiceRoomPage extends StatefulWidget {
   const _VoiceRoomPage({required this.palette, this.live, this.joinPassword});
   final AcoPalette palette;
@@ -1470,11 +1477,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       if (payload is! Map<String, dynamic>) return;
       final text = payload['text'];
       if (text is! String || text.trim().isEmpty || text.length > 300) return;
+      final identity = _parseLiveMessageIdentity(
+        payload['identity'],
+        event.participant?.metadata,
+      );
       final nickname = event.participant?.name.trim();
       _appendChatMessage(
         nickname: nickname == null || nickname.isEmpty ? '成员' : nickname,
         text: text,
-        identity: int.tryParse(event.participant?.metadata ?? '') ?? 0,
+        identity: identity,
       );
     } catch (_) {
       // Ignore malformed or non-chat data packets from other clients.
@@ -1493,7 +1504,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         isViewerChatMuted) {
       return;
     }
-    final payload = utf8.encode(jsonEncode({'text': text}));
+    final payload = utf8.encode(
+      jsonEncode({'text': text, 'identity': _liveKitIdentity}),
+    );
     if (!_checkMessageSendLimits(payload.length)) return;
     setState(() => _sending = true);
     try {
