@@ -83,7 +83,6 @@ flutter:
     - assets/icons/profile/
     - assets/icons/lucide/
     - assets/icons/crypto/tokens/
-    - assets/icons/crypto/chains/
     - assets/icons/crypto/domi/tokens/
     - assets/icons/crypto/domi/chains/
     - assets/design_svg/source/images/

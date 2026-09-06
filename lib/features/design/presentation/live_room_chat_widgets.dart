@@ -254,7 +254,15 @@ class _RoomComposer extends StatelessWidget {
                 padding: EdgeInsets.zero,
                 minimumSize: Size.zero,
                 onPressed: chatMuted ? null : onEmojiPressed,
-                child: Icon(CupertinoIcons.smiley, color: textColor, size: 20),
+                child: ColorFiltered(
+                  colorFilter: ColorFilter.mode(textColor, BlendMode.srcIn),
+                  child: Image.asset(
+                    'assets/icons/live_room_emoji.png',
+                    width: 20,
+                    height: 20,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
               ),
             ),
             Expanded(
