@@ -50,7 +50,7 @@ class _LiveRoomOverview extends StatelessWidget {
                     ),
               ),
             ),
-            if (isHost && room.checkIn != null)
+            if (isHost && _checkInIsActive(room.checkIn))
               Positioned(
                 top: 40,
                 left: 12,
@@ -62,7 +62,7 @@ class _LiveRoomOverview extends StatelessWidget {
                 ),
               ),
             if (!isHost &&
-                room.checkIn != null &&
+                _checkInIsActive(room.checkIn) &&
                 !checkingIn &&
                 !room.checkIn!.viewerChecked)
               Positioned(
@@ -1195,6 +1195,9 @@ class _MemberRoleBadge extends StatelessWidget {
 
 enum _LiveMemberAction { toggleMute, removeSpeaker, transferHost, kick }
 
+bool _checkInIsActive(LiveCheckIn? checkIn) =>
+    checkIn != null && checkIn.deadline.isAfter(DateTime.now());
+
 class _LiveRoomMembersSheet extends StatefulWidget {
   const _LiveRoomMembersSheet({
     required this.palette,
@@ -1297,6 +1300,8 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
         if (result.total != null) _total = result.total!;
         _hasMore = result.hasMore;
       });
+    } on AccountApiException catch (error) {
+      if (mounted) setState(() => _error = error.localizedMessage);
     } catch (_) {
       if (mounted) setState(() => _error = '成员列表加载失败，请重试。');
     } finally {

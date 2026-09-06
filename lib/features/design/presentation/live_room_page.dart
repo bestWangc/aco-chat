@@ -727,6 +727,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         if (!mounted) return;
         if (displayedRoom.checkIn!.deadline.isBefore(DateTime.now())) {
           _checkInTimer?.cancel();
+          setState(() {
+            _room = _copyRoom(
+              _room ?? displayedRoom,
+              participantCount: displayedRoom.participantCount,
+              checkIn: null,
+            );
+          });
           unawaited(_loadRoom(silent: true));
           return;
         }

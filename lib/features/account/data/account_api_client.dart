@@ -25,6 +25,9 @@ class AccountApiException implements Exception {
         normalized.contains('kicked from this live');
   }
 
+  bool get isLiveParticipantMissing =>
+      _normalizedMessage.contains('participant is not in live room');
+
   /// User-facing copy for API errors. The API may return English or internal
   /// validation text; keep the raw [message] for logging and map it at the UI
   /// boundary so dialogs remain consistently Chinese.
@@ -73,6 +76,9 @@ class AccountApiException implements Exception {
     }
     if (isLiveKick) {
       return '你已被移出会议，10分钟内不能再次进入。';
+    }
+    if (isLiveParticipantMissing) {
+      return '你已离开会议，请重新进入。';
     }
     if (normalized.contains('unauthorized') || statusCode == 401) {
       return '登录状态已失效，请重新登录。';

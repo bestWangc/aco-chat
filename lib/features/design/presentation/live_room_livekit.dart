@@ -508,7 +508,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     try {
       await _accountSession.setLiveAudioMute(live.id, muted);
     } on AccountApiException catch (error) {
-      if (mounted) _showNotice(context, '设置失败', error.message);
+      if (mounted) _showNotice(context, '设置失败', error.localizedMessage);
       rethrow;
     } catch (_) {
       if (mounted) _showNotice(context, '设置失败', '请检查网络后重试。');
@@ -574,8 +574,11 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     } on AccountApiException catch (error) {
       _localMuteOverride = null;
       await _restoreMicrophone(!nextMuted);
+      if (error.isLiveParticipantMissing) {
+        unawaited(_loadRoom(silent: true));
+      }
       if (!mounted) return;
-      _showNotice(context, '设置麦克风失败', error.message);
+      _showNotice(context, '设置麦克风失败', error.localizedMessage);
     } catch (_) {
       _localMuteOverride = null;
       await _restoreMicrophone(!nextMuted);
