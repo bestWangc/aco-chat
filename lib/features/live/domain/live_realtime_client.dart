@@ -57,16 +57,16 @@ class LiveRealtimeClient {
       _channel = channel;
       _subscription = channel.stream.listen(
         _handleIncomingEvent,
-        onError: (_) {
-          if (connectionGeneration == _connectionGeneration) {
-            _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
-          }
-        },
-        onDone: () {
-          if (connectionGeneration == _connectionGeneration) {
-            _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
-          }
-        },
+        onError: (_) => _handleConnectionClosed(
+          connectionGeneration: connectionGeneration,
+          uri: uri,
+          ticketLoader: ticketLoader,
+        ),
+        onDone: () => _handleConnectionClosed(
+          connectionGeneration: connectionGeneration,
+          uri: uri,
+          ticketLoader: ticketLoader,
+        ),
       );
       _reconnectTimer?.cancel();
       _reconnectScheduled = false;
@@ -122,4 +122,13 @@ class LiveRealtimeClient {
   }
 
   void _handleIncomingEvent(dynamic event) => onEvent(event);
+
+  void _handleConnectionClosed({
+    required int connectionGeneration,
+    required Uri uri,
+    required LiveRealtimeTicketLoader ticketLoader,
+  }) {
+    if (connectionGeneration != _connectionGeneration) return;
+    _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
+  }
 }
