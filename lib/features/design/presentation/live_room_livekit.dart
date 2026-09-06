@@ -29,6 +29,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         live.id,
         joinPassword: widget.joinPassword,
       );
+      _liveKitIdentity = joinInfo.identity;
       liveKitUrl = joinInfo.url;
       debugPrint(
         'LiveKit connect: join info received, url=$liveKitUrl '

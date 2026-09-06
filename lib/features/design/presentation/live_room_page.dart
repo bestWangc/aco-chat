@@ -110,6 +110,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool? _liveKitCanPublish;
   bool _liveKitPublishReady = false;
   String? _liveKitRole;
+  int _liveKitIdentity = 0;
   bool _microphoneUpdating = false;
   bool _liveKitMicrophoneOperationInFlight = false;
   bool _liveKitPermissionReconnectInFlight = false;
@@ -827,6 +828,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             username: participant.username,
             avatarUrl: participant.avatarUrl,
             role: participant.role,
+            identity: participant.identity,
             handRaised: participant.handRaised,
             muted: muted,
             speakerInvited: participant.speakerInvited,
@@ -1472,6 +1474,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _appendChatMessage(
         nickname: nickname == null || nickname.isEmpty ? '成员' : nickname,
         text: text,
+        identity: int.tryParse(event.participant?.metadata ?? '') ?? 0,
       );
     } catch (_) {
       // Ignore malformed or non-chat data packets from other clients.
@@ -1505,7 +1508,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       );
       // Reliable publication may wait on mobile networks; update the local
       // conversation immediately so sending does not feel blocked.
-      _appendChatMessage(nickname: _localChatNickname, text: text);
+      _appendChatMessage(
+        nickname: _localChatNickname,
+        text: text,
+        identity: _liveKitIdentity,
+      );
       if (mounted) {
         setState(() {
           _messageController.clear();
@@ -1542,13 +1549,29 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   String get _localChatNickname {
     final room = _room;
-    if (room != null && room.host.userId == room.viewerUserId) {
-      return room.host.nickname;
+    if (room != null) {
+      final participants = <LiveParticipant>[
+        room.host,
+        ...room.speakers,
+        ...room.listeners,
+      ];
+      for (final participant in participants) {
+        if (participant.userId == room.viewerUserId &&
+            participant.nickname.trim().isNotEmpty) {
+          return participant.nickname.trim();
+        }
+      }
     }
-    return '我';
+    final liveKitName = _liveKitRoom?.localParticipant?.name.trim();
+    if (liveKitName != null && liveKitName.isNotEmpty) return liveKitName;
+    return '成员';
   }
 
-  void _appendChatMessage({required String nickname, required String text}) {
+  void _appendChatMessage({
+    required String nickname,
+    required String text,
+    int identity = 0,
+  }) {
     final now = DateTime.now();
     _chatBuffer.append(
       LiveMessage(
@@ -1556,6 +1579,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         nickname: nickname,
         text: text.trim(),
         createdAt: now,
+        identity: identity,
       ),
     );
   }

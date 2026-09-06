@@ -519,6 +519,7 @@ class _LiveRoomHeaderActions extends StatelessWidget {
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Image.asset(
                 'assets/icons/live_viewers_custom.png',
@@ -630,12 +631,30 @@ class _LiveRoomHostCard extends StatelessWidget {
       children: [
         _buildHostAvatar(),
         const SizedBox(height: 14),
-        Text(
-          host.nickname,
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
+        ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width - 32,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  host.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: _identityColor(host.identity, palette),
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (_identityBadgeAsset(host.identity) != null) ...[
+                const SizedBox(width: 6),
+                _identityBadge(context, host.identity, widthFactor: .18),
+              ],
+            ],
           ),
         ),
         const SizedBox(height: 4),
@@ -768,6 +787,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
       username: participant.username,
       avatarUrl: participant.avatarUrl,
       role: participant.role,
+      identity: participant.identity,
       handRaised: participant.handRaised,
       muted: viewerMuted,
       speakerInvited: participant.speakerInvited,
@@ -786,20 +806,6 @@ class _LiveRoomParticipantSection extends StatelessWidget {
         if (leftIsViewer == rightIsViewer) return 0;
         return leftIsViewer ? -1 : 1;
       });
-    if (kDebugMode && effectiveListeners.length < 12) {
-      for (var index = effectiveListeners.length; index < 12; index++) {
-        effectiveListeners.add(
-          LiveParticipant(
-            userId: -1000 - index,
-            nickname: '听众${(index + 1).toString().padLeft(2, '0')}',
-            avatarUrl: '',
-            role: 'listener',
-            handRaised: false,
-            muted: true,
-          ),
-        );
-      }
-    }
     final activeSpeakers = effectiveSpeakers.where(
       (participant) =>
           !participant.muted &&
@@ -918,16 +924,31 @@ class _LiveRoomParticipantCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 7),
-          Text(
-            participant.nickname,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  participant.nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: participant.identity == 0
+                        ? _white
+                        : _identityColor(participant.identity, palette),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ),
+              if (_identityNodeAsset(participant.identity)
+                  case final nodeAsset?) ...[
+                const SizedBox(width: 3),
+                Image.asset(nodeAsset, height: 12, fit: BoxFit.contain),
+              ],
+            ],
           ),
         ],
       ),

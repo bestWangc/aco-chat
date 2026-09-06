@@ -1,5 +1,40 @@
 part of 'aco_design_shell.dart';
 
+Color _identityColor(int identity, AcoPalette palette) => switch (identity) {
+  1 => const Color(0xFFB055FF),
+  2 => const Color(0xFF85BCFF),
+  3 => const Color(0xFFFFD62C),
+  _ => palette.accent,
+};
+
+String? _identityBadgeAsset(int identity) => switch (identity) {
+  1 => 'assets/images/identity_badges/shareholder_purple.png',
+  2 => 'assets/images/identity_badges/shareholder_blue.png',
+  3 => 'assets/images/identity_badges/shareholder_gold.png',
+  _ => null,
+};
+
+String? _identityNodeAsset(int identity) => switch (identity) {
+  1 => 'assets/images/identity_badges/founder_node_purple.png',
+  2 => 'assets/images/identity_badges/super_node_blue.png',
+  3 => 'assets/images/identity_badges/partner_node_gold.png',
+  _ => null,
+};
+
+Widget _identityBadge(
+  BuildContext context,
+  int identity, {
+  required double widthFactor,
+}) {
+  final asset = _identityBadgeAsset(identity);
+  if (asset == null) return const SizedBox.shrink();
+  return Image.asset(
+    asset,
+    width: MediaQuery.sizeOf(context).width * widthFactor,
+    fit: BoxFit.contain,
+  );
+}
+
 class _RoomChatHistory extends StatefulWidget {
   const _RoomChatHistory({
     required this.palette,
@@ -68,6 +103,7 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
           palette: widget.palette,
           name: message.nickname,
           text: message.text,
+          identity: message.identity,
         );
       },
     );
@@ -476,15 +512,21 @@ class _RoomMessage extends StatelessWidget {
     required this.palette,
     required this.name,
     required this.text,
+    required this.identity,
   });
 
   final AcoPalette palette;
   final String name;
   final String text;
+  final int identity;
 
   @override
   Widget build(BuildContext context) {
     final isSystemMessage = name.isEmpty;
+    final badgeAsset = _identityBadgeAsset(identity);
+    final nameColor = identity == 0
+        ? _white
+        : _identityColor(identity, palette);
     final messageStyle = TextStyle(
       color: isSystemMessage ? palette.accent : _white,
       fontSize: 15,
@@ -507,7 +549,7 @@ class _RoomMessage extends StatelessWidget {
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 280),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: EdgeInsets.fromLTRB(isSystemMessage ? 14 : 8, 6, 14, 6),
         decoration: decoration,
         child: isSystemMessage
             ? Text(text, textAlign: TextAlign.center, style: messageStyle)
@@ -515,9 +557,21 @@ class _RoomMessage extends StatelessWidget {
                 text: TextSpan(
                   style: messageStyle,
                   children: [
+                    if (badgeAsset != null)
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.bottom,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 5),
+                          child: _identityBadge(
+                            context,
+                            identity,
+                            widthFactor: .16,
+                          ),
+                        ),
+                      ),
                     TextSpan(
                       text: '$name:  ',
-                      style: TextStyle(color: palette.accent),
+                      style: TextStyle(color: nameColor),
                     ),
                     TextSpan(text: text),
                   ],

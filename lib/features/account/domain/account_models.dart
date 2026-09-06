@@ -205,6 +205,7 @@ class LiveKitJoinInfo {
     required this.token,
     required this.roomName,
     required this.role,
+    required this.identity,
     required this.canPublish,
     required this.canPublishData,
   });
@@ -215,6 +216,7 @@ class LiveKitJoinInfo {
         token: json['token'] as String,
         roomName: json['room_name'] as String,
         role: json['role'] as String,
+        identity: (json['identity'] as num?)?.toInt() ?? 0,
         canPublish: json['can_publish'] as bool? ?? false,
         canPublishData: json['can_publish_data'] as bool? ?? false,
       );
@@ -223,6 +225,7 @@ class LiveKitJoinInfo {
   final String token;
   final String roomName;
   final String role;
+  final int identity;
   final bool canPublish;
   final bool canPublishData;
 }
@@ -233,18 +236,21 @@ class LiveMessage {
     required this.nickname,
     required this.text,
     required this.createdAt,
+    this.identity = 0,
   });
 
   final int id;
   final String nickname;
   final String text;
   final DateTime createdAt;
+  final int identity;
 
   factory LiveMessage.fromJson(Map<String, dynamic> json) => LiveMessage(
     id: _messageId(json['id']),
     nickname: json['nickname'] as String,
     text: json['text'] as String,
     createdAt: DateTime.parse(json['created_at'] as String),
+    identity: (json['identity'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -260,6 +266,7 @@ class LiveParticipant {
     this.username = '',
     required this.avatarUrl,
     required this.role,
+    this.identity = 0,
     required this.handRaised,
     required this.muted,
     this.speakerInvited = false,
@@ -270,6 +277,7 @@ class LiveParticipant {
   final String username;
   final String avatarUrl;
   final String role;
+  final int identity;
   final bool handRaised;
   final bool muted;
   final bool speakerInvited;
@@ -281,6 +289,7 @@ class LiveParticipant {
         username: json['username'] as String? ?? '',
         avatarUrl: json['avatar_url'] as String? ?? '',
         role: json['role'] as String,
+        identity: (json['identity'] as num?)?.toInt() ?? 0,
         handRaised: json['hand_raised'] as bool? ?? false,
         muted: json['muted'] as bool? ?? false,
         speakerInvited: json['speaker_invite'] as bool? ?? false,
