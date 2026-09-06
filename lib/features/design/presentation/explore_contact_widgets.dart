@@ -131,6 +131,7 @@ class _ContactListTile extends StatelessWidget {
     this.avatarGap = 20,
     this.showAvatar = true,
     this.nameColor,
+    this.identity = 0,
   });
 
   final AcoPalette palette;
@@ -147,6 +148,7 @@ class _ContactListTile extends StatelessWidget {
   final double avatarGap;
   final bool showAvatar;
   final Color? nameColor;
+  final int identity;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
@@ -162,10 +164,14 @@ class _ContactListTile extends StatelessWidget {
       child: Row(
         children: [
           if (showAvatar) ...[
-            AcoAvatar(size: avatarSize, imageUrl: avatarUrl),
+            AcoAvatar(
+              size: avatarSize,
+              imageUrl: avatarUrl,
+              assetPath: _defaultAvatarAsset,
+            ),
             SizedBox(width: avatarGap),
           ],
-          Expanded(
+          Flexible(
             child: Text(
               name,
               maxLines: nameMaxLines,
@@ -177,7 +183,16 @@ class _ContactListTile extends StatelessWidget {
               ),
             ),
           ),
-          if (trailing != null) trailing!,
+          if (identity > 0) ...[
+            const SizedBox(width: 10),
+            Image.asset(
+              _identityBadgeAsset(identity) ??
+                  'assets/images/identity_badges/shareholder_gold.png',
+              height: 18,
+              fit: BoxFit.contain,
+            ),
+          ],
+          ...?trailing == null ? null : [trailing!],
         ],
       ),
     ),

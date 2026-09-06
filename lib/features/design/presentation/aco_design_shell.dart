@@ -31,7 +31,13 @@ import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart'
-    show InteractiveViewer, ListTile, Material, MaterialType, RefreshIndicator;
+    show
+        InteractiveViewer,
+        ListTile,
+        Material,
+        MaterialType,
+        RefreshIndicator,
+        Theme;
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -332,6 +338,15 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       return;
     }
 
+    if (screen == AcoScreen.socialMessages) {
+      setState(() {
+        _selectedNav = 4;
+        _rootScreen = AcoScreen.socialMessages;
+      });
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
     // 聊天详情是社交列表的直接下级页面，保留具体版本，避免被通用兜底路由到 Coming Soon。
     if (screen == AcoScreen.chatV1 || screen == AcoScreen.chatV2) {
       Navigator.of(context).push<Object?>(
@@ -430,9 +445,15 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       username: _username.value,
       avatarUrl: _avatarUrl.value,
       displayName: _displayName.value,
-      onDisplayNameChanged: (name) => _displayName.value = name,
-      onUsernameChanged: (username) => _username.value = username,
-      onAvatarUrlChanged: (avatarUrl) => _avatarUrl.value = avatarUrl,
+      onDisplayNameChanged: (name) {
+        if (mounted) _displayName.value = name;
+      },
+      onUsernameChanged: (username) {
+        if (mounted) _username.value = username;
+      },
+      onAvatarUrlChanged: (avatarUrl) {
+        if (mounted) _avatarUrl.value = avatarUrl;
+      },
       language: _language,
       liveListRevision: _liveListRevision,
       hasAppUpdate: _hasAppUpdate,
@@ -483,11 +504,15 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       username: _username.value,
                       avatarUrl: _avatarUrl.value,
                       displayName: _displayName.value,
-                      onDisplayNameChanged: (name) => _displayName.value = name,
-                      onUsernameChanged: (username) =>
-                          _username.value = username,
-                      onAvatarUrlChanged: (avatarUrl) =>
-                          _avatarUrl.value = avatarUrl,
+                      onDisplayNameChanged: (name) {
+                        if (mounted) _displayName.value = name;
+                      },
+                      onUsernameChanged: (username) {
+                        if (mounted) _username.value = username;
+                      },
+                      onAvatarUrlChanged: (avatarUrl) {
+                        if (mounted) _avatarUrl.value = avatarUrl;
+                      },
                       language: _language,
                       liveListRevision: _liveListRevision,
                       hasAppUpdate: _hasAppUpdate,
@@ -512,6 +537,10 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                         AcoScreen.squareFeed,
                         AcoScreen.socialMessages,
                       ];
+                      if (index == 4) {
+                        _open(AcoScreen.socialMessages);
+                        return;
+                      }
                       setState(() {
                         _selectedNav = index;
                         _rootScreen = destinations[index];

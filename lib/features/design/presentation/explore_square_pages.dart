@@ -574,39 +574,61 @@ class _MessageQuickActions extends StatelessWidget {
   const _MessageQuickActions({
     required this.palette,
     required this.onContactsTap,
-    required this.onSearchTap,
+    required this.onMessagesTap,
+    required this.controller,
+    required this.onQueryChanged,
     this.hasFriendRequest = false,
+    this.showContacts = false,
   });
 
   final AcoPalette palette;
   final VoidCallback onContactsTap;
-  final VoidCallback onSearchTap;
+  final VoidCallback onMessagesTap;
+  final TextEditingController controller;
+  final ValueChanged<String> onQueryChanged;
   final bool hasFriendRequest;
+  final bool showContacts;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+    decoration: const BoxDecoration(
+      border: Border(bottom: BorderSide(color: Color(0xFF191919), width: 1)),
+    ),
     child: SizedBox(
-      height: 36,
+      height: 44,
       child: Row(
         children: [
           Expanded(
-            child: _MessageQuickTab(
-              icon: CupertinoIcons.person_2,
-              label: '通讯录',
+            child: _MessageListSearchField(
               palette: palette,
-              onPressed: onContactsTap,
-              badge: hasFriendRequest,
+              controller: controller,
+              onChanged: onQueryChanged,
             ),
           ),
+          const SizedBox(width: 16),
+          _MessageHeaderLabel(
+            asset: showContacts
+                ? 'assets/icons/chat_messages.png'
+                : 'assets/icons/chat_messages_selected.png',
+            label: '消息',
+            palette: palette,
+            selected: !showContacts,
+            onPressed: onMessagesTap,
+            useAssetColor: !showContacts,
+          ),
           const SizedBox(width: 8),
-          Expanded(
-            child: _MessageQuickTab(
-              icon: CupertinoIcons.search,
-              label: '搜索',
-              palette: palette,
-              onPressed: onSearchTap,
-            ),
+          _MessageHeaderLabel(
+            asset: showContacts
+                ? 'assets/icons/chat_contacts_selected.png'
+                : 'assets/icons/chat_contacts.png',
+            label: '通讯录',
+            palette: palette,
+            onPressed: onContactsTap,
+            badge: hasFriendRequest,
+            selected: showContacts,
+            useAssetColor: showContacts,
           ),
         ],
       ),
@@ -614,76 +636,153 @@ class _MessageQuickActions extends StatelessWidget {
   );
 }
 
-class _MessageQuickTab extends StatelessWidget {
-  const _MessageQuickTab({
-    required this.icon,
-    required this.label,
+class _MessageListSearchField extends StatelessWidget {
+  const _MessageListSearchField({
     required this.palette,
-    required this.onPressed,
-    this.badge = false,
+    required this.controller,
+    required this.onChanged,
   });
 
-  final IconData icon;
-  final String label;
   final AcoPalette palette;
-  final VoidCallback onPressed;
-  final bool badge;
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    button: true,
-    label: label,
-    child: CupertinoButton(
-      padding: EdgeInsets.zero,
-      minimumSize: Size.zero,
-      onPressed: onPressed,
-      child: SizedBox(
-        width: double.infinity,
-        height: 30,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0xFF191919),
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(icon, color: palette.primaryText, size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: palette.primaryText,
-                      fontSize: AcoTypography.caption,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-              if (badge)
-                const Positioned(
-                  right: 8,
-                  top: 4,
-                  child: SizedBox(
-                    width: 8,
-                    height: 8,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: _danger,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
+  Widget build(BuildContext context) => Container(
+    height: 30,
+    padding: const EdgeInsets.symmetric(horizontal: 12),
+    decoration: BoxDecoration(
+      color: palette.dark ? const Color(0xFF191919) : const Color(0xFFF1F2F3),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
+        const SizedBox(width: 7),
+        Expanded(
+          child: CupertinoTextField(
+            controller: controller,
+            maxLines: 1,
+            textInputAction: TextInputAction.search,
+            cursorColor: palette.accent,
+            placeholder: '搜索',
+            placeholderStyle: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.caption,
+            ),
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.caption,
+            ),
+            decoration: null,
+            padding: EdgeInsets.zero,
+            onChanged: onChanged,
           ),
         ),
-      ),
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: controller,
+          builder: (context, value, _) {
+            if (value.text.isEmpty) return const SizedBox.shrink();
+            return CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(28, 28),
+              onPressed: () {
+                controller.clear();
+                onChanged('');
+              },
+              child: Icon(
+                CupertinoIcons.clear_circled_solid,
+                color: palette.mutedText,
+                size: 17,
+              ),
+            );
+          },
+        ),
+      ],
     ),
   );
+}
+
+class _MessageHeaderLabel extends StatelessWidget {
+  const _MessageHeaderLabel({
+    required this.asset,
+    required this.label,
+    required this.palette,
+    this.onPressed,
+    this.badge = false,
+    this.selected = false,
+    this.useAssetColor = false,
+  });
+
+  final String asset;
+  final String label;
+  final AcoPalette palette;
+  final VoidCallback? onPressed;
+  final bool badge;
+  final bool selected;
+  final bool useAssetColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? palette.accent : palette.primaryText;
+    final content = SizedBox(
+      width: label == '通讯录' ? 42 : 32,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.topCenter,
+        children: [
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                asset,
+                width: 23,
+                height: 20,
+                color: useAssetColor ? null : color,
+                colorBlendMode: useAssetColor ? null : BlendMode.srcIn,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  color: color,
+                  fontSize: AcoTypography.caption - 2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          if (badge)
+            const Positioned(
+              top: -1,
+              right: 1,
+              child: SizedBox(
+                width: 8,
+                height: 8,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: _danger,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+    if (onPressed == null) return ExcludeSemantics(child: content);
+    return Semantics(
+      button: true,
+      label: label,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: const Size(46, 44),
+        onPressed: onPressed,
+        child: content,
+      ),
+    );
+  }
 }
 
 String _formatConversationDate(int? timestamp) {
@@ -691,5 +790,5 @@ String _formatConversationDate(int? timestamp) {
   final value = timestamp > 100000000000 ? timestamp : timestamp * 1000;
   final date = DateTime.fromMillisecondsSinceEpoch(value);
   String twoDigits(int number) => number.toString().padLeft(2, '0');
-  return '${date.year}-${twoDigits(date.month)}-${twoDigits(date.day)}';
+  return '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
 }
