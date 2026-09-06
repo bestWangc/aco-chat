@@ -24,7 +24,9 @@ class LiveRealtimeClient {
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
   int _reconnectAttempt = 0;
+  int _connectionGeneration = 0;
   bool _reconnectScheduled = false;
+  bool _connectInFlight = false;
   bool _stopped = false;
   bool _disposed = false;
 
@@ -32,21 +34,39 @@ class LiveRealtimeClient {
     required Uri uri,
     required LiveRealtimeTicketLoader ticketLoader,
   }) async {
-    if (_disposed) return;
+    if (_disposed || _connectInFlight) return;
+    _connectInFlight = true;
+    final connectionGeneration = ++_connectionGeneration;
     try {
       final ticket = await ticketLoader();
       if (_disposed) return;
       final channel = WebSocketChannel.connect(
         uri.replace(queryParameters: {'ticket': ticket}),
       );
+
+      // WebSocketChannel.connect() only creates the channel. The handshake
+      // result is reported by ready, so do not reset retry state or notify the
+      // room until the server has accepted this connection.
+      await channel.ready;
+      if (_disposed || connectionGeneration != _connectionGeneration) {
+        await channel.sink.close();
+        return;
+      }
       await _subscription?.cancel();
       await _channel?.sink.close();
       _channel = channel;
       _subscription = channel.stream.listen(
         _handleIncomingEvent,
-        onError: (_) =>
-            _scheduleReconnect(uri: uri, ticketLoader: ticketLoader),
-        onDone: () => _scheduleReconnect(uri: uri, ticketLoader: ticketLoader),
+        onError: (_) {
+          if (connectionGeneration == _connectionGeneration) {
+            _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
+          }
+        },
+        onDone: () {
+          if (connectionGeneration == _connectionGeneration) {
+            _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
+          }
+        },
       );
       _reconnectTimer?.cancel();
       _reconnectScheduled = false;
@@ -64,6 +84,8 @@ class LiveRealtimeClient {
       _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
     } catch (_) {
       _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
+    } finally {
+      _connectInFlight = false;
     }
   }
 
