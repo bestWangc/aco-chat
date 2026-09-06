@@ -31,7 +31,9 @@ class _ChatPageState extends State<_ChatPage> {
   var _voiceRecording = false;
   final _voiceRecorder = AudioRecorder();
   Timer? _voiceRecordingTimer;
+  StreamSubscription<Amplitude>? _voiceAmplitudeSubscription;
   var _voiceFinishing = false;
+  var _voiceLevel = 0.0;
   String? _voiceRecordingPath;
   DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
@@ -354,6 +356,7 @@ class _ChatPageState extends State<_ChatPage> {
     _messageController.dispose();
     _chatScrollController.dispose();
     _voiceRecordingTimer?.cancel();
+    _voiceAmplitudeSubscription?.cancel();
     _voiceRecorder.dispose();
     super.dispose();
   }
@@ -532,6 +535,16 @@ class _ChatPageState extends State<_ChatPage> {
           const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
           path: path,
         );
+        await _voiceAmplitudeSubscription?.cancel();
+        _voiceAmplitudeSubscription = _voiceRecorder
+            .onAmplitudeChanged(const Duration(milliseconds: 80))
+            .listen((amplitude) {
+              if (!mounted || !_voiceRecording) return;
+              final level = ((amplitude.current + 58) / 48).clamp(0.0, 1.0);
+              if ((level - _voiceLevel).abs() >= .03) {
+                setState(() => _voiceLevel = level);
+              }
+            });
         _voiceRecordingPath = path;
         _voiceRecordingStartedAt = DateTime.now();
         _voiceRecordingTimer?.cancel();
@@ -539,7 +552,12 @@ class _ChatPageState extends State<_ChatPage> {
           const Duration(seconds: 60),
           () => unawaited(_finishVoiceRecording(send: true)),
         );
-        if (mounted) setState(() => _voiceRecording = true);
+        if (mounted) {
+          setState(() {
+            _voiceLevel = 0;
+            _voiceRecording = true;
+          });
+        }
       case _VoiceRecordingAction.send:
         await _finishVoiceRecording(send: true);
       case _VoiceRecordingAction.cancel:
@@ -556,10 +574,17 @@ class _ChatPageState extends State<_ChatPage> {
       final path = await _voiceRecorder.stop() ?? _voiceRecordingPath;
       _voiceRecordingTimer?.cancel();
       _voiceRecordingTimer = null;
+      await _voiceAmplitudeSubscription?.cancel();
+      _voiceAmplitudeSubscription = null;
       final startedAt = _voiceRecordingStartedAt;
       _voiceRecordingPath = null;
       _voiceRecordingStartedAt = null;
-      if (mounted) setState(() => _voiceRecording = false);
+      if (mounted) {
+        setState(() {
+          _voiceLevel = 0;
+          _voiceRecording = false;
+        });
+      }
       if (path == null) return;
       final file = File(path);
       if (!send || startedAt == null) {
@@ -574,6 +599,7 @@ class _ChatPageState extends State<_ChatPage> {
         if (mounted) _showNotice(context, '发送失败', '聊天连接未就绪。');
         return;
       }
+      var sentSuccessfully = false;
       try {
         final duration = DateTime.now()
             .difference(startedAt)
@@ -593,15 +619,18 @@ class _ChatPageState extends State<_ChatPage> {
         _historyMessages.add(sent);
         _pendingSentMessages.add(sent);
         setState(
-          () => _chatHistory.add(_ChatHistoryMessage('[语音消息]', mine: true)),
+          () => _chatHistory.add(
+            _ChatHistoryMessage.fromOpenIM(sent, mine: true),
+          ),
         );
         _scrollToBottom(force: true, animate: false);
         OpenIMChatRepository.conversationRevision.value++;
+        sentSuccessfully = true;
       } catch (error) {
         if (mounted) _showNotice(context, '语音发送失败', '请稍后重试。');
         debugPrint('[OpenIM] voice send failed: $error');
       } finally {
-        if (await file.exists()) await file.delete();
+        if (!sentSuccessfully && await file.exists()) await file.delete();
       }
     } finally {
       _voiceFinishing = false;
@@ -707,6 +736,9 @@ class _ChatPageState extends State<_ChatPage> {
                               previewImageUrl: message.previewImageUrl,
                               shouldCacheThumbnail:
                                   message.shouldCacheThumbnail,
+                              soundPath: message.soundPath,
+                              soundUrl: message.soundUrl,
+                              soundDuration: message.soundDuration,
                               mine: message.mine,
                               avatarUrl: _resolvedPeerAvatar,
                               ownAvatarUrl: widget.ownAvatarUrl,
@@ -775,8 +807,9 @@ class _ChatPageState extends State<_ChatPage> {
                   ),
                 ),
                 child: _voiceRecording
-                    ? const _VoiceRecordingOverlay(
+                    ? _VoiceRecordingOverlay(
                         key: ValueKey('voice-recording'),
+                        level: _voiceLevel,
                       )
                     : const SizedBox(key: ValueKey('voice-recording-idle')),
               ),
@@ -789,7 +822,9 @@ class _ChatPageState extends State<_ChatPage> {
 }
 
 class _VoiceRecordingOverlay extends StatelessWidget {
-  const _VoiceRecordingOverlay({super.key});
+  const _VoiceRecordingOverlay({super.key, required this.level});
+
+  final double level;
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -810,7 +845,7 @@ class _VoiceRecordingOverlay extends StatelessWidget {
                   color: const Color(0xFF98EC63),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const _VoiceWaveform(),
+                child: _VoiceWaveform(level: level),
               ),
               Positioned(
                 bottom: -7,
@@ -1195,77 +1230,54 @@ class _VoiceCallControl extends StatelessWidget {
   );
 }
 
-class _VoiceWaveform extends StatefulWidget {
-  const _VoiceWaveform();
+class _VoiceWaveform extends StatelessWidget {
+  const _VoiceWaveform({required this.level});
+
+  final double level;
 
   @override
-  State<_VoiceWaveform> createState() => _VoiceWaveformState();
-}
-
-class _VoiceWaveformState extends State<_VoiceWaveform>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 720),
-  )..repeat();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (context, child) {
-      const baseHeights = <double>[
-        8,
-        11,
-        8,
-        13,
-        9,
-        12,
-        8,
-        11,
-        9,
-        22,
-        9,
-        11,
-        8,
-        12,
-        9,
-        13,
-        8,
-        11,
-        8,
-      ];
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          for (var index = 0; index < baseHeights.length; index++)
-            Container(
-              width: 3,
-              height:
-                  baseHeights[index] *
-                  (.72 +
-                      .28 *
-                          math
-                              .sin(
-                                _controller.value * math.pi * 2 + index * .75,
-                              )
-                              .abs()),
-              margin: const EdgeInsets.symmetric(horizontal: 1.5),
-              decoration: BoxDecoration(
-                color: const Color(0xFF387B2B),
-                borderRadius: BorderRadius.circular(2),
-              ),
+  Widget build(BuildContext context) {
+    const baseHeights = <double>[
+      8,
+      11,
+      8,
+      13,
+      9,
+      12,
+      8,
+      11,
+      9,
+      22,
+      9,
+      11,
+      8,
+      12,
+      9,
+      13,
+      8,
+      11,
+      8,
+    ];
+    final multiplier = 1 + level * 1.7;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (final height in baseHeights)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            curve: Curves.easeOut,
+            width: 3,
+            height: height * multiplier,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF387B2B),
+              borderRadius: BorderRadius.circular(2),
             ),
-        ],
-      );
-    },
-  );
+          ),
+      ],
+    );
+  }
 }
 
 class _ComposerImageIcon extends StatelessWidget {
@@ -1395,6 +1407,9 @@ class _ChatMessage extends StatelessWidget {
     required this.imageUrl,
     required this.previewImageUrl,
     required this.shouldCacheThumbnail,
+    required this.soundPath,
+    required this.soundUrl,
+    required this.soundDuration,
     required this.mine,
     this.avatarUrl,
     this.ownAvatarUrl,
@@ -1407,6 +1422,9 @@ class _ChatMessage extends StatelessWidget {
   final String? imageUrl;
   final String? previewImageUrl;
   final bool shouldCacheThumbnail;
+  final String? soundPath;
+  final String? soundUrl;
+  final int? soundDuration;
   final bool mine;
   final String? avatarUrl;
   final String? ownAvatarUrl;
@@ -1481,6 +1499,15 @@ class _ChatMessage extends StatelessWidget {
 
     if (imagePath != null) return const _ImageUnavailable();
 
+    if (soundPath != null || soundUrl != null) {
+      return _VoiceMessageBubble(
+        path: soundPath,
+        url: soundUrl,
+        duration: soundDuration ?? 0,
+        mine: mine,
+      );
+    }
+
     return _Bubble(palette: palette, text: text, mine: mine);
   }
 
@@ -1547,6 +1574,117 @@ class _ChatImagePreview extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _VoiceMessageBubble extends StatefulWidget {
+  const _VoiceMessageBubble({
+    required this.path,
+    required this.url,
+    required this.duration,
+    required this.mine,
+  });
+
+  final String? path;
+  final String? url;
+  final int duration;
+  final bool mine;
+
+  @override
+  State<_VoiceMessageBubble> createState() => _VoiceMessageBubbleState();
+}
+
+class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
+  final _player = AudioPlayer();
+  StreamSubscription<void>? _completeSubscription;
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _completeSubscription = _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _playing = false);
+    });
+  }
+
+  @override
+  void dispose() {
+    _completeSubscription?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    try {
+      if (_playing) {
+        await _player.pause();
+        if (mounted) setState(() => _playing = false);
+        return;
+      }
+      final source = await _source();
+      if (source == null) return;
+      await _player.play(source);
+      if (mounted) setState(() => _playing = true);
+    } catch (error) {
+      debugPrint('[OpenIM] voice playback failed: $error');
+    }
+  }
+
+  Future<Source?> _source() async {
+    final url = widget.url;
+    if (url?.isNotEmpty == true) return UrlSource(url!);
+
+    final path = widget.path;
+    if (path?.isNotEmpty == true && await File(path!).exists()) {
+      return DeviceFileSource(path);
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = widget.mine ? _black : _white;
+    final background = widget.mine
+        ? const Color(0xFF24B865)
+        : const Color(0xFF2C2C2C);
+    return Semantics(
+      button: true,
+      label: '播放语音消息，${widget.duration}秒',
+      child: GestureDetector(
+        onTap: _toggle,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (widget.mine) ...[
+                Text(
+                  '${widget.duration}"',
+                  style: TextStyle(color: foreground, fontSize: 16),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Icon(
+                _playing ? CupertinoIcons.pause_fill : CupertinoIcons.volume_up,
+                color: foreground,
+                size: 23,
+              ),
+              if (!widget.mine) ...[
+                const SizedBox(width: 8),
+                Text(
+                  '${widget.duration}"',
+                  style: TextStyle(color: foreground, fontSize: 16),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ImageUnavailable extends StatelessWidget {

@@ -32,7 +32,10 @@ class _ChatHistoryMessage {
       imagePath = null,
       imageUrl = null,
       previewImageUrl = null,
-      shouldCacheThumbnail = false;
+      shouldCacheThumbnail = false,
+      soundPath = null,
+      soundUrl = null,
+      soundDuration = null;
 
   const _ChatHistoryMessage.image({
     required this.mine,
@@ -41,11 +44,27 @@ class _ChatHistoryMessage {
     this.imageUrl,
     this.previewImageUrl,
     this.shouldCacheThumbnail = false,
-  }) : text = '';
+  }) : text = '',
+       soundPath = null,
+       soundUrl = null,
+       soundDuration = null;
+
+  const _ChatHistoryMessage.sound({
+    required this.mine,
+    this.soundPath,
+    this.soundUrl,
+    this.soundDuration,
+  }) : text = '',
+       imageBytes = null,
+       imagePath = null,
+       imageUrl = null,
+       previewImageUrl = null,
+       shouldCacheThumbnail = false;
 
   static bool isDisplayable(Message message) =>
       message.textElem?.content?.isNotEmpty == true ||
-      message.pictureElem != null;
+      message.pictureElem != null ||
+      message.soundElem != null;
 
   static String? imageUrlOf(PictureElem? picture) =>
       picture?.snapshotPicture?.url ??
@@ -61,6 +80,15 @@ class _ChatHistoryMessage {
   }) {
     final text = message.textElem?.content;
     if (text?.isNotEmpty == true) return _ChatHistoryMessage(text!, mine: mine);
+    final sound = message.soundElem;
+    if (sound != null) {
+      return _ChatHistoryMessage.sound(
+        mine: mine,
+        soundPath: sound.soundPath,
+        soundUrl: sound.sourceUrl,
+        soundDuration: sound.duration,
+      );
+    }
     final picture = message.pictureElem;
     final thumbnailUrl = picture?.snapshotPicture?.url;
     return _ChatHistoryMessage.image(
@@ -79,6 +107,9 @@ class _ChatHistoryMessage {
   final String? imageUrl;
   final String? previewImageUrl;
   final bool shouldCacheThumbnail;
+  final String? soundPath;
+  final String? soundUrl;
+  final int? soundDuration;
 }
 
 class _SocialMessageTile extends StatelessWidget {

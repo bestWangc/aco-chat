@@ -41,6 +41,7 @@ import 'package:livekit_client/livekit_client.dart' hide ConnectionState;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;

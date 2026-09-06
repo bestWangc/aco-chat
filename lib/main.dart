@@ -98,26 +98,29 @@ class WalletAccountAuthentication {
       // cached token would create a reconnect loop.
       _cachedOpenIMToken = null;
       await _connectOpenIM(userId);
-      // If the kick happened while the original login was still finishing,
-      // the first call may have been deduplicated. Ensure a second login is
-      // started after that in-flight attempt completes.
-      if (!OpenIMChatRepository.conversationReady.value) {
-        await _connectOpenIM(userId);
-      }
     };
     final running = _openIMConnectFuture;
-    if (running != null) return running;
-    final future = _connectOpenIMOnce(userId).timeout(
-      const Duration(seconds: 15),
-      onTimeout: () => debugPrint('[OpenIM] initialization timed out'),
+    if (running != null) return _waitForOpenIMConnection(running);
+
+    // Keep the single-flight lock until the SDK call itself has completed.
+    // Future.timeout only stops its wrapper; it does not cancel the login.
+    final connection = _connectOpenIMOnce(userId);
+    _openIMConnectFuture = connection;
+    unawaited(
+      connection.whenComplete(() {
+        if (identical(_openIMConnectFuture, connection)) {
+          _openIMConnectFuture = null;
+        }
+      }),
     );
-    _openIMConnectFuture = future;
-    try {
-      await future;
-    } finally {
-      if (identical(_openIMConnectFuture, future)) _openIMConnectFuture = null;
-    }
+    return _waitForOpenIMConnection(connection);
   }
+
+  static Future<void> _waitForOpenIMConnection(Future<void> connection) =>
+      connection.timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => debugPrint('[OpenIM] initialization timed out'),
+      );
 
   static Future<void> _connectOpenIMOnce(String userId) async {
     final client = AccountApiClient();
