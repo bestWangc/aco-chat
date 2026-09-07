@@ -17,12 +17,14 @@ class ChatKeepAliveService : Service() {
     companion object {
         private const val SERVICE_CHANNEL_ID = "chat_keep_alive"
         private const val MESSAGE_CHANNEL_ID = "chat_messages"
+        private const val URGENT_MESSAGE_CHANNEL_ID = "chat_urgent_messages"
         private const val SERVICE_NOTIFICATION_ID = 4202
 
-        fun showMessage(context: Context, title: String, body: String) {
+        fun showMessage(context: Context, title: String, body: String, urgent: Boolean) {
             val manager = context.getSystemService(NotificationManager::class.java)
             ensureChannels(manager)
-            val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
+            val channelID = if (urgent) URGENT_MESSAGE_CHANNEL_ID else MESSAGE_CHANNEL_ID
+            val notification = NotificationCompat.Builder(context, channelID)
                 .setSmallIcon(context.applicationInfo.icon)
                 .setContentTitle(title)
                 .setContentText(body)
@@ -60,6 +62,13 @@ class ChatKeepAliveService : Service() {
                 NotificationChannel(
                     MESSAGE_CHANNEL_ID,
                     "聊天消息",
+                    NotificationManager.IMPORTANCE_DEFAULT,
+                ),
+            )
+            manager.createNotificationChannel(
+                NotificationChannel(
+                    URGENT_MESSAGE_CHANNEL_ID,
+                    "重要聊天消息",
                     NotificationManager.IMPORTANCE_HIGH,
                 ),
             )

@@ -19,6 +19,7 @@ class AcoScreenPage extends StatelessWidget {
     this.displayName,
     this.accountId,
     this.chatUserID,
+    this.chatGroupID,
     this.chatName,
     this.chatConversationID,
     this.walletLoginFuture,
@@ -55,6 +56,7 @@ class AcoScreenPage extends StatelessWidget {
   final String? displayName;
   final String? accountId;
   final String? chatUserID;
+  final String? chatGroupID;
   final String? chatName;
   final String? chatConversationID;
   final Future<AccountProfile?>? walletLoginFuture;
@@ -201,6 +203,7 @@ class AcoScreenPage extends StatelessWidget {
         version: 1,
         ownAvatarUrl: avatarUrl,
         peerUserID: chatUserID,
+        groupID: chatGroupID,
         peerName: chatName,
         conversationID: chatConversationID,
       ),
@@ -209,6 +212,7 @@ class AcoScreenPage extends StatelessWidget {
         version: 2,
         ownAvatarUrl: avatarUrl,
         peerUserID: chatUserID,
+        groupID: chatGroupID,
         peerName: chatName,
         conversationID: chatConversationID,
       ),

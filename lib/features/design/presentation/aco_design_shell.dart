@@ -523,6 +523,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       isRoot: false,
       onOpen: _open,
       chatUserID: OpenIMChatRepository.pendingConversation?.userID,
+      chatGroupID: OpenIMChatRepository.pendingConversation?.groupID,
       chatName: OpenIMChatRepository.pendingConversation?.showName,
       chatConversationID:
           OpenIMChatRepository.pendingConversation?.conversationID,

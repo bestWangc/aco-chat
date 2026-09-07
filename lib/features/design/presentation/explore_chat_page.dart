@@ -6,6 +6,7 @@ class _ChatPage extends StatefulWidget {
     required this.version,
     this.ownAvatarUrl,
     this.peerUserID,
+    this.groupID,
     this.peerName,
     this.conversationID,
   });
@@ -13,6 +14,7 @@ class _ChatPage extends StatefulWidget {
   final int version;
   final String? ownAvatarUrl;
   final String? peerUserID;
+  final String? groupID;
   final String? peerName;
   final String? conversationID;
 
@@ -51,6 +53,12 @@ class _ChatPageState extends State<_ChatPage> {
   bool _markingMessagesAsRead = false;
   bool _chatAccessGranted = false;
   bool _peerIsBlocked = false;
+  bool _mentionVisible = false;
+  bool _mentionLoading = false;
+  int _mentionStart = -1;
+  String _mentionQuery = '';
+  List<GroupMembersInfo> _mentionMembers = const [];
+  final List<_GroupMention> _selectedMentions = <_GroupMention>[];
 
   String? get _currentConversationID {
     if (_resolvedConversationID?.isNotEmpty == true) {
@@ -59,21 +67,29 @@ class _ChatPageState extends State<_ChatPage> {
     if (widget.conversationID?.isNotEmpty == true) {
       return widget.conversationID;
     }
+    final groupID = widget.groupID;
+    if (groupID?.isNotEmpty == true) return 'sg_$groupID';
     final userID = widget.peerUserID;
     return userID?.isNotEmpty == true ? 'si_$userID' : null;
   }
 
+  bool get _isGroup => widget.groupID?.isNotEmpty == true;
+
+  String? get _conversationTarget =>
+      _isGroup ? widget.groupID : widget.peerUserID;
+
   @override
   void initState() {
     super.initState();
-    final peerUserID = widget.peerUserID;
-    if (peerUserID?.isNotEmpty == true) {
-      OpenIMChatRepository.beginActiveChat(peerUserID!);
+    final target = _conversationTarget;
+    if (target?.isNotEmpty == true) {
+      OpenIMChatRepository.beginActiveChat(target!);
     }
     _loadFuture = _loadHistory();
     OpenIMChatRepository.conversationReady.addListener(_onReady);
     OpenIMChatRepository.messageNotifier.addListener(_onMessage);
     _chatScrollController.addListener(_onChatScroll);
+    _messageController.addListener(_onComposerChanged);
   }
 
   void _onChatScroll() {
@@ -89,7 +105,11 @@ class _ChatPageState extends State<_ChatPage> {
     final message = OpenIMChatRepository.messageNotifier.value;
     if (!mounted || message == null) return;
     final mine = message.sendID == OpenIMChatRepository.currentUserID;
-    if (!mine && message.sendID != widget.peerUserID) return;
+    if (_isGroup) {
+      if (message.groupID != widget.groupID) return;
+    } else if (!mine && message.sendID != widget.peerUserID) {
+      return;
+    }
     if (_voiceCallInviteIDFromMessage(message) != null) return;
     if (!_ChatHistoryMessage.isDisplayable(message)) return;
     final clientMsgID = message.clientMsgID;
@@ -159,25 +179,27 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   Future<void> _loadHistory() async {
-    final userID = widget.peerUserID;
-    if (userID == null || userID.isEmpty) return;
+    final target = _conversationTarget;
+    if (target == null || target.isEmpty) return;
     if (!OpenIMChatRepository.conversationReady.value) {
       _error = '聊天服务正在连接，请稍候重试';
       return;
     }
     try {
-      if (!await _loadPeerProfile(userID)) {
+      if (!_isGroup && !await _loadPeerProfile(target)) {
         _chatAccessGranted = false;
         _error = '你们已不是好友，无法查看聊天记录';
         return;
       }
       _chatAccessGranted = true;
-      await _loadPeerBlockedState(userID);
+      if (!_isGroup) await _loadPeerBlockedState(target);
       if (mounted) setState(() {});
       final conversation = await OpenIM.iMManager.conversationManager
           .getOneConversation(
-            sourceID: userID,
-            sessionType: ConversationType.single,
+            sourceID: target,
+            sessionType: _isGroup
+                ? ConversationType.superGroup
+                : ConversationType.single,
           );
       _resolvedConversationID = conversation.conversationID;
       final result = await OpenIM.iMManager.messageManager
@@ -217,7 +239,7 @@ class _ChatPageState extends State<_ChatPage> {
                 .map(
                   (m) => _ChatHistoryMessage.fromOpenIM(
                     m,
-                    mine: m.sendID != userID,
+                    mine: m.sendID == OpenIMChatRepository.currentUserID,
                   ),
                 ),
           );
@@ -270,9 +292,9 @@ class _ChatPageState extends State<_ChatPage> {
 
   Future<void> _loadOlderMessages() async {
     if (_loadingOlder || _historyEnd || _historyMessages.isEmpty) return;
-    final userID = widget.peerUserID;
+    final target = _conversationTarget;
     final conversationID = _resolvedConversationID;
-    if (userID == null || conversationID == null) return;
+    if (target == null || conversationID == null) return;
     _loadingOlder = true;
     final oldMaxExtent = _chatScrollController.hasClients
         ? _chatScrollController.position.maxScrollExtent
@@ -301,7 +323,7 @@ class _ChatPageState extends State<_ChatPage> {
                 .map(
                   (m) => _ChatHistoryMessage.fromOpenIM(
                     m,
-                    mine: m.sendID != userID,
+                    mine: m.sendID == OpenIMChatRepository.currentUserID,
                   ),
                 ),
           );
@@ -329,9 +351,9 @@ class _ChatPageState extends State<_ChatPage> {
 
   Future<void> _sendText() async {
     final text = _messageController.text.trim();
-    final userID = widget.peerUserID;
-    if (text.isEmpty || userID == null || userID.isEmpty) return;
-    await _refreshPeerBlockedState(userID);
+    final target = _conversationTarget;
+    if (text.isEmpty || target == null || target.isEmpty) return;
+    if (!_isGroup) await _refreshPeerBlockedState(target);
     if (_peerIsBlocked) {
       final shouldFollowNewMessage =
           !_chatScrollController.hasClients ||
@@ -359,20 +381,34 @@ class _ChatPageState extends State<_ChatPage> {
       _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
       return;
     }
+    final mentions = _mentionsIn(text);
     _messageController.clear();
+    _selectedMentions.clear();
     try {
-      final message = await OpenIM.iMManager.messageManager.createTextMessage(
-        text: text,
-      );
+      final message = mentions.isEmpty
+          ? await OpenIM.iMManager.messageManager.createTextMessage(text: text)
+          : await OpenIM.iMManager.messageManager.createTextAtMessage(
+              text: text,
+              atUserIDList: mentions.map((mention) => mention.userID).toList(),
+              atUserInfoList: mentions
+                  .map(
+                    (mention) => AtUserInfo(
+                      atUserID: mention.userID,
+                      groupNickname: mention.name,
+                    ),
+                  )
+                  .toList(),
+            );
       final sent = await OpenIM.iMManager.messageManager.sendMessage(
         message: message,
-        userID: userID,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
         offlinePushInfo: OfflinePushInfo(title: '新消息', desc: text),
       );
       debugPrint(
         '[OpenIM] message sent clientMsgID=${sent.clientMsgID} '
         'serverMsgID=${sent.serverMsgID} status=${sent.status} '
-        'to=$userID',
+        'to=$target',
       );
       if (!mounted) return;
       _historyMessages.add(sent);
@@ -417,13 +453,14 @@ class _ChatPageState extends State<_ChatPage> {
 
   @override
   void dispose() {
-    final peerUserID = widget.peerUserID;
-    if (peerUserID?.isNotEmpty == true) {
-      OpenIMChatRepository.endActiveChat(peerUserID!);
+    final target = _conversationTarget;
+    if (target?.isNotEmpty == true) {
+      OpenIMChatRepository.endActiveChat(target!);
     }
     OpenIMChatRepository.conversationReady.removeListener(_onReady);
     OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
     _chatScrollController.removeListener(_onChatScroll);
+    _messageController.removeListener(_onComposerChanged);
     _messageController.dispose();
     _chatScrollController.dispose();
     _voiceRecordingTimer?.cancel();
@@ -499,7 +536,7 @@ class _ChatPageState extends State<_ChatPage> {
 
   String get _peerName {
     final name = _resolvedPeerName ?? widget.peerName?.trim();
-    return name?.isNotEmpty == true ? name! : (widget.peerUserID ?? '聊天');
+    return name?.isNotEmpty == true ? name! : (_conversationTarget ?? '聊天');
   }
 
   Future<void> _pickChatImage(ImageSource source) async {
@@ -524,9 +561,9 @@ class _ChatPageState extends State<_ChatPage> {
       }
       final imageBytes = await photo.readAsBytes();
       pickedImageBytes = imageBytes;
-      final userID = widget.peerUserID;
-      if (userID == null || userID.isEmpty) return;
-      await _refreshPeerBlockedState(userID);
+      final target = _conversationTarget;
+      if (target == null || target.isEmpty) return;
+      if (!_isGroup) await _refreshPeerBlockedState(target);
       if (_peerIsBlocked) {
         if (mounted) {
           setState(
@@ -555,7 +592,8 @@ class _ChatPageState extends State<_ChatPage> {
           .createImageMessageFromFullPath(imagePath: photo.path);
       final sent = await OpenIM.iMManager.messageManager.sendMessage(
         message: message,
-        userID: userID,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
         offlinePushInfo: OfflinePushInfo(title: '新消息', desc: '[图片]'),
       );
       if (!mounted) return;
@@ -623,6 +661,10 @@ class _ChatPageState extends State<_ChatPage> {
     if (label == '语音通话') {
       setState(() => _morePanelVisible = false);
       if (!mounted) return;
+      if (_isGroup) {
+        _showNotice(context, '暂不支持', '群语音将在后续版本开放。');
+        return;
+      }
       final userID = widget.peerUserID;
       if (userID == null || userID.isEmpty || !_chatAccessGranted) {
         _showNotice(context, '无法发起通话', '请先确认你们仍是好友。');
@@ -669,18 +711,115 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   void _hidePanels() {
-    if (!_isPanelVisible) return;
+    if (!_isPanelVisible && !_mentionVisible) return;
     setState(() {
       _emojiPickerVisible = false;
       _morePanelVisible = false;
+      _mentionVisible = false;
     });
   }
+
+  void _onComposerChanged() {
+    if (!_isGroup) return;
+    final selection = _messageController.selection;
+    final cursor = selection.extentOffset;
+    if (!selection.isValid || cursor < 0) return;
+    final textBeforeCursor = _messageController.text.substring(0, cursor);
+    final atIndex = textBeforeCursor.lastIndexOf('@');
+    final isMentionStart =
+        atIndex >= 0 &&
+        (atIndex == 0 || _isMentionBoundary(textBeforeCursor[atIndex - 1]));
+    final query = isMentionStart ? textBeforeCursor.substring(atIndex + 1) : '';
+    final shouldShow = isMentionStart && !query.contains(RegExp(r'\s'));
+    if (_mentionVisible != shouldShow ||
+        _mentionStart != (shouldShow ? atIndex : -1) ||
+        _mentionQuery != (shouldShow ? query : '')) {
+      setState(() {
+        _mentionVisible = shouldShow;
+        _mentionStart = shouldShow ? atIndex : -1;
+        _mentionQuery = shouldShow ? query : '';
+      });
+    }
+    if (shouldShow) unawaited(_loadMentionMembers());
+  }
+
+  bool _isMentionBoundary(String character) =>
+      RegExp(r'\s').hasMatch(character);
+
+  Future<void> _loadMentionMembers() async {
+    final groupID = widget.groupID;
+    if (_mentionLoading ||
+        _mentionMembers.isNotEmpty ||
+        groupID == null ||
+        groupID.isEmpty) {
+      return;
+    }
+    setState(() => _mentionLoading = true);
+    try {
+      final members = await OpenIM.iMManager.groupManager.getGroupMemberList(
+        groupID: groupID,
+        count: 500,
+      );
+      if (mounted) setState(() => _mentionMembers = members);
+    } catch (error) {
+      debugPrint('[OpenIM] load mention members failed: $error');
+    } finally {
+      if (mounted) setState(() => _mentionLoading = false);
+    }
+  }
+
+  List<GroupMembersInfo> get _filteredMentionMembers {
+    final query = _mentionQuery.trim().toLowerCase();
+    final currentUserID = OpenIMChatRepository.currentUserID;
+    return _mentionMembers
+        .where((member) {
+          final userID = member.userID;
+          if (userID == null || userID.isEmpty) return false;
+          if (userID == currentUserID) return false;
+          if (query.isEmpty) return true;
+          final name = _mentionName(member).toLowerCase();
+          return name.contains(query) || userID.toLowerCase().contains(query);
+        })
+        .toList(growable: false);
+  }
+
+  String _mentionName(GroupMembersInfo member) {
+    final name = member.nickname?.trim() ?? '';
+    return name.isEmpty ? (member.userID ?? '成员') : name;
+  }
+
+  void _insertMention(GroupMembersInfo member) {
+    final userID = member.userID;
+    final selection = _messageController.selection;
+    if (userID == null ||
+        userID.isEmpty ||
+        _mentionStart < 0 ||
+        !selection.isValid) {
+      return;
+    }
+    final name = _mentionName(member);
+    final token = '@$name ';
+    final text = _messageController.text;
+    final cursor = selection.extentOffset;
+    _messageController.value = TextEditingValue(
+      text:
+          '${text.substring(0, _mentionStart)}$token${text.substring(cursor)}',
+      selection: TextSelection.collapsed(offset: _mentionStart + token.length),
+    );
+    _selectedMentions.removeWhere((mention) => mention.userID == userID);
+    _selectedMentions.add(_GroupMention(userID: userID, name: name));
+  }
+
+  List<_GroupMention> _mentionsIn(String text) => _selectedMentions
+      .where((mention) => text.contains(mention.token))
+      .toList(growable: false);
 
   void _toggleEmojiPicker() {
     _dismissKeyboard();
     setState(() {
       _emojiPickerVisible = !_emojiPickerVisible;
       _morePanelVisible = false;
+      _mentionVisible = false;
     });
   }
 
@@ -689,6 +828,7 @@ class _ChatPageState extends State<_ChatPage> {
     setState(() {
       _morePanelVisible = !_morePanelVisible;
       _emojiPickerVisible = false;
+      _mentionVisible = false;
     });
   }
 
@@ -768,9 +908,9 @@ class _ChatPageState extends State<_ChatPage> {
         if (await file.exists()) await file.delete();
         return;
       }
-      final userID = widget.peerUserID;
-      if (userID != null && userID.isNotEmpty) {
-        await _refreshPeerBlockedState(userID);
+      final target = _conversationTarget;
+      if (!_isGroup && target != null && target.isNotEmpty) {
+        await _refreshPeerBlockedState(target);
       }
       if (_peerIsBlocked) {
         final duration = DateTime.now()
@@ -792,8 +932,8 @@ class _ChatPageState extends State<_ChatPage> {
         }
         return;
       }
-      if (userID == null ||
-          userID.isEmpty ||
+      if (target == null ||
+          target.isEmpty ||
           !_chatAccessGranted ||
           !OpenIMChatRepository.conversationReady.value) {
         if (await file.exists()) await file.delete();
@@ -813,7 +953,8 @@ class _ChatPageState extends State<_ChatPage> {
             );
         final sent = await OpenIM.iMManager.messageManager.sendMessage(
           message: message,
-          userID: userID,
+          userID: _isGroup ? null : target,
+          groupID: _isGroup ? target : null,
           offlinePushInfo: OfflinePushInfo(title: '新语音消息', desc: '[语音]'),
         );
         if (!mounted) return;
@@ -878,30 +1019,35 @@ class _ChatPageState extends State<_ChatPage> {
         child: CupertinoButton(
           padding: EdgeInsets.zero,
           minimumSize: const Size(51, 30),
-          onPressed: () => Navigator.of(context).push<void>(
-            _AcoPageRoute<void>(
-              builder: (_) => CupertinoPageScaffold(
-                backgroundColor: widget.palette.background,
-                child: SafeArea(
-                  left: false,
-                  right: false,
-                  bottom: false,
-                  child: ColoredBox(
-                    color: widget.palette.background,
-                    child: _ChatMoreSettingsPage(
-                      palette: widget.palette,
-                      peerName: _peerName,
-                      peerUserID: widget.peerUserID,
-                      conversationID: _currentConversationID,
-                      onBlockChanged: (blocked) => _peerIsBlocked = blocked,
-                      messages: _chatHistory,
-                      onMessageTap: _focusMessage,
+          onPressed: () async {
+            final exitedGroup = await Navigator.of(context).push<bool>(
+              _AcoPageRoute<bool>(
+                builder: (_) => CupertinoPageScaffold(
+                  backgroundColor: widget.palette.background,
+                  child: SafeArea(
+                    left: false,
+                    right: false,
+                    bottom: false,
+                    child: ColoredBox(
+                      color: widget.palette.background,
+                      child: _ChatMoreSettingsPage(
+                        palette: widget.palette,
+                        peerName: _peerName,
+                        peerUserID: widget.peerUserID,
+                        groupID: widget.groupID,
+                        conversationID: _currentConversationID,
+                        onBlockChanged: (blocked) => _peerIsBlocked = blocked,
+                        messages: _chatHistory,
+                        onMessageTap: _focusMessage,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ),
+            );
+            if (exitedGroup != true || !mounted) return;
+            Navigator.of(this.context).pop();
+          },
           child: Image.asset(
             'assets/icons/chat_more_mark.png',
             width: 26,
@@ -985,6 +1131,12 @@ class _ChatPageState extends State<_ChatPage> {
                     ),
                   ),
                 ),
+                if (_mentionVisible)
+                  _GroupMentionPanel(
+                    members: _filteredMentionMembers,
+                    loading: _mentionLoading,
+                    onSelected: _insertMention,
+                  ),
                 DecoratedBox(
                   decoration: const BoxDecoration(
                     color: Color(0xFF1E1D1B),
@@ -1024,7 +1176,10 @@ class _ChatPageState extends State<_ChatPage> {
                         setState(() => _emojiPickerVisible = false),
                   ),
                 if (_morePanelVisible)
-                  _ChatMorePanel(onSelected: _handleMorePanelSelection),
+                  _ChatMorePanel(
+                    isGroup: _isGroup,
+                    onSelected: _handleMorePanelSelection,
+                  ),
               ],
             ),
           ),
@@ -1718,78 +1873,100 @@ class _ComposerCupertinoIcon extends StatelessWidget {
 }
 
 class _ChatMorePanel extends StatelessWidget {
-  const _ChatMorePanel({required this.onSelected});
+  const _ChatMorePanel({required this.isGroup, required this.onSelected});
 
+  final bool isGroup;
   final Future<void> Function(String label) onSelected;
 
   static const _items = [
-    (label: '照片', assetPath: 'assets/icons/chat_more_photo.png'),
-    (label: '拍摄', assetPath: 'assets/icons/chat_more_camera.png'),
-    (label: '语音通话', assetPath: 'assets/icons/chat_more_call.png'),
-    (label: '转账', assetPath: 'assets/icons/chat_more_transfer.png'),
+    (
+      label: '照片',
+      assetPath: 'assets/icons/chat_more_photo.png',
+      availableInGroup: true,
+    ),
+    (
+      label: '拍摄',
+      assetPath: 'assets/icons/chat_more_camera.png',
+      availableInGroup: true,
+    ),
+    (
+      label: '语音通话',
+      assetPath: 'assets/icons/chat_more_call.png',
+      availableInGroup: false,
+    ),
+    (
+      label: '转账',
+      assetPath: 'assets/icons/chat_more_transfer.png',
+      availableInGroup: false,
+    ),
   ];
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: 116,
-    decoration: const BoxDecoration(
-      color: Color(0xFF1E1D1B),
-      border: Border(top: BorderSide(color: Color(0xFF515151))),
-    ),
-    padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
-    child: GridView.builder(
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: _items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        mainAxisSpacing: 10,
-        crossAxisSpacing: 16,
-        childAspectRatio: .77,
+  Widget build(BuildContext context) {
+    final items = isGroup
+        ? _items.where((item) => item.availableInGroup).toList()
+        : _items;
+    return Container(
+      height: 116,
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E1D1B),
+        border: Border(top: BorderSide(color: Color(0xFF515151))),
       ),
-      itemBuilder: (context, index) {
-        final item = _items[index];
-        return Semantics(
-          button: true,
-          label: item.label,
-          child: CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: Size.zero,
-            onPressed: () => onSelected(item.label),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2C2C2C),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(
-                    child: SizedBox(
-                      width: 26,
-                      height: 26,
-                      child: Image.asset(item.assetPath, fit: BoxFit.contain),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: items.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 16,
+          childAspectRatio: .77,
+        ),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return Semantics(
+            button: true,
+            label: item.label,
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => onSelected(item.label),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2C2C2C),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Center(
+                      child: SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: Image.asset(item.assetPath, fit: BoxFit.contain),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF9D9EA0),
-                    fontSize: 12,
+                  const SizedBox(height: 6),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF9D9EA0),
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        );
-      },
-    ),
-  );
+          );
+        },
+      ),
+    );
+  }
 }
 
 class _ChatMessage extends StatelessWidget {
@@ -1860,7 +2037,7 @@ class _ChatMessage extends StatelessWidget {
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: _messageBody(context, maxWidth: maxBubbleWidth),
+                child: _copyableMessageBody(context, maxWidth: maxBubbleWidth),
               ),
             ),
             if (mine) ...[
@@ -1923,6 +2100,22 @@ class _ChatMessage extends StatelessWidget {
 
     return _Bubble(palette: palette, text: text, mine: mine);
   }
+
+  Widget _copyableMessageBody(
+    BuildContext context, {
+    required double maxWidth,
+  }) {
+    final body = _messageBody(context, maxWidth: maxWidth);
+    if (text.isEmpty) return body;
+    return Semantics(
+      button: true,
+      hint: '长按复制消息',
+      onLongPress: _copyText,
+      child: GestureDetector(onLongPress: _copyText, child: body),
+    );
+  }
+
+  void _copyText() => unawaited(Clipboard.setData(ClipboardData(text: text)));
 
   Widget _image(
     BuildContext context,
@@ -2140,6 +2333,82 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
       ),
     );
   }
+}
+
+class _GroupMention {
+  const _GroupMention({required this.userID, required this.name});
+
+  final String userID;
+  final String name;
+
+  String get token => '@$name ';
+}
+
+class _GroupMentionPanel extends StatelessWidget {
+  const _GroupMentionPanel({
+    required this.members,
+    required this.loading,
+    required this.onSelected,
+  });
+
+  final List<GroupMembersInfo> members;
+  final bool loading;
+  final ValueChanged<GroupMembersInfo> onSelected;
+
+  String _memberName(GroupMembersInfo member) {
+    final name = member.nickname?.trim() ?? '';
+    return name.isEmpty ? (member.userID ?? '成员') : name;
+  }
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 208,
+    decoration: const BoxDecoration(
+      color: Color(0xFF252525),
+      border: Border(top: BorderSide(color: Color(0xFF3A3A3A))),
+    ),
+    child: loading
+        ? const Center(child: CupertinoActivityIndicator())
+        : members.isEmpty
+        ? const Center(
+            child: Text('未找到群成员', style: TextStyle(color: Color(0xFFAAAAAA))),
+          )
+        : ListView.separated(
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            itemCount: members.length,
+            separatorBuilder: (_, _) => const Padding(
+              padding: EdgeInsets.only(left: 58),
+              child: ColoredBox(
+                color: Color(0xFF343434),
+                child: SizedBox(height: 1),
+              ),
+            ),
+            itemBuilder: (_, index) {
+              final member = members[index];
+              return CupertinoButton(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                onPressed: () => onSelected(member),
+                child: Row(
+                  children: [
+                    AcoAvatar(size: 36, imageUrl: member.faceURL ?? ''),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _memberName(member),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: _white, fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+  );
 }
 
 class _ImageUnavailable extends StatelessWidget {

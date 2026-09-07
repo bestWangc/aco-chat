@@ -70,7 +70,7 @@ class _ChatHistoryMessage {
        isVoiceCallRecord = false;
 
   static bool isDisplayable(Message message) =>
-      message.textElem?.content?.isNotEmpty == true ||
+      OpenIMChatRepository.messageText(message) != null ||
       message.pictureElem != null ||
       message.soundElem != null ||
       _voiceCallRecordTextFromMessage(message) != null;
@@ -95,8 +95,8 @@ class _ChatHistoryMessage {
         isVoiceCallRecord: true,
       );
     }
-    final text = message.textElem?.content;
-    if (text?.isNotEmpty == true) return _ChatHistoryMessage(text!, mine: mine);
+    final text = OpenIMChatRepository.messageText(message);
+    if (text != null) return _ChatHistoryMessage(text, mine: mine);
     final sound = message.soundElem;
     if (sound != null) {
       return _ChatHistoryMessage.sound(
@@ -140,6 +140,7 @@ class _SocialMessageTile extends StatelessWidget {
     this.identity = 0,
     this.horizontalMargin = 0,
     this.avatarUrl,
+    this.groupAvatarUrls,
     this.unreadCount = 0,
     this.timestamp,
   });
@@ -151,6 +152,7 @@ class _SocialMessageTile extends StatelessWidget {
   final int identity;
   final double horizontalMargin;
   final String? avatarUrl;
+  final List<String>? groupAvatarUrls;
   final int unreadCount;
   final int? timestamp;
 
@@ -175,7 +177,12 @@ class _SocialMessageTile extends StatelessWidget {
                 minVerticalPadding: 0,
                 minLeadingWidth: 40,
                 horizontalTitleGap: 12,
-                leading: AcoAvatar(size: 40, imageUrl: avatarUrl),
+                leading: groupAvatarUrls == null
+                    ? AcoAvatar(size: 40, imageUrl: avatarUrl)
+                    : _GroupConversationAvatar(
+                        imageUrls: groupAvatarUrls!,
+                        fallbackAvatarUrl: avatarUrl,
+                      ),
                 title: Row(
                   children: [
                     Flexible(
@@ -248,5 +255,77 @@ class _SocialMessageTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _GroupConversationAvatar extends StatelessWidget {
+  const _GroupConversationAvatar({
+    required this.imageUrls,
+    required this.fallbackAvatarUrl,
+  });
+
+  final List<String> imageUrls;
+  final String? fallbackAvatarUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final avatars = imageUrls.isEmpty
+        ? <String?>[fallbackAvatarUrl]
+        : imageUrls.take(4).cast<String?>().toList(growable: false);
+    return Container(
+      width: 40,
+      height: 40,
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3A3A3A),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: avatars.length == 1
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: _GroupAvatarCell(imageUrl: avatars.single),
+            )
+          : GridView.builder(
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: avatars.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                mainAxisSpacing: 2,
+                crossAxisSpacing: 2,
+              ),
+              itemBuilder: (_, index) => ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: _GroupAvatarCell(imageUrl: avatars[index]),
+              ),
+            ),
+    );
+  }
+}
+
+class _GroupAvatarCell extends StatelessWidget {
+  const _GroupAvatarCell({this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final parsed = imageUrl == null || imageUrl!.isEmpty
+        ? null
+        : Uri.tryParse(imageUrl!);
+    final url = parsed?.hasScheme == true
+        ? imageUrl
+        : (parsed == null
+              ? null
+              : Uri.parse(
+                  const AppConfig().apiBaseUrl,
+                ).replace(path: parsed.path).toString());
+    final fallback = Image.asset(_defaultAvatarAsset, fit: BoxFit.cover);
+    return url == null
+        ? fallback
+        : Image.network(
+            url,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => fallback,
+          );
   }
 }

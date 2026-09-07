@@ -253,6 +253,21 @@ class _ScanPageState extends State<_ScanPage> {
     if (value == null || value.isEmpty) return;
     await _controller.stop();
     if (!mounted) return;
+    final groupInviteCode = _groupInviteCodeFromQr(value);
+    if (groupInviteCode != null) {
+      setState(() => _result = value);
+      try {
+        await _accountSession.joinGroupByCode(groupInviteCode);
+        if (!mounted) return;
+        _showNotice(context, '已加入群聊', '请在消息列表中查看群聊。');
+        Navigator.of(context).pop();
+      } on AccountApiException catch (error) {
+        if (mounted) setState(() => _error = error.localizedMessage);
+      } on StateError {
+        if (mounted) setState(() => _error = '请先登录后再加入群聊。');
+      }
+      return;
+    }
     final accountId = _profileAccountIdFromQr(value);
     if (accountId == null) {
       setState(() {
@@ -537,6 +552,15 @@ String? _profileAccountIdFromQr(String value) {
   }
   final accountId = uri.queryParameters['uid']?.trim();
   return accountId == null || accountId.isEmpty ? null : accountId;
+}
+
+String? _groupInviteCodeFromQr(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || uri.scheme != 'aco' || uri.host != 'group') return null;
+  final segments = uri.pathSegments;
+  if (segments.length != 2 || segments.first != 'join') return null;
+  final code = segments.last.trim();
+  return code.isEmpty ? null : code;
 }
 
 class _ReceiveAction extends StatelessWidget {

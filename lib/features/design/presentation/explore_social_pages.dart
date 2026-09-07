@@ -432,7 +432,22 @@ class _ContactsPageState extends State<_ContactsPage> {
                     icon: CupertinoIcons.person_2_fill,
                     assetPath: 'assets/icons/contact_group_chat.png',
                     color: const Color(0xFF00C976),
-                    onTap: () => _showNotice(context, '群聊', '群聊功能暂未开放。'),
+                    onTap: () async {
+                      final group = await Navigator.of(context).push<ChatGroup>(
+                        CupertinoPageRoute<ChatGroup>(
+                          builder: (_) =>
+                              _CreateGroupPage(palette: widget.palette),
+                        ),
+                      );
+                      if (!mounted || group == null) return;
+                      OpenIMChatRepository.pendingConversation =
+                          ConversationInfo(
+                            conversationID: 'sg_${group.groupId}',
+                            groupID: group.groupId,
+                            showName: group.name,
+                          );
+                      widget.onOpen(AcoScreen.chatV1);
+                    },
                   ),
                   const SizedBox(height: 12),
                   if (friends.isEmpty)
@@ -515,6 +530,125 @@ class _ContactsPageState extends State<_ContactsPage> {
     );
     if (mounted) setState(() {});
   }
+}
+
+class _CreateGroupPage extends StatefulWidget {
+  const _CreateGroupPage({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  State<_CreateGroupPage> createState() => _CreateGroupPageState();
+}
+
+class _CreateGroupPageState extends State<_CreateGroupPage> {
+  final _nameController = TextEditingController();
+  final _session = AccountSession(AccountApiClient());
+  final _selected = <String>{};
+  late final Future<List<FriendContact>> _friends = _session.listFriends();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      _showNotice(context, '请输入群名称', '群名称长度为 1–64 个字符。');
+      return;
+    }
+    if (_selected.isEmpty) {
+      _showNotice(context, '请选择成员', '至少邀请一位好友创建群聊。');
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final group = await _session.createGroup(
+        name: name,
+        memberAccountIds: _selected.toList(growable: false),
+      );
+      if (mounted && group.inviteCode != null) {
+        await Navigator.of(context).push<void>(
+          CupertinoPageRoute<void>(
+            builder: (_) => _GroupQRCodePage(
+              palette: widget.palette,
+              groupName: group.name,
+              inviteCode: group.inviteCode!,
+            ),
+          ),
+        );
+      }
+      if (mounted) Navigator.of(context).pop(group);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '创建群聊失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '创建群聊失败', '请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    navigationBar: CupertinoNavigationBar(
+      middle: const Text('创建群聊'),
+      trailing: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: _submitting ? null : _create,
+        child: Text(_submitting ? '创建中' : '创建'),
+      ),
+    ),
+    child: SafeArea(
+      child: FutureBuilder<List<FriendContact>>(
+        future: _friends,
+        builder: (_, snapshot) => ListView(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+          children: [
+            CupertinoTextField(
+              controller: _nameController,
+              placeholder: '群名称',
+              maxLength: 64,
+              style: TextStyle(color: widget.palette.primaryText),
+              decoration: BoxDecoration(
+                color: widget.palette.surface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              '选择好友（最多 499 人）',
+              style: TextStyle(color: widget.palette.mutedText),
+            ),
+            const SizedBox(height: 8),
+            for (final friend in snapshot.data ?? const <FriendContact>[])
+              CupertinoListTile(
+                padding: EdgeInsets.zero,
+                title: Text(
+                  friend.nickname.isEmpty ? friend.accountId : friend.nickname,
+                  style: TextStyle(color: widget.palette.primaryText),
+                ),
+                trailing: CupertinoCheckbox(
+                  value: _selected.contains(friend.accountId),
+                  onChanged: (selected) => setState(() {
+                    if (selected == true && _selected.length < 499) {
+                      _selected.add(friend.accountId);
+                    } else {
+                      _selected.remove(friend.accountId);
+                    }
+                  }),
+                ),
+              ),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Center(child: CupertinoActivityIndicator()),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _ContactsQuickAction extends StatelessWidget {
@@ -696,13 +830,16 @@ class _OpenIMConversationList extends StatefulWidget {
 
 class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   static List<ConversationInfo> _cachedConversations = const [];
+  static final Map<String, _GroupAvatarCache> _groupAvatarCache = {};
+  static const _groupAvatarCacheTTL = Duration(hours: 24);
   late Future<List<ConversationInfo>> _conversations;
   Timer? _reloadTimer;
   Map<String, int> _identityByUserID = const {};
+  Map<String, List<String>> _groupAvatarUrls = const {};
 
   String _latestMessagePreview(Message? message) {
-    final text = message?.textElem?.content;
-    if (text?.isNotEmpty == true) return text!;
+    final text = OpenIMChatRepository.messageText(message);
+    if (text != null) return text;
     if (message?.soundElem != null) return '[语音消息]';
     if (message?.pictureElem != null) return '[图片]';
     if (OpenIMChatRepository.isVoiceCallMessage(message)) {
@@ -723,6 +860,18 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   void _updateLatestMessage() {
     final message = OpenIMChatRepository.messageNotifier.value;
     if (!mounted || message == null) return;
+    final groupID = message.groupID;
+    if (groupID?.isNotEmpty == true) {
+      for (final item in _cachedConversations) {
+        if (item.groupID == groupID) {
+          item.latestMsg = message;
+          item.latestMsgSendTime = message.sendTime ?? message.createTime;
+          setState(() {});
+          return;
+        }
+      }
+      return;
+    }
     final peerID = message.sendID == OpenIMChatRepository.currentUserID
         ? message.recvID
         : message.sendID;
@@ -754,30 +903,51 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
         // the list instead of exposing its complete conversation history.
         final client = AccountApiClient();
         try {
-          final friends = await AccountSession(
-            client,
-          ).listFriends().timeout(const Duration(seconds: 5));
+          final session = AccountSession(client);
+          final results = await Future.wait([
+            session.listFriends().timeout(const Duration(seconds: 5)),
+            session.listGroups().timeout(const Duration(seconds: 5)),
+          ]);
+          final friends = results[0] as List<FriendContact>;
+          final groups = results[1] as List<ChatGroup>;
           final profiles = {
             for (final friend in friends) friend.accountId: friend,
           };
+          final groupsByID = {for (final group in groups) group.groupId: group};
           final conversations = openIMConversations
               .where(
-                (conversation) => profiles.containsKey(conversation.userID),
+                (conversation) =>
+                    profiles.containsKey(conversation.userID) ||
+                    (conversation.isGroupChat &&
+                        groupsByID.containsKey(conversation.groupID)),
               )
               .toList(growable: false);
+          for (final conversation in conversations) {
+            conversation.unreadCount = OpenIMChatRepository.visibleUnreadCount(
+              conversation,
+            );
+          }
           _identityByUserID = {
             for (final friend in friends)
               if (friend.identity > 0) friend.accountId: friend.identity,
           };
           for (final conversation in conversations) {
-            final friend = profiles[conversation.userID]!;
-            if (friend.nickname.isNotEmpty) {
-              conversation.showName = friend.nickname;
+            final friend = profiles[conversation.userID];
+            if (friend != null) {
+              if (friend.nickname.isNotEmpty) {
+                conversation.showName = friend.nickname;
+              }
+              if (friend.avatarUrl.isNotEmpty) {
+                conversation.faceURL = friend.avatarUrl;
+              }
+              continue;
             }
-            if (friend.avatarUrl.isNotEmpty) {
-              conversation.faceURL = friend.avatarUrl;
-            }
+            final group = groupsByID[conversation.groupID];
+            if (group == null) continue;
+            if (group.name.isNotEmpty) conversation.showName = group.name;
+            if (group.faceUrl.isNotEmpty) conversation.faceURL = group.faceUrl;
           }
+          _groupAvatarUrls = await _loadGroupAvatarUrls(conversations);
           conversations.sort(_compareConversations);
           _cachedConversations = List<ConversationInfo>.unmodifiable(
             conversations,
@@ -802,6 +972,53 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
       }
     }
     return const <ConversationInfo>[];
+  }
+
+  Future<Map<String, List<String>>> _loadGroupAvatarUrls(
+    Iterable<ConversationInfo> conversations,
+  ) async {
+    final groupIDs = conversations
+        .where((conversation) => conversation.isGroupChat)
+        .map((conversation) => conversation.groupID)
+        .whereType<String>()
+        .toSet();
+    if (groupIDs.isEmpty) return const {};
+    final now = DateTime.now();
+    final resolved = <String, List<String>>{};
+    final missing = <String>{};
+    for (final groupID in groupIDs) {
+      final cached = _groupAvatarCache[groupID];
+      if (cached != null &&
+          now.difference(cached.updatedAt) < _groupAvatarCacheTTL) {
+        resolved[groupID] = cached.urls;
+      } else {
+        missing.add(groupID);
+      }
+    }
+    final entries = await Future.wait(
+      missing.map((groupID) async {
+        try {
+          final members = await OpenIM.iMManager.groupManager
+              .getGroupMemberList(groupID: groupID, count: 4)
+              .timeout(const Duration(seconds: 2));
+          final urls = members
+              .map((member) => member.faceURL?.trim() ?? '')
+              .take(4)
+              .toList(growable: false);
+          return MapEntry(groupID, urls);
+        } catch (_) {
+          return MapEntry(groupID, const <String>[]);
+        }
+      }),
+    );
+    for (final entry in entries) {
+      _groupAvatarCache[entry.key] = _GroupAvatarCache(
+        urls: entry.value,
+        updatedAt: now,
+      );
+      resolved[entry.key] = entry.value;
+    }
+    return Map<String, List<String>>.unmodifiable(resolved);
   }
 
   int _compareConversations(ConversationInfo a, ConversationInfo b) {
@@ -898,6 +1115,10 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
                 name: entry.value.showName ?? entry.value.userID ?? '会话',
                 message: _latestMessagePreview(entry.value.latestMsg),
                 avatarUrl: entry.value.faceURL,
+                groupAvatarUrls: entry.value.isGroupChat
+                    ? (_groupAvatarUrls[entry.value.groupID] ??
+                          const <String>[])
+                    : null,
                 identity: _identityByUserID[entry.value.userID] ?? 0,
                 horizontalMargin: 16,
                 unreadCount: entry.value.unreadCount,
@@ -925,4 +1146,11 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
       },
     );
   }
+}
+
+class _GroupAvatarCache {
+  const _GroupAvatarCache({required this.urls, required this.updatedAt});
+
+  final List<String> urls;
+  final DateTime updatedAt;
 }

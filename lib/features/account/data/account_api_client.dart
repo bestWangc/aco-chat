@@ -80,6 +80,12 @@ class AccountApiException implements Exception {
     if (isLiveParticipantMissing) {
       return '你已离开会议，请重新进入。';
     }
+    if (normalized.contains('cannot leave group')) {
+      return '退出群聊失败，请稍后重试。';
+    }
+    if (normalized.contains('cannot dismiss group')) {
+      return '解散群聊失败，请稍后重试。';
+    }
     if (normalized.contains('unauthorized') || statusCode == 401) {
       return '登录状态已失效，请重新登录。';
     }
@@ -300,6 +306,66 @@ class AccountApiClient {
         .cast<Map<String, dynamic>>()
         .map(FriendContact.fromJson)
         .toList(growable: false);
+  }
+
+  Future<ChatGroup> createGroup({
+    required String name,
+    required List<String> memberAccountIds,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('groups'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'name': name, 'member_account_ids': memberAccountIds}),
+    );
+    return ChatGroup.fromJson(_body(response));
+  }
+
+  Future<List<ChatGroup>> listGroups({required String token}) async {
+    final response = await _httpClient.get(
+      _uri('groups'),
+      headers: _authorizedHeaders(token),
+    );
+    final items = _body(response)['items'] as List<dynamic>? ?? const [];
+    return items
+        .cast<Map<String, dynamic>>()
+        .map(ChatGroup.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<ChatGroup> joinGroupByCode({
+    required String inviteCode,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('groups/join/${Uri.encodeComponent(inviteCode)}'),
+      headers: _authorizedHeaders(token),
+    );
+    return ChatGroup.fromJson(_body(response));
+  }
+
+  Future<void> leaveGroup({
+    required String groupID,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('groups/${Uri.encodeComponent(groupID)}/leave'),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode != 204) _body(response);
+  }
+
+  Future<ChatGroup> updateGroupName({
+    required String groupID,
+    required String name,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('groups/${Uri.encodeComponent(groupID)}/name'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'name': name}),
+    );
+    return ChatGroup.fromJson(_body(response));
   }
 
   Future<AccountProfile> profileByAccountId({

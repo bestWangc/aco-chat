@@ -196,6 +196,33 @@ class AccountSession {
     return _apiClient.listFriendRequests(token: await _requireToken());
   }
 
+  Future<ChatGroup> createGroup({
+    required String name,
+    required List<String> memberAccountIds,
+  }) async => _apiClient.createGroup(
+    name: name,
+    memberAccountIds: memberAccountIds,
+    token: await _requireToken(),
+  );
+
+  Future<List<ChatGroup>> listGroups() async =>
+      _apiClient.listGroups(token: await _requireToken());
+
+  Future<ChatGroup> joinGroupByCode(String inviteCode) async => _apiClient
+      .joinGroupByCode(inviteCode: inviteCode, token: await _requireToken());
+
+  Future<void> leaveGroup(String groupID) async =>
+      _apiClient.leaveGroup(groupID: groupID, token: await _requireToken());
+
+  Future<ChatGroup> updateGroupName({
+    required String groupID,
+    required String name,
+  }) async => _apiClient.updateGroupName(
+    groupID: groupID,
+    name: name,
+    token: await _requireToken(),
+  );
+
   Future<LiveSession> createLive({
     required String title,
     required Uint8List coverBytes,

@@ -27,11 +27,13 @@ class AndroidChatBackgroundService {
   static Future<void> showMessage({
     required String title,
     required String body,
+    bool urgent = false,
   }) async {
     if (!Platform.isAndroid || !_appIsBackgrounded) return;
     await _channel.invokeMethod<void>('showMessage', {
       'title': title,
       'body': body,
+      'urgent': urgent,
     });
   }
 }

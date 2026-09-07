@@ -74,6 +74,30 @@ class FriendContact {
   );
 }
 
+class ChatGroup {
+  const ChatGroup({
+    required this.groupId,
+    required this.memberCount,
+    this.name = '',
+    this.faceUrl = '',
+    this.inviteCode,
+  });
+
+  final String groupId;
+  final String name;
+  final String faceUrl;
+  final int memberCount;
+  final String? inviteCode;
+
+  factory ChatGroup.fromJson(Map<String, dynamic> json) => ChatGroup(
+    groupId: json['group_id'] as String,
+    name: (json['name'] as String?)?.trim() ?? '',
+    faceUrl: (json['face_url'] as String?) ?? '',
+    memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
+    inviteCode: json['invite_code'] as String?,
+  );
+}
+
 class WalletAddress {
   const WalletAddress({required this.address, this.id, this.accountId});
 

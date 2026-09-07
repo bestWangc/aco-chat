@@ -115,7 +115,8 @@ class MainActivity : FlutterFragmentActivity() {
                     "showMessage" -> {
                         val title = call.argument<String>("title") ?: "新消息"
                         val body = call.argument<String>("body") ?: "你收到一条新消息"
-                        ChatKeepAliveService.showMessage(applicationContext, title, body)
+                        val urgent = call.argument<Boolean>("urgent") ?: false
+                        ChatKeepAliveService.showMessage(applicationContext, title, body, urgent)
                         result.success(null)
                     }
                     else -> result.notImplemented()
