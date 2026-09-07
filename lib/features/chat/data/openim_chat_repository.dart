@@ -26,10 +26,28 @@ final class OpenIMChatRepository implements ChatRepository {
     false,
   );
   static Future<void> Function()? reconnectHandler;
+  static String? _activeChatPeerUserID;
 
   static void publishLocalMessage(Message message) {
     messageNotifier.value = message;
     conversationRevision.value++;
+  }
+
+  static bool isVoiceCallMessage(Message? message) =>
+      message?.customElem?.extension == 'aco.voice_call';
+
+  /// Keeps messages from the conversation currently on screen out of the
+  /// global social-entry badge. The chat page still marks the conversation as
+  /// read in OpenIM so this is only needed while that asynchronous update is
+  /// in flight.
+  static void beginActiveChat(String peerUserID) {
+    _activeChatPeerUserID = peerUserID;
+  }
+
+  static void endActiveChat(String peerUserID) {
+    if (_activeChatPeerUserID == peerUserID) {
+      _activeChatPeerUserID = null;
+    }
   }
 
   /// Conversation selected from the list, consumed by the detail route.
@@ -159,7 +177,8 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static void _handleIncomingMessage(Message message) {
     messageNotifier.value = message;
-    if (message.sendID != _currentUserID) {
+    if (message.sendID != _currentUserID &&
+        message.sendID != _activeChatPeerUserID) {
       messageUnreadNotifier.value = true;
       unawaited(
         AndroidChatBackgroundService.showMessage(
@@ -178,7 +197,7 @@ final class OpenIMChatRepository implements ChatRepository {
     if (text?.isNotEmpty == true) return text!;
     if (message.soundElem != null) return '[语音消息]';
     if (message.pictureElem != null) return '[图片]';
-    if (message.customElem != null) return '[语音通话]';
+    if (isVoiceCallMessage(message)) return '[语音通话]';
     return '[新消息]';
   }
 
@@ -194,6 +213,20 @@ final class OpenIMChatRepository implements ChatRepository {
     }
   }
 
+  static Future<void> refreshMessageUnreadStatus() async {
+    final currentUserID = _currentUserID;
+    if (currentUserID == null) return;
+    try {
+      final conversations = await OpenIM.iMManager.conversationManager
+          .getAllConversationList();
+      messageUnreadNotifier.value = conversations.any(
+        (conversation) => conversation.unreadCount > 0,
+      );
+    } catch (error) {
+      developer.log('未读消息状态刷新失败: $error', name: 'OpenIM.message');
+    }
+  }
+
   static void markMessagesSeen() => messageUnreadNotifier.value = false;
 
   static void setFriendRequestCount(int count) {
@@ -204,6 +237,7 @@ final class OpenIMChatRepository implements ChatRepository {
   Future<void> logout() async {
     await _sdk.logout();
     _currentUserID = null;
+    _activeChatPeerUserID = null;
     friendRequestCountNotifier.value = 0;
     messageUnreadNotifier.value = false;
     conversationReady.value = false;

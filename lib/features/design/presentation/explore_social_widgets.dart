@@ -27,15 +27,18 @@ class _SocialMockMessage {
 }
 
 class _ChatHistoryMessage {
-  const _ChatHistoryMessage(this.text, {required this.mine})
-    : imageBytes = null,
-      imagePath = null,
-      imageUrl = null,
-      previewImageUrl = null,
-      shouldCacheThumbnail = false,
-      soundPath = null,
-      soundUrl = null,
-      soundDuration = null;
+  const _ChatHistoryMessage(
+    this.text, {
+    required this.mine,
+    this.isVoiceCallRecord = false,
+  }) : imageBytes = null,
+       imagePath = null,
+       imageUrl = null,
+       previewImageUrl = null,
+       shouldCacheThumbnail = false,
+       soundPath = null,
+       soundUrl = null,
+       soundDuration = null;
 
   const _ChatHistoryMessage.image({
     required this.mine,
@@ -47,7 +50,8 @@ class _ChatHistoryMessage {
   }) : text = '',
        soundPath = null,
        soundUrl = null,
-       soundDuration = null;
+       soundDuration = null,
+       isVoiceCallRecord = false;
 
   const _ChatHistoryMessage.sound({
     required this.mine,
@@ -59,7 +63,8 @@ class _ChatHistoryMessage {
        imagePath = null,
        imageUrl = null,
        previewImageUrl = null,
-       shouldCacheThumbnail = false;
+       shouldCacheThumbnail = false,
+       isVoiceCallRecord = false;
 
   static bool isDisplayable(Message message) =>
       message.textElem?.content?.isNotEmpty == true ||
@@ -80,7 +85,13 @@ class _ChatHistoryMessage {
     required bool mine,
   }) {
     final callRecord = _voiceCallRecordTextFromMessage(message);
-    if (callRecord != null) return _ChatHistoryMessage(callRecord, mine: mine);
+    if (callRecord != null) {
+      return _ChatHistoryMessage(
+        callRecord,
+        mine: mine,
+        isVoiceCallRecord: true,
+      );
+    }
     final text = message.textElem?.content;
     if (text?.isNotEmpty == true) return _ChatHistoryMessage(text!, mine: mine);
     final sound = message.soundElem;
@@ -113,6 +124,7 @@ class _ChatHistoryMessage {
   final String? soundPath;
   final String? soundUrl;
   final int? soundDuration;
+  final bool isVoiceCallRecord;
 }
 
 class _SocialMessageTile extends StatelessWidget {

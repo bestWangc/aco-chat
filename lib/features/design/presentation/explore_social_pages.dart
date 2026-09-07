@@ -705,6 +705,9 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
     if (text?.isNotEmpty == true) return text!;
     if (message?.soundElem != null) return '[语音消息]';
     if (message?.pictureElem != null) return '[图片]';
+    if (OpenIMChatRepository.isVoiceCallMessage(message)) {
+      return '[语音通话]';
+    }
     return '';
   }
 

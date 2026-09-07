@@ -131,10 +131,10 @@ String? _voiceCallRecordTextFromMessage(Message message) {
     final duration = seconds is num ? seconds.toInt() : 0;
     final minutes = (duration ~/ 60).toString().padLeft(2, '0');
     final remainder = (duration % 60).toString().padLeft(2, '0');
-    return '通话时长 $minutes:$remainder  ☎';
+    return '语音通话 $minutes:$remainder';
   }
-  if (status == 'declined') return '已拒绝语音通话';
-  if (status == 'cancelled') return '已取消语音通话';
+  if (status == 'declined') return '已拒绝';
+  if (status == 'cancelled') return '已取消';
   return '语音通话已结束';
 }
 

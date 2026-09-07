@@ -65,6 +65,10 @@ class _ChatPageState extends State<_ChatPage> {
   @override
   void initState() {
     super.initState();
+    final peerUserID = widget.peerUserID;
+    if (peerUserID?.isNotEmpty == true) {
+      OpenIMChatRepository.beginActiveChat(peerUserID!);
+    }
     _loadFuture = _loadHistory();
     OpenIMChatRepository.conversationReady.addListener(_onReady);
     OpenIMChatRepository.messageNotifier.addListener(_onMessage);
@@ -116,6 +120,7 @@ class _ChatPageState extends State<_ChatPage> {
         pendingConversation?.unreadCount = 0;
       }
       OpenIMChatRepository.conversationRevision.value++;
+      await OpenIMChatRepository.refreshMessageUnreadStatus();
     } catch (error) {
       debugPrint('[OpenIM] mark read failed: $error');
     } finally {
@@ -351,6 +356,10 @@ class _ChatPageState extends State<_ChatPage> {
 
   @override
   void dispose() {
+    final peerUserID = widget.peerUserID;
+    if (peerUserID?.isNotEmpty == true) {
+      OpenIMChatRepository.endActiveChat(peerUserID!);
+    }
     OpenIMChatRepository.conversationReady.removeListener(_onReady);
     OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
     _chatScrollController.removeListener(_onChatScroll);
@@ -820,6 +829,7 @@ class _ChatPageState extends State<_ChatPage> {
                                 soundPath: message.soundPath,
                                 soundUrl: message.soundUrl,
                                 soundDuration: message.soundDuration,
+                                isVoiceCallRecord: message.isVoiceCallRecord,
                                 mine: message.mine,
                                 avatarUrl: _resolvedPeerAvatar,
                                 ownAvatarUrl: widget.ownAvatarUrl,
@@ -1652,6 +1662,7 @@ class _ChatMessage extends StatelessWidget {
     required this.soundPath,
     required this.soundUrl,
     required this.soundDuration,
+    required this.isVoiceCallRecord,
     required this.mine,
     this.avatarUrl,
     this.ownAvatarUrl,
@@ -1667,6 +1678,7 @@ class _ChatMessage extends StatelessWidget {
   final String? soundPath;
   final String? soundUrl;
   final int? soundDuration;
+  final bool isVoiceCallRecord;
   final bool mine;
   final String? avatarUrl;
   final String? ownAvatarUrl;
@@ -1750,6 +1762,10 @@ class _ChatMessage extends StatelessWidget {
       );
     }
 
+    if (isVoiceCallRecord) {
+      return _VoiceCallRecordBubble(text: text, mine: mine);
+    }
+
     return _Bubble(palette: palette, text: text, mine: mine);
   }
 
@@ -1779,6 +1795,33 @@ class _ChatMessage extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _VoiceCallRecordBubble extends StatelessWidget {
+  const _VoiceCallRecordBubble({required this.text, required this.mine});
+
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = mine ? _black : _white;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: mine ? const Color(0xFF24B865) : const Color(0xFF2C2C2C),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(CupertinoIcons.phone_fill, color: foreground, size: 18),
+          const SizedBox(width: 8),
+          Text(text, style: TextStyle(color: foreground, fontSize: 16)),
+        ],
+      ),
+    );
+  }
 }
 
 class _ChatImagePreview extends StatelessWidget {
