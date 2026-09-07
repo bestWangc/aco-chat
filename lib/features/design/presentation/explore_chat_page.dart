@@ -1843,13 +1843,23 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
 
   Future<Source?> _source() async {
     final url = widget.url;
-    if (url?.isNotEmpty == true) return UrlSource(url!);
+    if (url != null && url.isNotEmpty) {
+      return UrlSource(_playbackUrl(url), mimeType: 'audio/mp4');
+    }
 
     final path = widget.path;
     if (path?.isNotEmpty == true && await File(path!).exists()) {
       return DeviceFileSource(path);
     }
     return null;
+  }
+
+  String _playbackUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'http' || uri.host != 'im.aco.chat') {
+      return url;
+    }
+    return uri.replace(scheme: 'https').toString();
   }
 
   @override
