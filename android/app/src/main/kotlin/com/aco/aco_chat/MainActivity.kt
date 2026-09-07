@@ -1,7 +1,9 @@
 package com.aco.aco_chat
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
@@ -84,6 +86,36 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                     "stop" -> {
                         stopService(Intent(this, LiveAudioForegroundService::class.java))
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/chat-background")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "start" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4202)
+                        }
+                        val intent = Intent(this, ChatKeepAliveService::class.java)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(null)
+                    }
+                    "stop" -> {
+                        stopService(Intent(this, ChatKeepAliveService::class.java))
+                        result.success(null)
+                    }
+                    "showMessage" -> {
+                        val title = call.argument<String>("title") ?: "新消息"
+                        val body = call.argument<String>("body") ?: "你收到一条新消息"
+                        ChatKeepAliveService.showMessage(applicationContext, title, body)
                         result.success(null)
                     }
                     else -> result.notImplemented()

@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../services/android_chat_background_service.dart';
+
 import '../domain/chat_repository.dart';
 
 /// OpenIM SDK 适配层。业务页面只依赖 [ChatRepository]。
@@ -152,8 +154,27 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static void _handleIncomingMessage(Message message) {
     messageNotifier.value = message;
-    if (message.sendID != _currentUserID) messageUnreadNotifier.value = true;
+    if (message.sendID != _currentUserID) {
+      messageUnreadNotifier.value = true;
+      unawaited(
+        AndroidChatBackgroundService.showMessage(
+          title: message.senderNickname?.isNotEmpty == true
+              ? message.senderNickname!
+              : '新消息',
+          body: _notificationPreview(message),
+        ),
+      );
+    }
     conversationRevision.value++;
+  }
+
+  static String _notificationPreview(Message message) {
+    final text = message.textElem?.content;
+    if (text?.isNotEmpty == true) return text!;
+    if (message.soundElem != null) return '[语音消息]';
+    if (message.pictureElem != null) return '[图片]';
+    if (message.customElem != null) return '[语音通话邀请]';
+    return '[新消息]';
   }
 
   Future<void> _refreshMessageUnreadStatus() async {

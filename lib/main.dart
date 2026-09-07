@@ -10,6 +10,7 @@ import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
+import 'package:aco_chat/services/android_chat_background_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:http/http.dart' as http;
@@ -82,6 +83,7 @@ class WalletAccountAuthentication {
       // OpenIM is optional for entering the app. Start it in the background;
       // SDK-dependent screens wait for the readiness signal before calling it.
       unawaited(_connectOpenIM(result.user.accountId));
+      unawaited(AndroidChatBackgroundService.start());
       return result.user;
     } finally {
       client.close();
@@ -225,6 +227,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    AndroidChatBackgroundService.updateAppLifecycle(state);
     if (state == AppLifecycleState.resumed && _accountProfile != null) {
       unawaited(
         WalletAccountAuthentication._connectOpenIM(_accountProfile!.accountId),
@@ -285,6 +288,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       _accountProfile = null;
       _walletLoginFuture = null;
     });
+    unawaited(AndroidChatBackgroundService.stop());
   }
 
   void _onThemeChanged(bool isDark) {
@@ -343,6 +347,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
         unawaited(
           WalletAccountAuthentication._connectOpenIM(result.user.accountId),
         );
+        unawaited(AndroidChatBackgroundService.start());
         return result.user;
       }
     } finally {
