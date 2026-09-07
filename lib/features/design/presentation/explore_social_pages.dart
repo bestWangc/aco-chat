@@ -49,14 +49,18 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  _MessageQuickActions(
-                    controller: _searchController,
-                    hasFriendRequest: false,
-                    palette: widget.palette,
-                    showContacts: _showContacts,
-                    onQueryChanged: (query) => setState(() => _query = query),
-                    onMessagesTap: () => setState(() => _showContacts = false),
-                    onContactsTap: () => setState(() => _showContacts = true),
+                  ValueListenableBuilder<FriendApplicationInfo?>(
+                    valueListenable: OpenIMChatRepository.friendRequestNotifier,
+                    builder: (_, request, _) => _MessageQuickActions(
+                      controller: _searchController,
+                      hasFriendRequest: request != null,
+                      palette: widget.palette,
+                      showContacts: _showContacts,
+                      onQueryChanged: (query) => setState(() => _query = query),
+                      onMessagesTap: () =>
+                          setState(() => _showContacts = false),
+                      onContactsTap: () => setState(() => _showContacts = true),
+                    ),
                   ),
                 ],
               ),
@@ -70,30 +74,18 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                   onOpen: widget.onOpen,
                   embedded: true,
                 )
-              else ...[
-                _FriendRequestChatSection(palette: widget.palette),
+              else
                 _OpenIMConversationList(
                   palette: widget.palette,
                   onOpen: widget.onOpen,
                   query: _query,
                 ),
-              ],
             ]),
           ),
         ],
       ),
     ),
   );
-}
-
-class _FriendRequestChatSection extends StatefulWidget {
-  const _FriendRequestChatSection({required this.palette});
-
-  final AcoPalette palette;
-
-  @override
-  State<_FriendRequestChatSection> createState() =>
-      _FriendRequestChatSectionState();
 }
 
 Future<List<FriendContact>> _fetchFriendRequests() async {
@@ -103,88 +95,6 @@ Future<List<FriendContact>> _fetchFriendRequests() async {
   } finally {
     client.close();
   }
-}
-
-class _FriendRequestChatSectionState extends State<_FriendRequestChatSection> {
-  late Future<List<FriendContact>> _requests;
-
-  @override
-  void initState() {
-    super.initState();
-    _requests = _load();
-    OpenIMChatRepository.friendRequestNotifier.addListener(_reload);
-  }
-
-  void _reload() {
-    if (mounted) {
-      setState(() {
-        _requests = _load();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    OpenIMChatRepository.friendRequestNotifier.removeListener(_reload);
-    super.dispose();
-  }
-
-  Future<List<FriendContact>> _load() async {
-    return _fetchFriendRequests();
-  }
-
-  Future<void> _openRequestsPage(BuildContext context) async {
-    // Mark the badge as read immediately when the request list is opened.
-    OpenIMChatRepository.friendRequestNotifier.value = null;
-    await Navigator.of(context).push(
-      CupertinoPageRoute<void>(
-        builder: (_) => _FriendRequestsPage(palette: widget.palette),
-      ),
-    );
-    // Treat the request list as read even if an SDK event arrived while it
-    // was open. This keeps the bottom navigation badge in sync on return.
-    OpenIMChatRepository.friendRequestNotifier.value = null;
-    if (!mounted) return;
-    setState(() {
-      _requests = _load();
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => FutureBuilder<List<FriendContact>>(
-    future: _requests,
-    builder: (context, snapshot) {
-      final requests = snapshot.data ?? const <FriendContact>[];
-      if (requests.isEmpty) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: _ContactListTile(
-          palette: widget.palette,
-          name: '有新的好友请求（${requests.length}）',
-          onTap: () {
-            _openRequestsPage(context);
-          },
-          backgroundColor: widget.palette.accent,
-          borderRadius: BorderRadius.circular(6),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 8,
-            vertical: 6,
-          ),
-          nameMaxLines: 2,
-          showAvatar: false,
-          avatarSize: 30,
-          avatarGap: 0,
-          nameFontSize: 14,
-          nameColor: const Color(0xFF000000),
-          trailing: Icon(
-            CupertinoIcons.chevron_right,
-            color: const Color(0xFF000000),
-            size: 16,
-          ),
-        ),
-      );
-    },
-  );
 }
 
 class _FriendRequestsPage extends StatefulWidget {
@@ -379,8 +289,6 @@ class _ContactsPageState extends State<_ContactsPage> {
   @override
   void initState() {
     super.initState();
-    // Opening the contacts page marks the current friend requests as seen.
-    OpenIMChatRepository.friendRequestNotifier.value = null;
     _friends = _loadFriends();
   }
 
@@ -494,18 +402,27 @@ class _ContactsPageState extends State<_ContactsPage> {
                   padding: EdgeInsets.zero,
                   children: [
                     const SizedBox(height: 8),
-                    _ContactsQuickAction(
-                      palette: widget.palette,
-                      label: '新的朋友',
-                      icon: CupertinoIcons.person_add_solid,
-                      assetPath: 'assets/icons/contact_new_friend.png',
-                      color: const Color(0xFFFF9E38),
-                      dividerLeftPadding: 18 + 40 + 16,
-                      onTap: () => Navigator.of(context).push(
-                        CupertinoPageRoute<void>(
-                          builder: (_) =>
-                              _FriendRequestsPage(palette: widget.palette),
-                        ),
+                    ValueListenableBuilder<FriendApplicationInfo?>(
+                      valueListenable:
+                          OpenIMChatRepository.friendRequestNotifier,
+                      builder: (_, request, _) => _ContactsQuickAction(
+                        palette: widget.palette,
+                        label: '新的朋友',
+                        icon: CupertinoIcons.person_add_solid,
+                        assetPath: 'assets/icons/contact_new_friend.png',
+                        color: const Color(0xFFFF9E38),
+                        dividerLeftPadding: 18 + 40 + 16,
+                        showBadge: request != null,
+                        onTap: () {
+                          OpenIMChatRepository.friendRequestNotifier.value =
+                              null;
+                          Navigator.of(context).push(
+                            CupertinoPageRoute<void>(
+                              builder: (_) =>
+                                  _FriendRequestsPage(palette: widget.palette),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     _ContactsQuickAction(
@@ -603,6 +520,7 @@ class _ContactsQuickAction extends StatelessWidget {
     this.assetPath,
     required this.color,
     this.dividerLeftPadding = 0,
+    this.showBadge = false,
     required this.onTap,
   });
   final AcoPalette palette;
@@ -611,6 +529,7 @@ class _ContactsQuickAction extends StatelessWidget {
   final String? assetPath;
   final Color color;
   final double dividerLeftPadding;
+  final bool showBadge;
   final VoidCallback onTap;
 
   @override
@@ -626,27 +545,51 @@ class _ContactsQuickAction extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 18),
               child: Row(
                 children: [
-                  if (assetPath == null)
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        icon,
-                        color: const Color(0xFFFFFFFF),
-                        size: 21,
-                      ),
-                    )
-                  else
-                    Image.asset(
-                      assetPath!,
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.contain,
+                  SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        if (assetPath == null)
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              icon,
+                              color: const Color(0xFFFFFFFF),
+                              size: 21,
+                            ),
+                          )
+                        else
+                          Image.asset(
+                            assetPath!,
+                            width: 40,
+                            height: 40,
+                            fit: BoxFit.contain,
+                          ),
+                        if (showBadge)
+                          const Positioned(
+                            top: -2,
+                            right: -2,
+                            child: SizedBox(
+                              width: 9,
+                              height: 9,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: _danger,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
+                  ),
                   const SizedBox(width: 16),
                   Text(
                     label,
@@ -801,72 +744,49 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
     }
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
-        final conversations = await OpenIM.iMManager.conversationManager
+        final openIMConversations = await OpenIM.iMManager.conversationManager
             .getAllConversationList()
             .timeout(const Duration(seconds: 3));
-        final userIDs = conversations
-            .map((conversation) => conversation.userID)
-            .whereType<String>()
-            .where((id) => id.isNotEmpty)
-            .toSet()
-            .toList();
-        if (userIDs.isNotEmpty) {
-          try {
-            final users = await OpenIM.iMManager.userManager
-                .getUsersInfo(userIDList: userIDs)
-                .timeout(const Duration(seconds: 3));
-            final profiles = {
-              for (final user in users)
-                if (user.userID != null) user.userID!: user,
-            };
-            for (final conversation in conversations) {
-              final profile = profiles[conversation.userID];
-              if (profile == null) continue;
-              if (profile.nickname?.trim().isNotEmpty == true) {
-                conversation.showName = profile.nickname!.trim();
-              }
-              conversation.faceURL = profile.faceURL;
+        // Aco owns friend relationships and profile data. OpenIM only supplies
+        // message transport metadata, so fail closed when Aco cannot review
+        // the list instead of exposing its complete conversation history.
+        final client = AccountApiClient();
+        try {
+          final friends = await AccountSession(
+            client,
+          ).listFriends().timeout(const Duration(seconds: 5));
+          final profiles = {
+            for (final friend in friends) friend.accountId: friend,
+          };
+          final conversations = openIMConversations
+              .where(
+                (conversation) => profiles.containsKey(conversation.userID),
+              )
+              .toList(growable: false);
+          _identityByUserID = {
+            for (final friend in friends)
+              if (friend.identity > 0) friend.accountId: friend.identity,
+          };
+          for (final conversation in conversations) {
+            final friend = profiles[conversation.userID]!;
+            if (friend.nickname.isNotEmpty) {
+              conversation.showName = friend.nickname;
             }
-          } catch (error) {
-            debugPrint('[OpenIM] conversation profile load failed: $error');
-          }
-          // The application API is the source of truth for profile fields;
-          // OpenIM may legitimately return the account ID as nickname.
-          final client = AccountApiClient();
-          try {
-            final friends = await AccountSession(
-              client,
-            ).listFriends().timeout(const Duration(seconds: 5));
-            final profiles = {
-              for (final friend in friends) friend.accountId: friend,
-            };
-            _identityByUserID = {
-              for (final friend in friends)
-                if (friend.identity > 0) friend.accountId: friend.identity,
-            };
-            for (final conversation in conversations) {
-              final friend = profiles[conversation.userID];
-              if (friend == null) continue;
-              if (friend.nickname.isNotEmpty) {
-                conversation.showName = friend.nickname;
-              }
-              if (friend.avatarUrl.isNotEmpty) {
-                conversation.faceURL = friend.avatarUrl;
-              }
+            if (friend.avatarUrl.isNotEmpty) {
+              conversation.faceURL = friend.avatarUrl;
             }
-          } catch (error) {
-            debugPrint('[API] conversation profile load failed: $error');
-          } finally {
-            client.close();
           }
-        }
-        if (conversations.isEmpty && _cachedConversations.isNotEmpty) {
+          _cachedConversations = List<ConversationInfo>.unmodifiable(
+            conversations,
+          );
           return _cachedConversations;
+        } catch (error) {
+          debugPrint('[API] conversation authorization failed: $error');
+          _identityByUserID = const {};
+          return const <ConversationInfo>[];
+        } finally {
+          client.close();
         }
-        _cachedConversations = List<ConversationInfo>.unmodifiable(
-          conversations,
-        );
-        return _cachedConversations;
       } catch (error) {
         final isResourceNotReady =
             error.toString().contains('10004') ||

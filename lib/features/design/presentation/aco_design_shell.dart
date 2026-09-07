@@ -523,31 +523,37 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                     ),
                   ),
                 ),
-                ValueListenableBuilder<FriendApplicationInfo?>(
-                  valueListenable: OpenIMChatRepository.friendRequestNotifier,
-                  builder: (_, request, _) => AcoBottomNav(
-                    selected: _selectedNav,
-                    dark: dark,
-                    showSocialBadge: request != null,
-                    onSelected: (index) {
-                      const destinations = [
-                        AcoScreen.walletHome,
-                        AcoScreen.comingSoon,
-                        AcoScreen.comingSoon,
-                        AcoScreen.squareFeed,
-                        AcoScreen.socialMessages,
-                      ];
-                      if (index == 4) {
-                        _open(AcoScreen.socialMessages);
-                        return;
-                      }
-                      setState(() {
-                        _selectedNav = index;
-                        _rootScreen = destinations[index];
-                        if (index == 3) _liveListRevision++;
-                      });
-                    },
-                  ),
+                ValueListenableBuilder<bool>(
+                  valueListenable: OpenIMChatRepository.messageUnreadNotifier,
+                  builder: (_, hasUnreadMessages, _) =>
+                      ValueListenableBuilder<FriendApplicationInfo?>(
+                        valueListenable:
+                            OpenIMChatRepository.friendRequestNotifier,
+                        builder: (_, request, _) => AcoBottomNav(
+                          selected: _selectedNav,
+                          dark: dark,
+                          showSocialBadge: hasUnreadMessages || request != null,
+                          onSelected: (index) {
+                            const destinations = [
+                              AcoScreen.walletHome,
+                              AcoScreen.comingSoon,
+                              AcoScreen.comingSoon,
+                              AcoScreen.squareFeed,
+                              AcoScreen.socialMessages,
+                            ];
+                            if (index == 4) {
+                              OpenIMChatRepository.markMessagesSeen();
+                              _open(AcoScreen.socialMessages);
+                              return;
+                            }
+                            setState(() {
+                              _selectedNav = index;
+                              _rootScreen = destinations[index];
+                              if (index == 3) _liveListRevision++;
+                            });
+                          },
+                        ),
+                      ),
                 ),
               ],
             ),

@@ -16,6 +16,9 @@ final class OpenIMChatRepository implements ChatRepository {
       ValueNotifier<FriendApplicationInfo?>(null);
   static final ValueNotifier<Message?> messageNotifier =
       ValueNotifier<Message?>(null);
+  static final ValueNotifier<bool> messageUnreadNotifier = ValueNotifier<bool>(
+    false,
+  );
   static final ValueNotifier<int> conversationRevision = ValueNotifier<int>(0);
   static final ValueNotifier<bool> conversationReady = ValueNotifier<bool>(
     false,
@@ -123,6 +126,7 @@ final class OpenIMChatRepository implements ChatRepository {
       // failed session; the API polling fallback still delivers requests.
       developer.log('好友监听器注册延迟失败: $error', name: 'OpenIM.friendship');
     }
+    await _refreshMessageUnreadStatus();
     conversationReady.value = true;
     // flutter_openim_sdk 3.8.3+hotfix.14 exposes setListenerForService in
     // Dart, but the Android plugin does not implement the corresponding
@@ -135,14 +139,30 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static void _handleIncomingMessage(Message message) {
     messageNotifier.value = message;
+    if (message.sendID != _currentUserID) messageUnreadNotifier.value = true;
     conversationRevision.value++;
   }
+
+  Future<void> _refreshMessageUnreadStatus() async {
+    try {
+      final conversations = await _sdk.conversationManager
+          .getAllConversationList();
+      messageUnreadNotifier.value = conversations.any(
+        (conversation) => conversation.unreadCount > 0,
+      );
+    } catch (error) {
+      developer.log('未读消息状态加载失败: $error', name: 'OpenIM.message');
+    }
+  }
+
+  static void markMessagesSeen() => messageUnreadNotifier.value = false;
 
   @override
   Future<void> logout() async {
     await _sdk.logout();
     _currentUserID = null;
     friendRequestNotifier.value = null;
+    messageUnreadNotifier.value = false;
     conversationReady.value = false;
     _sdkInitialized = false;
   }

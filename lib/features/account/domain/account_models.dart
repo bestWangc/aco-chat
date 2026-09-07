@@ -2,6 +2,13 @@ import 'dart:convert';
 
 const _shortAccountIdLength = 17;
 
+/// The sole public OpenIM entrypoint. Aco API issues the user token, while
+/// message traffic goes directly to this TLS-protected gateway. These values
+/// intentionally do not come from the token response, so an older API cannot
+/// direct a client to a test port or container hostname.
+const openIMApiAddress = 'https://im.aco.chat';
+const openIMWebSocketAddress = 'wss://im.aco.chat';
+
 String displayAccountId(String accountId) {
   final digitsOnly = accountId.replaceAll(RegExp(r'[^0-9]'), '');
   if (digitsOnly.isEmpty) return accountId;
@@ -161,8 +168,8 @@ class OpenIMToken {
   factory OpenIMToken.fromJson(Map<String, dynamic> json) => OpenIMToken(
     userId: json['user_id'] as String,
     token: json['token'] as String,
-    apiAddr: json['api_addr'] as String,
-    wsAddr: json['ws_addr'] as String,
+    apiAddr: openIMApiAddress,
+    wsAddr: openIMWebSocketAddress,
   );
 }
 
@@ -234,6 +241,33 @@ class LiveKitJoinInfo {
   final int identity;
   final bool canPublish;
   final bool canPublishData;
+}
+
+class VoiceCallInfo {
+  const VoiceCallInfo({
+    required this.callId,
+    required this.status,
+    this.url,
+    this.token,
+    this.roomName,
+  });
+
+  factory VoiceCallInfo.fromJson(Map<String, dynamic> json) => VoiceCallInfo(
+    callId: json['call_id'] as String,
+    status: json['status'] as String,
+    url: json['url'] as String?,
+    token: json['token'] as String?,
+    roomName: json['room_name'] as String?,
+  );
+
+  final String callId;
+  final String status;
+  final String? url;
+  final String? token;
+  final String? roomName;
+
+  bool get hasLiveKitCredentials =>
+      url?.isNotEmpty == true && token?.isNotEmpty == true;
 }
 
 class LiveMessage {

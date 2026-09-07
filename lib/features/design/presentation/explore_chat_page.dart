@@ -37,6 +37,7 @@ class _ChatPageState extends State<_ChatPage> {
   String? _voiceRecordingPath;
   DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
+  final _chatMessageKeys = <_ChatHistoryMessage, GlobalKey>{};
   final List<Message> _historyMessages = <Message>[];
   final List<Message> _pendingSentMessages = <Message>[];
   Future<void>? _loadFuture;
@@ -48,6 +49,8 @@ class _ChatPageState extends State<_ChatPage> {
   bool _loadingOlder = false;
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
+  bool _chatAccessGranted = false;
+  String? _presentedIncomingCallID;
 
   String? get _currentConversationID {
     if (_resolvedConversationID?.isNotEmpty == true) {
@@ -82,6 +85,11 @@ class _ChatPageState extends State<_ChatPage> {
     final message = OpenIMChatRepository.messageNotifier.value;
     if (!mounted || message == null) return;
     if (message.sendID != widget.peerUserID) return;
+    final invite = _voiceCallInviteID(message);
+    if (invite != null) {
+      unawaited(_presentIncomingVoiceCall(invite));
+      return;
+    }
     if (!_ChatHistoryMessage.isDisplayable(message)) return;
     final clientMsgID = message.clientMsgID;
     if (clientMsgID?.isNotEmpty == true &&
@@ -96,6 +104,40 @@ class _ChatPageState extends State<_ChatPage> {
     );
     unawaited(_markCurrentConversationAsRead());
     _scrollToBottom();
+  }
+
+  String? _voiceCallInviteID(Message message) {
+    final data = message.customElem?.data;
+    if (data == null || data.isEmpty) return null;
+    try {
+      final payload = jsonDecode(data);
+      if (payload is! Map<String, dynamic> ||
+          payload['type'] != 'aco.voice_call.invite') {
+        return null;
+      }
+      final callID = payload['call_id'];
+      return callID is String && callID.isNotEmpty ? callID : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _presentIncomingVoiceCall(String callID) async {
+    if (_presentedIncomingCallID == callID) return;
+    _presentedIncomingCallID = callID;
+    await Navigator.of(context).push<void>(
+      _AcoPageRoute<void>(
+        builder: (_) => _VoiceCallPage(
+          name: _peerName,
+          avatarUrl: _resolvedPeerAvatar,
+          callID: callID,
+          incoming: true,
+        ),
+      ),
+    );
+    if (mounted && _presentedIncomingCallID == callID) {
+      _presentedIncomingCallID = null;
+    }
   }
 
   Future<void> _markCurrentConversationAsRead() async {
@@ -130,45 +172,23 @@ class _ChatPageState extends State<_ChatPage> {
     }
   }
 
-  Future<void> _loadPeerProfile(String userID) async {
-    try {
-      final users = await OpenIM.iMManager.userManager.getUsersInfo(
-        userIDList: <String>[userID],
-      );
-      final user = users.isEmpty ? null : users.first;
-      final nickname = user?.nickname?.trim();
-      if (nickname?.isNotEmpty == true) _resolvedPeerName = nickname;
-      if (user?.faceURL?.isNotEmpty == true) {
-        _resolvedPeerAvatar = user!.faceURL;
-      }
-    } catch (error) {
-      debugPrint('[OpenIM] user profile load failed: $error');
-    }
-
+  Future<bool> _loadPeerProfile(String userID) async {
     final client = AccountApiClient();
     try {
-      final profile = await AccountSession(client).profileByAccountId(userID);
-      if (profile.nickname.isNotEmpty) _resolvedPeerName = profile.nickname;
-      if (profile.avatarUrl.isNotEmpty) _resolvedPeerAvatar = profile.avatarUrl;
-      _resolvedPeerIdentity = profile.identity;
-    } catch (error) {
-      debugPrint('[API] chat profile load failed: $error');
-    }
-    try {
       final friends = await AccountSession(client).listFriends();
-      for (final friend in friends) {
-        if (friend.accountId != userID) continue;
-        if (friend.nickname.isNotEmpty) _resolvedPeerName = friend.nickname;
-        if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
-        _resolvedPeerIdentity = friend.identity;
-        break;
-      }
+      final matches = friends.where((friend) => friend.accountId == userID);
+      if (matches.isEmpty) return false;
+      final friend = matches.first;
+      if (friend.nickname.isNotEmpty) _resolvedPeerName = friend.nickname;
+      if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
+      _resolvedPeerIdentity = friend.identity;
+      return true;
     } catch (error) {
       debugPrint('[API] chat profile load failed: $error');
+      return false;
     } finally {
       client.close();
     }
-    if (mounted) setState(() {});
   }
 
   Future<void> _loadHistory() async {
@@ -179,7 +199,13 @@ class _ChatPageState extends State<_ChatPage> {
       return;
     }
     try {
-      await _loadPeerProfile(userID);
+      if (!await _loadPeerProfile(userID)) {
+        _chatAccessGranted = false;
+        _error = '你们已不是好友，无法查看聊天记录';
+        return;
+      }
+      _chatAccessGranted = true;
+      if (mounted) setState(() {});
       final conversation = await OpenIM.iMManager.conversationManager
           .getOneConversation(
             sourceID: userID,
@@ -299,6 +325,10 @@ class _ChatPageState extends State<_ChatPage> {
     final text = _messageController.text.trim();
     final userID = widget.peerUserID;
     if (text.isEmpty || userID == null || userID.isEmpty) return;
+    if (!_chatAccessGranted) {
+      _showNotice(context, '无法发送', '请先确认你们仍是好友。');
+      return;
+    }
     final shouldFollowNewMessage =
         !_chatScrollController.hasClients ||
         _chatScrollController.position.pixels <= 80;
@@ -396,6 +426,44 @@ class _ChatPageState extends State<_ChatPage> {
     });
   }
 
+  GlobalKey _keyForMessage(_ChatHistoryMessage message) =>
+      _chatMessageKeys.putIfAbsent(message, GlobalKey.new);
+
+  void _focusMessage(_ChatHistoryMessage message) {
+    if (!_chatHistory.contains(message)) return;
+    final key = _keyForMessage(message);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chatScrollController.hasClients) return;
+      final historyIndex = _chatHistory.indexOf(message);
+      if (historyIndex < 0) return;
+
+      final position = _chatScrollController.position;
+      if (key.currentContext == null && _chatHistory.length > 1) {
+        final reversedIndex = _chatHistory.length - historyIndex - 1;
+        final estimatedOffset =
+            position.maxScrollExtent *
+            reversedIndex /
+            (_chatHistory.length - 1);
+        _chatScrollController.jumpTo(
+          estimatedOffset.clamp(0.0, position.maxScrollExtent).toDouble(),
+        );
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final context = key.currentContext;
+        if (context == null) return;
+        unawaited(
+          Scrollable.ensureVisible(
+            context,
+            alignment: .5,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+          ),
+        );
+      });
+    });
+  }
+
   bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
 
   String get _peerName {
@@ -425,6 +493,10 @@ class _ChatPageState extends State<_ChatPage> {
       final imageBytes = await photo.readAsBytes();
       final userID = widget.peerUserID;
       if (userID == null || userID.isEmpty) return;
+      if (!_chatAccessGranted) {
+        if (mounted) _showNotice(context, '无法发送', '请先确认你们仍是好友。');
+        return;
+      }
       if (!OpenIMChatRepository.conversationReady.value) {
         if (!mounted) return;
         _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
@@ -486,15 +558,44 @@ class _ChatPageState extends State<_ChatPage> {
     if (label == '语音通话') {
       setState(() => _morePanelVisible = false);
       if (!mounted) return;
-      await Navigator.of(context).push<void>(
-        _AcoPageRoute<void>(
-          builder: (_) => _VoiceCallPage(
-            name: _peerName,
-            avatarUrl: _resolvedPeerAvatar ?? widget.ownAvatarUrl,
-            incoming: false,
+      final userID = widget.peerUserID;
+      if (userID == null || userID.isEmpty || !_chatAccessGranted) {
+        _showNotice(context, '无法发起通话', '请先确认你们仍是好友。');
+        return;
+      }
+      final client = AccountApiClient();
+      try {
+        final call = await AccountSession(client).startVoiceCall(userID);
+        final invite = await OpenIM.iMManager.messageManager
+            .createCustomMessage(
+              data: jsonEncode({
+                'type': 'aco.voice_call.invite',
+                'call_id': call.callId,
+              }),
+              extension: 'aco.voice_call',
+              description: '语音通话邀请',
+            );
+        await OpenIM.iMManager.messageManager.sendMessage(
+          message: invite,
+          userID: userID,
+          offlinePushInfo: OfflinePushInfo(title: '语音通话', desc: '邀请你进行语音通话'),
+        );
+        if (!mounted) return;
+        await Navigator.of(context).push<void>(
+          _AcoPageRoute<void>(
+            builder: (_) => _VoiceCallPage(
+              name: _peerName,
+              avatarUrl: _resolvedPeerAvatar,
+              callID: call.callId,
+            ),
           ),
-        ),
-      );
+        );
+      } catch (error) {
+        if (mounted) _showNotice(context, '无法发起通话', '请检查网络后重试。');
+        debugPrint('[VoiceCall] start failed: $error');
+      } finally {
+        client.close();
+      }
       return;
     }
     setState(() => _morePanelVisible = false);
@@ -604,6 +705,7 @@ class _ChatPageState extends State<_ChatPage> {
       final userID = widget.peerUserID;
       if (userID == null ||
           userID.isEmpty ||
+          !_chatAccessGranted ||
           !OpenIMChatRepository.conversationReady.value) {
         if (await file.exists()) await file.delete();
         if (mounted) _showNotice(context, '发送失败', '聊天连接未就绪。');
@@ -679,6 +781,7 @@ class _ChatPageState extends State<_ChatPage> {
                       palette: widget.palette,
                       peerName: _peerName,
                       messages: _chatHistory,
+                      onMessageTap: _focusMessage,
                     ),
                   ),
                 ),
@@ -741,21 +844,24 @@ class _ChatPageState extends State<_ChatPage> {
                           itemBuilder: (_, index) {
                             final message =
                                 _chatHistory[_chatHistory.length - 1 - index];
-                            return _ChatMessage(
-                              palette: widget.palette,
-                              text: message.text,
-                              imageBytes: message.imageBytes,
-                              imagePath: message.imagePath,
-                              imageUrl: message.imageUrl,
-                              previewImageUrl: message.previewImageUrl,
-                              shouldCacheThumbnail:
-                                  message.shouldCacheThumbnail,
-                              soundPath: message.soundPath,
-                              soundUrl: message.soundUrl,
-                              soundDuration: message.soundDuration,
-                              mine: message.mine,
-                              avatarUrl: _resolvedPeerAvatar,
-                              ownAvatarUrl: widget.ownAvatarUrl,
+                            return KeyedSubtree(
+                              key: _keyForMessage(message),
+                              child: _ChatMessage(
+                                palette: widget.palette,
+                                text: message.text,
+                                imageBytes: message.imageBytes,
+                                imagePath: message.imagePath,
+                                imageUrl: message.imageUrl,
+                                previewImageUrl: message.previewImageUrl,
+                                shouldCacheThumbnail:
+                                    message.shouldCacheThumbnail,
+                                soundPath: message.soundPath,
+                                soundUrl: message.soundUrl,
+                                soundDuration: message.soundDuration,
+                                mine: message.mine,
+                                avatarUrl: _resolvedPeerAvatar,
+                                ownAvatarUrl: widget.ownAvatarUrl,
+                              ),
                             );
                           },
                         );
@@ -988,15 +1094,6 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   Duration _callDuration = Duration.zero;
   Timer? _callTimer;
 
-  @override
-  void initState() {
-    super.initState();
-    if (widget.incoming) return;
-    // Until call signaling is wired up, present the connected state after a
-    // short invite period so the dial screen can be previewed end to end.
-    _callTimer = Timer(const Duration(seconds: 2), _connectCall);
-  }
-
   void _connectCall() {
     if (!mounted) return;
     setState(() => _connected = true);
@@ -1024,122 +1121,61 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
     return '等待对方接受邀请.';
   }
 
-  List<Color> get _backgroundColors {
-    if (widget.incoming) {
-      return const [Color(0xFF151515), Color(0xFF171B24)];
-    }
-    return const [Color(0xFF263D1B), Color(0xFF0C100C)];
-  }
-
-  double get _overlayOpacity => widget.incoming ? .42 : .2;
-
   double get _statusFontSize => _connected ? 20 : 18;
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
-    backgroundColor: const Color(0xFF1A2417),
+    backgroundColor: _black,
     child: Stack(
       fit: StackFit.expand,
       children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: _backgroundColors,
-            ),
-          ),
-        ),
-        if (widget.avatarUrl?.isNotEmpty == true)
-          ImageFiltered(
-            imageFilter: ui.ImageFilter.blur(sigmaX: 34, sigmaY: 34),
-            child: Opacity(
-              opacity: .18,
-              child: Image.network(
-                widget.avatarUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              ),
-            ),
-          ),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: const Color(0xFF000000).withValues(alpha: _overlayOpacity),
-          ),
-        ),
         SafeArea(
           child: Column(
             children: [
-              SizedBox(
-                height: 68,
-                child: widget.incoming
-                    ? Align(
-                        alignment: Alignment.topLeft,
-                        child: CupertinoButton(
-                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                          onPressed: Navigator.of(context).pop,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF4A4A4D),
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                            child: const Padding(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: 18,
-                                vertical: 10,
+              if (widget.incoming)
+                SizedBox(
+                  height: 68,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: CupertinoButton(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                      onPressed: Navigator.of(context).pop,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4A4A4D),
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                        child: const Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                CupertinoIcons.bell_slash_fill,
+                                color: _white,
+                                size: 18,
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    CupertinoIcons.bell_slash_fill,
-                                    color: _white,
-                                    size: 18,
-                                  ),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    '忽略',
-                                    style: TextStyle(
-                                      color: _white,
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
+                              SizedBox(width: 8),
+                              Text(
+                                '忽略',
+                                style: TextStyle(
+                                  color: _white,
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          CupertinoButton(
-                            padding: const EdgeInsets.all(20),
-                            onPressed: Navigator.of(context).pop,
-                            child: const Icon(
-                              CupertinoIcons.chevron_down,
-                              color: _white,
-                              size: 28,
-                            ),
-                          ),
-                          if (_connected)
-                            CupertinoButton(
-                              padding: const EdgeInsets.all(20),
-                              onPressed: () {},
-                              child: const Icon(
-                                CupertinoIcons.person_add,
-                                color: _white,
-                                size: 25,
-                              ),
-                            )
-                          else
-                            const SizedBox(width: 68),
-                        ],
                       ),
-              ),
+                    ),
+                  ),
+                ),
               const Spacer(flex: 2),
-              _VoiceCallAvatar(name: widget.name, avatarUrl: widget.avatarUrl),
+              _VoiceCallAvatar(avatarUrl: widget.avatarUrl),
               const SizedBox(height: 22),
               Text(
                 widget.name,
@@ -1215,28 +1251,29 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
 }
 
 class _VoiceCallAvatar extends StatelessWidget {
-  const _VoiceCallAvatar({required this.name, this.avatarUrl});
+  const _VoiceCallAvatar({this.avatarUrl});
 
-  final String name;
   final String? avatarUrl;
 
   @override
-  Widget build(BuildContext context) => Container(
+  Widget build(BuildContext context) => SizedBox(
     width: 104,
     height: 104,
-    decoration: BoxDecoration(
-      color: const Color(0xFF78B844),
-      borderRadius: BorderRadius.circular(14),
+    child: ClipOval(
+      child: avatarUrl?.isNotEmpty == true
+          ? Image.network(
+              avatarUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => _defaultAvatar(),
+            )
+          : _defaultAvatar(),
     ),
-    clipBehavior: Clip.antiAlias,
-    child: avatarUrl?.isNotEmpty == true
-        ? Image.network(avatarUrl!, fit: BoxFit.cover)
-        : Center(
-            child: Text(
-              name.characters.firstOrNull ?? '?',
-              style: const TextStyle(color: _white, fontSize: 64),
-            ),
-          ),
+  );
+
+  Widget _defaultAvatar() => Image.asset(
+    _defaultAvatarAsset,
+    fit: BoxFit.cover,
+    semanticLabel: '默认头像',
   );
 }
 
@@ -1262,8 +1299,8 @@ class _VoiceCallControl extends StatelessWidget {
         padding: EdgeInsets.zero,
         onPressed: onPressed,
         child: Container(
-          width: 86,
-          height: 86,
+          width: 70,
+          height: 70,
           decoration: BoxDecoration(
             color: destructive
                 ? const Color(0xFFE84D50)
@@ -1275,7 +1312,7 @@ class _VoiceCallControl extends StatelessWidget {
           child: Icon(
             icon,
             color: destructive || !active ? _white : _black,
-            size: 34,
+            size: 28,
           ),
         ),
       ),
