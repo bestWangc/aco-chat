@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -180,6 +181,7 @@ void main() {
     expect(request.method, 'GET');
     expect(request.url.path, '/api/v1/lives');
     expect(request.headers['authorization'], 'Bearer signed-token');
+    expect(request.headers['x-app-version'], AppConfig.appVersion);
     expect(lives.single.title, '真实直播主题');
     expect(lives.single.coverUrl, '/uploads/live-cover-9.jpg');
     expect(lives.single.status, 'live');
