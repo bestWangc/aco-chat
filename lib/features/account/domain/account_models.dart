@@ -249,7 +249,6 @@ class VoiceCallInfo {
     required this.status,
     this.url,
     this.token,
-    this.roomName,
   });
 
   factory VoiceCallInfo.fromJson(Map<String, dynamic> json) => VoiceCallInfo(
@@ -257,14 +256,12 @@ class VoiceCallInfo {
     status: json['status'] as String,
     url: json['url'] as String?,
     token: json['token'] as String?,
-    roomName: json['room_name'] as String?,
   );
 
   final String callId;
   final String status;
   final String? url;
   final String? token;
-  final String? roomName;
 
   bool get hasLiveKitCredentials =>
       url?.isNotEmpty == true && token?.isNotEmpty == true;

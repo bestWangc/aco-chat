@@ -92,11 +92,13 @@ class _ChatHistorySearchPage extends StatefulWidget {
     required this.palette,
     required this.peerName,
     required this.messages,
+    required this.onMessageTap,
   });
 
   final AcoPalette palette;
   final String peerName;
   final List<_ChatHistoryMessage> messages;
+  final ValueChanged<_ChatHistoryMessage> onMessageTap;
 
   @override
   State<_ChatHistorySearchPage> createState() => _ChatHistorySearchPageState();
@@ -157,11 +159,20 @@ class _ChatHistorySearchPageState extends State<_ChatHistorySearchPage> {
                       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
                       itemCount: results.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 6),
-                      itemBuilder: (context, index) => _ChatHistoryResultTile(
-                        palette: widget.palette,
-                        peerName: widget.peerName,
-                        message: results[index],
-                      ),
+                      itemBuilder: (context, index) {
+                        final message = results[index];
+                        return _ChatHistoryResultTile(
+                          palette: widget.palette,
+                          peerName: widget.peerName,
+                          message: message,
+                          onTap: () {
+                            widget.onMessageTap(message);
+                            final navigator = Navigator.of(context);
+                            navigator.pop();
+                            navigator.pop();
+                          },
+                        );
+                      },
                     ),
             ),
           ],
@@ -176,38 +187,45 @@ class _ChatHistoryResultTile extends StatelessWidget {
     required this.palette,
     required this.peerName,
     required this.message,
+    required this.onTap,
   });
 
   final AcoPalette palette;
   final String peerName;
   final _ChatHistoryMessage message;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    decoration: BoxDecoration(
-      color: const Color(0xFF191919),
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          message.mine ? '我' : peerName,
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.caption - 1,
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    onPressed: onTap,
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF191919),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message.mine ? '我' : peerName,
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.caption - 1,
+            ),
           ),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          message.text,
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: AcoTypography.caption,
+          const SizedBox(height: 5),
+          Text(
+            message.text,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.caption,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }

@@ -278,6 +278,24 @@ class AccountSession {
     token: await _requireToken(),
   );
 
+  Future<VoiceCallInfo> startVoiceCall(String peerAccountId) async =>
+      _apiClient.startVoiceCall(
+        peerAccountId: peerAccountId,
+        token: await _requireToken(),
+      );
+
+  Future<VoiceCallInfo> voiceCallStatus(String callId) async =>
+      _apiClient.voiceCallStatus(callId: callId, token: await _requireToken());
+
+  Future<VoiceCallInfo> acceptVoiceCall(String callId) async =>
+      _apiClient.acceptVoiceCall(callId: callId, token: await _requireToken());
+
+  Future<VoiceCallInfo> joinVoiceCall(String callId) async =>
+      _apiClient.joinVoiceCall(callId: callId, token: await _requireToken());
+
+  Future<void> endVoiceCall(String callId) async =>
+      _apiClient.endVoiceCall(callId: callId, token: await _requireToken());
+
   Future<String> liveWebsocketTicket(int liveId) async => _apiClient
       .createLiveWebsocketTicket(liveId: liveId, token: await _requireToken());
 

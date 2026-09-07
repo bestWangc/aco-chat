@@ -129,8 +129,6 @@ class _ContactListTile extends StatelessWidget {
     this.avatarSize = 42,
     this.nameFontSize,
     this.avatarGap = 20,
-    this.showAvatar = true,
-    this.nameColor,
     this.identity = 0,
   });
 
@@ -146,8 +144,6 @@ class _ContactListTile extends StatelessWidget {
   final double avatarSize;
   final double? nameFontSize;
   final double avatarGap;
-  final bool showAvatar;
-  final Color? nameColor;
   final int identity;
 
   @override
@@ -163,21 +159,19 @@ class _ContactListTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          if (showAvatar) ...[
-            AcoAvatar(
-              size: avatarSize,
-              imageUrl: avatarUrl,
-              assetPath: _defaultAvatarAsset,
-            ),
-            SizedBox(width: avatarGap),
-          ],
+          AcoAvatar(
+            size: avatarSize,
+            imageUrl: avatarUrl,
+            assetPath: _defaultAvatarAsset,
+          ),
+          SizedBox(width: avatarGap),
           Flexible(
             child: Text(
               name,
               maxLines: nameMaxLines,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: nameColor ?? palette.primaryText,
+                color: palette.primaryText,
                 fontSize: nameFontSize ?? AcoTypography.body,
                 fontWeight: FontWeight.w500,
               ),
@@ -192,7 +186,7 @@ class _ContactListTile extends StatelessWidget {
               fit: BoxFit.contain,
             ),
           ],
-          ...?trailing == null ? null : [trailing!],
+          if (trailing != null) ...[const Spacer(), trailing!],
         ],
       ),
     ),

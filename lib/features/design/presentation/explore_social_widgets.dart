@@ -118,6 +118,8 @@ class _SocialMessageTile extends StatelessWidget {
     required this.name,
     required this.onTap,
     required this.message,
+    this.identity = 0,
+    this.horizontalMargin = 0,
     this.avatarUrl,
     this.unreadCount = 0,
     this.timestamp,
@@ -127,62 +129,105 @@ class _SocialMessageTile extends StatelessWidget {
   final String name;
   final VoidCallback onTap;
   final String message;
+  final int identity;
+  final double horizontalMargin;
   final String? avatarUrl;
   final int unreadCount;
   final int? timestamp;
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    dense: true,
-    contentPadding: EdgeInsets.zero,
-    minVerticalPadding: 0,
-    minLeadingWidth: 34,
-    horizontalTitleGap: 12,
-    leading: AcoAvatar(size: 34, imageUrl: avatarUrl),
-    title: Text(
-      name,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: TextStyle(
-        color: palette.primaryText,
-        fontSize: AcoTypography.body - 1,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-    subtitle: Text(
-      message,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: const TextStyle(
-        color: Color(0xFFA2A4A8),
-        fontSize: AcoTypography.caption,
-      ),
-    ),
-    trailing: SizedBox(
-      width: 82,
-      height: 52,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        crossAxisAlignment: CrossAxisAlignment.end,
+  Widget build(BuildContext context) {
+    final badgeAsset = _identityBadgeAsset(identity);
+    return Container(
+      margin: EdgeInsets.only(left: horizontalMargin),
+      child: Stack(
         children: [
-          if (unreadCount > 0)
-            _GreenBadge(
-              label: unreadCount > 99 ? '99+' : '$unreadCount',
-              color: palette.accent,
-              fontSize: AcoTypography.caption - 1,
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          Padding(
+            padding: EdgeInsets.only(right: horizontalMargin),
+            child: Theme(
+              data: Theme.of(context).copyWith(
+                splashColor: const Color(0x00000000),
+                highlightColor: const Color(0x00000000),
+                hoverColor: const Color(0x00000000),
+              ),
+              child: ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                minVerticalPadding: 0,
+                minLeadingWidth: 40,
+                horizontalTitleGap: 12,
+                leading: AcoAvatar(size: 40, imageUrl: avatarUrl),
+                title: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: AcoTypography.body - 1,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    if (badgeAsset != null) ...[
+                      const SizedBox(width: 5),
+                      Image.asset(badgeAsset, width: 56, fit: BoxFit.contain),
+                    ],
+                  ],
+                ),
+                subtitle: Text(
+                  message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFFA2A4A8),
+                    fontSize: AcoTypography.caption,
+                  ),
+                ),
+                trailing: SizedBox(
+                  width: 82,
+                  height: 44,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _formatConversationDate(timestamp),
+                        style: const TextStyle(
+                          color: Color(0xFF9D9EA0),
+                          fontSize: AcoTypography.caption - 2,
+                        ),
+                      ),
+                      if (unreadCount > 0) const SizedBox(height: 4),
+                      if (unreadCount > 0)
+                        _GreenBadge(
+                          label: unreadCount > 99 ? '99+' : '$unreadCount',
+                          color: palette.accent,
+                          fontSize: AcoTypography.caption - 1,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                onTap: onTap,
+              ),
             ),
-          const SizedBox(height: 5),
-          Text(
-            _formatConversationDate(timestamp),
-            style: const TextStyle(
-              color: Color(0xFF9D9EA0),
-              fontSize: AcoTypography.caption - 2,
-            ),
+          ),
+          Positioned(
+            left: 52,
+            right: 0,
+            bottom: 0,
+            height: 1,
+            child: ColoredBox(color: Color(0xFF323232)),
           ),
         ],
       ),
-    ),
-    onTap: onTap,
-  );
+    );
+  }
 }

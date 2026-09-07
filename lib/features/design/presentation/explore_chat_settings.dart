@@ -5,11 +5,13 @@ class _ChatMoreSettingsPage extends StatefulWidget {
     required this.palette,
     required this.peerName,
     required this.messages,
+    required this.onMessageTap,
   });
 
   final AcoPalette palette;
   final String peerName;
   final List<_ChatHistoryMessage> messages;
+  final ValueChanged<_ChatHistoryMessage> onMessageTap;
 
   @override
   State<_ChatMoreSettingsPage> createState() => _ChatMoreSettingsPageState();
@@ -43,6 +45,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                     palette: widget.palette,
                     peerName: widget.peerName,
                     messages: widget.messages,
+                    onMessageTap: widget.onMessageTap,
                   ),
                 ),
               ),

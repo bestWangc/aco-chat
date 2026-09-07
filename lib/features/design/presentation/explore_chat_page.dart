@@ -1075,11 +1075,13 @@ class _VoiceRecordingOverlay extends StatelessWidget {
 class _VoiceCallPage extends StatefulWidget {
   const _VoiceCallPage({
     required this.name,
+    required this.callID,
     this.avatarUrl,
     this.incoming = false,
   });
 
   final String name;
+  final String callID;
   final String? avatarUrl;
   final bool incoming;
 
@@ -1091,11 +1093,94 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   var _microphoneEnabled = true;
   var _speakerEnabled = false;
   var _connected = false;
+  var _connecting = false;
+  var _ended = false;
   Duration _callDuration = Duration.zero;
   Timer? _callTimer;
+  Timer? _statusTimer;
+  Room? _room;
+  late final AccountApiClient _apiClient;
+  late final AccountSession _accountSession;
 
-  void _connectCall() {
-    if (!mounted) return;
+  @override
+  void initState() {
+    super.initState();
+    _apiClient = AccountApiClient();
+    _accountSession = AccountSession(_apiClient);
+    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_refreshCallStatus());
+    });
+  }
+
+  void _setConnecting(bool value) {
+    _connecting = value;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _refreshCallStatus() async {
+    if (_connecting || _ended) return;
+    try {
+      final call = await _accountSession.voiceCallStatus(widget.callID);
+      if (!mounted) return;
+      if (call.status == 'active' && !_connected) {
+        await _joinCall();
+      } else if (call.status == 'ended') {
+        setState(() => _ended = true);
+        _statusTimer?.cancel();
+      }
+    } catch (error) {
+      debugPrint('[VoiceCall] status failed: $error');
+    }
+  }
+
+  Future<void> _acceptCall() async {
+    if (_connecting || _ended) return;
+    _setConnecting(true);
+    try {
+      final call = await _accountSession.acceptVoiceCall(widget.callID);
+      await _connectLiveKit(call);
+    } catch (error) {
+      if (mounted) _showNotice(context, '无法接听', '请检查网络后重试。');
+      debugPrint('[VoiceCall] accept failed: $error');
+    } finally {
+      _setConnecting(false);
+    }
+  }
+
+  Future<void> _joinCall() async {
+    if (_connecting || _connected || _ended) return;
+    _setConnecting(true);
+    try {
+      final call = await _accountSession.joinVoiceCall(widget.callID);
+      await _connectLiveKit(call);
+    } catch (error) {
+      debugPrint('[VoiceCall] join failed: $error');
+    } finally {
+      _setConnecting(false);
+    }
+  }
+
+  Future<void> _connectLiveKit(VoiceCallInfo call) async {
+    if (!call.hasLiveKitCredentials) throw StateError('Missing LiveKit token');
+    await LiveKitClient.initialize();
+    final room = Room(
+      roomOptions: const RoomOptions(
+        defaultAudioOutputOptions: AudioOutputOptions(speakerOn: false),
+      ),
+    );
+    try {
+      await room.connect(call.url!, call.token!);
+      await AudioManager.instance.setSpeakerOutputPreferred(false);
+      await room.localParticipant?.setMicrophoneEnabled(_microphoneEnabled);
+    } catch (_) {
+      await room.disconnect();
+      rethrow;
+    }
+    if (!mounted) {
+      await room.disconnect();
+      return;
+    }
+    _room = room;
     setState(() => _connected = true);
     _callTimer?.cancel();
     _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -1103,11 +1188,44 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
     });
   }
 
-  void _acceptCall() => _connectCall();
+  Future<void> _toggleMicrophone() async {
+    final nextEnabled = !_microphoneEnabled;
+    try {
+      await _room?.localParticipant?.setMicrophoneEnabled(nextEnabled);
+      if (mounted) setState(() => _microphoneEnabled = nextEnabled);
+    } catch (error) {
+      debugPrint('[VoiceCall] microphone toggle failed: $error');
+    }
+  }
+
+  Future<void> _toggleSpeaker() async {
+    final nextEnabled = !_speakerEnabled;
+    try {
+      await AudioManager.instance.setSpeakerOutputPreferred(nextEnabled);
+      if (mounted) setState(() => _speakerEnabled = nextEnabled);
+    } catch (error) {
+      debugPrint('[VoiceCall] speaker toggle failed: $error');
+    }
+  }
+
+  Future<void> _endAndClose() async {
+    _statusTimer?.cancel();
+    try {
+      await _accountSession.endVoiceCall(widget.callID);
+    } catch (error) {
+      debugPrint('[VoiceCall] end failed: $error');
+    }
+    await _room?.disconnect();
+    _room = null;
+    if (mounted) Navigator.of(context).pop();
+  }
 
   @override
   void dispose() {
     _callTimer?.cancel();
+    _statusTimer?.cancel();
+    unawaited(_room?.disconnect() ?? Future<void>.value());
+    _apiClient.close();
     super.dispose();
   }
 
@@ -1117,6 +1235,8 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
       final seconds = (_callDuration.inSeconds % 60).toString().padLeft(2, '0');
       return '$minutes:$seconds';
     }
+    if (_ended) return '通话已结束';
+    if (_connecting) return '正在连接...';
     if (widget.incoming) return '邀请你语音通话...';
     return '等待对方接受邀请.';
   }
@@ -1139,7 +1259,7 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
                     alignment: Alignment.topLeft,
                     child: CupertinoButton(
                       padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                      onPressed: Navigator.of(context).pop,
+                      onPressed: _endAndClose,
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: const Color(0xFF4A4A4D),
@@ -1203,7 +1323,7 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
                       label: '拒绝',
                       active: false,
                       destructive: true,
-                      onPressed: Navigator.of(context).pop,
+                      onPressed: _endAndClose,
                     ),
                     _VoiceCallControl(
                       icon: CupertinoIcons.phone_fill,
@@ -1218,16 +1338,14 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
                           : CupertinoIcons.mic_slash_fill,
                       label: _microphoneEnabled ? '麦克风已开' : '麦克风已关',
                       active: _microphoneEnabled,
-                      onPressed: () => setState(
-                        () => _microphoneEnabled = !_microphoneEnabled,
-                      ),
+                      onPressed: () => unawaited(_toggleMicrophone()),
                     ),
                     _VoiceCallControl(
                       icon: CupertinoIcons.phone_down_fill,
                       label: _connected ? '挂断' : '取消',
                       active: false,
                       destructive: true,
-                      onPressed: Navigator.of(context).pop,
+                      onPressed: _endAndClose,
                     ),
                     _VoiceCallControl(
                       icon: _speakerEnabled
@@ -1235,8 +1353,7 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
                           : CupertinoIcons.speaker_slash_fill,
                       label: _speakerEnabled ? '扬声器已开' : '扬声器已关',
                       active: _speakerEnabled,
-                      onPressed: () =>
-                          setState(() => _speakerEnabled = !_speakerEnabled),
+                      onPressed: () => unawaited(_toggleSpeaker()),
                     ),
                   ],
                 ],

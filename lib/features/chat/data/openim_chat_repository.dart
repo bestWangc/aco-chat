@@ -12,8 +12,8 @@ final class OpenIMChatRepository implements ChatRepository {
   static bool _sdkInitialized = false;
   static String? _currentUserID;
   static String? get currentUserID => _currentUserID;
-  static final ValueNotifier<FriendApplicationInfo?> friendRequestNotifier =
-      ValueNotifier<FriendApplicationInfo?>(null);
+  static final ValueNotifier<int> friendRequestCountNotifier =
+      ValueNotifier<int>(0);
   static final ValueNotifier<Message?> messageNotifier =
       ValueNotifier<Message?>(null);
   static final ValueNotifier<bool> messageUnreadNotifier = ValueNotifier<bool>(
@@ -62,6 +62,7 @@ final class OpenIMChatRepository implements ChatRepository {
         isLogStandardOutput: false,
       );
       _sdkInitialized = true;
+      await _registerListeners();
     }
   }
 
@@ -88,17 +89,26 @@ final class OpenIMChatRepository implements ChatRepository {
       _currentUserID = userId;
     }
     await Future<void>.delayed(const Duration(seconds: 1));
+    await _registerListeners();
+    await _refreshMessageUnreadStatus();
+    conversationReady.value = true;
+    // flutter_openim_sdk 3.8.3+hotfix.14 exposes setListenerForService in
+    // Dart, but the Android plugin does not implement the corresponding
+    // native method (the Java method is commented out). Calling it therefore
+    // raises NoSuchMethodException on Android and can interrupt login setup.
+    // Friendship events are delivered through setFriendshipListener, which is
+    // implemented on both supported platforms, so keep a single canonical
+    // event path here.
+  }
+
+  Future<void> _registerListeners() async {
     try {
-      try {
-        await _sdk.messageManager.setAdvancedMsgListener(
-          OnAdvancedMsgListener(
-            onRecvNewMessage: _handleIncomingMessage,
-            onRecvOfflineNewMessage: _handleIncomingMessage,
-          ),
-        );
-      } catch (error) {
-        developer.log('消息监听器注册失败: $error', name: 'OpenIM.message');
-      }
+      await _sdk.messageManager.setAdvancedMsgListener(
+        OnAdvancedMsgListener(
+          onRecvNewMessage: _handleIncomingMessage,
+          onRecvOfflineNewMessage: _handleIncomingMessage,
+        ),
+      );
       await _sdk.friendshipManager.setFriendshipListener(
         OnFriendshipListener(
           onFriendApplicationAdded: (info) {
@@ -112,7 +122,7 @@ final class OpenIMChatRepository implements ChatRepository {
                     info.toUserID != currentUserID)) {
               return;
             }
-            friendRequestNotifier.value = info;
+            friendRequestCountNotifier.value++;
             developer.log(
               '收到好友申请: ${info.fromUserID}',
               name: 'OpenIM.friendship',
@@ -122,19 +132,10 @@ final class OpenIMChatRepository implements ChatRepository {
       );
       developer.log('好友监听器注册成功', name: 'OpenIM.friendship');
     } catch (error) {
-      // A transient native 10004 here must not turn a successful login into a
-      // failed session; the API polling fallback still delivers requests.
-      developer.log('好友监听器注册延迟失败: $error', name: 'OpenIM.friendship');
+      // Some native SDKs only accept listener registration after login. The
+      // post-login call retries without preventing the session from starting.
+      developer.log('消息监听器注册失败: $error', name: 'OpenIM.message');
     }
-    await _refreshMessageUnreadStatus();
-    conversationReady.value = true;
-    // flutter_openim_sdk 3.8.3+hotfix.14 exposes setListenerForService in
-    // Dart, but the Android plugin does not implement the corresponding
-    // native method (the Java method is commented out). Calling it therefore
-    // raises NoSuchMethodException on Android and can interrupt login setup.
-    // Friendship events are delivered through setFriendshipListener, which is
-    // implemented on both supported platforms, so keep a single canonical
-    // event path here.
   }
 
   static void _handleIncomingMessage(Message message) {
@@ -157,11 +158,15 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static void markMessagesSeen() => messageUnreadNotifier.value = false;
 
+  static void setFriendRequestCount(int count) {
+    friendRequestCountNotifier.value = count < 0 ? 0 : count;
+  }
+
   @override
   Future<void> logout() async {
     await _sdk.logout();
     _currentUserID = null;
-    friendRequestNotifier.value = null;
+    friendRequestCountNotifier.value = 0;
     messageUnreadNotifier.value = false;
     conversationReady.value = false;
     _sdkInitialized = false;

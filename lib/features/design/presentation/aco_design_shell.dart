@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
@@ -526,13 +525,14 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                 ValueListenableBuilder<bool>(
                   valueListenable: OpenIMChatRepository.messageUnreadNotifier,
                   builder: (_, hasUnreadMessages, _) =>
-                      ValueListenableBuilder<FriendApplicationInfo?>(
+                      ValueListenableBuilder<int>(
                         valueListenable:
-                            OpenIMChatRepository.friendRequestNotifier,
-                        builder: (_, request, _) => AcoBottomNav(
+                            OpenIMChatRepository.friendRequestCountNotifier,
+                        builder: (_, friendRequestCount, _) => AcoBottomNav(
                           selected: _selectedNav,
                           dark: dark,
-                          showSocialBadge: hasUnreadMessages || request != null,
+                          showSocialBadge:
+                              hasUnreadMessages || friendRequestCount > 0,
                           onSelected: (index) {
                             const destinations = [
                               AcoScreen.walletHome,

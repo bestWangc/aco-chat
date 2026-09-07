@@ -526,6 +526,54 @@ class AccountApiClient {
     return LiveKitJoinInfo.fromJson(_body(response));
   }
 
+  Future<VoiceCallInfo> startVoiceCall({
+    required String peerAccountId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('voice-calls'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'peer_account_id': peerAccountId}),
+    );
+    return VoiceCallInfo.fromJson(_body(response));
+  }
+
+  Future<VoiceCallInfo> voiceCallStatus({
+    required String callId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('voice-calls/$callId'),
+      headers: _authorizedHeaders(token),
+    );
+    return VoiceCallInfo.fromJson(_body(response));
+  }
+
+  Future<VoiceCallInfo> acceptVoiceCall({
+    required String callId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('voice-calls/$callId/accept'),
+      headers: _authorizedHeaders(token),
+    );
+    return VoiceCallInfo.fromJson(_body(response));
+  }
+
+  Future<VoiceCallInfo> joinVoiceCall({
+    required String callId,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('voice-calls/$callId/join'),
+      headers: _authorizedHeaders(token),
+    );
+    return VoiceCallInfo.fromJson(_body(response));
+  }
+
+  Future<void> endVoiceCall({required String callId, required String token}) =>
+      _postWithoutBody('voice-calls/$callId/end', token);
+
   Future<String> createLiveWebsocketTicket({
     required int liveId,
     required String token,

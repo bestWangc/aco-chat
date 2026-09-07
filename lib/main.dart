@@ -92,7 +92,10 @@ class WalletAccountAuthentication {
     // App resume can invoke this method repeatedly. Calling OpenIM login for
     // an already active account creates a second session and the server kicks
     // the previous one offline.
-    if (OpenIMChatRepository.conversationReady.value) return;
+    if (OpenIMChatRepository.conversationReady.value) {
+      unawaited(_refreshFriendRequestBadge());
+      return;
+    }
     OpenIMChatRepository.reconnectHandler = () async {
       // A kicked/invalid session must obtain a fresh token; reusing the
       // cached token would create a reconnect loop.
@@ -146,6 +149,7 @@ class WalletAccountAuthentication {
         dataDir: openIMDirectory.path,
       );
       await chat.login(userId: userId, userSig: token.token);
+      await _refreshFriendRequestBadge(session);
     } catch (error) {
       debugPrint('[OpenIM] background login failed: $error');
     } finally {
@@ -158,6 +162,21 @@ class WalletAccountAuthentication {
       error is HandshakeException ||
       error is TimeoutException ||
       error is http.ClientException;
+
+  static Future<void> _refreshFriendRequestBadge([
+    AccountSession? session,
+  ]) async {
+    final client = session == null ? AccountApiClient() : null;
+    final requestSession = session ?? AccountSession(client!);
+    try {
+      final requests = await requestSession.listFriendRequests();
+      OpenIMChatRepository.setFriendRequestCount(requests.length);
+    } catch (error) {
+      debugPrint('[Aco] friend request badge refresh failed: $error');
+    } finally {
+      client?.close();
+    }
+  }
 }
 
 class AcoApp extends StatefulWidget {

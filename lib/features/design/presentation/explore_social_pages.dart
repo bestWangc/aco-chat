@@ -49,11 +49,12 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  ValueListenableBuilder<FriendApplicationInfo?>(
-                    valueListenable: OpenIMChatRepository.friendRequestNotifier,
-                    builder: (_, request, _) => _MessageQuickActions(
+                  ValueListenableBuilder<int>(
+                    valueListenable:
+                        OpenIMChatRepository.friendRequestCountNotifier,
+                    builder: (_, friendRequestCount, _) => _MessageQuickActions(
                       controller: _searchController,
-                      hasFriendRequest: request != null,
+                      hasFriendRequest: friendRequestCount > 0,
                       palette: widget.palette,
                       showContacts: _showContacts,
                       onQueryChanged: (query) => setState(() => _query = query),
@@ -112,7 +113,7 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
   @override
   void initState() {
     super.initState();
-    OpenIMChatRepository.friendRequestNotifier.value = null;
+    OpenIMChatRepository.setFriendRequestCount(0);
     _requests = _load();
   }
 
@@ -153,7 +154,7 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
           _requests = Future.value(visible);
         });
       }
-      OpenIMChatRepository.friendRequestNotifier.value = null;
+      OpenIMChatRepository.setFriendRequestCount(0);
     } catch (error) {
       if (!mounted) return;
       final message = error is AccountApiException
@@ -402,28 +403,29 @@ class _ContactsPageState extends State<_ContactsPage> {
                   padding: EdgeInsets.zero,
                   children: [
                     const SizedBox(height: 8),
-                    ValueListenableBuilder<FriendApplicationInfo?>(
+                    ValueListenableBuilder<int>(
                       valueListenable:
-                          OpenIMChatRepository.friendRequestNotifier,
-                      builder: (_, request, _) => _ContactsQuickAction(
-                        palette: widget.palette,
-                        label: '新的朋友',
-                        icon: CupertinoIcons.person_add_solid,
-                        assetPath: 'assets/icons/contact_new_friend.png',
-                        color: const Color(0xFFFF9E38),
-                        dividerLeftPadding: 18 + 40 + 16,
-                        showBadge: request != null,
-                        onTap: () {
-                          OpenIMChatRepository.friendRequestNotifier.value =
-                              null;
-                          Navigator.of(context).push(
-                            CupertinoPageRoute<void>(
-                              builder: (_) =>
-                                  _FriendRequestsPage(palette: widget.palette),
-                            ),
-                          );
-                        },
-                      ),
+                          OpenIMChatRepository.friendRequestCountNotifier,
+                      builder: (_, friendRequestCount, _) =>
+                          _ContactsQuickAction(
+                            palette: widget.palette,
+                            label: '新的朋友',
+                            icon: CupertinoIcons.person_add_solid,
+                            assetPath: 'assets/icons/contact_new_friend.png',
+                            color: const Color(0xFFFF9E38),
+                            dividerLeftPadding: 18 + 40 + 16,
+                            requestCount: friendRequestCount,
+                            onTap: () {
+                              OpenIMChatRepository.setFriendRequestCount(0);
+                              Navigator.of(context).push(
+                                CupertinoPageRoute<void>(
+                                  builder: (_) => _FriendRequestsPage(
+                                    palette: widget.palette,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                     ),
                     _ContactsQuickAction(
                       palette: widget.palette,
@@ -488,9 +490,13 @@ class _ContactsPageState extends State<_ContactsPage> {
     );
   }
 
-  void _openFriend(BuildContext context, FriendContact friend) {
+  Future<void> _openFriend(BuildContext context, FriendContact friend) async {
     final name = _displayNameOf(friend);
-    Navigator.of(context).push(
+    // The index is in the root overlay, outside this route's Navigator.
+    // Remove it while a contact detail page is visible.
+    _alphabetOverlay?.remove();
+    _alphabetOverlay = null;
+    await Navigator.of(context).push(
       CupertinoPageRoute<void>(
         builder: (_) => _ContactDetailPage(
           palette: widget.palette,
@@ -509,6 +515,7 @@ class _ContactsPageState extends State<_ContactsPage> {
         ),
       ),
     );
+    if (mounted) setState(() {});
   }
 }
 
@@ -520,7 +527,7 @@ class _ContactsQuickAction extends StatelessWidget {
     this.assetPath,
     required this.color,
     this.dividerLeftPadding = 0,
-    this.showBadge = false,
+    this.requestCount = 0,
     required this.onTap,
   });
   final AcoPalette palette;
@@ -529,7 +536,7 @@ class _ContactsQuickAction extends StatelessWidget {
   final String? assetPath;
   final Color color;
   final double dividerLeftPadding;
-  final bool showBadge;
+  final int requestCount;
   final VoidCallback onTap;
 
   @override
@@ -548,13 +555,8 @@ class _ContactsQuickAction extends StatelessWidget {
                   SizedBox(
                     width: 40,
                     height: 40,
-                    child: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        if (assetPath == null)
-                          Container(
-                            width: 40,
-                            height: 40,
+                    child: assetPath == null
+                        ? Container(
                             decoration: BoxDecoration(
                               color: color,
                               shape: BoxShape.circle,
@@ -565,30 +567,7 @@ class _ContactsQuickAction extends StatelessWidget {
                               size: 21,
                             ),
                           )
-                        else
-                          Image.asset(
-                            assetPath!,
-                            width: 40,
-                            height: 40,
-                            fit: BoxFit.contain,
-                          ),
-                        if (showBadge)
-                          const Positioned(
-                            top: -2,
-                            right: -2,
-                            child: SizedBox(
-                              width: 9,
-                              height: 9,
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: _danger,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                        : Image.asset(assetPath!, fit: BoxFit.contain),
                   ),
                   const SizedBox(width: 16),
                   Text(
@@ -599,6 +578,28 @@ class _ContactsQuickAction extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  const Spacer(),
+                  if (requestCount > 0)
+                    Container(
+                      constraints: const BoxConstraints(minWidth: 20),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: _danger,
+                        borderRadius: BorderRadius.all(Radius.circular(10)),
+                      ),
+                      child: Text(
+                        '$requestCount',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Color(0xFFFFFFFF),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
