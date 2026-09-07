@@ -103,6 +103,41 @@ void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 // height down by a physical pixel and overflow the room content.
 const _roomBottomBarHeight = 82.0;
 const _roomEmojiPickerHeight = 292.0;
+
+Map<String, dynamic>? _voiceCallPayload(Message message) {
+  final data = message.customElem?.data;
+  if (data == null || data.isEmpty) return null;
+  try {
+    final payload = jsonDecode(data);
+    return payload is Map<String, dynamic> ? payload : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+String? _voiceCallInviteIDFromMessage(Message message) {
+  final payload = _voiceCallPayload(message);
+  if (payload?['type'] != 'aco.voice_call.invite') return null;
+  final callID = payload?['call_id'];
+  return callID is String && callID.isNotEmpty ? callID : null;
+}
+
+String? _voiceCallRecordTextFromMessage(Message message) {
+  final payload = _voiceCallPayload(message);
+  if (payload?['type'] != 'aco.voice_call.ended') return null;
+  final status = payload?['status'];
+  if (status == 'completed') {
+    final seconds = payload?['duration_seconds'];
+    final duration = seconds is num ? seconds.toInt() : 0;
+    final minutes = (duration ~/ 60).toString().padLeft(2, '0');
+    final remainder = (duration % 60).toString().padLeft(2, '0');
+    return '通话时长 $minutes:$remainder  ☎';
+  }
+  if (status == 'declined') return '已拒绝语音通话';
+  if (status == 'cancelled') return '已取消语音通话';
+  return '语音通话已结束';
+}
+
 // Colors and geometry are sampled from 设计图/钱包页-dark.svg.
 const _loginSecondarySurface = Color(0xFF515151);
 // 首页-dark.svg is a 595.28pt-wide artboard. These are its measurements
@@ -197,6 +232,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
   String _language = '简体中文';
   bool _hasAppUpdate = false;
+  String? _presentedIncomingCallID;
 
   @override
   void initState() {
@@ -206,6 +242,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _applyAccountProfile(widget.accountProfile);
     _loadWalletName();
     unawaited(_checkForAppUpdate());
+    OpenIMChatRepository.messageNotifier.addListener(_onIncomingMessage);
   }
 
   Future<void> _checkForAppUpdate() async {
@@ -289,6 +326,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
 
   @override
   void dispose() {
+    OpenIMChatRepository.messageNotifier.removeListener(_onIncomingMessage);
     if (_ownsThemeNotifier) _isDark.dispose();
     _displayName.dispose();
     _walletName.dispose();
@@ -296,6 +334,45 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _avatarUrl.dispose();
     _selectedWalletChain.dispose();
     super.dispose();
+  }
+
+  void _onIncomingMessage() {
+    final message = OpenIMChatRepository.messageNotifier.value;
+    final senderID = message?.sendID;
+    if (!mounted ||
+        message == null ||
+        senderID == null ||
+        senderID.isEmpty ||
+        senderID == OpenIMChatRepository.currentUserID) {
+      return;
+    }
+    final callID = _voiceCallInviteIDFromMessage(message);
+    if (callID == null || _presentedIncomingCallID == callID) return;
+    _presentedIncomingCallID = callID;
+    unawaited(_presentIncomingVoiceCall(message, callID, senderID));
+  }
+
+  Future<void> _presentIncomingVoiceCall(
+    Message message,
+    String callID,
+    String senderID,
+  ) async {
+    await Navigator.of(context).push<void>(
+      _AcoPageRoute<void>(
+        builder: (_) => _VoiceCallPage(
+          name: message.senderNickname?.isNotEmpty == true
+              ? message.senderNickname!
+              : '好友',
+          avatarUrl: message.senderFaceUrl,
+          callID: callID,
+          peerUserID: senderID,
+          incoming: true,
+        ),
+      ),
+    );
+    if (mounted && _presentedIncomingCallID == callID) {
+      _presentedIncomingCallID = null;
+    }
   }
 
   void _toggleTheme() {

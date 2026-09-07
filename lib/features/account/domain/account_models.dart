@@ -53,6 +53,7 @@ class FriendContact {
     required this.nickname,
     required this.avatarUrl,
     required this.status,
+    this.initial = '#',
     this.identity = 0,
   });
 
@@ -60,6 +61,7 @@ class FriendContact {
   final String nickname;
   final String avatarUrl;
   final String status;
+  final String initial;
   final int identity;
 
   factory FriendContact.fromJson(Map<String, dynamic> json) => FriendContact(
@@ -67,6 +69,7 @@ class FriendContact {
     nickname: (json['nickname'] as String?)?.trim() ?? '',
     avatarUrl: (json['avatar_url'] as String?) ?? '',
     status: (json['status'] as String?) ?? 'accepted',
+    initial: (json['initial'] as String?) ?? '#',
     identity: (json['identity'] as num?)?.toInt() ?? 0,
   );
 }

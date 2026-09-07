@@ -78,6 +78,7 @@ flutter:
   assets:
     - assets/images/
     - assets/images/identity_badges/
+    - assets/sounds/
     - assets/videos/
     - assets/icons/
     - assets/icons/profile/

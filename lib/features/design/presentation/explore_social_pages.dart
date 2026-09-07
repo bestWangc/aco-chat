@@ -28,72 +28,75 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
   @override
   Widget build(BuildContext context) => Material(
     type: MaterialType.transparency,
-    child: RefreshIndicator(
-      onRefresh: () => Future<void>.delayed(const Duration(milliseconds: 650)),
-      child: CustomScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        slivers: [
-          SliverPersistentHeader(
-            pinned: true,
-            delegate: _PinnedHeaderDelegate(
-              extent: 46 * .672 + 8 + 61,
-              backgroundColor: widget.palette.background,
-              child: Column(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 35),
-                    child: AcoRootHeader(
-                      palette: widget.palette,
-                      onOpen: widget.onOpen,
-                      scale: .672,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  ValueListenableBuilder<bool>(
-                    valueListenable: OpenIMChatRepository.messageUnreadNotifier,
-                    builder: (_, hasUnreadMessages, _) =>
-                        ValueListenableBuilder<int>(
-                          valueListenable:
-                              OpenIMChatRepository.friendRequestCountNotifier,
-                          builder: (_, friendRequestCount, _) =>
-                              _MessageQuickActions(
-                                controller: _searchController,
-                                hasUnreadMessages: hasUnreadMessages,
-                                hasFriendRequest: friendRequestCount > 0,
-                                palette: widget.palette,
-                                showContacts: _showContacts,
-                                onQueryChanged: (query) =>
-                                    setState(() => _query = query),
-                                onMessagesTap: () =>
-                                    setState(() => _showContacts = false),
-                                onContactsTap: () =>
-                                    setState(() => _showContacts = true),
-                              ),
-                        ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverList(
-            delegate: SliverChildListDelegate([
-              if (_showContacts)
-                _ContactsPage(
+    child: _showContacts
+        ? Column(
+            children: [
+              _header(),
+              Expanded(
+                child: _ContactsPage(
                   palette: widget.palette,
                   onOpen: widget.onOpen,
                   embedded: true,
-                )
-              else
-                _OpenIMConversationList(
-                  palette: widget.palette,
-                  onOpen: widget.onOpen,
-                  query: _query,
                 ),
-            ]),
+              ),
+            ],
+          )
+        : RefreshIndicator(
+            onRefresh: () =>
+                Future<void>.delayed(const Duration(milliseconds: 650)),
+            child: CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _PinnedHeaderDelegate(
+                    extent: 46 * .672 + 8 + 61,
+                    backgroundColor: widget.palette.background,
+                    child: _header(),
+                  ),
+                ),
+                SliverList(
+                  delegate: SliverChildListDelegate([
+                    _OpenIMConversationList(
+                      palette: widget.palette,
+                      onOpen: widget.onOpen,
+                      query: _query,
+                    ),
+                  ]),
+                ),
+              ],
+            ),
           ),
-        ],
+  );
+
+  Widget _header() => Column(
+    children: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 35),
+        child: AcoRootHeader(
+          palette: widget.palette,
+          onOpen: widget.onOpen,
+          scale: .672,
+        ),
       ),
-    ),
+      const SizedBox(height: 2),
+      ValueListenableBuilder<bool>(
+        valueListenable: OpenIMChatRepository.messageUnreadNotifier,
+        builder: (_, hasUnreadMessages, _) => ValueListenableBuilder<int>(
+          valueListenable: OpenIMChatRepository.friendRequestCountNotifier,
+          builder: (_, friendRequestCount, _) => _MessageQuickActions(
+            controller: _searchController,
+            hasUnreadMessages: hasUnreadMessages,
+            hasFriendRequest: friendRequestCount > 0,
+            palette: widget.palette,
+            showContacts: _showContacts,
+            onQueryChanged: (query) => setState(() => _query = query),
+            onMessagesTap: () => setState(() => _showContacts = false),
+            onContactsTap: () => setState(() => _showContacts = true),
+          ),
+        ),
+      ),
+    ],
   );
 }
 
@@ -291,6 +294,7 @@ class _ContactsPage extends StatefulWidget {
 }
 
 class _ContactsPageState extends State<_ContactsPage> {
+  static final _alphabetInitial = RegExp(r'^[A-Z]$');
   late Future<List<FriendContact>> _friends;
   final _sectionKeys = <String, GlobalKey>{};
   OverlayEntry? _alphabetOverlay;
@@ -319,10 +323,8 @@ class _ContactsPageState extends State<_ContactsPage> {
   }
 
   String _initialOf(FriendContact friend) {
-    final name = _displayNameOf(friend).trim();
-    if (name.isEmpty) return '#';
-    final initial = name[0].toUpperCase();
-    return RegExp(r'[A-Z]').hasMatch(initial) ? initial : '#';
+    final initial = friend.initial.toUpperCase();
+    return _alphabetInitial.hasMatch(initial) ? initial : '#';
   }
 
   String _displayNameOf(FriendContact friend) =>
@@ -377,12 +379,10 @@ class _ContactsPageState extends State<_ContactsPage> {
           return const Center(child: CupertinoActivityIndicator());
         }
         if (snapshot.hasError) {
-          debugPrint('[OpenIM] contacts load failed: ${snapshot.error}');
+          debugPrint('[Aco] contacts load failed: ${snapshot.error}');
           return _ContactsStateMessage(
             message: '通讯录加载失败，点击重试',
-            onRetry: () => setState(() {
-              _friends = _loadFriends();
-            }),
+            onRetry: () => setState(() => _friends = _loadFriends()),
           );
         }
         final friends = snapshot.data ?? const <FriendContact>[];
@@ -395,99 +395,89 @@ class _ContactsPageState extends State<_ContactsPage> {
         _sectionKeys
           ..clear()
           ..addEntries(letters.map((letter) => MapEntry(letter, GlobalKey())));
-        return ConstrainedBox(
-          constraints: BoxConstraints(
-            minHeight: MediaQuery.sizeOf(context).height,
-          ),
-          child: Stack(
-            children: [
-              RefreshIndicator(
-                onRefresh: _refresh,
-                child: ListView(
-                  shrinkWrap: widget.embedded,
-                  physics: widget.embedded
-                      ? const NeverScrollableScrollPhysics()
-                      : const AlwaysScrollableScrollPhysics(),
-                  padding: EdgeInsets.zero,
-                  children: [
-                    const SizedBox(height: 8),
-                    ValueListenableBuilder<int>(
-                      valueListenable:
-                          OpenIMChatRepository.friendRequestCountNotifier,
-                      builder: (_, friendRequestCount, _) =>
-                          _ContactsQuickAction(
-                            palette: widget.palette,
-                            label: '新的朋友',
-                            icon: CupertinoIcons.person_add_solid,
-                            assetPath: 'assets/icons/contact_new_friend.png',
-                            color: const Color(0xFFFF9E38),
-                            dividerLeftPadding: 18 + 40 + 16,
-                            requestCount: friendRequestCount,
-                            onTap: () {
-                              OpenIMChatRepository.setFriendRequestCount(0);
-                              Navigator.of(context).push(
-                                CupertinoPageRoute<void>(
-                                  builder: (_) => _FriendRequestsPage(
-                                    palette: widget.palette,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                    ),
-                    _ContactsQuickAction(
+        return Stack(
+          children: [
+            RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const ClampingScrollPhysics(),
+                padding: EdgeInsets.zero,
+                children: [
+                  const SizedBox(height: 8),
+                  ValueListenableBuilder<int>(
+                    valueListenable:
+                        OpenIMChatRepository.friendRequestCountNotifier,
+                    builder: (_, friendRequestCount, _) => _ContactsQuickAction(
                       palette: widget.palette,
-                      label: '群聊',
-                      icon: CupertinoIcons.person_2_fill,
-                      assetPath: 'assets/icons/contact_group_chat.png',
-                      color: const Color(0xFF00C976),
-                      onTap: () => _showNotice(context, '群聊', '群聊功能暂未开放。'),
-                    ),
-                    const SizedBox(height: 12),
-                    if (friends.isEmpty)
-                      const _ContactsStateMessage(message: '暂无好友')
-                    else
-                      for (final letter in letters) ...[
-                        Padding(
-                          key: _sectionKeys[letter],
-                          padding: const EdgeInsets.symmetric(horizontal: 18),
-                          child: _ContactsSectionLabel(label: letter),
-                        ),
-                        const SizedBox(height: 4),
-                        for (final friend in groupedFriends[letter]!)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 18),
-                            child: _ContactListTile(
-                              palette: widget.palette,
-                              name: _displayNameOf(friend),
-                              avatarUrl: friend.avatarUrl,
-                              identity: friend.identity,
-                              onTap: () => _openFriend(context, friend),
-                              avatarSize: 40,
-                              avatarGap: 16,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 10,
-                              ),
-                              nameFontSize: 15,
-                            ),
+                      label: '新的朋友',
+                      icon: CupertinoIcons.person_add_solid,
+                      assetPath: 'assets/icons/contact_new_friend.png',
+                      color: const Color(0xFFFF9E38),
+                      dividerLeftPadding: 18 + 40 + 16,
+                      requestCount: friendRequestCount,
+                      onTap: () {
+                        OpenIMChatRepository.setFriendRequestCount(0);
+                        Navigator.of(context).push(
+                          CupertinoPageRoute<void>(
+                            builder: (_) =>
+                                _FriendRequestsPage(palette: widget.palette),
                           ),
-                      ],
-                    const SizedBox(height: 24),
-                  ],
+                        );
+                      },
+                    ),
+                  ),
+                  _ContactsQuickAction(
+                    palette: widget.palette,
+                    label: '群聊',
+                    icon: CupertinoIcons.person_2_fill,
+                    assetPath: 'assets/icons/contact_group_chat.png',
+                    color: const Color(0xFF00C976),
+                    onTap: () => _showNotice(context, '群聊', '群聊功能暂未开放。'),
+                  ),
+                  const SizedBox(height: 12),
+                  if (friends.isEmpty)
+                    const _ContactsStateMessage(message: '暂无好友')
+                  else
+                    for (final letter in letters) ...[
+                      Padding(
+                        key: _sectionKeys[letter],
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        child: _ContactsSectionLabel(label: letter),
+                      ),
+                      const SizedBox(height: 4),
+                      for (final friend in groupedFriends[letter]!)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          child: _ContactListTile(
+                            palette: widget.palette,
+                            name: _displayNameOf(friend),
+                            avatarUrl: friend.avatarUrl,
+                            identity: friend.identity,
+                            onTap: () => _openFriend(context, friend),
+                            avatarSize: 40,
+                            avatarGap: 16,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 10,
+                            ),
+                            nameFontSize: 15,
+                          ),
+                        ),
+                    ],
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+            if (!widget.embedded && letters.isNotEmpty)
+              Positioned(
+                right: 8,
+                top: 80,
+                bottom: 0,
+                child: _ContactsAlphabetIndex(
+                  letters: letters,
+                  onLetterTap: _scrollToSection,
                 ),
               ),
-              if (!widget.embedded && letters.isNotEmpty)
-                Positioned(
-                  right: 8,
-                  top: 80,
-                  bottom: 0,
-                  child: _ContactsAlphabetIndex(
-                    letters: letters,
-                    onLetterTap: _scrollToSection,
-                  ),
-                ),
-            ],
-          ),
+          ],
         );
       },
     );

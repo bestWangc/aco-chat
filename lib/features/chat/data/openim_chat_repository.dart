@@ -27,6 +27,11 @@ final class OpenIMChatRepository implements ChatRepository {
   );
   static Future<void> Function()? reconnectHandler;
 
+  static void publishLocalMessage(Message message) {
+    messageNotifier.value = message;
+    conversationRevision.value++;
+  }
+
   /// Conversation selected from the list, consumed by the detail route.
   static ConversationInfo? pendingConversation;
   OpenIMChatRepository({IMManager? sdk}) : _sdk = sdk ?? OpenIM.iMManager;
@@ -173,7 +178,7 @@ final class OpenIMChatRepository implements ChatRepository {
     if (text?.isNotEmpty == true) return text!;
     if (message.soundElem != null) return '[语音消息]';
     if (message.pictureElem != null) return '[图片]';
-    if (message.customElem != null) return '[语音通话邀请]';
+    if (message.customElem != null) return '[语音通话]';
     return '[新消息]';
   }
 

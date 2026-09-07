@@ -64,7 +64,8 @@ class _ChatHistoryMessage {
   static bool isDisplayable(Message message) =>
       message.textElem?.content?.isNotEmpty == true ||
       message.pictureElem != null ||
-      message.soundElem != null;
+      message.soundElem != null ||
+      _voiceCallRecordTextFromMessage(message) != null;
 
   static String? imageUrlOf(PictureElem? picture) =>
       picture?.snapshotPicture?.url ??
@@ -78,6 +79,8 @@ class _ChatHistoryMessage {
     Message message, {
     required bool mine,
   }) {
+    final callRecord = _voiceCallRecordTextFromMessage(message);
+    if (callRecord != null) return _ChatHistoryMessage(callRecord, mine: mine);
     final text = message.textElem?.content;
     if (text?.isNotEmpty == true) return _ChatHistoryMessage(text!, mine: mine);
     final sound = message.soundElem;

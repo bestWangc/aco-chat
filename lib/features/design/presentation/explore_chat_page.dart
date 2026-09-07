@@ -50,7 +50,6 @@ class _ChatPageState extends State<_ChatPage> {
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
   bool _chatAccessGranted = false;
-  String? _presentedIncomingCallID;
 
   String? get _currentConversationID {
     if (_resolvedConversationID?.isNotEmpty == true) {
@@ -84,12 +83,9 @@ class _ChatPageState extends State<_ChatPage> {
   void _onMessage() {
     final message = OpenIMChatRepository.messageNotifier.value;
     if (!mounted || message == null) return;
-    if (message.sendID != widget.peerUserID) return;
-    final invite = _voiceCallInviteID(message);
-    if (invite != null) {
-      unawaited(_presentIncomingVoiceCall(invite));
-      return;
-    }
+    final mine = message.sendID == OpenIMChatRepository.currentUserID;
+    if (!mine && message.sendID != widget.peerUserID) return;
+    if (_voiceCallInviteIDFromMessage(message) != null) return;
     if (!_ChatHistoryMessage.isDisplayable(message)) return;
     final clientMsgID = message.clientMsgID;
     if (clientMsgID?.isNotEmpty == true &&
@@ -98,46 +94,11 @@ class _ChatPageState extends State<_ChatPage> {
     }
     _historyMessages.add(message);
     setState(
-      () => _chatHistory.add(
-        _ChatHistoryMessage.fromOpenIM(message, mine: false),
-      ),
+      () =>
+          _chatHistory.add(_ChatHistoryMessage.fromOpenIM(message, mine: mine)),
     );
     unawaited(_markCurrentConversationAsRead());
     _scrollToBottom();
-  }
-
-  String? _voiceCallInviteID(Message message) {
-    final data = message.customElem?.data;
-    if (data == null || data.isEmpty) return null;
-    try {
-      final payload = jsonDecode(data);
-      if (payload is! Map<String, dynamic> ||
-          payload['type'] != 'aco.voice_call.invite') {
-        return null;
-      }
-      final callID = payload['call_id'];
-      return callID is String && callID.isNotEmpty ? callID : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<void> _presentIncomingVoiceCall(String callID) async {
-    if (_presentedIncomingCallID == callID) return;
-    _presentedIncomingCallID = callID;
-    await Navigator.of(context).push<void>(
-      _AcoPageRoute<void>(
-        builder: (_) => _VoiceCallPage(
-          name: _peerName,
-          avatarUrl: _resolvedPeerAvatar,
-          callID: callID,
-          incoming: true,
-        ),
-      ),
-    );
-    if (mounted && _presentedIncomingCallID == callID) {
-      _presentedIncomingCallID = null;
-    }
   }
 
   Future<void> _markCurrentConversationAsRead() async {
@@ -587,6 +548,7 @@ class _ChatPageState extends State<_ChatPage> {
               name: _peerName,
               avatarUrl: _resolvedPeerAvatar,
               callID: call.callId,
+              peerUserID: userID,
             ),
           ),
         );
@@ -1076,12 +1038,14 @@ class _VoiceCallPage extends StatefulWidget {
   const _VoiceCallPage({
     required this.name,
     required this.callID,
+    required this.peerUserID,
     this.avatarUrl,
     this.incoming = false,
   });
 
   final String name;
   final String callID;
+  final String peerUserID;
   final String? avatarUrl;
   final bool incoming;
 
@@ -1094,11 +1058,15 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   var _speakerEnabled = false;
   var _connected = false;
   var _connecting = false;
-  var _ended = false;
+  var _ending = false;
   Duration _callDuration = Duration.zero;
   Timer? _callTimer;
   Timer? _statusTimer;
+  Timer? _outgoingToneRestartTimer;
   Room? _room;
+  final _callTonePlayer = AudioPlayer();
+  StreamSubscription<void>? _outgoingToneCompleteSubscription;
+  var _callToneStopped = false;
   late final AccountApiClient _apiClient;
   late final AccountSession _accountSession;
 
@@ -1110,6 +1078,56 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
     _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       unawaited(_refreshCallStatus());
     });
+    unawaited(_startCallTone());
+  }
+
+  Future<void> _startCallTone() async {
+    _callToneStopped = false;
+    try {
+      if (widget.incoming) {
+        await _callTonePlayer.setReleaseMode(ReleaseMode.loop);
+        await _callTonePlayer.play(AssetSource('sounds/ringtone.wav'));
+        return;
+      }
+
+      await _callTonePlayer.setReleaseMode(ReleaseMode.stop);
+      await _outgoingToneCompleteSubscription?.cancel();
+      _outgoingToneCompleteSubscription = _callTonePlayer.onPlayerComplete
+          .listen((_) => _scheduleOutgoingToneReplay());
+      await _playOutgoingTone();
+    } catch (error) {
+      debugPrint('[VoiceCall] call tone playback failed: $error');
+    }
+  }
+
+  Future<void> _playOutgoingTone() async {
+    if (_callToneStopped) return;
+    try {
+      await _callTonePlayer.play(AssetSource('sounds/dial_tone.wav'));
+    } catch (error) {
+      debugPrint('[VoiceCall] outgoing call tone playback failed: $error');
+    }
+  }
+
+  void _scheduleOutgoingToneReplay() {
+    if (_callToneStopped) return;
+    _outgoingToneRestartTimer?.cancel();
+    _outgoingToneRestartTimer = Timer(const Duration(seconds: 3), () {
+      unawaited(_playOutgoingTone());
+    });
+  }
+
+  Future<void> _stopCallTone() async {
+    _callToneStopped = true;
+    _outgoingToneRestartTimer?.cancel();
+    _outgoingToneRestartTimer = null;
+    await _outgoingToneCompleteSubscription?.cancel();
+    _outgoingToneCompleteSubscription = null;
+    try {
+      await _callTonePlayer.stop();
+    } catch (error) {
+      debugPrint('[VoiceCall] call tone stop failed: $error');
+    }
   }
 
   void _setConnecting(bool value) {
@@ -1118,15 +1136,14 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _refreshCallStatus() async {
-    if (_connecting || _ended) return;
+    if (_connecting) return;
     try {
       final call = await _accountSession.voiceCallStatus(widget.callID);
       if (!mounted) return;
       if (call.status == 'active' && !_connected) {
         await _joinCall();
       } else if (call.status == 'ended') {
-        setState(() => _ended = true);
-        _statusTimer?.cancel();
+        await _closeAfterRemoteEnd();
       }
     } catch (error) {
       debugPrint('[VoiceCall] status failed: $error');
@@ -1134,8 +1151,9 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _acceptCall() async {
-    if (_connecting || _ended) return;
+    if (_connecting) return;
     _setConnecting(true);
+    await _stopCallTone();
     try {
       final call = await _accountSession.acceptVoiceCall(widget.callID);
       await _connectLiveKit(call);
@@ -1148,8 +1166,9 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _joinCall() async {
-    if (_connecting || _connected || _ended) return;
+    if (_connecting || _connected) return;
     _setConnecting(true);
+    await _stopCallTone();
     try {
       final call = await _accountSession.joinVoiceCall(widget.callID);
       await _connectLiveKit(call);
@@ -1209,12 +1228,60 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _endAndClose() async {
+    if (_ending) return;
+    _ending = true;
     _statusTimer?.cancel();
+    await _stopCallTone();
+    var ended = false;
     try {
       await _accountSession.endVoiceCall(widget.callID);
+      ended = true;
     } catch (error) {
       debugPrint('[VoiceCall] end failed: $error');
     }
+    Message? record;
+    if (ended) record = await _sendCallRecord();
+    await _room?.disconnect();
+    _room = null;
+    if (mounted) Navigator.of(context).pop(record);
+  }
+
+  Future<Message?> _sendCallRecord() async {
+    final status = _callRecordStatus;
+    try {
+      final message = await OpenIM.iMManager.messageManager.createCustomMessage(
+        data: jsonEncode({
+          'type': 'aco.voice_call.ended',
+          'call_id': widget.callID,
+          'status': status,
+          'duration_seconds': _callDuration.inSeconds,
+        }),
+        extension: 'aco.voice_call',
+        description: '语音通话',
+      );
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: widget.peerUserID,
+        offlinePushInfo: OfflinePushInfo(title: '语音通话', desc: '语音通话记录'),
+      );
+      OpenIMChatRepository.publishLocalMessage(sent);
+      return sent;
+    } catch (error) {
+      debugPrint('[VoiceCall] call record send failed: $error');
+      return null;
+    }
+  }
+
+  String get _callRecordStatus {
+    if (_connected) return 'completed';
+    if (widget.incoming) return 'declined';
+    return 'cancelled';
+  }
+
+  Future<void> _closeAfterRemoteEnd() async {
+    _statusTimer?.cancel();
+    _callTimer?.cancel();
+    await _stopCallTone();
     await _room?.disconnect();
     _room = null;
     if (mounted) Navigator.of(context).pop();
@@ -1224,6 +1291,12 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   void dispose() {
     _callTimer?.cancel();
     _statusTimer?.cancel();
+    _callToneStopped = true;
+    _outgoingToneRestartTimer?.cancel();
+    unawaited(
+      _outgoingToneCompleteSubscription?.cancel() ?? Future<void>.value(),
+    );
+    unawaited(_callTonePlayer.dispose());
     unawaited(_room?.disconnect() ?? Future<void>.value());
     _apiClient.close();
     super.dispose();
@@ -1235,7 +1308,6 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
       final seconds = (_callDuration.inSeconds % 60).toString().padLeft(2, '0');
       return '$minutes:$seconds';
     }
-    if (_ended) return '通话已结束';
     if (_connecting) return '正在连接...';
     if (widget.incoming) return '邀请你语音通话...';
     return '等待对方接受邀请.';
@@ -1252,48 +1324,6 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
         SafeArea(
           child: Column(
             children: [
-              if (widget.incoming)
-                SizedBox(
-                  height: 68,
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: CupertinoButton(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-                      onPressed: _endAndClose,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4A4A4D),
-                          borderRadius: BorderRadius.circular(28),
-                        ),
-                        child: const Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 18,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                CupertinoIcons.bell_slash_fill,
-                                color: _white,
-                                size: 18,
-                              ),
-                              SizedBox(width: 8),
-                              Text(
-                                '忽略',
-                                style: TextStyle(
-                                  color: _white,
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
               const Spacer(flex: 2),
               _VoiceCallAvatar(avatarUrl: widget.avatarUrl),
               const SizedBox(height: 22),
