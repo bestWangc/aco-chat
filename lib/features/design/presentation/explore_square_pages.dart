@@ -478,11 +478,10 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 }
 
 class _SquareComposer extends StatelessWidget {
-  const _SquareComposer({required this.palette, this.imageUrl, this.onSubmit});
+  const _SquareComposer({required this.palette, this.imageUrl});
 
   final AcoPalette palette;
   final String? imageUrl;
-  final VoidCallback? onSubmit;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -513,7 +512,6 @@ class _SquareComposer extends StatelessWidget {
                       variant: AcoSearchVariant.squareComposer,
                       submitIcon: CupertinoIcons.add,
                       showSubmit: true,
-                      onSubmit: onSubmit,
                     ),
                   ),
                 ),
@@ -577,6 +575,7 @@ class _MessageQuickActions extends StatelessWidget {
     required this.onMessagesTap,
     required this.controller,
     required this.onQueryChanged,
+    this.hasUnreadMessages = false,
     this.hasFriendRequest = false,
     this.showContacts = false,
   });
@@ -586,6 +585,7 @@ class _MessageQuickActions extends StatelessWidget {
   final VoidCallback onMessagesTap;
   final TextEditingController controller;
   final ValueChanged<String> onQueryChanged;
+  final bool hasUnreadMessages;
   final bool hasFriendRequest;
   final bool showContacts;
 
@@ -616,6 +616,7 @@ class _MessageQuickActions extends StatelessWidget {
             palette: palette,
             selected: !showContacts,
             onPressed: onMessagesTap,
+            badge: hasUnreadMessages,
             useAssetColor: !showContacts,
           ),
           const SizedBox(width: 8),

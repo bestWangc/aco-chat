@@ -102,6 +102,11 @@ final class OpenIMChatRepository implements ChatRepository {
   }
 
   Future<void> _registerListeners() async {
+    await _registerMessageListener();
+    await _registerFriendshipListener();
+  }
+
+  Future<void> _registerMessageListener() async {
     try {
       await _sdk.messageManager.setAdvancedMsgListener(
         OnAdvancedMsgListener(
@@ -109,6 +114,15 @@ final class OpenIMChatRepository implements ChatRepository {
           onRecvOfflineNewMessage: _handleIncomingMessage,
         ),
       );
+    } catch (error) {
+      // Some native SDKs only accept listener registration after login. The
+      // post-login call retries without preventing the session from starting.
+      developer.log('消息监听器注册失败: $error', name: 'OpenIM.message');
+    }
+  }
+
+  Future<void> _registerFriendshipListener() async {
+    try {
       await _sdk.friendshipManager.setFriendshipListener(
         OnFriendshipListener(
           onFriendApplicationAdded: (info) {
@@ -132,9 +146,7 @@ final class OpenIMChatRepository implements ChatRepository {
       );
       developer.log('好友监听器注册成功', name: 'OpenIM.friendship');
     } catch (error) {
-      // Some native SDKs only accept listener registration after login. The
-      // post-login call retries without preventing the session from starting.
-      developer.log('消息监听器注册失败: $error', name: 'OpenIM.message');
+      developer.log('好友监听器注册失败: $error', name: 'OpenIM.friendship');
     }
   }
 

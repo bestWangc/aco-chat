@@ -49,19 +49,27 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  ValueListenableBuilder<int>(
-                    valueListenable:
-                        OpenIMChatRepository.friendRequestCountNotifier,
-                    builder: (_, friendRequestCount, _) => _MessageQuickActions(
-                      controller: _searchController,
-                      hasFriendRequest: friendRequestCount > 0,
-                      palette: widget.palette,
-                      showContacts: _showContacts,
-                      onQueryChanged: (query) => setState(() => _query = query),
-                      onMessagesTap: () =>
-                          setState(() => _showContacts = false),
-                      onContactsTap: () => setState(() => _showContacts = true),
-                    ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: OpenIMChatRepository.messageUnreadNotifier,
+                    builder: (_, hasUnreadMessages, _) =>
+                        ValueListenableBuilder<int>(
+                          valueListenable:
+                              OpenIMChatRepository.friendRequestCountNotifier,
+                          builder: (_, friendRequestCount, _) =>
+                              _MessageQuickActions(
+                                controller: _searchController,
+                                hasUnreadMessages: hasUnreadMessages,
+                                hasFriendRequest: friendRequestCount > 0,
+                                palette: widget.palette,
+                                showContacts: _showContacts,
+                                onQueryChanged: (query) =>
+                                    setState(() => _query = query),
+                                onMessagesTap: () =>
+                                    setState(() => _showContacts = false),
+                                onContactsTap: () =>
+                                    setState(() => _showContacts = true),
+                              ),
+                        ),
                   ),
                 ],
               ),
