@@ -778,6 +778,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
               conversation.faceURL = friend.avatarUrl;
             }
           }
+          conversations.sort(_compareConversations);
           _cachedConversations = List<ConversationInfo>.unmodifiable(
             conversations,
           );
@@ -801,6 +802,19 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
       }
     }
     return const <ConversationInfo>[];
+  }
+
+  int _compareConversations(ConversationInfo a, ConversationInfo b) {
+    if (a.isPinned != b.isPinned) return a.isPinned == true ? -1 : 1;
+    final aTime = [
+      a.draftTextTime ?? 0,
+      a.latestMsgSendTime ?? 0,
+    ].reduce(math.max);
+    final bTime = [
+      b.draftTextTime ?? 0,
+      b.latestMsgSendTime ?? 0,
+    ].reduce(math.max);
+    return bTime.compareTo(aTime);
   }
 
   void _reload() {
@@ -853,7 +867,8 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
         }
         final query = widget.query.trim().toLowerCase();
         final filteredConversations = query.isEmpty
-            ? conversations
+            ? (List<ConversationInfo>.of(conversations)
+                ..sort(_compareConversations))
             : conversations.where((conversation) {
                 final name = conversation.showName ?? conversation.userID ?? '';
                 return name.toLowerCase().contains(query) ||

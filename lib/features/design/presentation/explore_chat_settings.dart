@@ -4,12 +4,18 @@ class _ChatMoreSettingsPage extends StatefulWidget {
   const _ChatMoreSettingsPage({
     required this.palette,
     required this.peerName,
+    required this.peerUserID,
+    required this.conversationID,
+    required this.onBlockChanged,
     required this.messages,
     required this.onMessageTap,
   });
 
   final AcoPalette palette;
   final String peerName;
+  final String? peerUserID;
+  final String? conversationID;
+  final ValueChanged<bool> onBlockChanged;
   final List<_ChatHistoryMessage> messages;
   final ValueChanged<_ChatHistoryMessage> onMessageTap;
 
@@ -19,7 +25,110 @@ class _ChatMoreSettingsPage extends StatefulWidget {
 
 class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
   var _isPinned = false;
+  var _pinLoading = true;
+  var _pinUpdating = false;
   var _isBlocked = false;
+  var _blockLoading = true;
+  var _blockUpdating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadPinState());
+    unawaited(_loadBlockState());
+  }
+
+  Future<void> _loadBlockState() async {
+    final userID = widget.peerUserID;
+    if (userID == null || userID.isEmpty) {
+      if (mounted) setState(() => _blockLoading = false);
+      return;
+    }
+    try {
+      final blacklist = await OpenIM.iMManager.friendshipManager.getBlacklist();
+      if (mounted) {
+        setState(() {
+          _isBlocked = blacklist.any(
+            (item) => item.userID == userID || item.blockUserID == userID,
+          );
+          _blockLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _blockLoading = false);
+    }
+  }
+
+  Future<void> _setBlocked(bool value) async {
+    final userID = widget.peerUserID;
+    if (_blockUpdating || userID == null || userID.isEmpty) return;
+    final previous = _isBlocked;
+    setState(() {
+      _isBlocked = value;
+      _blockUpdating = true;
+    });
+    try {
+      if (value) {
+        await OpenIM.iMManager.friendshipManager.addBlacklist(userID: userID);
+      } else {
+        await OpenIM.iMManager.friendshipManager.removeBlacklist(
+          userID: userID,
+        );
+      }
+      widget.onBlockChanged(value);
+    } catch (_) {
+      if (mounted) setState(() => _isBlocked = previous);
+      if (mounted) _showNotice(context, '拉黑', '拉黑设置失败，请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _blockUpdating = false);
+    }
+  }
+
+  Future<void> _loadPinState() async {
+    final conversationID = widget.conversationID;
+    if (conversationID == null || conversationID.isEmpty) {
+      if (mounted) setState(() => _pinLoading = false);
+      return;
+    }
+    try {
+      final conversations = await OpenIM.iMManager.conversationManager
+          .getMultipleConversation(conversationIDList: [conversationID]);
+      if (mounted) {
+        setState(() {
+          _isPinned = conversations.firstOrNull?.isPinned == true;
+          _pinLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _pinLoading = false);
+      }
+    }
+  }
+
+  Future<void> _setPinned(bool value) async {
+    final conversationID = widget.conversationID;
+    if (_pinUpdating || conversationID == null || conversationID.isEmpty) {
+      return;
+    }
+    final previous = _isPinned;
+    setState(() {
+      _isPinned = value;
+      _pinUpdating = true;
+    });
+    try {
+      await OpenIM.iMManager.conversationManager.pinConversation(
+        conversationID: conversationID,
+        isPinned: value,
+      );
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (_) {
+      if (mounted) setState(() => _isPinned = previous);
+      if (mounted) _showNotice(context, '置顶聊天', '置顶设置失败，请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _pinUpdating = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Column(
@@ -55,7 +164,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
               palette: widget.palette,
               label: '置顶聊天',
               value: _isPinned,
-              onChanged: (value) => setState(() => _isPinned = value),
+              onChanged: _pinLoading || _pinUpdating ? null : _setPinned,
             ),
             const SizedBox(height: 6),
             _ChatSettingsActionRow(
@@ -68,7 +177,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
               palette: widget.palette,
               label: '拉黑',
               value: _isBlocked,
-              onChanged: (value) => setState(() => _isBlocked = value),
+              onChanged: _blockLoading || _blockUpdating ? null : _setBlocked,
             ),
           ],
         ),
@@ -125,7 +234,7 @@ class _ChatSettingsToggleRow extends StatelessWidget {
   final AcoPalette palette;
   final String label;
   final bool value;
-  final ValueChanged<bool> onChanged;
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) => Container(
