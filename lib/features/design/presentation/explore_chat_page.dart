@@ -50,6 +50,7 @@ class _ChatPageState extends State<_ChatPage> {
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
   bool _chatAccessGranted = false;
+  bool _peerIsBlocked = false;
 
   String? get _currentConversationID {
     if (_resolvedConversationID?.isNotEmpty == true) {
@@ -171,6 +172,7 @@ class _ChatPageState extends State<_ChatPage> {
         return;
       }
       _chatAccessGranted = true;
+      await _loadPeerBlockedState(userID);
       if (mounted) setState(() {});
       final conversation = await OpenIM.iMManager.conversationManager
           .getOneConversation(
@@ -226,6 +228,44 @@ class _ChatPageState extends State<_ChatPage> {
       setState(() => _error = '聊天记录加载失败，点击重试');
       debugPrint('[OpenIM] history load failed: $error');
     }
+  }
+
+  Future<void> _loadPeerBlockedState(String userID) async {
+    _peerIsBlocked = await _queryPeerBlockedState(userID);
+  }
+
+  Future<bool> _queryPeerBlockedState(String userID) async {
+    final previousState = _peerIsBlocked;
+    try {
+      final blacklist = await OpenIM.iMManager.friendshipManager.getBlacklist();
+      return blacklist.any(
+        (item) => item.userID == userID || item.blockUserID == userID,
+      );
+    } catch (error) {
+      debugPrint('[OpenIM] blacklist status load failed: $error');
+      return previousState;
+    }
+  }
+
+  Future<bool> _refreshPeerBlockedState(String userID) async {
+    _peerIsBlocked = await _queryPeerBlockedState(userID);
+    return _peerIsBlocked;
+  }
+
+  bool _isBlockedByPeerError(Object error) =>
+      (error is PlatformException && error.code == '1302') ||
+      error.toString().contains('1302') ||
+      error.toString().contains('BlockedByPeer');
+
+  void _appendFailedText(String text) {
+    if (!mounted) return;
+    setState(
+      () => _chatHistory.add(
+        _ChatHistoryMessage(text, mine: true, sendFailed: true),
+      ),
+    );
+    _peerIsBlocked = true;
+    _scrollToBottom(force: true, animate: false);
   }
 
   Future<void> _loadOlderMessages() async {
@@ -291,7 +331,23 @@ class _ChatPageState extends State<_ChatPage> {
     final text = _messageController.text.trim();
     final userID = widget.peerUserID;
     if (text.isEmpty || userID == null || userID.isEmpty) return;
+    await _refreshPeerBlockedState(userID);
+    if (_peerIsBlocked) {
+      final shouldFollowNewMessage =
+          !_chatScrollController.hasClients ||
+          _chatScrollController.position.pixels <= 80;
+      _messageController.clear();
+      if (!mounted) return;
+      setState(
+        () => _chatHistory.add(
+          _ChatHistoryMessage(text, mine: true, sendFailed: true),
+        ),
+      );
+      _scrollToBottom(force: shouldFollowNewMessage, animate: false);
+      return;
+    }
     if (!_chatAccessGranted) {
+      if (!mounted) return;
       _showNotice(context, '无法发送', '请先确认你们仍是好友。');
       return;
     }
@@ -299,6 +355,7 @@ class _ChatPageState extends State<_ChatPage> {
         !_chatScrollController.hasClients ||
         _chatScrollController.position.pixels <= 80;
     if (!OpenIMChatRepository.conversationReady.value) {
+      if (!mounted) return;
       _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
       return;
     }
@@ -340,6 +397,10 @@ class _ChatPageState extends State<_ChatPage> {
       }
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
+      if (_peerIsBlocked || _isBlockedByPeerError(error)) {
+        _appendFailedText(text);
+        return;
+      }
       if (!mounted) return;
       _showNotice(context, '发送失败', '请稍后重试');
       debugPrint('[OpenIM] send failed: $error');
@@ -444,6 +505,7 @@ class _ChatPageState extends State<_ChatPage> {
   Future<void> _pickChatImage(ImageSource source) async {
     setState(() => _morePanelVisible = false);
     File? pickedImage;
+    Uint8List? pickedImageBytes;
     try {
       final photo = await ImagePicker().pickImage(
         source: source,
@@ -461,8 +523,25 @@ class _ChatPageState extends State<_ChatPage> {
         return;
       }
       final imageBytes = await photo.readAsBytes();
+      pickedImageBytes = imageBytes;
       final userID = widget.peerUserID;
       if (userID == null || userID.isEmpty) return;
+      await _refreshPeerBlockedState(userID);
+      if (_peerIsBlocked) {
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.image(
+                mine: true,
+                imageBytes: pickedImageBytes,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
       if (!_chatAccessGranted) {
         if (mounted) _showNotice(context, '无法发送', '请先确认你们仍是好友。');
         return;
@@ -499,6 +578,22 @@ class _ChatPageState extends State<_ChatPage> {
       _scrollToBottom(force: true, animate: false);
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
+      if (_peerIsBlocked || _isBlockedByPeerError(error)) {
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.image(
+                mine: true,
+                imageBytes: pickedImageBytes,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _peerIsBlocked = true;
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
       if (!mounted) return;
       _showNotice(context, '图片发送失败', '请稍后重试。');
       debugPrint('[OpenIM] image send failed: $error');
@@ -674,6 +769,29 @@ class _ChatPageState extends State<_ChatPage> {
         return;
       }
       final userID = widget.peerUserID;
+      if (userID != null && userID.isNotEmpty) {
+        await _refreshPeerBlockedState(userID);
+      }
+      if (_peerIsBlocked) {
+        final duration = DateTime.now()
+            .difference(startedAt)
+            .inSeconds
+            .clamp(1, 60);
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.sound(
+                mine: true,
+                soundPath: path,
+                soundDuration: duration,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
       if (userID == null ||
           userID.isEmpty ||
           !_chatAccessGranted ||
@@ -710,6 +828,28 @@ class _ChatPageState extends State<_ChatPage> {
         OpenIMChatRepository.conversationRevision.value++;
         sentSuccessfully = true;
       } catch (error) {
+        if (_peerIsBlocked || _isBlockedByPeerError(error)) {
+          final failedDuration = DateTime.now()
+              .difference(startedAt)
+              .inSeconds
+              .clamp(1, 60);
+          if (mounted) {
+            setState(
+              () => _chatHistory.add(
+                _ChatHistoryMessage.sound(
+                  mine: true,
+                  soundPath: path,
+                  soundDuration: failedDuration,
+                  sendFailed: true,
+                ),
+              ),
+            );
+            _peerIsBlocked = true;
+            _scrollToBottom(force: true, animate: false);
+          }
+          sentSuccessfully = true;
+          return;
+        }
         if (mounted) _showNotice(context, '语音发送失败', '请稍后重试。');
         debugPrint('[OpenIM] voice send failed: $error');
       } finally {
@@ -751,6 +891,9 @@ class _ChatPageState extends State<_ChatPage> {
                     child: _ChatMoreSettingsPage(
                       palette: widget.palette,
                       peerName: _peerName,
+                      peerUserID: widget.peerUserID,
+                      conversationID: _currentConversationID,
+                      onBlockChanged: (blocked) => _peerIsBlocked = blocked,
                       messages: _chatHistory,
                       onMessageTap: _focusMessage,
                     ),
@@ -830,6 +973,7 @@ class _ChatPageState extends State<_ChatPage> {
                                 soundUrl: message.soundUrl,
                                 soundDuration: message.soundDuration,
                                 isVoiceCallRecord: message.isVoiceCallRecord,
+                                sendFailed: message.sendFailed,
                                 mine: message.mine,
                                 avatarUrl: _resolvedPeerAvatar,
                                 ownAvatarUrl: widget.ownAvatarUrl,
@@ -1663,6 +1807,7 @@ class _ChatMessage extends StatelessWidget {
     required this.soundUrl,
     required this.soundDuration,
     required this.isVoiceCallRecord,
+    required this.sendFailed,
     required this.mine,
     this.avatarUrl,
     this.ownAvatarUrl,
@@ -1679,6 +1824,7 @@ class _ChatMessage extends StatelessWidget {
   final String? soundUrl;
   final int? soundDuration;
   final bool isVoiceCallRecord;
+  final bool sendFailed;
   final bool mine;
   final String? avatarUrl;
   final String? ownAvatarUrl;
@@ -1696,12 +1842,21 @@ class _ChatMessage extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: _isImageMessage
               ? CrossAxisAlignment.start
-              : CrossAxisAlignment.end,
+              : CrossAxisAlignment.center,
           children: [
             if (!mine) ...[
               AcoAvatar(size: 40, imageUrl: avatarUrl),
               const SizedBox(width: 6),
             ],
+            if (mine && sendFailed)
+              const Padding(
+                padding: EdgeInsets.only(right: 5),
+                child: Icon(
+                  CupertinoIcons.exclamationmark_circle_fill,
+                  color: Color(0xFFFF3B30),
+                  size: 19,
+                ),
+              ),
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),

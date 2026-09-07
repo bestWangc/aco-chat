@@ -31,6 +31,7 @@ class _ChatHistoryMessage {
     this.text, {
     required this.mine,
     this.isVoiceCallRecord = false,
+    this.sendFailed = false,
   }) : imageBytes = null,
        imagePath = null,
        imageUrl = null,
@@ -47,6 +48,7 @@ class _ChatHistoryMessage {
     this.imageUrl,
     this.previewImageUrl,
     this.shouldCacheThumbnail = false,
+    this.sendFailed = false,
   }) : text = '',
        soundPath = null,
        soundUrl = null,
@@ -58,6 +60,7 @@ class _ChatHistoryMessage {
     this.soundPath,
     this.soundUrl,
     this.soundDuration,
+    this.sendFailed = false,
   }) : text = '',
        imageBytes = null,
        imagePath = null,
@@ -125,6 +128,7 @@ class _ChatHistoryMessage {
   final String? soundUrl;
   final int? soundDuration;
   final bool isVoiceCallRecord;
+  final bool sendFailed;
 }
 
 class _SocialMessageTile extends StatelessWidget {

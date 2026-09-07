@@ -349,10 +349,33 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     final callID = _voiceCallInviteIDFromMessage(message);
     if (callID == null || _presentedIncomingCallID == callID) return;
     _presentedIncomingCallID = callID;
-    unawaited(_presentIncomingVoiceCall(message, callID, senderID));
+    unawaited(_presentIncomingVoiceCallIfActive(message, callID, senderID));
   }
 
-  Future<void> _presentIncomingVoiceCall(
+  Future<void> _presentIncomingVoiceCallIfActive(
+    Message message,
+    String callID,
+    String senderID,
+  ) async {
+    final client = AccountApiClient();
+    try {
+      final call = await AccountSession(client).voiceCallStatus(callID);
+      // Offline sync can deliver an invite after the caller has cancelled it.
+      // Do not render a transient incoming-call page for a terminal call.
+      if (!mounted || call.status != 'ringing') return;
+      await _pushIncomingVoiceCall(message, callID, senderID);
+    } catch (error) {
+      // A stale/invalid invite must not interrupt the user with a call page.
+      debugPrint('[VoiceCall] incoming invite status failed: $error');
+    } finally {
+      client.close();
+      if (mounted && _presentedIncomingCallID == callID) {
+        _presentedIncomingCallID = null;
+      }
+    }
+  }
+
+  Future<void> _pushIncomingVoiceCall(
     Message message,
     String callID,
     String senderID,
@@ -370,9 +393,6 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         ),
       ),
     );
-    if (mounted && _presentedIncomingCallID == callID) {
-      _presentedIncomingCallID = null;
-    }
   }
 
   void _toggleTheme() {
