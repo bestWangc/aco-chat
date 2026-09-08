@@ -8,6 +8,8 @@ typedef LiveRealtimeEventHandler = void Function(Object? event);
 
 /// Owns the auxiliary live-room WebSocket and its bounded reconnect policy.
 class LiveRealtimeClient {
+  static const _handshakeTimeout = Duration(seconds: 10);
+
   LiveRealtimeClient({
     required this.onEvent,
     required this.onConnected,
@@ -47,7 +49,12 @@ class LiveRealtimeClient {
       // WebSocketChannel.connect() only creates the channel. The handshake
       // result is reported by ready, so do not reset retry state or notify the
       // room until the server has accepted this connection.
-      await channel.ready;
+      try {
+        await channel.ready.timeout(_handshakeTimeout);
+      } on TimeoutException {
+        unawaited(channel.sink.close());
+        rethrow;
+      }
       if (_disposed || connectionGeneration != _connectionGeneration) {
         await channel.sink.close();
         return;
