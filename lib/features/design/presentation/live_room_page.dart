@@ -121,6 +121,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _microphoneUpdating = false;
   bool _liveKitMicrophoneOperationInFlight = false;
   bool _liveKitPermissionReconnectInFlight = false;
+  LiveRoom? _pendingLiveKitPermissionRoom;
+  bool _liveKitPermissionSyncRunning = false;
   bool _speakerInviteDialogVisible = false;
   LocalAudioTrack? _listenerAudioWarmupTrack;
   bool? _localMuteOverride;

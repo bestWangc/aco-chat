@@ -327,6 +327,10 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     } finally {
       _liveKitConnecting = false;
       if (mounted) setState(() {});
+      final latestRoom = _room;
+      if (latestRoom != null) {
+        unawaited(_syncLiveKitPublishPermission(latestRoom));
+      }
     }
   }
 
@@ -448,6 +452,40 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
   }
 
   Future<void> _syncLiveKitPublishPermission(LiveRoom room) async {
+    _pendingLiveKitPermissionRoom = room;
+    if (_liveKitPermissionSyncRunning) return;
+    _liveKitPermissionSyncRunning = true;
+    try {
+      while (mounted && !_leaving) {
+        final pendingRoom = _pendingLiveKitPermissionRoom;
+        if (pendingRoom == null) return;
+        if (_liveKitRoom == null ||
+            _liveKitConnecting ||
+            _liveKitReconnecting ||
+            _liveKitMicrophoneOperationInFlight ||
+            _liveKitPermissionReconnectInFlight) {
+          return;
+        }
+        _pendingLiveKitPermissionRoom = null;
+        await _applyLiveKitPublishPermission(pendingRoom);
+      }
+    } finally {
+      _liveKitPermissionSyncRunning = false;
+      final pendingRoom = _pendingLiveKitPermissionRoom;
+      if (pendingRoom != null &&
+          mounted &&
+          !_leaving &&
+          _liveKitRoom != null &&
+          !_liveKitConnecting &&
+          !_liveKitReconnecting &&
+          !_liveKitMicrophoneOperationInFlight &&
+          !_liveKitPermissionReconnectInFlight) {
+        unawaited(_syncLiveKitPublishPermission(pendingRoom));
+      }
+    }
+  }
+
+  Future<void> _applyLiveKitPublishPermission(LiveRoom room) async {
     // A stale listener snapshot can arrive after the server has promoted this
     // participant. Do not let it disable an already-publishable connection.
     if (_liveKitCanPublish == true &&
@@ -456,9 +494,6 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       return;
     }
     final canPublish = _canPublishAudio(room);
-    if (_liveKitRoom == null || _liveKitConnecting || _liveKitReconnecting) {
-      return;
-    }
     // A receive-only token can still report the speaker role while approval
     // propagation is catching up. Once this connection has adopted that same
     // role, retrying on every room snapshot creates an endless reconnect loop.
@@ -468,7 +503,6 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       // A listener uses the media playback session. Promotion must reconnect
       // with a publishing token after switching to the communication session,
       // which recreates iOS's audio device instead of reusing a stopped one.
-      if (_liveKitPermissionReconnectInFlight) return;
       _liveKitPermissionReconnectInFlight = true;
       try {
         await _connectLiveKit(showError: false);
@@ -481,7 +515,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     _liveKitRole = room.viewerRole;
     if (!canPublish) {
       _liveKitPublishReady = false;
-      await _setLocalMicrophoneEnabled(false);
+      await _setLocalMicrophoneEnabledWithRecovery(false);
       return;
     }
     if (_liveKitMicrophoneOperationInFlight) return;
@@ -587,6 +621,10 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       _showNotice(context, '设置麦克风失败', '请检查网络后重试。');
     } finally {
       _microphoneUpdating = false;
+      final pendingRoom = _pendingLiveKitPermissionRoom;
+      if (pendingRoom != null) {
+        unawaited(_syncLiveKitPublishPermission(pendingRoom));
+      }
     }
   }
 
