@@ -34,7 +34,6 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static void publishLocalMessage(Message message) {
     messageNotifier.value = message;
-    conversationRevision.value++;
   }
 
   static bool isVoiceCallMessage(Message? message) =>
@@ -362,7 +361,6 @@ final class OpenIMChatRepository implements ChatRepository {
         ),
       );
     }
-    conversationRevision.value++;
   }
 
   static String? _messageConversationID(Message message) {
