@@ -39,7 +39,7 @@ class _ChatPageState extends State<_ChatPage> {
   String? _voiceRecordingPath;
   DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
-  final _chatMessageKeys = <_ChatHistoryMessage, GlobalKey>{};
+  final _chatMessageKeys = <String, GlobalKey>{};
   final Map<String, Message> _messagesByClientMsgID = <String, Message>{};
   Future<void>? _loadFuture;
   String? _error;
@@ -50,6 +50,7 @@ class _ChatPageState extends State<_ChatPage> {
   bool _loadingOlder = false;
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
+  bool _markMessagesAsReadDirty = false;
   bool _chatAccessGranted = false;
   bool _peerIsBlocked = false;
   bool _mentionVisible = false;
@@ -79,12 +80,24 @@ class _ChatPageState extends State<_ChatPage> {
 
   List<Message> get _historyMessages {
     final messages = _messagesByClientMsgID.values.toList();
-    messages.sort((a, b) {
-      final aTime = a.sendTime ?? a.createTime ?? 0;
-      final bTime = b.sendTime ?? b.createTime ?? 0;
-      return aTime.compareTo(bTime);
-    });
+    messages.sort(_compareMessages);
     return messages;
+  }
+
+  Message? get _oldestHistoryMessage {
+    Message? oldest;
+    for (final message in _messagesByClientMsgID.values) {
+      if (oldest == null || _compareMessages(message, oldest) < 0) {
+        oldest = message;
+      }
+    }
+    return oldest;
+  }
+
+  int _compareMessages(Message a, Message b) {
+    final aTime = a.sendTime ?? a.createTime ?? 0;
+    final bTime = b.sendTime ?? b.createTime ?? 0;
+    return aTime.compareTo(bTime);
   }
 
   @override
@@ -133,12 +146,16 @@ class _ChatPageState extends State<_ChatPage> {
     _messagesByClientMsgID[clientMsgID!] = message;
   }
 
-  void _rememberMessagesIfAbsent(Iterable<Message> messages) {
+  List<Message> _rememberMessagesIfAbsent(Iterable<Message> messages) {
+    final added = <Message>[];
     for (final message in messages) {
       final clientMsgID = message.clientMsgID;
       if (clientMsgID?.isNotEmpty != true) continue;
-      _messagesByClientMsgID.putIfAbsent(clientMsgID!, () => message);
+      if (_messagesByClientMsgID.containsKey(clientMsgID)) continue;
+      _messagesByClientMsgID[clientMsgID!] = message;
+      added.add(message);
     }
+    return added;
   }
 
   bool _upsertDisplayedMessage(
@@ -176,7 +193,6 @@ class _ChatPageState extends State<_ChatPage> {
       if (index < 0) {
         _chatHistory.add(historyMessage);
       } else {
-        _chatMessageKeys.remove(_chatHistory[index]);
         _chatHistory[index] = historyMessage;
       }
     });
@@ -186,6 +202,7 @@ class _ChatPageState extends State<_ChatPage> {
   void _removeTrackedMessage(String? clientMsgID) {
     if (clientMsgID?.isNotEmpty != true) return;
     _messagesByClientMsgID.remove(clientMsgID);
+    _chatMessageKeys.remove(clientMsgID);
     if (!mounted) return;
     setState(() {
       _chatHistory.removeWhere((item) => item.clientMsgID == clientMsgID);
@@ -193,26 +210,30 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   Future<void> _markCurrentConversationAsRead() async {
-    if (_markingMessagesAsRead) return;
     final conversationID = _currentConversationID;
     if (conversationID == null) return;
+    if (_markingMessagesAsRead) {
+      _markMessagesAsReadDirty = true;
+      return;
+    }
 
     _markingMessagesAsRead = true;
-    try {
-      await OpenIM.iMManager.conversationManager.markConversationMessageAsRead(
-        conversationID: conversationID,
-      );
-      final pendingConversation = OpenIMChatRepository.pendingConversation;
-      if (pendingConversation?.conversationID == conversationID) {
-        pendingConversation?.unreadCount = 0;
+    do {
+      _markMessagesAsReadDirty = false;
+      try {
+        await OpenIM.iMManager.conversationManager
+            .markConversationMessageAsRead(conversationID: conversationID);
+        final pendingConversation = OpenIMChatRepository.pendingConversation;
+        if (pendingConversation?.conversationID == conversationID) {
+          pendingConversation?.unreadCount = 0;
+        }
+        OpenIMChatRepository.conversationRevision.value++;
+        await OpenIMChatRepository.refreshMessageUnreadStatus();
+      } catch (error) {
+        debugPrint('[OpenIM] mark read failed: $error');
       }
-      OpenIMChatRepository.conversationRevision.value++;
-      await OpenIMChatRepository.refreshMessageUnreadStatus();
-    } catch (error) {
-      debugPrint('[OpenIM] mark read failed: $error');
-    } finally {
-      _markingMessagesAsRead = false;
-    }
+    } while (_markMessagesAsReadDirty);
+    _markingMessagesAsRead = false;
   }
 
   void _onReady() {
@@ -275,6 +296,7 @@ class _ChatPageState extends State<_ChatPage> {
       await _markCurrentConversationAsRead();
       if (!mounted) return;
       setState(() {
+        _chatMessageKeys.clear();
         _chatHistory
           ..clear()
           ..addAll(
@@ -403,7 +425,9 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   Future<void> _loadOlderMessages() async {
-    if (_loadingOlder || _historyEnd || _historyMessages.isEmpty) return;
+    if (_loadingOlder || _historyEnd) return;
+    final oldestMessage = _oldestHistoryMessage;
+    if (oldestMessage == null) return;
     final target = _conversationTarget;
     final conversationID = _resolvedConversationID;
     if (target == null || conversationID == null) return;
@@ -415,7 +439,7 @@ class _ChatPageState extends State<_ChatPage> {
       final result = await OpenIM.iMManager.messageManager
           .getAdvancedHistoryMessageList(
             conversationID: conversationID,
-            startMsg: _historyMessages.first,
+            startMsg: oldestMessage,
             count: 30,
           );
       final older = result.messageList ?? const <Message>[];
@@ -423,22 +447,21 @@ class _ChatPageState extends State<_ChatPage> {
         _historyEnd = true;
         return;
       }
-      _rememberMessagesIfAbsent(older);
+      final addedMessages = _rememberMessagesIfAbsent(older)
+        ..sort(_compareMessages);
+      final olderHistory = addedMessages
+          .where(_ChatHistoryMessage.isDisplayable)
+          .map(
+            (message) => _ChatHistoryMessage.fromOpenIM(
+              message,
+              mine: message.sendID == OpenIMChatRepository.currentUserID,
+            ),
+          )
+          .toList(growable: false);
       if (!mounted) return;
-      setState(() {
-        _chatHistory
-          ..clear()
-          ..addAll(
-            _historyMessages
-                .where(_ChatHistoryMessage.isDisplayable)
-                .map(
-                  (m) => _ChatHistoryMessage.fromOpenIM(
-                    m,
-                    mine: m.sendID == OpenIMChatRepository.currentUserID,
-                  ),
-                ),
-          );
-      });
+      if (olderHistory.isNotEmpty) {
+        setState(() => _chatHistory.insertAll(0, olderHistory));
+      }
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!_chatScrollController.hasClients) return;
         final delta =
@@ -624,12 +647,16 @@ class _ChatPageState extends State<_ChatPage> {
     });
   }
 
-  GlobalKey _keyForMessage(_ChatHistoryMessage message) =>
-      _chatMessageKeys.putIfAbsent(message, GlobalKey.new);
+  GlobalKey? _keyForMessage(_ChatHistoryMessage message) {
+    final clientMsgID = message.clientMsgID;
+    if (clientMsgID?.isNotEmpty != true) return null;
+    return _chatMessageKeys.putIfAbsent(clientMsgID!, GlobalKey.new);
+  }
 
   void _focusMessage(_ChatHistoryMessage message) {
     if (!_chatHistory.contains(message)) return;
     final key = _keyForMessage(message);
+    if (key == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_chatScrollController.hasClients) return;
       final historyIndex = _chatHistory.indexOf(message);
