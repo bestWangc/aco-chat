@@ -54,13 +54,9 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                     child: _header(),
                   ),
                 ),
-                SliverList(
-                  delegate: SliverChildListDelegate([
-                    _OpenIMConversationList(
-                      palette: widget.palette,
-                      onOpen: widget.onOpen,
-                    ),
-                  ]),
+                _OpenIMConversationList(
+                  palette: widget.palette,
+                  onOpen: widget.onOpen,
                 ),
               ],
             ),
@@ -1368,77 +1364,83 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
         final conversations = snapshot.data ?? _cachedConversations;
         if (snapshot.connectionState == ConnectionState.waiting &&
             conversations.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CupertinoActivityIndicator()),
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CupertinoActivityIndicator()),
+            ),
           );
         }
         if (conversations.isEmpty &&
             !OpenIMChatRepository.conversationReady.value) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CupertinoActivityIndicator()),
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CupertinoActivityIndicator()),
+            ),
           );
         }
         if (conversations.isEmpty &&
             snapshot.connectionState == ConnectionState.done &&
             OpenIMChatRepository.conversationReady.value) {
-          return const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: Text('暂无会话')),
+          return const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: Text('暂无会话')),
+            ),
           );
         }
         final sortedConversations = List<ConversationInfo>.of(conversations)
           ..sort(_compareConversations);
         if (sortedConversations.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Text(
-                '未找到相关会话',
-                style: TextStyle(
-                  color: widget.palette.mutedText,
-                  fontSize: AcoTypography.caption,
+          return SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Center(
+                child: Text(
+                  '未找到相关会话',
+                  style: TextStyle(
+                    color: widget.palette.mutedText,
+                    fontSize: AcoTypography.caption,
+                  ),
                 ),
               ),
             ),
           );
         }
-        return Column(
-          children: [
-            for (final entry in sortedConversations.asMap().entries) ...[
-              _SocialMessageTile(
-                palette: widget.palette,
-                name: entry.value.showName ?? entry.value.userID ?? '会话',
-                message: _latestMessagePreview(entry.value.latestMsg),
-                avatarUrl: entry.value.faceURL,
-                groupAvatarUrls: entry.value.isGroupChat
-                    ? (_groupAvatarUrls[entry.value.groupID] ??
-                          const <String>[])
-                    : null,
-                identity: _identityByUserID[entry.value.userID] ?? 0,
-                horizontalMargin: 16,
-                unreadCount: entry.value.unreadCount,
-                timestamp: entry.value.latestMsgSendTime,
-                onTap: () {
-                  final conversation = entry.value;
-                  conversation.unreadCount = 0;
-                  OpenIMChatRepository.pendingConversation = conversation;
-                  OpenIMChatRepository.conversationRevision.value++;
-                  unawaited(
-                    OpenIM.iMManager.conversationManager
-                        .markConversationMessageAsRead(
-                          conversationID: conversation.conversationID,
-                        )
-                        .catchError((error) {
-                          debugPrint('[OpenIM] mark read failed: $error');
-                        }),
-                  );
-                  widget.onOpen(AcoScreen.chatV1);
-                },
-              ),
-            ],
-          ],
+        return SliverList.builder(
+          itemCount: sortedConversations.length,
+          itemBuilder: (context, index) {
+            final conversation = sortedConversations[index];
+            return _SocialMessageTile(
+              palette: widget.palette,
+              name: conversation.showName ?? conversation.userID ?? '会话',
+              message: _latestMessagePreview(conversation.latestMsg),
+              avatarUrl: conversation.faceURL,
+              groupAvatarUrls: conversation.isGroupChat
+                  ? (_groupAvatarUrls[conversation.groupID] ?? const <String>[])
+                  : null,
+              identity: _identityByUserID[conversation.userID] ?? 0,
+              horizontalMargin: 16,
+              unreadCount: conversation.unreadCount,
+              timestamp: conversation.latestMsgSendTime,
+              onTap: () {
+                conversation.unreadCount = 0;
+                OpenIMChatRepository.pendingConversation = conversation;
+                OpenIMChatRepository.conversationRevision.value++;
+                unawaited(
+                  OpenIM.iMManager.conversationManager
+                      .markConversationMessageAsRead(
+                        conversationID: conversation.conversationID,
+                      )
+                      .catchError((error) {
+                        debugPrint('[OpenIM] mark read failed: $error');
+                      }),
+                );
+                widget.onOpen(AcoScreen.chatV1);
+              },
+            );
+          },
         );
       },
     );
