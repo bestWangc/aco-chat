@@ -520,9 +520,18 @@ class _ChatPageState extends State<_ChatPage> {
     if (conversationID == null || conversationID.isEmpty) {
       throw StateError('Conversation is unavailable');
     }
+    await OpenIM.iMManager.conversationManager.markConversationMessageAsRead(
+      conversationID: conversationID,
+    );
     await OpenIM.iMManager.conversationManager.clearConversationAndDeleteAllMsg(
       conversationID: conversationID,
     );
+    final pendingConversation = OpenIMChatRepository.pendingConversation;
+    if (pendingConversation?.conversationID == conversationID) {
+      pendingConversation?.unreadCount = 0;
+    }
+    OpenIMChatRepository.conversationRevision.value++;
+    await OpenIMChatRepository.refreshMessageUnreadStatus();
     if (!mounted) return;
     setState(() {
       _historyMessages.clear();
@@ -531,7 +540,6 @@ class _ChatPageState extends State<_ChatPage> {
       _chatMessageKeys.clear();
       _historyEnd = true;
     });
-    OpenIMChatRepository.conversationRevision.value++;
   }
 
   @override

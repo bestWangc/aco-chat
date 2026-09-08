@@ -1232,6 +1232,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
               conversation,
             );
           }
+          OpenIMChatRepository.updateAuthorizedConversations(conversations);
           _identityByUserID = {
             for (final friend in friends)
               if (friend.identity > 0) friend.accountId: friend.identity,

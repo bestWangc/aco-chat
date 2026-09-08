@@ -28,6 +28,7 @@ final class OpenIMChatRepository implements ChatRepository {
   );
   static Future<void> Function()? reconnectHandler;
   static String? _activeChatPeerUserID;
+  static Set<String>? _authorizedConversationIDs;
   static final Set<String> _locallyLeavingGroupIDs = <String>{};
   static final Set<String> _handledGroupRemovalIDs = <String>{};
 
@@ -91,6 +92,10 @@ final class OpenIMChatRepository implements ChatRepository {
         !isNotifiableMessage(message)) {
       return false;
     }
+    final conversationID = _messageConversationID(message);
+    if (!_isAuthorizedConversation(conversationID)) {
+      return false;
+    }
     return _messageConversationTarget(message) != _activeChatPeerUserID;
   }
 
@@ -101,11 +106,12 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static int visibleUnreadCount(ConversationInfo conversation) {
     if (conversation.unreadCount <= 0) return 0;
-    final currentUserID = _currentUserID;
     final latestMessage = conversation.latestMsg;
-    if (currentUserID == null || latestMessage == null) {
-      return conversation.unreadCount;
-    }
+    // Clearing history can leave OpenIM's unread counter stale even though the
+    // conversation no longer contains a message the user can open.
+    if (latestMessage == null) return 0;
+    final currentUserID = _currentUserID;
+    if (currentUserID == null) return conversation.unreadCount;
     final target = _conversationTarget(conversation);
     if (latestMessage.sendID == currentUserID ||
         target == _activeChatPeerUserID) {
@@ -119,8 +125,31 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static bool hasUnreadMessagesFromOthers(
     Iterable<ConversationInfo> conversations,
-  ) =>
-      conversations.any((conversation) => visibleUnreadCount(conversation) > 0);
+  ) => conversations.any(
+    (conversation) =>
+        _isAuthorizedConversation(conversation.conversationID) &&
+        visibleUnreadCount(conversation) > 0,
+  );
+
+  static bool _isAuthorizedConversation(String? conversationID) {
+    final authorizedConversationIDs = _authorizedConversationIDs;
+    return authorizedConversationIDs == null ||
+        (conversationID != null &&
+            authorizedConversationIDs.contains(conversationID));
+  }
+
+  static void updateAuthorizedConversations(
+    Iterable<ConversationInfo> conversations,
+  ) {
+    final authorizedConversations = conversations.toList(growable: false);
+    _authorizedConversationIDs = {
+      for (final conversation in authorizedConversations)
+        conversation.conversationID,
+    };
+    messageUnreadNotifier.value = hasUnreadMessagesFromOthers(
+      authorizedConversations,
+    );
+  }
 
   /// Keeps messages from the conversation currently on screen out of the
   /// global social-entry badge. The chat page still marks the conversation as
@@ -336,6 +365,15 @@ final class OpenIMChatRepository implements ChatRepository {
     conversationRevision.value++;
   }
 
+  static String? _messageConversationID(Message message) {
+    final groupID = message.groupID;
+    if (groupID?.isNotEmpty == true) return 'sg_$groupID';
+    final peerID = message.sendID == _currentUserID
+        ? message.recvID
+        : message.sendID;
+    return peerID?.isNotEmpty == true ? 'si_$peerID' : null;
+  }
+
   static void _handleGroupDeparture(GroupInfo group, String notice) {
     conversationRevision.value++;
     if (_locallyLeavingGroupIDs.remove(group.groupID)) return;
@@ -400,6 +438,7 @@ final class OpenIMChatRepository implements ChatRepository {
     await _sdk.logout();
     _currentUserID = null;
     _activeChatPeerUserID = null;
+    _authorizedConversationIDs = null;
     _locallyLeavingGroupIDs.clear();
     _handledGroupRemovalIDs.clear();
     friendRequestCountNotifier.value = 0;
