@@ -1522,17 +1522,17 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     final showMuted = member.role == 'listener' || (isSpeaker && member.muted);
     if (showMuted) {
       return Image.asset(
-        'assets/icons/live_mic_disabled.png',
+        'assets/icons/live_muted_red.png',
         width: 18,
-        height: 18,
+        height: 23,
         fit: BoxFit.contain,
       );
     }
     if (isSpeaker) {
       return Image.asset(
-        'assets/icons/live_mic_enabled.png',
+        'assets/icons/live_mic_open.png',
         width: 18,
-        height: 18,
+        height: 23,
         fit: BoxFit.contain,
       );
     }
