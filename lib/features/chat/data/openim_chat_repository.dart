@@ -31,6 +31,9 @@ final class OpenIMChatRepository implements ChatRepository {
   static Set<String>? _authorizedConversationIDs;
   static final Set<String> _locallyLeavingGroupIDs = <String>{};
   static final Set<String> _handledGroupRemovalIDs = <String>{};
+  static Set<String>? _blacklistedUserIDs;
+  static Future<Set<String>>? _blacklistLoad;
+  static int _blacklistRevision = 0;
 
   static void publishLocalMessage(Message message) {
     messageNotifier.value = message;
@@ -176,6 +179,45 @@ final class OpenIMChatRepository implements ChatRepository {
     _locallyLeavingGroupIDs.remove(groupID);
   }
 
+  static Future<Set<String>> blacklistedUserIDs({bool forceRefresh = false}) {
+    final cached = _blacklistedUserIDs;
+    if (!forceRefresh && cached != null) return Future.value(cached);
+    final pending = _blacklistLoad;
+    if (!forceRefresh && pending != null) return pending;
+
+    final revision = _blacklistRevision;
+    final load = OpenIM.iMManager.friendshipManager.getBlacklist().then((
+      items,
+    ) {
+      final userIDs = <String>{};
+      for (final item in items) {
+        for (final userID in [item.userID, item.blockUserID]) {
+          if (userID?.isNotEmpty == true) userIDs.add(userID!);
+        }
+      }
+      if (revision == _blacklistRevision) _blacklistedUserIDs = userIDs;
+      return userIDs;
+    });
+    _blacklistLoad = load;
+    unawaited(
+      load.then<void>(
+        (_) {
+          if (identical(_blacklistLoad, load)) _blacklistLoad = null;
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          if (identical(_blacklistLoad, load)) _blacklistLoad = null;
+        },
+      ),
+    );
+    return load;
+  }
+
+  static void invalidateBlacklistCache() {
+    _blacklistRevision++;
+    _blacklistedUserIDs = null;
+    _blacklistLoad = null;
+  }
+
   /// The backend has already removed the membership, so refresh the visible
   /// conversation list immediately instead of waiting for OpenIM's callback.
   static void completeLeavingGroup() {
@@ -287,6 +329,8 @@ final class OpenIMChatRepository implements ChatRepository {
     try {
       await _sdk.friendshipManager.setFriendshipListener(
         OnFriendshipListener(
+          onBlackAdded: (_) => invalidateBlacklistCache(),
+          onBlackDeleted: (_) => invalidateBlacklistCache(),
           onFriendApplicationAdded: (info) {
             // The SDK may echo an outgoing request to the sender. A badge is
             // only meaningful when the current user is the recipient.
@@ -439,6 +483,7 @@ final class OpenIMChatRepository implements ChatRepository {
     _authorizedConversationIDs = null;
     _locallyLeavingGroupIDs.clear();
     _handledGroupRemovalIDs.clear();
+    invalidateBlacklistCache();
     friendRequestCountNotifier.value = 0;
     messageUnreadNotifier.value = false;
     conversationReady.value = false;

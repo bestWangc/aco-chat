@@ -110,12 +110,11 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
       return;
     }
     try {
-      final blacklist = await OpenIM.iMManager.friendshipManager.getBlacklist();
+      final blacklistedUserIDs =
+          await OpenIMChatRepository.blacklistedUserIDs();
       if (mounted) {
         setState(() {
-          _isBlocked = blacklist.any(
-            (item) => item.userID == userID || item.blockUserID == userID,
-          );
+          _isBlocked = blacklistedUserIDs.contains(userID);
           _blockLoading = false;
         });
       }
@@ -140,6 +139,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
           userID: userID,
         );
       }
+      OpenIMChatRepository.invalidateBlacklistCache();
       widget.onBlockChanged(value);
     } catch (_) {
       if (mounted) setState(() => _isBlocked = previous);

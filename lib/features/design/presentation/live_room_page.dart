@@ -25,10 +25,16 @@ int _parseLiveMessageIdentity(Object? payloadIdentity, String? metadata) {
 }
 
 class _VoiceRoomPage extends StatefulWidget {
-  const _VoiceRoomPage({required this.palette, this.live, this.joinPassword});
+  const _VoiceRoomPage({
+    required this.palette,
+    this.live,
+    this.joinPassword,
+    this.initialRoom,
+  });
   final AcoPalette palette;
   final LiveSession? live;
   final String? joinPassword;
+  final LiveRoom? initialRoom;
 
   @override
   State<_VoiceRoomPage> createState() => _VoiceRoomPageState();
@@ -123,6 +129,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _liveKitPermissionReconnectInFlight = false;
   LiveRoom? _pendingLiveKitPermissionRoom;
   bool _liveKitPermissionSyncRunning = false;
+  bool _skipNextRealtimeSnapshot = false;
   bool _speakerInviteDialogVisible = false;
   LocalAudioTrack? _listenerAudioWarmupTrack;
   bool? _localMuteOverride;
@@ -146,7 +153,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           // including reconnects. This callback is separate from the
           // reconnecting-state callback so the initial connection is not
           // accidentally reconciled twice.
-          unawaited(_loadRoom(silent: true));
+          if (!_skipNextRealtimeSnapshot) {
+            unawaited(_loadRoom(silent: true));
+          }
+          _skipNextRealtimeSnapshot = false;
           _scheduleRoomSnapshotCalibration();
         }
       },
@@ -170,6 +180,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     unawaited(_setLiveRoomWakelock(true));
     _apiClient = AccountApiClient();
     _accountSession = AccountSession(_apiClient);
+    _skipNextRealtimeSnapshot = widget.initialRoom != null;
     if (widget.live != null) {
       unawaited(_initializeRoom());
     }
@@ -181,10 +192,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (mounted) setState(() => _roomLoading = true);
     await _waitForLiveKitReentryCooldown(live.id);
     if (!mounted || _leaving) return;
-    // Load the current role before requesting the LiveKit token. Connecting
-    // both requests concurrently can issue a second token refresh as soon as
-    // the room snapshot arrives, creating two joins for the same participant.
-    await _loadRoom(resetRole: true);
+    final initialRoom = widget.initialRoom;
+    if (initialRoom != null) {
+      _applyRoomSnapshot(initialRoom);
+      if (mounted) setState(() => _roomLoading = false);
+    } else {
+      // Direct room navigation has no preloaded snapshot, so load it before
+      // requesting the LiveKit token.
+      await _loadRoom(resetRole: true);
+    }
     await _connectLiveKit();
     // The auxiliary state stream is started in the background; chat itself is
     // handled by LiveKit data.

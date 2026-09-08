@@ -25,12 +25,15 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
   final bool _showLive = true;
   final AccountApiClient _apiClient = AccountApiClient();
-  late Future<List<LiveSession>> _lives;
+  List<LiveSession>? _loadedLives;
+  Object? _livesError;
+  var _livesLoading = true;
+  var _livesRequestID = 0;
 
   @override
   void initState() {
     super.initState();
-    _lives = _loadLives();
+    unawaited(_beginLivesLoad());
   }
 
   Future<List<LiveSession>> _loadLives({bool useInitialLives = true}) async {
@@ -42,22 +45,33 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     return AccountSession(_apiClient).listLives();
   }
 
+  Future<void> _beginLivesLoad({bool useInitialLives = true}) async {
+    final requestID = ++_livesRequestID;
+    _livesLoading = true;
+    _livesError = null;
+    if (mounted) setState(() {});
+    try {
+      final lives = await _loadLives(useInitialLives: useInitialLives);
+      if (!mounted || requestID != _livesRequestID) return;
+      setState(() {
+        _loadedLives = lives;
+        _livesLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || requestID != _livesRequestID) return;
+      setState(() {
+        _livesError = error;
+        _livesLoading = false;
+      });
+    }
+  }
+
   void _retryLoadingLives() {
-    setState(() {
-      _lives = _loadLives(useInitialLives: false);
-    });
+    unawaited(_beginLivesLoad(useInitialLives: false));
   }
 
   Future<void> _refreshLives() async {
-    final refreshFuture = _loadLives(useInitialLives: false);
-    setState(() {
-      _lives = refreshFuture;
-    });
-    try {
-      await refreshFuture;
-    } catch (_) {
-      // The FutureBuilder below presents the existing load error state.
-    }
+    await _beginLivesLoad(useInitialLives: false);
   }
 
   @override
@@ -95,14 +109,8 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
             joinPassword == null)) {
       return;
     }
-    if (joinPassword != null &&
-        !await _verifyLivePassword(session, joinPassword)) {
-      return;
-    }
-    // Check the kick block before pushing the room route. This keeps the
-    // rejection in the live list instead of briefly entering a room page.
-    if (joinPassword == null && !await _verifyLiveEntry(session)) return;
-    if (!mounted) return;
+    final initialRoom = await _joinLiveRoom(session, joinPassword);
+    if (!mounted || initialRoom == null) return;
     Navigator.of(context)
         .push<Object?>(
           _AcoPageRoute<Object?>(
@@ -117,6 +125,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                     palette: widget.palette,
                     live: session,
                     joinPassword: joinPassword,
+                    initialRoom: initialRoom,
                   ),
                 ),
               ),
@@ -135,12 +144,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         });
   }
 
-  Future<bool> _verifyLivePassword(LiveSession session, String password) async {
+  Future<LiveRoom?> _joinLiveRoom(
+    LiveSession session,
+    String? joinPassword,
+  ) async {
     try {
-      await AccountSession(
+      return await AccountSession(
         _apiClient,
-      ).liveRoom(session.id, joinPassword: password);
-      return true;
+      ).liveRoom(session.id, joinPassword: joinPassword, resetRole: true);
     } on AccountApiException catch (error) {
       if (mounted) {
         showAcoAlertNotice(
@@ -152,25 +163,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     } catch (_) {
       if (mounted) showAcoAlertNotice(context, '无法进入会议', '请检查网络后重试。');
     }
-    return false;
-  }
-
-  Future<bool> _verifyLiveEntry(LiveSession session) async {
-    try {
-      await AccountSession(_apiClient).liveRoom(session.id);
-      return true;
-    } on AccountApiException catch (error) {
-      if (mounted) {
-        showAcoAlertNotice(
-          context,
-          error.isLiveKick ? '暂时无法进入会议' : '无法进入会议',
-          error.localizedMessage,
-        );
-      }
-    } catch (_) {
-      if (mounted) showAcoAlertNotice(context, '无法进入会议', '请检查网络后重试。');
-    }
-    return false;
+    return null;
   }
 
   Future<String?> _requestLivePassword() {
@@ -304,44 +297,56 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         });
   }
 
-  List<Widget> _buildLiveContent(AcoPalette palette) => [
-    const SizedBox(height: 24),
-    FutureBuilder<List<LiveSession>>(
-      future: _lives,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CupertinoActivityIndicator());
-        }
-        if (snapshot.hasError) {
-          return _LiveListMessage(
+  Widget _buildLiveSliver(AcoPalette palette) {
+    if (_livesLoading) {
+      return const SliverToBoxAdapter(
+        child: Padding(
+          padding: EdgeInsets.only(top: 24),
+          child: Center(child: CupertinoActivityIndicator()),
+        ),
+      );
+    }
+    if (_livesError != null) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 24),
+          child: _LiveListMessage(
             palette: palette,
             message: '会议列表加载失败，请检查网络后重试。',
             actionLabel: '重试',
             onPressed: _retryLoadingLives,
-          );
-        }
-        final sessions = snapshot.data ?? const <LiveSession>[];
-        if (sessions.isEmpty) {
-          return _LiveListMessage(palette: palette, message: '暂无会议，去创建一场吧。');
-        }
-        return Column(
-          children: [
-            for (final session in sessions) ...[
-              _LiveCard(
-                palette: palette,
-                session: session,
-                onTap: () => _openLiveRoom(session),
-                onEdit: session.canEdit && session.status == 'scheduled'
-                    ? () => _editLive(session)
-                    : null,
-              ),
-              const SizedBox(height: 24),
-            ],
-          ],
+          ),
+        ),
+      );
+    }
+    final sessions = _loadedLives ?? const <LiveSession>[];
+    if (sessions.isEmpty) {
+      return SliverToBoxAdapter(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 24),
+          child: _LiveListMessage(palette: palette, message: '暂无会议，去创建一场吧。'),
+        ),
+      );
+    }
+    return SliverList.builder(
+      itemCount: sessions.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) return const SizedBox(height: 24);
+        final session = sessions[index - 1];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: _LiveCard(
+            palette: palette,
+            session: session,
+            onTap: () => _openLiveRoom(session),
+            onEdit: session.canEdit && session.status == 'scheduled'
+                ? () => _editLive(session)
+                : null,
+          ),
         );
       },
-    ),
-  ];
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -401,18 +406,21 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.only(bottom: 96),
-                sliver: SliverList(
-                  delegate: SliverChildListDelegate([
-                    if (_showLive)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: _liveListHorizontalInset,
-                        ),
-                        child: Column(children: _buildLiveContent(palette)),
-                      )
-                    else
+              if (_showLive)
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    _liveListHorizontalInset,
+                    0,
+                    _liveListHorizontalInset,
+                    96,
+                  ),
+                  sliver: _buildLiveSliver(palette),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.only(bottom: 96),
+                  sliver: SliverList(
+                    delegate: SliverChildListDelegate([
                       Padding(
                         padding: const EdgeInsets.symmetric(
                           horizontal: _contentHorizontalInset,
@@ -443,9 +451,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                           ],
                         ),
                       ),
-                  ]),
+                    ]),
+                  ),
                 ),
-              ),
             ],
           ),
         ),

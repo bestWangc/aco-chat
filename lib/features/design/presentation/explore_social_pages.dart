@@ -1297,22 +1297,34 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
         missing.add(groupID);
       }
     }
-    final entries = await Future.wait(
-      missing.map((groupID) async {
-        try {
-          final members = await OpenIM.iMManager.groupManager
-              .getGroupMemberList(groupID: groupID, count: 4)
-              .timeout(const Duration(seconds: 2));
-          final urls = members
-              .map((member) => member.faceURL?.trim() ?? '')
-              .take(4)
-              .toList(growable: false);
-          return MapEntry(groupID, urls);
-        } catch (_) {
-          return MapEntry(groupID, const <String>[]);
-        }
-      }),
-    );
+    const maxConcurrentRequests = 4;
+    final missingGroupIDs = missing.toList(growable: false);
+    final entries = <MapEntry<String, List<String>>>[];
+    for (
+      var offset = 0;
+      offset < missingGroupIDs.length;
+      offset += maxConcurrentRequests
+    ) {
+      final batch = missingGroupIDs.skip(offset).take(maxConcurrentRequests);
+      entries.addAll(
+        await Future.wait(
+          batch.map((groupID) async {
+            try {
+              final members = await OpenIM.iMManager.groupManager
+                  .getGroupMemberList(groupID: groupID, count: 4)
+                  .timeout(const Duration(seconds: 2));
+              final urls = members
+                  .map((member) => member.faceURL?.trim() ?? '')
+                  .take(4)
+                  .toList(growable: false);
+              return MapEntry(groupID, urls);
+            } catch (_) {
+              return MapEntry(groupID, const <String>[]);
+            }
+          }),
+        ),
+      );
+    }
     for (final entry in entries) {
       _groupAvatarCache[entry.key] = _GroupAvatarCache(
         urls: entry.value,

@@ -117,9 +117,10 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       const overviewChatGap = 6.0;
+                      const minChatHeight = 160.0;
                       final overviewMaxHeight = math.max(
                         0.0,
-                        constraints.maxHeight - overviewChatGap,
+                        constraints.maxHeight - overviewChatGap - minChatHeight,
                       );
                       return Column(
                         children: [

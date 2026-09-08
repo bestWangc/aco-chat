@@ -50,6 +50,7 @@ class _ChatPageState extends State<_ChatPage> {
   bool _loadingOlder = false;
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
+  bool _markMessagesAsReadDirty = false;
   bool _chatAccessGranted = false;
   bool _peerIsBlocked = false;
   bool _mentionVisible = false;
@@ -209,26 +210,30 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   Future<void> _markCurrentConversationAsRead() async {
-    if (_markingMessagesAsRead) return;
     final conversationID = _currentConversationID;
     if (conversationID == null) return;
+    if (_markingMessagesAsRead) {
+      _markMessagesAsReadDirty = true;
+      return;
+    }
 
     _markingMessagesAsRead = true;
-    try {
-      await OpenIM.iMManager.conversationManager.markConversationMessageAsRead(
-        conversationID: conversationID,
-      );
-      final pendingConversation = OpenIMChatRepository.pendingConversation;
-      if (pendingConversation?.conversationID == conversationID) {
-        pendingConversation?.unreadCount = 0;
+    do {
+      _markMessagesAsReadDirty = false;
+      try {
+        await OpenIM.iMManager.conversationManager
+            .markConversationMessageAsRead(conversationID: conversationID);
+        final pendingConversation = OpenIMChatRepository.pendingConversation;
+        if (pendingConversation?.conversationID == conversationID) {
+          pendingConversation?.unreadCount = 0;
+        }
+        OpenIMChatRepository.conversationRevision.value++;
+        await OpenIMChatRepository.refreshMessageUnreadStatus();
+      } catch (error) {
+        debugPrint('[OpenIM] mark read failed: $error');
       }
-      OpenIMChatRepository.conversationRevision.value++;
-      await OpenIMChatRepository.refreshMessageUnreadStatus();
-    } catch (error) {
-      debugPrint('[OpenIM] mark read failed: $error');
-    } finally {
-      _markingMessagesAsRead = false;
-    }
+    } while (_markMessagesAsReadDirty);
+    _markingMessagesAsRead = false;
   }
 
   void _onReady() {
@@ -384,13 +389,16 @@ class _ChatPageState extends State<_ChatPage> {
     _peerIsBlocked = await _queryPeerBlockedState(userID);
   }
 
-  Future<bool> _queryPeerBlockedState(String userID) async {
+  Future<bool> _queryPeerBlockedState(
+    String userID, {
+    bool forceRefresh = false,
+  }) async {
     final previousState = _peerIsBlocked;
     try {
-      final blacklist = await OpenIM.iMManager.friendshipManager.getBlacklist();
-      return blacklist.any(
-        (item) => item.userID == userID || item.blockUserID == userID,
+      final blacklistedUserIDs = await OpenIMChatRepository.blacklistedUserIDs(
+        forceRefresh: forceRefresh,
       );
+      return blacklistedUserIDs.contains(userID);
     } catch (error) {
       debugPrint('[OpenIM] blacklist status load failed: $error');
       return previousState;
@@ -398,7 +406,7 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   Future<bool> _refreshPeerBlockedState(String userID) async {
-    _peerIsBlocked = await _queryPeerBlockedState(userID);
+    _peerIsBlocked = await _queryPeerBlockedState(userID, forceRefresh: true);
     return _peerIsBlocked;
   }
 
@@ -482,7 +490,7 @@ class _ChatPageState extends State<_ChatPage> {
     final text = _messageController.text.trim();
     final target = _conversationTarget;
     if (text.isEmpty || target == null || target.isEmpty) return;
-    if (!_isGroup) await _refreshPeerBlockedState(target);
+    if (!_isGroup) await _loadPeerBlockedState(target);
     if (_peerIsBlocked) {
       final shouldFollowNewMessage =
           !_chatScrollController.hasClients ||
@@ -562,7 +570,9 @@ class _ChatPageState extends State<_ChatPage> {
       }
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
-      if (_peerIsBlocked || _isBlockedByPeerError(error)) {
+      final blockedByPeer = _isBlockedByPeerError(error);
+      if (blockedByPeer) await _refreshPeerBlockedState(target);
+      if (_peerIsBlocked || blockedByPeer) {
         _appendFailedText(text, clientMsgID: outgoingClientMsgID);
         return;
       }
@@ -696,6 +706,7 @@ class _ChatPageState extends State<_ChatPage> {
     File? pickedImage;
     Uint8List? pickedImageBytes;
     String? outgoingClientMsgID;
+    final target = _conversationTarget;
     try {
       final photo = await ImagePicker().pickImage(
         source: source,
@@ -714,9 +725,8 @@ class _ChatPageState extends State<_ChatPage> {
       }
       final imageBytes = await photo.readAsBytes();
       pickedImageBytes = imageBytes;
-      final target = _conversationTarget;
       if (target == null || target.isEmpty) return;
-      if (!_isGroup) await _refreshPeerBlockedState(target);
+      if (!_isGroup) await _loadPeerBlockedState(target);
       if (_peerIsBlocked) {
         if (mounted) {
           setState(
@@ -762,7 +772,11 @@ class _ChatPageState extends State<_ChatPage> {
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
       _removeTrackedMessage(outgoingClientMsgID);
-      if (_peerIsBlocked || _isBlockedByPeerError(error)) {
+      final blockedByPeer = _isBlockedByPeerError(error);
+      if (blockedByPeer && target?.isNotEmpty == true) {
+        await _refreshPeerBlockedState(target!);
+      }
+      if (_peerIsBlocked || blockedByPeer) {
         if (mounted) {
           setState(
             () => _chatHistory.add(
@@ -1056,7 +1070,7 @@ class _ChatPageState extends State<_ChatPage> {
       }
       final target = _conversationTarget;
       if (!_isGroup && target != null && target.isNotEmpty) {
-        await _refreshPeerBlockedState(target);
+        await _loadPeerBlockedState(target);
       }
       if (_peerIsBlocked) {
         final duration = DateTime.now()
@@ -1114,7 +1128,9 @@ class _ChatPageState extends State<_ChatPage> {
         sentSuccessfully = true;
       } catch (error) {
         _removeTrackedMessage(outgoingClientMsgID);
-        if (_peerIsBlocked || _isBlockedByPeerError(error)) {
+        final blockedByPeer = _isBlockedByPeerError(error);
+        if (blockedByPeer) await _refreshPeerBlockedState(target);
+        if (_peerIsBlocked || blockedByPeer) {
           final failedDuration = DateTime.now()
               .difference(startedAt)
               .inSeconds
@@ -1524,6 +1540,7 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   Duration _callDuration = Duration.zero;
   Timer? _callTimer;
   Timer? _statusTimer;
+  var _statusRefreshing = false;
   Timer? _outgoingToneRestartTimer;
   Room? _room;
   final _callTonePlayer = AudioPlayer();
@@ -1598,10 +1615,11 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _refreshCallStatus() async {
-    if (_connecting) return;
+    if (_connecting || _ending || _statusRefreshing) return;
+    _statusRefreshing = true;
     try {
       final call = await _accountSession.voiceCallStatus(widget.callID);
-      if (!mounted) return;
+      if (!mounted || _ending) return;
       if (call.status == 'active' && !_connected) {
         await _joinCall();
       } else if (call.status == 'ended') {
@@ -1609,11 +1627,13 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
       }
     } catch (error) {
       debugPrint('[VoiceCall] status failed: $error');
+    } finally {
+      _statusRefreshing = false;
     }
   }
 
   Future<void> _acceptCall() async {
-    if (_connecting) return;
+    if (_connecting || _ending) return;
     _setConnecting(true);
     await _stopCallTone();
     try {
@@ -1628,7 +1648,7 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _joinCall() async {
-    if (_connecting || _connected) return;
+    if (_connecting || _connected || _ending) return;
     _setConnecting(true);
     await _stopCallTone();
     try {
@@ -1741,6 +1761,8 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
   }
 
   Future<void> _closeAfterRemoteEnd() async {
+    if (_ending) return;
+    _ending = true;
     _statusTimer?.cancel();
     _callTimer?.cancel();
     await _stopCallTone();
