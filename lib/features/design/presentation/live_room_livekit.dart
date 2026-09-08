@@ -737,7 +737,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     unawaited(
       _logLiveKitAudioRoute('microphone-${enabled ? 'enabled' : 'disabled'}'),
     );
-    if (enabled && track is LocalAudioTrack) {
+    if (kDebugMode && enabled && track is LocalAudioTrack) {
       debugPrint(
         'LiveKit audio engine after microphone enable: '
         '${AudioManager.instance.audioEngineState}',
@@ -836,6 +836,8 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
     String publicationSid,
     bool publicationMuted,
   ) async {
+    if (!kDebugMode) return;
+
     Future<void> log(String sample) async {
       final stats = await track.getReceiverStats();
       debugPrint(
@@ -881,6 +883,8 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
   }
 
   Future<void> _logAllRemoteAudioTrackStats(String sample) async {
+    if (!kDebugMode) return;
+
     final room = _liveKitRoom;
     if (room == null) return;
     for (final participant in room.remoteParticipants.values) {
@@ -911,6 +915,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
   }
 
   Future<void> _logLiveKitAudioRoute(String reason) async {
+    if (!kDebugMode) return;
     if (defaultTargetPlatform != TargetPlatform.iOS &&
         defaultTargetPlatform != TargetPlatform.android) {
       return;
