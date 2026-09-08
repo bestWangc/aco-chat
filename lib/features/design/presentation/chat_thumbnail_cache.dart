@@ -3,18 +3,37 @@ part of 'aco_design_shell.dart';
 final class _ChatThumbnailCache {
   static const _retention = Duration(days: 30);
   static const _directoryName = 'chat-thumbnails';
+  static const _requestTimeout = Duration(seconds: 10);
+  static Future<Directory>? _directoryFuture;
+  static Future<void>? _cleanupFuture;
+  static final Map<String, Future<File>> _inFlight = {};
 
-  static Future<File> load(String url) async {
+  static Future<File> load(String url) {
+    final pending = _inFlight[url];
+    if (pending != null) return pending;
+    final future = _load(url);
+    _inFlight[url] = future;
+    unawaited(
+      future.then<void>(
+        (_) => _inFlight.remove(url),
+        onError: (Object error, StackTrace stackTrace) {
+          _inFlight.remove(url);
+        },
+      ),
+    );
+    return future;
+  }
+
+  static Future<File> _load(String url) async {
     final directory = await _directory();
-    unawaited(_removeExpired(directory));
+    _scheduleCleanup(directory);
     final file = File('${directory.path}/${_fileNameFor(url)}.jpg');
     if (await _isFresh(file)) {
-      await file.setLastModified(DateTime.now());
       return file;
     }
 
     if (await file.exists()) await file.delete();
-    final response = await http.get(Uri.parse(url));
+    final response = await http.get(Uri.parse(url)).timeout(_requestTimeout);
     if (response.statusCode != 200) {
       throw HttpException('缩略图下载失败: ${response.statusCode}');
     }
@@ -22,11 +41,20 @@ final class _ChatThumbnailCache {
     return file;
   }
 
-  static Future<Directory> _directory() async {
+  static Future<Directory> _directory() =>
+      _directoryFuture ??= _createDirectory();
+
+  static Future<Directory> _createDirectory() async {
     final cacheDirectory = await getTemporaryDirectory();
     return Directory(
       '${cacheDirectory.path}/$_directoryName',
     ).create(recursive: true);
+  }
+
+  static void _scheduleCleanup(Directory directory) {
+    _cleanupFuture ??= _removeExpired(directory).catchError((error) {
+      debugPrint('[Chat] thumbnail cache cleanup failed: $error');
+    });
   }
 
   static Future<bool> _isFresh(File file) async {
