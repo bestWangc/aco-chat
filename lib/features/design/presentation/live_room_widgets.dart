@@ -1152,7 +1152,7 @@ class _SpeakingBadgeState extends State<_SpeakingBadge>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 680),
+    duration: const Duration(milliseconds: 480),
     lowerBound: .72,
     upperBound: 1.12,
   )..repeat(reverse: true);
