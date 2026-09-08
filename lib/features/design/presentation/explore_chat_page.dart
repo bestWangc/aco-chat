@@ -40,8 +40,7 @@ class _ChatPageState extends State<_ChatPage> {
   DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
   final _chatMessageKeys = <_ChatHistoryMessage, GlobalKey>{};
-  final List<Message> _historyMessages = <Message>[];
-  final List<Message> _pendingSentMessages = <Message>[];
+  final Map<String, Message> _messagesByClientMsgID = <String, Message>{};
   Future<void>? _loadFuture;
   String? _error;
   String? _resolvedConversationID;
@@ -78,6 +77,16 @@ class _ChatPageState extends State<_ChatPage> {
   String? get _conversationTarget =>
       _isGroup ? widget.groupID : widget.peerUserID;
 
+  List<Message> get _historyMessages {
+    final messages = _messagesByClientMsgID.values.toList();
+    messages.sort((a, b) {
+      final aTime = a.sendTime ?? a.createTime ?? 0;
+      final bTime = b.sendTime ?? b.createTime ?? 0;
+      return aTime.compareTo(bTime);
+    });
+    return messages;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -107,23 +116,80 @@ class _ChatPageState extends State<_ChatPage> {
     final mine = message.sendID == OpenIMChatRepository.currentUserID;
     if (_isGroup) {
       if (message.groupID != widget.groupID) return;
-    } else if (!mine && message.sendID != widget.peerUserID) {
+    } else if (!_isMessageInCurrentConversation(message)) {
       return;
     }
     if (_voiceCallInviteIDFromMessage(message) != null) return;
     if (!_ChatHistoryMessage.isDisplayable(message)) return;
-    final clientMsgID = message.clientMsgID;
-    if (clientMsgID?.isNotEmpty == true &&
-        _historyMessages.any((item) => item.clientMsgID == clientMsgID)) {
-      return;
-    }
-    _historyMessages.add(message);
-    setState(
-      () =>
-          _chatHistory.add(_ChatHistoryMessage.fromOpenIM(message, mine: mine)),
-    );
+    _rememberMessage(message);
+    final added = _upsertDisplayedMessage(message, mine: mine);
     unawaited(_markCurrentConversationAsRead());
-    _scrollToBottom();
+    if (added) _scrollToBottom();
+  }
+
+  void _rememberMessage(Message message) {
+    final clientMsgID = message.clientMsgID;
+    if (clientMsgID?.isNotEmpty != true) return;
+    _messagesByClientMsgID[clientMsgID!] = message;
+  }
+
+  void _rememberMessagesIfAbsent(Iterable<Message> messages) {
+    for (final message in messages) {
+      final clientMsgID = message.clientMsgID;
+      if (clientMsgID?.isNotEmpty != true) continue;
+      _messagesByClientMsgID.putIfAbsent(clientMsgID!, () => message);
+    }
+  }
+
+  bool _upsertDisplayedMessage(
+    Message message, {
+    required bool mine,
+    Uint8List? imageBytes,
+  }) {
+    final clientMsgID = message.clientMsgID;
+    if (clientMsgID?.isNotEmpty != true ||
+        !_ChatHistoryMessage.isDisplayable(message)) {
+      return false;
+    }
+    final index = _chatHistory.indexWhere(
+      (item) => item.clientMsgID == clientMsgID,
+    );
+    final existing = index < 0 ? null : _chatHistory[index];
+    final messageFromOpenIM = _ChatHistoryMessage.fromOpenIM(
+      message,
+      mine: mine,
+    );
+    final retainedImageBytes = imageBytes ?? existing?.imageBytes;
+    var historyMessage = messageFromOpenIM;
+    if (retainedImageBytes != null && message.pictureElem != null) {
+      historyMessage = _ChatHistoryMessage.image(
+        mine: mine,
+        clientMsgID: clientMsgID,
+        imageBytes: retainedImageBytes,
+        imageUrl: messageFromOpenIM.imageUrl,
+        previewImageUrl: messageFromOpenIM.previewImageUrl,
+        shouldCacheThumbnail: messageFromOpenIM.shouldCacheThumbnail,
+      );
+    }
+    if (!mounted) return false;
+    setState(() {
+      if (index < 0) {
+        _chatHistory.add(historyMessage);
+      } else {
+        _chatMessageKeys.remove(_chatHistory[index]);
+        _chatHistory[index] = historyMessage;
+      }
+    });
+    return index < 0;
+  }
+
+  void _removeTrackedMessage(String? clientMsgID) {
+    if (clientMsgID?.isNotEmpty != true) return;
+    _messagesByClientMsgID.remove(clientMsgID);
+    if (!mounted) return;
+    setState(() {
+      _chatHistory.removeWhere((item) => item.clientMsgID == clientMsgID);
+    });
   }
 
   Future<void> _markCurrentConversationAsRead() async {
@@ -204,26 +270,7 @@ class _ChatPageState extends State<_ChatPage> {
       _resolvedConversationID = conversation.conversationID;
       final targetMessage = _takeSearchTargetMessage();
       final history = await _loadHistoryWindow(targetMessage);
-      final messages = history.messages;
-      final loadedIDs = {
-        for (final message in messages)
-          if (message.clientMsgID?.isNotEmpty == true) message.clientMsgID,
-      };
-      final pending = _pendingSentMessages
-          .where(
-            (message) =>
-                message.clientMsgID?.isNotEmpty == true &&
-                !loadedIDs.contains(message.clientMsgID),
-          )
-          .toList();
-      _pendingSentMessages.removeWhere(
-        (message) => loadedIDs.contains(message.clientMsgID),
-      );
-      _historyMessages
-        ..clear()
-        ..addAll(messages)
-        ..addAll(pending);
-      _sortHistoryMessages();
+      _rememberMessagesIfAbsent(history.messages);
       _historyEnd = history.isEnd;
       await _markCurrentConversationAsRead();
       if (!mounted) return;
@@ -343,7 +390,8 @@ class _ChatPageState extends State<_ChatPage> {
       error.toString().contains('1302') ||
       error.toString().contains('BlockedByPeer');
 
-  void _appendFailedText(String text) {
+  void _appendFailedText(String text, {String? clientMsgID}) {
+    _removeTrackedMessage(clientMsgID);
     if (!mounted) return;
     setState(
       () => _chatHistory.add(
@@ -375,8 +423,7 @@ class _ChatPageState extends State<_ChatPage> {
         _historyEnd = true;
         return;
       }
-      _historyMessages.insertAll(0, older);
-      _sortHistoryMessages();
+      _rememberMessagesIfAbsent(older);
       if (!mounted) return;
       setState(() {
         _chatHistory
@@ -448,6 +495,7 @@ class _ChatPageState extends State<_ChatPage> {
     final mentions = _mentionsIn(text);
     _messageController.clear();
     _selectedMentions.clear();
+    String? outgoingClientMsgID;
     try {
       final message = mentions.isEmpty
           ? await OpenIM.iMManager.messageManager.createTextMessage(text: text)
@@ -463,6 +511,8 @@ class _ChatPageState extends State<_ChatPage> {
                   )
                   .toList(),
             );
+      outgoingClientMsgID = message.clientMsgID;
+      _rememberMessage(message);
       final sent = await OpenIM.iMManager.messageManager.sendMessage(
         message: message,
         userID: _isGroup ? null : target,
@@ -475,17 +525,14 @@ class _ChatPageState extends State<_ChatPage> {
         'to=$target',
       );
       if (!mounted) return;
-      _historyMessages.add(sent);
-      _pendingSentMessages.add(sent);
-      setState(
-        () => _chatHistory.add(
-          _ChatHistoryMessage(sent.textElem?.content ?? text, mine: true),
-        ),
-      );
+      _rememberMessage(sent);
+      final added = _upsertDisplayedMessage(sent, mine: true);
       // The composer/keyboard can resize the viewport in a later frame. Use
       // a short scroll when the user was already following the conversation.
       // When reading older messages, preserve their position like WeChat.
-      _scrollToBottom(force: shouldFollowNewMessage, animate: false);
+      if (added) {
+        _scrollToBottom(force: shouldFollowNewMessage, animate: false);
+      }
       if (shouldFollowNewMessage) {
         // The keyboard inset animation can finish after the list's first
         // layout. Re-check once it settles so the new bubble is not hidden.
@@ -498,21 +545,14 @@ class _ChatPageState extends State<_ChatPage> {
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
       if (_peerIsBlocked || _isBlockedByPeerError(error)) {
-        _appendFailedText(text);
+        _appendFailedText(text, clientMsgID: outgoingClientMsgID);
         return;
       }
+      _removeTrackedMessage(outgoingClientMsgID);
       if (!mounted) return;
       _showNotice(context, '发送失败', '请稍后重试');
       debugPrint('[OpenIM] send failed: $error');
     }
-  }
-
-  void _sortHistoryMessages() {
-    _historyMessages.sort((a, b) {
-      final aTime = a.sendTime ?? a.createTime ?? 0;
-      final bTime = b.sendTime ?? b.createTime ?? 0;
-      return aTime.compareTo(bTime);
-    });
   }
 
   Future<void> _clearCurrentConversationMessages() async {
@@ -534,8 +574,7 @@ class _ChatPageState extends State<_ChatPage> {
     await OpenIMChatRepository.refreshMessageUnreadStatus();
     if (!mounted) return;
     setState(() {
-      _historyMessages.clear();
-      _pendingSentMessages.clear();
+      _messagesByClientMsgID.clear();
       _chatHistory.clear();
       _chatMessageKeys.clear();
       _historyEnd = true;
@@ -634,6 +673,7 @@ class _ChatPageState extends State<_ChatPage> {
     setState(() => _morePanelVisible = false);
     File? pickedImage;
     Uint8List? pickedImageBytes;
+    String? outgoingClientMsgID;
     try {
       final photo = await ImagePicker().pickImage(
         source: source,
@@ -681,6 +721,8 @@ class _ChatPageState extends State<_ChatPage> {
       }
       final message = await OpenIM.iMManager.messageManager
           .createImageMessageFromFullPath(imagePath: photo.path);
+      outgoingClientMsgID = message.clientMsgID;
+      _rememberMessage(message);
       final sent = await OpenIM.iMManager.messageManager.sendMessage(
         message: message,
         userID: _isGroup ? null : target,
@@ -688,25 +730,16 @@ class _ChatPageState extends State<_ChatPage> {
         offlinePushInfo: OfflinePushInfo(title: '新消息', desc: '[图片]'),
       );
       if (!mounted) return;
-      _historyMessages.add(sent);
-      _pendingSentMessages.add(sent);
-      setState(() {
-        _chatHistory.add(
-          _ChatHistoryMessage.image(
-            mine: true,
-            imageBytes: imageBytes,
-            imageUrl: _ChatHistoryMessage.imageUrlOf(sent.pictureElem),
-            previewImageUrl: _ChatHistoryMessage.previewImageUrlOf(
-              sent.pictureElem,
-            ),
-            shouldCacheThumbnail:
-                sent.pictureElem?.snapshotPicture?.url?.isNotEmpty == true,
-          ),
-        );
-      });
-      _scrollToBottom(force: true, animate: false);
+      _rememberMessage(sent);
+      final added = _upsertDisplayedMessage(
+        sent,
+        mine: true,
+        imageBytes: imageBytes,
+      );
+      if (added) _scrollToBottom(force: true, animate: false);
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
+      _removeTrackedMessage(outgoingClientMsgID);
       if (_peerIsBlocked || _isBlockedByPeerError(error)) {
         if (mounted) {
           setState(
@@ -1032,6 +1065,7 @@ class _ChatPageState extends State<_ChatPage> {
         return;
       }
       var sentSuccessfully = false;
+      String? outgoingClientMsgID;
       try {
         final duration = DateTime.now()
             .difference(startedAt)
@@ -1042,6 +1076,8 @@ class _ChatPageState extends State<_ChatPage> {
               soundPath: path,
               duration: duration,
             );
+        outgoingClientMsgID = message.clientMsgID;
+        _rememberMessage(message);
         final sent = await OpenIM.iMManager.messageManager.sendMessage(
           message: message,
           userID: _isGroup ? null : target,
@@ -1049,17 +1085,13 @@ class _ChatPageState extends State<_ChatPage> {
           offlinePushInfo: OfflinePushInfo(title: '新语音消息', desc: '[语音]'),
         );
         if (!mounted) return;
-        _historyMessages.add(sent);
-        _pendingSentMessages.add(sent);
-        setState(
-          () => _chatHistory.add(
-            _ChatHistoryMessage.fromOpenIM(sent, mine: true),
-          ),
-        );
-        _scrollToBottom(force: true, animate: false);
+        _rememberMessage(sent);
+        final added = _upsertDisplayedMessage(sent, mine: true);
+        if (added) _scrollToBottom(force: true, animate: false);
         OpenIMChatRepository.conversationRevision.value++;
         sentSuccessfully = true;
       } catch (error) {
+        _removeTrackedMessage(outgoingClientMsgID);
         if (_peerIsBlocked || _isBlockedByPeerError(error)) {
           final failedDuration = DateTime.now()
               .difference(startedAt)
