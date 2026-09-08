@@ -355,6 +355,17 @@ class AccountApiClient {
     if (response.statusCode != 204) _body(response);
   }
 
+  Future<void> dismissGroup({
+    required String groupID,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('groups/${Uri.encodeComponent(groupID)}/dismiss'),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode != 204) _body(response);
+  }
+
   Future<ChatGroup> updateGroupName({
     required String groupID,
     required String name,

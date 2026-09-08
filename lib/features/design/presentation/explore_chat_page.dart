@@ -515,6 +515,25 @@ class _ChatPageState extends State<_ChatPage> {
     });
   }
 
+  Future<void> _clearCurrentConversationMessages() async {
+    final conversationID = _currentConversationID;
+    if (conversationID == null || conversationID.isEmpty) {
+      throw StateError('Conversation is unavailable');
+    }
+    await OpenIM.iMManager.conversationManager.clearConversationAndDeleteAllMsg(
+      conversationID: conversationID,
+    );
+    if (!mounted) return;
+    setState(() {
+      _historyMessages.clear();
+      _pendingSentMessages.clear();
+      _chatHistory.clear();
+      _chatMessageKeys.clear();
+      _historyEnd = true;
+    });
+    OpenIMChatRepository.conversationRevision.value++;
+  }
+
   @override
   void dispose() {
     final target = _conversationTarget;
@@ -1103,6 +1122,7 @@ class _ChatPageState extends State<_ChatPage> {
                         onBlockChanged: (blocked) => _peerIsBlocked = blocked,
                         messages: _chatHistory,
                         onMessageTap: _focusMessage,
+                        onClearMessages: _clearCurrentConversationMessages,
                       ),
                     ),
                   ),

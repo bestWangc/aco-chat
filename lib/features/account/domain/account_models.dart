@@ -81,6 +81,7 @@ class ChatGroup {
     this.name = '',
     this.faceUrl = '',
     this.inviteCode,
+    this.isOwner = false,
   });
 
   final String groupId;
@@ -88,6 +89,7 @@ class ChatGroup {
   final String faceUrl;
   final int memberCount;
   final String? inviteCode;
+  final bool isOwner;
 
   factory ChatGroup.fromJson(Map<String, dynamic> json) => ChatGroup(
     groupId: json['group_id'] as String,
@@ -95,6 +97,7 @@ class ChatGroup {
     faceUrl: (json['face_url'] as String?) ?? '',
     memberCount: (json['member_count'] as num?)?.toInt() ?? 0,
     inviteCode: json['invite_code'] as String?,
+    isOwner: json['is_owner'] as bool? ?? false,
   );
 }
 

@@ -10,6 +10,7 @@ class _ChatMoreSettingsPage extends StatefulWidget {
     required this.onBlockChanged,
     required this.messages,
     required this.onMessageTap,
+    required this.onClearMessages,
   });
 
   final AcoPalette palette;
@@ -20,6 +21,7 @@ class _ChatMoreSettingsPage extends StatefulWidget {
   final ValueChanged<bool> onBlockChanged;
   final List<_ChatHistoryMessage> messages;
   final ValueChanged<_ChatHistoryMessage> onMessageTap;
+  final Future<void> Function() onClearMessages;
 
   @override
   State<_ChatMoreSettingsPage> createState() => _ChatMoreSettingsPageState();
@@ -33,6 +35,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
   var _blockLoading = true;
   var _blockUpdating = false;
   var _groupMembersLoading = false;
+  var _isGroupOwner = false;
   List<GroupMembersInfo> _groupMembers = const [];
   late String _groupName = widget.peerName;
 
@@ -44,6 +47,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     unawaited(_loadPinState());
     if (_isGroup) {
       unawaited(_loadGroupMembers());
+      unawaited(_loadGroupOwnership());
     } else {
       unawaited(_loadBlockState());
     }
@@ -68,12 +72,34 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
       final groupInfo = await OpenIM.iMManager.groupManager.getGroupsInfo(
         groupIDList: [groupID],
       );
-      final name = groupInfo.firstOrNull?.groupName?.trim();
-      if (mounted && name?.isNotEmpty == true) {
-        setState(() => _groupName = name!);
+      final info = groupInfo.firstOrNull;
+      final name = info?.groupName?.trim();
+      if (mounted) {
+        setState(() {
+          if (name?.isNotEmpty == true) _groupName = name!;
+          _isGroupOwner =
+              info?.ownerUserID == OpenIMChatRepository.currentUserID;
+        });
       }
     } catch (_) {
       // The name already shown by the conversation remains usable offline.
+    }
+  }
+
+  Future<void> _loadGroupOwnership() async {
+    final groupID = widget.groupID;
+    if (groupID == null || groupID.isEmpty) return;
+    final client = AccountApiClient();
+    try {
+      final groups = await AccountSession(client).listGroups();
+      final group = groups.where((item) => item.groupId == groupID).firstOrNull;
+      if (mounted && group != null) {
+        setState(() => _isGroupOwner = group.isOwner);
+      }
+    } catch (_) {
+      // OpenIM group information remains the fallback while offline.
+    } finally {
+      client.close();
     }
   }
 
@@ -206,6 +232,14 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
   Future<void> _exitGroup() async {
     final groupID = widget.groupID;
     if (groupID == null || groupID.isEmpty) return;
+    if (!await _confirm(
+      title: '退出群聊',
+      content: '退出后将不再接收该群消息。',
+      action: '退出',
+      destructive: true,
+    )) {
+      return;
+    }
     OpenIMChatRepository.beginLeavingGroup(groupID);
     try {
       await AccountSession(AccountApiClient()).leaveGroup(groupID);
@@ -220,9 +254,77 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     }
   }
 
+  Future<void> _dismissGroup() async {
+    final groupID = widget.groupID;
+    if (!_isGroupOwner || groupID == null || groupID.isEmpty) return;
+    if (!await _confirm(
+      title: '解散群聊',
+      content: '解散后所有成员将无法继续访问该群。',
+      action: '解散',
+      destructive: true,
+    )) {
+      return;
+    }
+    OpenIMChatRepository.beginLeavingGroup(groupID);
+    try {
+      await AccountSession(AccountApiClient()).dismissGroup(groupID);
+      OpenIMChatRepository.completeLeavingGroup();
+      if (mounted) Navigator.of(context).pop(true);
+    } on AccountApiException catch (error) {
+      OpenIMChatRepository.cancelLeavingGroup(groupID);
+      if (mounted) _showNotice(context, '解散群聊失败', error.localizedMessage);
+    } catch (_) {
+      OpenIMChatRepository.cancelLeavingGroup(groupID);
+      if (mounted) _showNotice(context, '解散群聊失败', '请稍后重试。');
+    }
+  }
+
+  Future<void> _clearMessages() async {
+    if (!await _confirm(
+      title: '清空聊天记录',
+      content: '仅清空当前设备上的聊天记录，此操作无法恢复。',
+      action: '清空',
+      destructive: true,
+    )) {
+      return;
+    }
+    try {
+      await widget.onClearMessages();
+      if (mounted) _showNotice(context, '已清空', '当前聊天记录已清空。');
+    } catch (_) {
+      if (mounted) _showNotice(context, '清空聊天记录失败', '请稍后重试。');
+    }
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String content,
+    required String action,
+    required bool destructive,
+  }) async =>
+      await showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: destructive,
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(action),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
   Future<void> _editGroupName() async {
     final groupID = widget.groupID;
-    if (groupID == null || groupID.isEmpty) return;
+    if (!_isGroupOwner || groupID == null || groupID.isEmpty) return;
     final controller = TextEditingController(text: _groupName);
     final name = await showCupertinoDialog<String>(
       context: context,
@@ -296,7 +398,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                 palette: widget.palette,
                 label: '群组名称',
                 value: _groupName,
-                onTap: _editGroupName,
+                onTap: _isGroupOwner ? _editGroupName : null,
               ),
               const SizedBox(height: 6),
               _ChatSettingsActionRow(
@@ -335,12 +437,21 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                 destructive: true,
                 onTap: _exitGroup,
               ),
+              if (_isGroupOwner) ...[
+                const SizedBox(height: 6),
+                _ChatSettingsActionRow(
+                  palette: widget.palette,
+                  label: '解散群聊',
+                  destructive: true,
+                  onTap: _dismissGroup,
+                ),
+              ],
             ] else ...[
               const SizedBox(height: 6),
               _ChatSettingsActionRow(
                 palette: widget.palette,
                 label: '清空聊天记录',
-                onTap: () => _showNotice(context, '清空聊天记录', '聊天记录已清空。'),
+                onTap: _clearMessages,
               ),
               const SizedBox(height: 6),
               _ChatSettingsToggleRow(

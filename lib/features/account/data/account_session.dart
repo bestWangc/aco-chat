@@ -214,6 +214,9 @@ class AccountSession {
   Future<void> leaveGroup(String groupID) async =>
       _apiClient.leaveGroup(groupID: groupID, token: await _requireToken());
 
+  Future<void> dismissGroup(String groupID) async =>
+      _apiClient.dismissGroup(groupID: groupID, token: await _requireToken());
+
   Future<ChatGroup> updateGroupName({
     required String groupID,
     required String name,

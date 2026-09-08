@@ -75,9 +75,7 @@ final class OpenIMChatRepository implements ChatRepository {
         atText?.atUserList?.contains(currentUserID) == true;
   }
 
-  /// Only content a user can read or act on should create a chat reminder.
-  /// Group membership and other OpenIM system events update the conversation,
-  /// but should not surface as a social unread badge or system notification.
+  /// Only content a user can read or act on should create a system notification.
   static bool isNotifiableMessage(Message message) =>
       messageText(message) != null ||
       message.pictureElem != null ||
@@ -110,7 +108,6 @@ final class OpenIMChatRepository implements ChatRepository {
     }
     final target = _conversationTarget(conversation);
     if (latestMessage.sendID == currentUserID ||
-        !isNotifiableMessage(latestMessage) ||
         target == _activeChatPeerUserID) {
       return 0;
     }
