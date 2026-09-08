@@ -466,6 +466,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       );
       if (viewerRole != 'listener') _handRaised = false;
     });
+    _ensureHostHeartbeat(_room!);
     _hostTransferred = viewerRole == 'host';
   }
 
@@ -737,10 +738,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         if (!mounted) return;
         if (displayedRoom.checkIn!.deadline.isBefore(DateTime.now())) {
           _checkInTimer?.cancel();
+          final currentRoom = _room ?? displayedRoom;
           setState(() {
             _room = _copyRoom(
-              _room ?? displayedRoom,
-              participantCount: displayedRoom.participantCount,
+              currentRoom,
+              participantCount: currentRoom.participantCount,
               checkIn: null,
             );
           });
