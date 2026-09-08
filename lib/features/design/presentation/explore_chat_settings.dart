@@ -209,6 +209,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     OpenIMChatRepository.beginLeavingGroup(groupID);
     try {
       await AccountSession(AccountApiClient()).leaveGroup(groupID);
+      OpenIMChatRepository.completeLeavingGroup();
       if (mounted) Navigator.of(context).pop(true);
     } on AccountApiException catch (error) {
       OpenIMChatRepository.cancelLeavingGroup(groupID);

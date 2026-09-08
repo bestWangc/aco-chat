@@ -26,9 +26,8 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Material(
-    type: MaterialType.transparency,
-    child: _showContacts
+  Widget build(BuildContext context) {
+    final content = _showContacts
         ? Column(
             children: [
               _header(),
@@ -60,13 +59,56 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                     _OpenIMConversationList(
                       palette: widget.palette,
                       onOpen: widget.onOpen,
-                      query: _query,
                     ),
                   ]),
                 ),
               ],
             ),
+          );
+    return Material(
+      type: MaterialType.transparency,
+      child: Stack(
+        children: [
+          content,
+          if (_query.trim().isNotEmpty) _searchOverlay(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _searchOverlay(BuildContext context) => Positioned(
+    top: 100,
+    left: 12,
+    right: 12,
+    child: ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.sizeOf(context).height * .56,
+      ),
+      child: DecoratedBox(
+        decoration: const BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Color(0x66000000),
+              blurRadius: 18,
+              offset: Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Material(
+          color: const Color(0xFF1B1B1B),
+          shape: RoundedRectangleBorder(
+            side: const BorderSide(color: Color(0xFF303030)),
+            borderRadius: BorderRadius.circular(14),
           ),
+          clipBehavior: Clip.antiAlias,
+          child: _SocialGlobalSearchResults(
+            palette: widget.palette,
+            onOpen: widget.onOpen,
+            query: _query,
+          ),
+        ),
+      ),
+    ),
   );
 
   Widget _header() => Column(
@@ -107,6 +149,266 @@ Future<List<FriendContact>> _fetchFriendRequests() async {
   } finally {
     client.close();
   }
+}
+
+class _SocialGlobalSearchResults extends StatefulWidget {
+  const _SocialGlobalSearchResults({
+    required this.palette,
+    required this.onOpen,
+    required this.query,
+  });
+
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+  final String query;
+
+  @override
+  State<_SocialGlobalSearchResults> createState() =>
+      _SocialGlobalSearchResultsState();
+}
+
+class _SocialGlobalSearchResultsState
+    extends State<_SocialGlobalSearchResults> {
+  late final Future<_SocialSearchScope> _scope;
+  Timer? _searchTimer;
+  var _searchVersion = 0;
+  var _loading = true;
+  List<FriendContact> _friendResults = const [];
+  List<_SocialMessageSearchResult> _messageResults = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _scope = _loadScope();
+    _scheduleSearch();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SocialGlobalSearchResults oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.query != widget.query) _scheduleSearch();
+  }
+
+  @override
+  void dispose() {
+    _searchTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<_SocialSearchScope> _loadScope() async {
+    final client = AccountApiClient();
+    try {
+      final session = AccountSession(client);
+      final results = await Future.wait([
+        session.listFriends(),
+        session.listGroups(),
+        OpenIM.iMManager.conversationManager.getAllConversationList(),
+      ]);
+      final friends = results[0] as List<FriendContact>;
+      final groups = results[1] as List<ChatGroup>;
+      final conversations = results[2] as List<ConversationInfo>;
+      final friendIDs = friends.map((friend) => friend.accountId).toSet();
+      final groupIDs = groups.map((group) => group.groupId).toSet();
+      final allowedConversations = {
+        for (final conversation in conversations)
+          if (friendIDs.contains(conversation.userID) ||
+              (conversation.isGroupChat &&
+                  groupIDs.contains(conversation.groupID)))
+            conversation.conversationID: conversation,
+      };
+      return _SocialSearchScope(
+        friends: friends,
+        conversationsByID: allowedConversations,
+      );
+    } finally {
+      client.close();
+    }
+  }
+
+  void _scheduleSearch() {
+    _searchTimer?.cancel();
+    final keyword = widget.query.trim();
+    final version = ++_searchVersion;
+    setState(() => _loading = true);
+    _searchTimer = Timer(const Duration(milliseconds: 300), () {
+      unawaited(_search(keyword, version));
+    });
+  }
+
+  Future<void> _search(String keyword, int version) async {
+    try {
+      final scope = await _scope;
+      final result = await OpenIM.iMManager.messageManager
+          .searchLocalMessages(keywordList: [keyword], count: 100)
+          .timeout(const Duration(seconds: 5));
+      final normalizedKeyword = keyword.toLowerCase();
+      final friends = scope.friends
+          .where((friend) => _matchesFriend(friend, normalizedKeyword))
+          .toList(growable: false);
+      final messages = _messageMatches(result, scope.conversationsByID);
+      if (!mounted || version != _searchVersion) return;
+      setState(() {
+        _friendResults = friends;
+        _messageResults = messages;
+        _loading = false;
+      });
+    } catch (error) {
+      debugPrint('[OpenIM] global social search failed: $error');
+      if (!mounted || version != _searchVersion) return;
+      setState(() {
+        _friendResults = const [];
+        _messageResults = const [];
+        _loading = false;
+      });
+    }
+  }
+
+  static bool _matchesFriend(FriendContact friend, String keyword) {
+    return friend.nickname.toLowerCase().contains(keyword) ||
+        friend.accountId.toLowerCase().contains(keyword);
+  }
+
+  static List<_SocialMessageSearchResult> _messageMatches(
+    SearchResult result,
+    Map<String, ConversationInfo> conversationsByID,
+  ) {
+    final matches = <_SocialMessageSearchResult>[];
+    final items =
+        result.searchResultItems ?? result.findResultItems ?? const [];
+    for (final item in items) {
+      final conversation = conversationsByID[item.conversationID];
+      final messages = item.messageList;
+      if (conversation == null || messages == null || messages.isEmpty) {
+        continue;
+      }
+      matches.add(
+        _SocialMessageSearchResult(
+          conversation: conversation,
+          message: messages.reduce(_newerMessage),
+        ),
+      );
+    }
+    matches.sort(
+      (first, second) =>
+          _messageTime(second.message).compareTo(_messageTime(first.message)),
+    );
+    return matches;
+  }
+
+  static Message _newerMessage(Message first, Message second) =>
+      _messageTime(first) >= _messageTime(second) ? first : second;
+
+  static int _messageTime(Message message) =>
+      message.sendTime ?? message.createTime ?? 0;
+
+  void _openConversation(_SocialMessageSearchResult result) {
+    final conversation = result.conversation;
+    conversation.unreadCount = 0;
+    OpenIMChatRepository.pendingConversation = conversation;
+    OpenIMChatRepository.pendingSearchMessage = result.message;
+    OpenIMChatRepository.conversationRevision.value++;
+    unawaited(
+      OpenIM.iMManager.conversationManager
+          .markConversationMessageAsRead(
+            conversationID: conversation.conversationID,
+          )
+          .catchError((error) {
+            debugPrint('[OpenIM] mark read failed: $error');
+          }),
+    );
+    widget.onOpen(AcoScreen.chatV1);
+  }
+
+  void _openFriend(FriendContact friend) {
+    OpenIMChatRepository.pendingSearchMessage = null;
+    OpenIMChatRepository.pendingConversation = ConversationInfo(
+      conversationID: 'si_${friend.accountId}',
+      userID: friend.accountId,
+      showName: friend.nickname.isEmpty ? friend.accountId : friend.nickname,
+      faceURL: friend.avatarUrl,
+    );
+    widget.onOpen(AcoScreen.chatV1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const SizedBox(
+        height: 84,
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
+    if (_friendResults.isEmpty && _messageResults.isEmpty) {
+      return SizedBox(
+        height: 84,
+        child: _SearchHint(palette: widget.palette, label: '没有找到相关联系人或聊天记录'),
+      );
+    }
+    return ListView(
+      shrinkWrap: true,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+      children: [
+        if (_friendResults.isNotEmpty) ...[
+          const _ContactsSectionLabel(label: '联系人'),
+          const SizedBox(height: 4),
+          for (final friend in _friendResults)
+            _ContactListTile(
+              palette: widget.palette,
+              name: friend.nickname.isEmpty
+                  ? friend.accountId
+                  : friend.nickname,
+              avatarUrl: friend.avatarUrl,
+              identity: friend.identity,
+              onTap: () => _openFriend(friend),
+              avatarSize: 40,
+              avatarGap: 16,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              nameFontSize: 15,
+            ),
+        ],
+        if (_friendResults.isNotEmpty && _messageResults.isNotEmpty)
+          const SizedBox(height: 16),
+        if (_messageResults.isNotEmpty) ...[
+          const _ContactsSectionLabel(label: '聊天记录'),
+          const SizedBox(height: 4),
+          for (final result in _messageResults)
+            _SocialMessageTile(
+              palette: widget.palette,
+              name:
+                  result.conversation.showName ??
+                  result.conversation.userID ??
+                  '会话',
+              message:
+                  OpenIMChatRepository.messageText(result.message) ?? '[消息]',
+              avatarUrl: result.conversation.faceURL,
+              timestamp: _messageTime(result.message),
+              onTap: () => _openConversation(result),
+            ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SocialSearchScope {
+  const _SocialSearchScope({
+    required this.friends,
+    required this.conversationsByID,
+  });
+
+  final List<FriendContact> friends;
+  final Map<String, ConversationInfo> conversationsByID;
+}
+
+class _SocialMessageSearchResult {
+  const _SocialMessageSearchResult({
+    required this.conversation,
+    required this.message,
+  });
+
+  final ConversationInfo conversation;
+  final Message message;
 }
 
 class _FriendRequestsPage extends StatefulWidget {
@@ -433,13 +735,21 @@ class _ContactsPageState extends State<_ContactsPage> {
                     assetPath: 'assets/icons/contact_group_chat.png',
                     color: const Color(0xFF00C976),
                     onTap: () async {
+                      // The index is inserted in the root overlay, so it
+                      // would otherwise remain above the group-creation page.
+                      _alphabetOverlay?.remove();
+                      _alphabetOverlay = null;
                       final group = await Navigator.of(context).push<ChatGroup>(
                         CupertinoPageRoute<ChatGroup>(
                           builder: (_) =>
                               _CreateGroupPage(palette: widget.palette),
                         ),
                       );
-                      if (!mounted || group == null) return;
+                      if (!mounted) return;
+                      if (group == null) {
+                        setState(() {});
+                        return;
+                      }
                       OpenIMChatRepository.pendingConversation =
                           ConversationInfo(
                             conversationID: 'sg_${group.groupId}',
@@ -813,15 +1123,10 @@ class _ContactsStateMessage extends StatelessWidget {
 }
 
 class _OpenIMConversationList extends StatefulWidget {
-  const _OpenIMConversationList({
-    required this.palette,
-    required this.onOpen,
-    this.query = '',
-  });
+  const _OpenIMConversationList({required this.palette, required this.onOpen});
 
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
-  final String query;
 
   @override
   State<_OpenIMConversationList> createState() =>
@@ -1082,18 +1387,9 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
             child: Center(child: Text('暂无会话')),
           );
         }
-        final query = widget.query.trim().toLowerCase();
-        final filteredConversations = query.isEmpty
-            ? (List<ConversationInfo>.of(conversations)
-                ..sort(_compareConversations))
-            : conversations.where((conversation) {
-                final name = conversation.showName ?? conversation.userID ?? '';
-                return name.toLowerCase().contains(query) ||
-                    _latestMessagePreview(
-                      conversation.latestMsg,
-                    ).toLowerCase().contains(query);
-              }).toList();
-        if (filteredConversations.isEmpty) {
+        final sortedConversations = List<ConversationInfo>.of(conversations)
+          ..sort(_compareConversations);
+        if (sortedConversations.isEmpty) {
           return Padding(
             padding: const EdgeInsets.all(24),
             child: Center(
@@ -1109,7 +1405,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
         }
         return Column(
           children: [
-            for (final entry in filteredConversations.asMap().entries) ...[
+            for (final entry in sortedConversations.asMap().entries) ...[
               _SocialMessageTile(
                 palette: widget.palette,
                 name: entry.value.showName ?? entry.value.userID ?? '会话',

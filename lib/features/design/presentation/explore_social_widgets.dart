@@ -30,6 +30,7 @@ class _ChatHistoryMessage {
   const _ChatHistoryMessage(
     this.text, {
     required this.mine,
+    this.clientMsgID,
     this.isVoiceCallRecord = false,
     this.sendFailed = false,
   }) : imageBytes = null,
@@ -43,6 +44,7 @@ class _ChatHistoryMessage {
 
   const _ChatHistoryMessage.image({
     required this.mine,
+    this.clientMsgID,
     this.imageBytes,
     this.imagePath,
     this.imageUrl,
@@ -57,6 +59,7 @@ class _ChatHistoryMessage {
 
   const _ChatHistoryMessage.sound({
     required this.mine,
+    this.clientMsgID,
     this.soundPath,
     this.soundUrl,
     this.soundDuration,
@@ -92,15 +95,23 @@ class _ChatHistoryMessage {
       return _ChatHistoryMessage(
         callRecord,
         mine: mine,
+        clientMsgID: message.clientMsgID,
         isVoiceCallRecord: true,
       );
     }
     final text = OpenIMChatRepository.messageText(message);
-    if (text != null) return _ChatHistoryMessage(text, mine: mine);
+    if (text != null) {
+      return _ChatHistoryMessage(
+        text,
+        mine: mine,
+        clientMsgID: message.clientMsgID,
+      );
+    }
     final sound = message.soundElem;
     if (sound != null) {
       return _ChatHistoryMessage.sound(
         mine: mine,
+        clientMsgID: message.clientMsgID,
         soundPath: sound.soundPath,
         soundUrl: sound.sourceUrl,
         soundDuration: sound.duration,
@@ -110,6 +121,7 @@ class _ChatHistoryMessage {
     final thumbnailUrl = picture?.snapshotPicture?.url;
     return _ChatHistoryMessage.image(
       mine: mine,
+      clientMsgID: message.clientMsgID,
       imagePath: picture?.sourcePath,
       imageUrl: imageUrlOf(picture),
       previewImageUrl: previewImageUrlOf(picture),
@@ -118,6 +130,7 @@ class _ChatHistoryMessage {
   }
 
   final String text;
+  final String? clientMsgID;
   final bool mine;
   final Uint8List? imageBytes;
   final String? imagePath;

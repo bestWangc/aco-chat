@@ -151,8 +151,18 @@ final class OpenIMChatRepository implements ChatRepository {
     _locallyLeavingGroupIDs.remove(groupID);
   }
 
+  /// The backend has already removed the membership, so refresh the visible
+  /// conversation list immediately instead of waiting for OpenIM's callback.
+  static void completeLeavingGroup() {
+    conversationRevision.value++;
+    unawaited(refreshMessageUnreadStatus());
+  }
+
   /// Conversation selected from the list, consumed by the detail route.
   static ConversationInfo? pendingConversation;
+
+  /// Search result selected from the social page, consumed once by chat.
+  static Message? pendingSearchMessage;
   OpenIMChatRepository({IMManager? sdk}) : _sdk = sdk ?? OpenIM.iMManager;
 
   final IMManager _sdk;

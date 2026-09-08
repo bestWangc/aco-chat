@@ -202,12 +202,9 @@ class _ChatPageState extends State<_ChatPage> {
                 : ConversationType.single,
           );
       _resolvedConversationID = conversation.conversationID;
-      final result = await OpenIM.iMManager.messageManager
-          .getAdvancedHistoryMessageList(
-            conversationID: _resolvedConversationID!,
-            count: 30,
-          );
-      final messages = result.messageList ?? const <Message>[];
+      final targetMessage = _takeSearchTargetMessage();
+      final history = await _loadHistoryWindow(targetMessage);
+      final messages = history.messages;
       final loadedIDs = {
         for (final message in messages)
           if (message.clientMsgID?.isNotEmpty == true) message.clientMsgID,
@@ -227,7 +224,7 @@ class _ChatPageState extends State<_ChatPage> {
         ..addAll(messages)
         ..addAll(pending);
       _sortHistoryMessages();
-      _historyEnd = result.isEnd ?? messages.length < 30;
+      _historyEnd = history.isEnd;
       await _markCurrentConversationAsRead();
       if (!mounted) return;
       setState(() {
@@ -245,11 +242,78 @@ class _ChatPageState extends State<_ChatPage> {
           );
         _error = null;
       });
+      _focusSearchTarget(targetMessage);
     } catch (error) {
       if (!mounted) return;
       setState(() => _error = '聊天记录加载失败，点击重试');
       debugPrint('[OpenIM] history load failed: $error');
     }
+  }
+
+  Message? _takeSearchTargetMessage() {
+    final message = OpenIMChatRepository.pendingSearchMessage;
+    if (message == null) return null;
+    if (!_isMessageInCurrentConversation(message)) return null;
+    OpenIMChatRepository.pendingSearchMessage = null;
+    return message;
+  }
+
+  bool _isMessageInCurrentConversation(Message message) {
+    if (_isGroup) return message.groupID == widget.groupID;
+    return message.sendID == widget.peerUserID ||
+        message.recvID == widget.peerUserID;
+  }
+
+  void _focusSearchTarget(Message? targetMessage) {
+    final targetID = targetMessage?.clientMsgID;
+    if (targetID == null || targetID.isEmpty) return;
+    final target = _chatHistory
+        .where((message) => message.clientMsgID == targetID)
+        .firstOrNull;
+    if (target != null) _focusMessage(target);
+  }
+
+  Future<_ChatHistoryWindow> _loadHistoryWindow(Message? target) async {
+    final conversationID = _resolvedConversationID!;
+    if (target == null) {
+      final result = await OpenIM.iMManager.messageManager
+          .getAdvancedHistoryMessageList(
+            conversationID: conversationID,
+            count: 30,
+          );
+      final messages = result.messageList ?? const <Message>[];
+      return _ChatHistoryWindow(
+        messages: messages,
+        isEnd: result.isEnd ?? messages.length < 30,
+      );
+    }
+    final results = await Future.wait([
+      OpenIM.iMManager.messageManager.getAdvancedHistoryMessageList(
+        conversationID: conversationID,
+        startMsg: target,
+        count: 18,
+      ),
+      OpenIM.iMManager.messageManager.getAdvancedHistoryMessageListReverse(
+        conversationID: conversationID,
+        startMsg: target,
+        count: 18,
+      ),
+    ]);
+    final before = results[0];
+    final after = results[1];
+    final messagesByID = <String, Message>{};
+    for (final message in [
+      ...?before.messageList,
+      target,
+      ...?after.messageList,
+    ]) {
+      final id = message.clientMsgID;
+      if (id != null && id.isNotEmpty) messagesByID[id] = message;
+    }
+    return _ChatHistoryWindow(
+      messages: messagesByID.values.toList(growable: false),
+      isEnd: before.isEnd ?? false,
+    );
   }
 
   Future<void> _loadPeerBlockedState(String userID) async {
@@ -1210,6 +1274,13 @@ class _ChatPageState extends State<_ChatPage> {
       ),
     );
   }
+}
+
+class _ChatHistoryWindow {
+  const _ChatHistoryWindow({required this.messages, required this.isEnd});
+
+  final List<Message> messages;
+  final bool isEnd;
 }
 
 class _ChatHeaderTitle extends StatelessWidget {
