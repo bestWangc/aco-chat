@@ -557,11 +557,12 @@ class _RoomMessage extends StatelessWidget {
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: Container(
         constraints: const BoxConstraints(maxWidth: 280),
-        padding: EdgeInsets.fromLTRB(isSystemMessage ? 14 : 8, 6, 14, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: decoration,
         child: isSystemMessage
             ? Text(text, textAlign: TextAlign.center, style: messageStyle)
             : RichText(
+                textAlign: TextAlign.center,
                 text: TextSpan(
                   style: messageStyle,
                   children: [
