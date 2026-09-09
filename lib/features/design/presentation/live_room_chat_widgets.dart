@@ -551,18 +551,32 @@ class _RoomMessage extends StatelessWidget {
             color: palette.dark
                 ? const Color(0xFF3D3D3D)
                 : palette.surfaceRaised,
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(18),
           );
+    final maxBubbleWidth = math.min(
+      320.0,
+      MediaQuery.sizeOf(context).width - 32,
+    );
+    const textHeightBehavior = TextHeightBehavior(
+      applyHeightToFirstAscent: false,
+      applyHeightToLastDescent: false,
+    );
     return Align(
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 280),
+        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: decoration,
         child: isSystemMessage
-            ? Text(text, textAlign: TextAlign.center, style: messageStyle)
-            : RichText(
+            ? Text(
+                text,
                 textAlign: TextAlign.center,
+                textHeightBehavior: textHeightBehavior,
+                style: messageStyle,
+            )
+            : RichText(
+                textAlign: TextAlign.start,
+                textHeightBehavior: textHeightBehavior,
                 text: TextSpan(
                   style: messageStyle,
                   children: [

@@ -1519,16 +1519,23 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
 
   Widget _buildMemberAudioIcon(LiveParticipant member) {
     final isSpeaker = member.role == 'host' || member.role == 'speaker';
-    final showMuted = member.role == 'listener' || (isSpeaker && member.muted);
-    if (showMuted) {
+    if (member.role == 'listener') {
       return Image.asset(
-        'assets/icons/live_muted_red.png',
+        'assets/icons/live_muted.png',
         width: 18,
-        height: 23,
+        height: 18,
         fit: BoxFit.contain,
       );
     }
     if (isSpeaker) {
+      if (member.muted) {
+        return Image.asset(
+          'assets/icons/live_muted_red.png',
+          width: 18,
+          height: 23,
+          fit: BoxFit.contain,
+        );
+      }
       return Image.asset(
         'assets/icons/live_mic_open.png',
         width: 18,
@@ -1576,6 +1583,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
             widget.isModerator &&
             member.userId != widget.currentUserId &&
             member.role != 'host';
+        final identityBadgeAsset = _identityBadgeAsset(member.identity);
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1595,15 +1603,29 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          member.nickname,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: const Color(0xFF151515),
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                member.nickname,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: const Color(0xFF151515),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (identityBadgeAsset != null) ...[
+                              const SizedBox(width: 4),
+                              Image.asset(
+                                identityBadgeAsset,
+                                width: 76,
+                                fit: BoxFit.contain,
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 1),
                         _buildMemberSubtitle(member),
