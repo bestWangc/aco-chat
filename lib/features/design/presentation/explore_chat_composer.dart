@@ -3,6 +3,7 @@ part of 'aco_design_shell.dart';
 class _ChatComposer extends StatelessWidget {
   const _ChatComposer({
     required this.controller,
+    required this.focusNode,
     required this.voiceInputActive,
     required this.onVoicePressed,
     required this.onRecordingChanged,
@@ -13,6 +14,7 @@ class _ChatComposer extends StatelessWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool voiceInputActive;
   final VoidCallback onVoicePressed;
   final ValueChanged<_VoiceRecordingAction> onRecordingChanged;
@@ -56,6 +58,7 @@ class _ChatComposer extends StatelessWidget {
                   ),
                   child: CupertinoTextField(
                     controller: controller,
+                    focusNode: focusNode,
                     maxLines: 1,
                     textInputAction: TextInputAction.send,
                     cursorColor: _white,

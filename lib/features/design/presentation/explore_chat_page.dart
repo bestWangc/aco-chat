@@ -26,6 +26,7 @@ class _ChatPageState extends State<_ChatPage> {
   static const _chatImageMaxBytes = 1536 * 1024;
 
   final _messageController = TextEditingController();
+  final _messageFocusNode = FocusNode();
   final _chatScrollController = ScrollController();
   var _emojiPickerVisible = false;
   var _morePanelVisible = false;
@@ -616,6 +617,7 @@ class _ChatPageState extends State<_ChatPage> {
     _chatScrollController.removeListener(_onChatScroll);
     _messageController.removeListener(_onComposerChanged);
     _messageController.dispose();
+    _messageFocusNode.dispose();
     _chatScrollController.dispose();
     _voiceRecordingTimer?.cancel();
     _voiceAmplitudeSubscription?.cancel();
@@ -940,14 +942,58 @@ class _ChatPageState extends State<_ChatPage> {
         !selection.isValid) {
       return;
     }
-    final name = _mentionName(member);
+    final cursor = selection.extentOffset;
+    _insertMentionToken(
+      userID: userID,
+      name: _mentionName(member),
+      start: _mentionStart,
+      end: cursor,
+    );
+  }
+
+  void _mentionMessageSender({
+    required String? userID,
+    required String? nickname,
+  }) {
+    if (!_isGroup ||
+        userID == null ||
+        userID.isEmpty ||
+        userID == OpenIMChatRepository.currentUserID) {
+      return;
+    }
+    final selection = _messageController.selection;
+    final text = _messageController.text;
+    final cursor = selection.isValid
+        ? selection.extentOffset.clamp(0, text.length).toInt()
+        : text.length;
+    final name = nickname?.trim();
+    _insertMentionToken(
+      userID: userID,
+      name: name == null || name.isEmpty ? userID : name,
+      start: cursor,
+      end: cursor,
+    );
+    setState(() {
+      _voiceInputActive = false;
+      _emojiPickerVisible = false;
+      _morePanelVisible = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _messageFocusNode.requestFocus();
+    });
+  }
+
+  void _insertMentionToken({
+    required String userID,
+    required String name,
+    required int start,
+    required int end,
+  }) {
     final token = '@$name ';
     final text = _messageController.text;
-    final cursor = selection.extentOffset;
     _messageController.value = TextEditingValue(
-      text:
-          '${text.substring(0, _mentionStart)}$token${text.substring(cursor)}',
-      selection: TextSelection.collapsed(offset: _mentionStart + token.length),
+      text: '${text.substring(0, start)}$token${text.substring(end)}',
+      selection: TextSelection.collapsed(offset: start + token.length),
     );
     _selectedMentions.removeWhere((mention) => mention.userID == userID);
     _selectedMentions.add(_GroupMention(userID: userID, name: name));
@@ -1249,6 +1295,9 @@ class _ChatPageState extends State<_ChatPage> {
                           itemBuilder: (_, index) {
                             final message =
                                 _chatHistory[_chatHistory.length - 1 - index];
+                            final sourceMessage = message.clientMsgID == null
+                                ? null
+                                : _messagesByClientMsgID[message.clientMsgID];
                             return KeyedSubtree(
                               key: _messageKey(message),
                               child: _ChatMessage(
@@ -1266,8 +1315,17 @@ class _ChatPageState extends State<_ChatPage> {
                                 isVoiceCallRecord: message.isVoiceCallRecord,
                                 sendFailed: message.sendFailed,
                                 mine: message.mine,
-                                avatarUrl: _resolvedPeerAvatar,
+                                avatarUrl: _isGroup
+                                    ? sourceMessage?.senderFaceUrl ??
+                                          _resolvedPeerAvatar
+                                    : _resolvedPeerAvatar,
                                 ownAvatarUrl: widget.ownAvatarUrl,
+                                onAvatarLongPress: _isGroup
+                                    ? () => _mentionMessageSender(
+                                        userID: sourceMessage?.sendID,
+                                        nickname: sourceMessage?.senderNickname,
+                                      )
+                                    : null,
                               ),
                             );
                           },
@@ -1302,6 +1360,7 @@ class _ChatPageState extends State<_ChatPage> {
                       ),
                       child: _ChatComposer(
                         controller: _messageController,
+                        focusNode: _messageFocusNode,
                         voiceInputActive: _voiceInputActive,
                         onVoicePressed: _toggleVoiceInput,
                         onRecordingChanged: _setVoiceRecording,
@@ -2146,6 +2205,7 @@ class _ChatMessage extends StatelessWidget {
     required this.mine,
     this.avatarUrl,
     this.ownAvatarUrl,
+    this.onAvatarLongPress,
   });
 
   final AcoPalette palette;
@@ -2163,6 +2223,7 @@ class _ChatMessage extends StatelessWidget {
   final bool mine;
   final String? avatarUrl;
   final String? ownAvatarUrl;
+  final VoidCallback? onAvatarLongPress;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -2175,7 +2236,10 @@ class _ChatMessage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!mine) ...[
-              AcoAvatar(size: 40, imageUrl: avatarUrl),
+              GestureDetector(
+                onLongPress: onAvatarLongPress,
+                child: AcoAvatar(size: 40, imageUrl: avatarUrl),
+              ),
               const SizedBox(width: 6),
             ],
             if (mine && sendFailed)
