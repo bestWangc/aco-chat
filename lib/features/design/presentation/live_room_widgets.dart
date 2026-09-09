@@ -946,11 +946,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
               if (_identityNodeAsset(participant.identity)
                   case final nodeAsset?) ...[
                 const SizedBox(width: 3),
-                Image.asset(
-                  nodeAsset,
-                  width: 21,
-                  fit: BoxFit.contain,
-                ),
+                Image.asset(nodeAsset, width: 21, fit: BoxFit.contain),
               ],
             ],
           ),
@@ -1586,6 +1582,12 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
             member.userId != widget.currentUserId &&
             member.role != 'host';
         final identityBadgeAsset = _identityBadgeAsset(member.identity);
+        final nicknameColor = switch (member.identity) {
+          1 => const Color(0xFF820089),
+          2 => const Color(0xFF0057F2),
+          3 => const Color(0xFFFFD310),
+          _ => const Color(0xFF151515),
+        };
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1613,8 +1615,8 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
-                                  color: const Color(0xFF151515),
-                                  fontSize: 15,
+                                  color: nicknameColor,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1623,7 +1625,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                               const SizedBox(width: 4),
                               Image.asset(
                                 identityBadgeAsset,
-                                width: 76,
+                                width: 68,
                                 fit: BoxFit.contain,
                               ),
                             ],
