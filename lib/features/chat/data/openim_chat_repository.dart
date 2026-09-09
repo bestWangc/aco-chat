@@ -250,16 +250,21 @@ final class OpenIMChatRepository implements ChatRepository {
         wsAddr: wsAddr,
         dataDir: dataDir,
         listener: OnConnectListener(
-          onConnecting: () => developer.log('连接中', name: 'OpenIM.connection'),
-          onConnectSuccess: () =>
-              developer.log('连接成功', name: 'OpenIM.connection'),
-          onConnectFailed: (code, message) => developer.log(
-            '连接失败 code=$code message=$message',
+          onConnecting: () => developer.log(
+            '连接中 sdkInitialized=$_sdkInitialized currentUser=$_currentUserID',
             name: 'OpenIM.connection',
           ),
-          onUserTokenExpired: _handleConnectionLost,
-          onUserTokenInvalid: _handleConnectionLost,
-          onKickedOffline: _handleConnectionLost,
+          onConnectSuccess: () => developer.log(
+            '连接成功 currentUser=$_currentUserID',
+            name: 'OpenIM.connection',
+          ),
+          onConnectFailed: (code, message) => developer.log(
+            '连接失败 code=$code message=$message currentUser=$_currentUserID',
+            name: 'OpenIM.connection',
+          ),
+          onUserTokenExpired: () => _handleConnectionLost('token expired'),
+          onUserTokenInvalid: () => _handleConnectionLost('token invalid'),
+          onKickedOffline: () => _handleConnectionLost('kicked offline'),
         ),
         logLevel: 3,
         isLogStandardOutput: false,
@@ -269,9 +274,12 @@ final class OpenIMChatRepository implements ChatRepository {
     }
   }
 
-  static void _handleConnectionLost() {
+  static void _handleConnectionLost(String reason) {
     conversationReady.value = false;
-    developer.log('OpenIM 连接失效，准备重连', name: 'OpenIM.connection');
+    developer.log(
+      'OpenIM 连接失效，准备重连 reason=$reason currentUser=$_currentUserID',
+      name: 'OpenIM.connection',
+    );
     final reconnect = reconnectHandler;
     if (reconnect != null) unawaited(reconnect());
   }
@@ -285,8 +293,18 @@ final class OpenIMChatRepository implements ChatRepository {
     try {
       await _sdk.login(userID: userId, token: userSig);
       _currentUserID = userId;
-    } catch (error) {
+    } catch (error, stackTrace) {
+      developer.log(
+        'login failed user=$userId error=$error',
+        name: 'OpenIM.connection',
+        error: error,
+        stackTrace: stackTrace,
+      );
       if (!error.toString().contains('10004')) rethrow;
+      developer.log(
+        'login retry after 10004 user=$userId',
+        name: 'OpenIM.connection',
+      );
       await Future<void>.delayed(const Duration(seconds: 1));
       await _sdk.login(userID: userId, token: userSig);
       _currentUserID = userId;
@@ -295,6 +313,7 @@ final class OpenIMChatRepository implements ChatRepository {
     await _registerListeners();
     await _refreshMessageUnreadStatus();
     conversationReady.value = true;
+    developer.log('conversation ready user=$userId', name: 'OpenIM.connection');
     // flutter_openim_sdk 3.8.3+hotfix.14 exposes setListenerForService in
     // Dart, but the Android plugin does not implement the corresponding
     // native method (the Java method is commented out). Calling it therefore

@@ -36,6 +36,7 @@ import 'package:flutter/material.dart'
         Material,
         MaterialType,
         RefreshIndicator,
+        SelectableText,
         Theme;
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/services.dart';

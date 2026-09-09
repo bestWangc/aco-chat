@@ -436,14 +436,18 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
       final session = AccountSession(client);
       if (accept) {
         await session.acceptFriend(request.accountId);
+        const acceptanceMessage = '我通过了你的朋友验证请求，现在我们可以开始聊天了';
         // Notify the requester in the newly established conversation.
         try {
           final message = await OpenIM.iMManager.messageManager
-              .createTextMessage(text: '我通过了你的好友请求');
+              .createTextMessage(text: acceptanceMessage);
           await OpenIM.iMManager.messageManager.sendMessage(
             message: message,
             userID: request.accountId,
-            offlinePushInfo: OfflinePushInfo(title: '好友申请', desc: '我通过了你的好友请求'),
+            offlinePushInfo: OfflinePushInfo(
+              title: '好友申请',
+              desc: acceptanceMessage,
+            ),
           );
         } catch (error) {
           // Acceptance is already persisted; a transient IM send failure

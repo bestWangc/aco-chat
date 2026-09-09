@@ -105,7 +105,9 @@ class WalletAccountAuthentication {
       await _connectOpenIM(userId);
     };
     final running = _openIMConnectFuture;
-    if (running != null) return _waitForOpenIMConnection(running);
+    if (running != null) {
+      return _waitForOpenIMConnection(running, userId: userId);
+    }
 
     // Keep the single-flight lock until the SDK call itself has completed.
     // Future.timeout only stops its wrapper; it does not cancel the login.
@@ -118,14 +120,19 @@ class WalletAccountAuthentication {
         }
       }),
     );
-    return _waitForOpenIMConnection(connection);
+    return _waitForOpenIMConnection(connection, userId: userId);
   }
 
-  static Future<void> _waitForOpenIMConnection(Future<void> connection) =>
-      connection.timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => debugPrint('[OpenIM] initialization timed out'),
-      );
+  static Future<void> _waitForOpenIMConnection(
+    Future<void> connection, {
+    required String userId,
+  }) => connection.timeout(
+    const Duration(seconds: 15),
+    onTimeout: () => debugPrint(
+      '[OpenIM] initialization timed out user=$userId '
+      '(underlying SDK attempt still running)',
+    ),
+  );
 
   static Future<void> _connectOpenIMOnce(String userId) async {
     final client = AccountApiClient();
@@ -137,23 +144,43 @@ class WalletAccountAuthentication {
           cached.userId == userId &&
           !cached.expiresWithin(const Duration(minutes: 10))) {
         token = cached;
+        debugPrint('[OpenIM] token cache hit user=$userId');
       } else {
+        debugPrint('[OpenIM] token request start user=$userId');
         token = await session.openIMToken();
+        debugPrint(
+          '[OpenIM] token request success user=$userId '
+          'tokenUser=${token.userId} apiHost=${Uri.tryParse(token.apiAddr)?.host} '
+          'wsHost=${Uri.tryParse(token.wsAddr)?.host}',
+        );
       }
       _cachedOpenIMToken = token;
       final chat = OpenIMChatRepository();
       final dataDirectory = await getApplicationSupportDirectory();
       final openIMDirectory = Directory('${dataDirectory.path}/openim');
       await openIMDirectory.create(recursive: true);
+      debugPrint(
+        '[OpenIM] sdk init start user=$userId '
+        'apiHost=${Uri.tryParse(token.apiAddr)?.host} '
+        'wsHost=${Uri.tryParse(token.wsAddr)?.host}',
+      );
       await chat.initialize(
         apiAddr: token.apiAddr,
         wsAddr: token.wsAddr,
         dataDir: openIMDirectory.path,
       );
+      debugPrint('[OpenIM] sdk init success user=$userId');
+      debugPrint('[OpenIM] login start user=$userId');
       await chat.login(userId: userId, userSig: token.token);
+      debugPrint(
+        '[OpenIM] login success user=$userId '
+        'ready=${OpenIMChatRepository.conversationReady.value}',
+      );
       await _refreshFriendRequestBadge(session);
-    } catch (error) {
-      debugPrint('[OpenIM] background login failed: $error');
+      debugPrint('[OpenIM] initialization complete user=$userId');
+    } catch (error, stackTrace) {
+      debugPrint('[OpenIM] background login failed user=$userId error=$error');
+      debugPrint('[OpenIM] background login stack=$stackTrace');
     } finally {
       client.close();
     }

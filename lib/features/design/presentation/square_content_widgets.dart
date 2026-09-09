@@ -505,19 +505,27 @@ class _Bubble extends StatelessWidget {
     required this.palette,
     required this.text,
     required this.mine,
+    this.onTextSelected,
   });
   final AcoPalette palette;
   final String text;
   final bool mine;
+  final ValueChanged<String>? onTextSelected;
   @override
   Widget build(BuildContext context) {
-    final textWidget = Text(
+    final textStyle = TextStyle(
+      color: mine ? _black : _white,
+      height: 1.4,
+      fontSize: 16,
+    );
+    final textWidget = SelectableText(
       text,
-      style: TextStyle(
-        color: mine ? _black : _white,
-        height: 1.4,
-        fontSize: 16,
-      ),
+      style: textStyle,
+      onSelectionChanged: (selection, _) {
+        if (!selection.isCollapsed) {
+          onTextSelected?.call(selection.textInside(text));
+        }
+      },
     );
     if (!mine) {
       return ConstrainedBox(

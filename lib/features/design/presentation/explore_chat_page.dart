@@ -2251,7 +2251,12 @@ class _ChatMessage extends StatelessWidget {
       return _VoiceCallRecordBubble(text: text, mine: mine);
     }
 
-    return _Bubble(palette: palette, text: text, mine: mine);
+    return _Bubble(
+      palette: palette,
+      text: text,
+      mine: mine,
+      onTextSelected: (selectedText) => _copyText(context, selectedText),
+    );
   }
 
   Widget _copyableMessageBody(
@@ -2260,20 +2265,42 @@ class _ChatMessage extends StatelessWidget {
   }) {
     final body = _messageBody(context, maxWidth: maxWidth);
     if (text.isEmpty) return body;
-    return Semantics(
-      button: true,
-      hint: '长按复制消息',
-      onLongPress: () => _copyText(context),
-      child: GestureDetector(
-        onLongPress: () => _copyText(context),
-        child: body,
-      ),
-    );
+    return Semantics(button: true, hint: '长按选择并复制消息', child: body);
   }
 
-  Future<void> _copyText(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: text));
-    if (context.mounted) _showNotice(context, '已复制', '消息已复制到剪贴板。');
+  Future<void> _copyText(BuildContext context, String selectedText) async {
+    await Clipboard.setData(ClipboardData(text: selectedText));
+    if (!context.mounted) return;
+    final overlay = Overlay.maybeOf(context, rootOverlay: true);
+    if (overlay == null) return;
+
+    late final OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Positioned(
+        left: 0,
+        right: 0,
+        bottom: 96,
+        child: IgnorePointer(
+          child: Center(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0xE6000000),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                child: Text(
+                  '已复制',
+                  style: TextStyle(color: _white, fontSize: 14),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(entry);
+    Timer(const Duration(milliseconds: 1400), entry.remove);
   }
 
   Widget _image(
