@@ -662,8 +662,9 @@ class _ChatPageState extends State<_ChatPage> {
             position.maxScrollExtent *
             reversedIndex /
             (_chatHistory.length - 1);
-        final target =
-            estimatedOffset.clamp(0.0, position.maxScrollExtent).toDouble();
+        final target = estimatedOffset
+            .clamp(0.0, position.maxScrollExtent)
+            .toDouble();
         if ((position.pixels - target).abs() >= 1) {
           _chatScrollController.jumpTo(target);
         }
@@ -1425,7 +1426,7 @@ class _VoiceRecordingOverlay extends StatelessWidget {
                 height: 78,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF98EC63),
+                  color: const Color(0xFF28B561),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: _VoiceWaveform(level: level),
@@ -1437,7 +1438,7 @@ class _VoiceRecordingOverlay extends StatelessWidget {
                   child: const SizedBox(
                     width: 14,
                     height: 14,
-                    child: ColoredBox(color: Color(0xFF98EC63)),
+                    child: ColoredBox(color: Color(0xFF28B561)),
                   ),
                 ),
               ),
@@ -2262,12 +2263,18 @@ class _ChatMessage extends StatelessWidget {
     return Semantics(
       button: true,
       hint: '长按复制消息',
-      onLongPress: _copyText,
-      child: GestureDetector(onLongPress: _copyText, child: body),
+      onLongPress: () => _copyText(context),
+      child: GestureDetector(
+        onLongPress: () => _copyText(context),
+        child: body,
+      ),
     );
   }
 
-  void _copyText() => unawaited(Clipboard.setData(ClipboardData(text: text)));
+  Future<void> _copyText(BuildContext context) async {
+    await Clipboard.setData(ClipboardData(text: text));
+    if (context.mounted) _showNotice(context, '已复制', '消息已复制到剪贴板。');
+  }
 
   Widget _image(
     BuildContext context,
@@ -2306,13 +2313,13 @@ class _VoiceCallRecordBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = mine ? _black : _white;
-    final background = mine ? const Color(0xFF24B865) : const Color(0xFF2C2C2C);
+    final background = mine ? const Color(0xFF28B561) : const Color(0xFF2C2C2C);
     return CustomPaint(
       painter: mine
           ? _MineBubblePainter(color: background)
           : _OtherBubblePainter(color: background),
       child: Padding(
-        padding: EdgeInsets.fromLTRB(mine ? 8 : 14, 4, mine ? 14 : 8, 10),
+        padding: EdgeInsets.fromLTRB(mine ? 12 : 18, 8, mine ? 18 : 12, 8),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -2441,7 +2448,7 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
   Widget build(BuildContext context) {
     final foreground = widget.mine ? _black : _white;
     final background = widget.mine
-        ? const Color(0xFF24B865)
+        ? const Color(0xFF28B561)
         : const Color(0xFF2C2C2C);
     return Semantics(
       button: true,
@@ -2454,10 +2461,10 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
               : _OtherBubblePainter(color: background),
           child: Padding(
             padding: EdgeInsets.fromLTRB(
-              widget.mine ? 8 : 14,
-              4,
-              widget.mine ? 14 : 8,
-              10,
+              widget.mine ? 12 : 18,
+              8,
+              widget.mine ? 18 : 12,
+              8,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,

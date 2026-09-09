@@ -525,7 +525,7 @@ class _Bubble extends StatelessWidget {
         child: CustomPaint(
           painter: const _OtherBubblePainter(),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 8, 10),
+            padding: const EdgeInsets.fromLTRB(18, 8, 12, 8),
             child: textWidget,
           ),
         ),
@@ -536,7 +536,7 @@ class _Bubble extends StatelessWidget {
       child: CustomPaint(
         painter: const _MineBubblePainter(),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 4, 14, 10),
+          padding: const EdgeInsets.fromLTRB(12, 8, 18, 8),
           child: textWidget,
         ),
       ),
