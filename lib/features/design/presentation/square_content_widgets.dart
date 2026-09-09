@@ -525,7 +525,7 @@ class _Bubble extends StatelessWidget {
         child: CustomPaint(
           painter: const _OtherBubblePainter(),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 8, 6),
+            padding: const EdgeInsets.fromLTRB(14, 4, 8, 10),
             child: textWidget,
           ),
         ),
@@ -536,7 +536,7 @@ class _Bubble extends StatelessWidget {
       child: CustomPaint(
         painter: const _MineBubblePainter(),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 6, 14, 6),
+          padding: const EdgeInsets.fromLTRB(8, 4, 14, 10),
           child: textWidget,
         ),
       ),
@@ -545,13 +545,15 @@ class _Bubble extends StatelessWidget {
 }
 
 class _OtherBubblePainter extends CustomPainter {
-  const _OtherBubblePainter();
+  const _OtherBubblePainter({this.color = const Color(0xFF2C2C2C)});
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     const tailWidth = 6.0;
     final bubbleLeft = tailWidth;
-    final paint = Paint()..color = const Color(0xFF2C2C2C);
+    final paint = Paint()..color = color;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(bubbleLeft, 0, size.width - tailWidth, size.height),
@@ -559,7 +561,9 @@ class _OtherBubblePainter extends CustomPainter {
       ),
       paint,
     );
-    final tailCenter = size.height - 20;
+    // The message row is top-aligned and the avatar is 40px tall, so the
+    // tail should stay at the avatar's vertical center even for long text.
+    final tailCenter = math.min(20.0, size.height / 2);
     final tail = Path()
       ..moveTo(bubbleLeft + 1, tailCenter - 6)
       ..lineTo(0, tailCenter)
@@ -569,17 +573,20 @@ class _OtherBubblePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _OtherBubblePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _OtherBubblePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _MineBubblePainter extends CustomPainter {
-  const _MineBubblePainter();
+  const _MineBubblePainter({this.color = const Color(0xFF28B561)});
+
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
     const tailWidth = 6.0;
     final bubbleWidth = size.width - tailWidth;
-    final paint = Paint()..color = const Color(0xFF28B561);
+    final paint = Paint()..color = color;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(0, 0, bubbleWidth, size.height),
@@ -587,8 +594,9 @@ class _MineBubblePainter extends CustomPainter {
       ),
       paint,
     );
-    // The message row aligns the avatar to the bubble's bottom edge.
-    final tailCenter = size.height - 20;
+    // The message row is top-aligned and the avatar is 40px tall, so the
+    // tail should stay at the avatar's vertical center even for long text.
+    final tailCenter = math.min(20.0, size.height / 2);
     final tail = Path()
       ..moveTo(bubbleWidth - 1, tailCenter - 6)
       ..lineTo(size.width, tailCenter)
@@ -598,7 +606,8 @@ class _MineBubblePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _MineBubblePainter oldDelegate) => false;
+  bool shouldRepaint(covariant _MineBubblePainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _LiveCard extends StatelessWidget {

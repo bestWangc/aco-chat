@@ -39,7 +39,6 @@ class _ChatPageState extends State<_ChatPage> {
   String? _voiceRecordingPath;
   DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
-  final _chatMessageKeys = <String, GlobalKey>{};
   final Map<String, Message> _messagesByClientMsgID = <String, Message>{};
   Future<void>? _loadFuture;
   String? _error;
@@ -202,7 +201,6 @@ class _ChatPageState extends State<_ChatPage> {
   void _removeTrackedMessage(String? clientMsgID) {
     if (clientMsgID?.isNotEmpty != true) return;
     _messagesByClientMsgID.remove(clientMsgID);
-    _chatMessageKeys.remove(clientMsgID);
     if (!mounted) return;
     setState(() {
       _chatHistory.removeWhere((item) => item.clientMsgID == clientMsgID);
@@ -296,7 +294,6 @@ class _ChatPageState extends State<_ChatPage> {
       await _markCurrentConversationAsRead();
       if (!mounted) return;
       setState(() {
-        _chatMessageKeys.clear();
         _chatHistory
           ..clear()
           ..addAll(
@@ -604,7 +601,6 @@ class _ChatPageState extends State<_ChatPage> {
     setState(() {
       _messagesByClientMsgID.clear();
       _chatHistory.clear();
-      _chatMessageKeys.clear();
       _historyEnd = true;
     });
   }
@@ -652,46 +648,32 @@ class _ChatPageState extends State<_ChatPage> {
     });
   }
 
-  GlobalKey? _keyForMessage(_ChatHistoryMessage message) {
-    final clientMsgID = message.clientMsgID;
-    if (clientMsgID?.isNotEmpty != true) return null;
-    return _chatMessageKeys.putIfAbsent(clientMsgID!, GlobalKey.new);
-  }
-
   void _focusMessage(_ChatHistoryMessage message) {
     if (!_chatHistory.contains(message)) return;
-    final key = _keyForMessage(message);
-    if (key == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_chatScrollController.hasClients) return;
       final historyIndex = _chatHistory.indexOf(message);
       if (historyIndex < 0) return;
 
       final position = _chatScrollController.position;
-      if (key.currentContext == null && _chatHistory.length > 1) {
+      if (_chatHistory.length > 1) {
         final reversedIndex = _chatHistory.length - historyIndex - 1;
         final estimatedOffset =
             position.maxScrollExtent *
             reversedIndex /
             (_chatHistory.length - 1);
-        _chatScrollController.jumpTo(
-          estimatedOffset.clamp(0.0, position.maxScrollExtent).toDouble(),
-        );
+        final target =
+            estimatedOffset.clamp(0.0, position.maxScrollExtent).toDouble();
+        if ((position.pixels - target).abs() >= 1) {
+          _chatScrollController.jumpTo(target);
+        }
       }
-
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final context = key.currentContext;
-        if (context == null) return;
-        unawaited(
-          Scrollable.ensureVisible(
-            context,
-            alignment: .5,
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-          ),
-        );
-      });
     });
+  }
+
+  Key? _messageKey(_ChatHistoryMessage message) {
+    final clientMsgID = message.clientMsgID;
+    return clientMsgID?.isNotEmpty == true ? ValueKey(clientMsgID) : null;
   }
 
   bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
@@ -1267,7 +1249,7 @@ class _ChatPageState extends State<_ChatPage> {
                             final message =
                                 _chatHistory[_chatHistory.length - 1 - index];
                             return KeyedSubtree(
-                              key: _keyForMessage(message),
+                              key: _messageKey(message),
                               child: _ChatMessage(
                                 palette: widget.palette,
                                 text: message.text,
@@ -2181,9 +2163,6 @@ class _ChatMessage extends StatelessWidget {
   final String? avatarUrl;
   final String? ownAvatarUrl;
 
-  bool get _isImageMessage =>
-      imageBytes != null || imagePath != null || imageUrl != null;
-
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
@@ -2192,9 +2171,7 @@ class _ChatMessage extends StatelessWidget {
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Row(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: _isImageMessage
-              ? CrossAxisAlignment.start
-              : CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!mine) ...[
               AcoAvatar(size: 40, imageUrl: avatarUrl),
@@ -2329,19 +2306,21 @@ class _VoiceCallRecordBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = mine ? _black : _white;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: mine ? const Color(0xFF24B865) : const Color(0xFF2C2C2C),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(CupertinoIcons.phone_fill, color: foreground, size: 18),
-          const SizedBox(width: 8),
-          Text(text, style: TextStyle(color: foreground, fontSize: 16)),
-        ],
+    final background = mine ? const Color(0xFF24B865) : const Color(0xFF2C2C2C);
+    return CustomPaint(
+      painter: mine
+          ? _MineBubblePainter(color: background)
+          : _OtherBubblePainter(color: background),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(mine ? 8 : 14, 4, mine ? 14 : 8, 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(CupertinoIcons.phone_fill, color: foreground, size: 18),
+            const SizedBox(width: 8),
+            Text(text, style: TextStyle(color: foreground, fontSize: 16)),
+          ],
+        ),
       ),
     );
   }
@@ -2469,40 +2448,46 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
       label: '播放语音消息，${widget.duration}秒',
       child: GestureDetector(
         onTap: _toggle,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: background,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.mine) ...[
-                Text(
-                  '${widget.duration}"',
-                  style: TextStyle(color: foreground, fontSize: 16),
+        child: CustomPaint(
+          painter: widget.mine
+              ? _MineBubblePainter(color: background)
+              : _OtherBubblePainter(color: background),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              widget.mine ? 8 : 14,
+              4,
+              widget.mine ? 14 : 8,
+              10,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.mine) ...[
+                  Text(
+                    '${widget.duration}"',
+                    style: TextStyle(color: foreground, fontSize: 16),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Transform.flip(
+                  flipX: widget.mine && !_playing,
+                  child: Icon(
+                    _playing
+                        ? CupertinoIcons.pause_fill
+                        : CupertinoIcons.volume_up,
+                    color: foreground,
+                    size: 23,
+                  ),
                 ),
-                const SizedBox(width: 8),
+                if (!widget.mine) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '${widget.duration}"',
+                    style: TextStyle(color: foreground, fontSize: 16),
+                  ),
+                ],
               ],
-              Transform.flip(
-                flipX: widget.mine && !_playing,
-                child: Icon(
-                  _playing
-                      ? CupertinoIcons.pause_fill
-                      : CupertinoIcons.volume_up,
-                  color: foreground,
-                  size: 23,
-                ),
-              ),
-              if (!widget.mine) ...[
-                const SizedBox(width: 8),
-                Text(
-                  '${widget.duration}"',
-                  style: TextStyle(color: foreground, fontSize: 16),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),
