@@ -946,7 +946,11 @@ class _LiveRoomParticipantCard extends StatelessWidget {
               if (_identityNodeAsset(participant.identity)
                   case final nodeAsset?) ...[
                 const SizedBox(width: 3),
-                Image.asset(nodeAsset, height: 12, fit: BoxFit.contain),
+                Image.asset(
+                  nodeAsset,
+                  width: 21,
+                  fit: BoxFit.contain,
+                ),
               ],
             ],
           ),
@@ -1135,8 +1139,7 @@ class _MutedMicrophoneBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Image.asset(
     'assets/icons/live_mic_disabled.png',
-    width: 20,
-    height: 20,
+    width: 21,
     fit: BoxFit.contain,
   );
 }
@@ -1180,8 +1183,7 @@ class _LiveMicrophoneBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Image.asset(
     'assets/icons/live_mic_enabled.png',
-    width: 20,
-    height: 20,
+    width: 21,
     fit: BoxFit.contain,
   );
 }
