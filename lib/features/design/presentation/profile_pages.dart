@@ -1,5 +1,31 @@
 part of 'aco_design_shell.dart';
 
+const _profileBadgeWidth = 75.0;
+
+Widget _profileBadges(int identity, int staffIdentity) {
+  final identityAsset = _identityBadgeAsset(identity);
+  final staffAsset = _staffLongBadgeAsset(staffIdentity);
+  final assets = <String>[?identityAsset, ?staffAsset];
+  if (assets.isEmpty) return const SizedBox.shrink();
+
+  return Padding(
+    padding: const EdgeInsets.only(top: 5),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var index = 0; index < assets.length; index++) ...[
+          if (index > 0) const SizedBox(width: 4),
+          Image.asset(
+            assets[index],
+            width: _profileBadgeWidth,
+            fit: BoxFit.contain,
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _ProfilePage extends StatelessWidget {
   const _ProfilePage({
     required this.palette,
@@ -7,6 +33,8 @@ class _ProfilePage extends StatelessWidget {
     required this.displayName,
     required this.accountId,
     required this.username,
+    required this.identity,
+    required this.staffIdentity,
     required this.avatarUrl,
     required this.hasAppUpdate,
     required this.onOpenAppUpdate,
@@ -17,6 +45,8 @@ class _ProfilePage extends StatelessWidget {
   final String displayName;
   final String accountId;
   final String username;
+  final int identity;
+  final int staffIdentity;
   final String avatarUrl;
   final bool hasAppUpdate;
   final Future<bool> Function() onOpenAppUpdate;
@@ -75,7 +105,9 @@ class _ProfilePage extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: palette.primaryText,
+                    color: identity == 0
+                        ? palette.primaryText
+                        : _identityColor(identity, palette),
                     fontSize: AcoTypography.titleLarge,
                     fontWeight: FontWeight.w700,
                   ),
@@ -98,6 +130,7 @@ class _ProfilePage extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: palette.mutedText, fontSize: 10),
                 ),
+                _profileBadges(identity, staffIdentity),
               ],
             ),
           ),

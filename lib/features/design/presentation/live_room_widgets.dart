@@ -644,7 +644,9 @@ class _LiveRoomHostCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: _identityColor(host.identity, palette),
+                    color: host.identity == 0
+                        ? palette.primaryText
+                        : _identityColor(host.identity, palette),
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
@@ -961,11 +963,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
               if (_staffBadgeAsset(participant.staffIdentity)
                   case final staffAsset?) ...[
                 const SizedBox(width: 3),
-                Image.asset(
-                  staffAsset,
-                  width: 20,
-                  fit: BoxFit.contain,
-                ),
+                Image.asset(staffAsset, width: 20, fit: BoxFit.contain),
               ],
             ],
           ),

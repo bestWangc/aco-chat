@@ -231,6 +231,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   String? _accountId;
   final ValueNotifier<String> _username = ValueNotifier<String>('');
   final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
+  final ValueNotifier<int> _identity = ValueNotifier<int>(0);
+  final ValueNotifier<int> _staffIdentity = ValueNotifier<int>(0);
   String _language = '简体中文';
   bool _hasAppUpdate = false;
   String? _presentedIncomingCallID;
@@ -308,6 +310,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _displayName.value = profile.nickname;
     _username.value = profile.username;
     _avatarUrl.value = profile.avatarUrl;
+    _identity.value = profile.identity;
+    _staffIdentity.value = profile.staffIdentity;
   }
 
   @override
@@ -319,7 +323,9 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         (oldProfile?.accountId != profile.accountId ||
             oldProfile?.nickname != profile.nickname ||
             oldProfile?.username != profile.username ||
-            oldProfile?.avatarUrl != profile.avatarUrl)) {
+            oldProfile?.avatarUrl != profile.avatarUrl ||
+            oldProfile?.identity != profile.identity ||
+            oldProfile?.staffIdentity != profile.staffIdentity)) {
       _applyAccountProfile(profile);
     }
     if (oldWidget.walletIdentity != widget.walletIdentity) _loadWalletName();
@@ -333,6 +339,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _walletName.dispose();
     _username.dispose();
     _avatarUrl.dispose();
+    _identity.dispose();
+    _staffIdentity.dispose();
     _selectedWalletChain.dispose();
     super.dispose();
   }
@@ -515,6 +523,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       _displayName,
       _username,
       _avatarUrl,
+      _identity,
+      _staffIdentity,
       _walletName,
       _selectedWalletChain,
     ]),
@@ -542,6 +552,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       walletLoginFuture: widget.walletLoginFuture,
       username: _username.value,
       avatarUrl: _avatarUrl.value,
+      identity: _identity.value,
+      staffIdentity: _staffIdentity.value,
       displayName: _displayName.value,
       onDisplayNameChanged: (name) {
         if (mounted) _displayName.value = name;
@@ -581,6 +593,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       _displayName,
                       _username,
                       _avatarUrl,
+                      _identity,
+                      _staffIdentity,
                       _walletName,
                       _selectedWalletChain,
                     ]),
@@ -601,6 +615,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       walletLoginFuture: widget.walletLoginFuture,
                       username: _username.value,
                       avatarUrl: _avatarUrl.value,
+                      identity: _identity.value,
+                      staffIdentity: _staffIdentity.value,
                       displayName: _displayName.value,
                       onDisplayNameChanged: (name) {
                         if (mounted) _displayName.value = name;

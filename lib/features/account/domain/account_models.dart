@@ -47,6 +47,7 @@ class AccountProfile {
     'username': username,
     'nickname': nickname,
     'avatar_url': avatarUrl,
+    'identity': identity,
     'staff_identity': staffIdentity,
   };
 }

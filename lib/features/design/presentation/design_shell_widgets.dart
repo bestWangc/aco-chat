@@ -25,6 +25,8 @@ class AcoScreenPage extends StatelessWidget {
     this.walletLoginFuture,
     this.username,
     this.avatarUrl,
+    this.identity = 0,
+    this.staffIdentity = 0,
     this.walletIdentity,
     this.walletSecretStore,
     this.walletName = 'Wallet1',
@@ -62,6 +64,8 @@ class AcoScreenPage extends StatelessWidget {
   final Future<AccountProfile?>? walletLoginFuture;
   final String? username;
   final String? avatarUrl;
+  final int identity;
+  final int staffIdentity;
   final WalletIdentity? walletIdentity;
   final WalletSecretStore? walletSecretStore;
   final String walletName;
@@ -228,6 +232,8 @@ class AcoScreenPage extends StatelessWidget {
                 displayName: currentDisplayName,
                 accountId: currentAccountId,
                 username: currentUsername,
+                identity: identity,
+                staffIdentity: staffIdentity,
                 avatarUrl: avatarUrl ?? '',
                 hasAppUpdate: hasAppUpdate,
                 onOpenAppUpdate: onOpenAppUpdate ?? () async => false,
