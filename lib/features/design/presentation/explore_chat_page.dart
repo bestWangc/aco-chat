@@ -1248,16 +1248,18 @@ class _ChatPageState extends State<_ChatPage> {
                     bottom: false,
                     child: ColoredBox(
                       color: widget.palette.background,
-                      child: _ChatMoreSettingsPage(
-                        palette: widget.palette,
-                        peerName: _peerName,
-                        peerUserID: widget.peerUserID,
-                        groupID: widget.groupID,
-                        conversationID: _currentConversationID,
-                        onBlockChanged: (blocked) => _peerIsBlocked = blocked,
-                        messages: _chatHistory,
-                        onMessageTap: _focusMessage,
-                        onClearMessages: _clearCurrentConversationMessages,
+                      child: SizedBox.expand(
+                        child: _ChatMoreSettingsPage(
+                          palette: widget.palette,
+                          peerName: _peerName,
+                          peerUserID: widget.peerUserID,
+                          groupID: widget.groupID,
+                          conversationID: _currentConversationID,
+                          onBlockChanged: (blocked) => _peerIsBlocked = blocked,
+                          messages: _chatHistory,
+                          onMessageTap: _focusMessage,
+                          onClearMessages: _clearCurrentConversationMessages,
+                        ),
                       ),
                     ),
                   ),

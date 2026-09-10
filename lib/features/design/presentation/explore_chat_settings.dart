@@ -1,5 +1,10 @@
 part of 'aco_design_shell.dart';
 
+const _maxGroupMemberCount = 19;
+const _memberGridColumnCount = 5;
+const _memberGridSpacing = 12.0;
+const _settingsArrowAsset = 'assets/images/right_arrow.png';
+
 class _ChatMoreSettingsPage extends StatefulWidget {
   const _ChatMoreSettingsPage({
     required this.palette,
@@ -37,6 +42,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
   var _groupMembersLoading = false;
   var _isGroupOwner = false;
   List<GroupMembersInfo> _groupMembers = const [];
+  Map<String, int> _identityByUserID = const {};
   late String _groupName = widget.peerName;
 
   bool get _isGroup => widget.groupID?.isNotEmpty == true;
@@ -60,9 +66,12 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     try {
       final members = await OpenIM.iMManager.groupManager.getGroupMemberList(
         groupID: groupID,
-        count: 7,
+        count: _maxGroupMemberCount,
       );
-      if (mounted) setState(() => _groupMembers = members);
+      if (mounted) {
+        setState(() => _groupMembers = members);
+        unawaited(_loadMemberIdentities(members));
+      }
     } catch (_) {
       // Keep the settings usable when OpenIM has not completed its local sync.
     } finally {
@@ -83,6 +92,34 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
       }
     } catch (_) {
       // The name already shown by the conversation remains usable offline.
+    }
+  }
+
+  Future<void> _loadMemberIdentities(List<GroupMembersInfo> members) async {
+    final client = AccountApiClient();
+    final session = AccountSession(client);
+    try {
+      final identities = await Future.wait(
+        members.take(_maxGroupMemberCount).map((member) async {
+          final userID = member.userID;
+          if (userID == null || userID.isEmpty) return null;
+          try {
+            final profile = await session.profileByAccountId(userID);
+            return MapEntry(userID, profile.identity);
+          } catch (_) {
+            return null;
+          }
+        }),
+      );
+      if (!mounted) return;
+      setState(() {
+        _identityByUserID = {
+          for (final entry in identities.whereType<MapEntry<String, int>>())
+            if (entry.value > 0) entry.key: entry.value,
+        };
+      });
+    } finally {
+      client.close();
     }
   }
 
@@ -380,37 +417,30 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
       ),
       Expanded(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
           children: [
             if (_isGroup) ...[
-              _GroupMemberGrid(
-                palette: widget.palette,
-                members: _groupMembers,
-                loading: _groupMembersLoading,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: _GroupMemberGrid(
+                  palette: widget.palette,
+                  members: _groupMembers,
+                  loading: _groupMembersLoading,
+                  identityByUserID: _identityByUserID,
+                ),
               ),
               const SizedBox(height: 18),
-              Container(
-                height: 1,
-                color: widget.palette.mutedText.withValues(alpha: .16),
-              ),
-              const SizedBox(height: 6),
-              _ChatSettingsInfoRow(
+              _GroupSettingsCard(
                 palette: widget.palette,
-                label: '群组名称',
-                value: _groupName,
-                onTap: _isGroupOwner ? _editGroupName : null,
-              ),
-              const SizedBox(height: 6),
-              _ChatSettingsActionRow(
-                palette: widget.palette,
-                label: '群二维码',
-                onTap: _showGroupQRCode,
+                groupName: _groupName,
+                onEditName: _isGroupOwner ? _editGroupName : null,
+                onShowQRCode: _showGroupQRCode,
               ),
               const SizedBox(height: 6),
             ],
             _ChatSettingsActionRow(
               palette: widget.palette,
-              label: '查找聊天记录',
+              label: '查找聊天内容',
               onTap: () => Navigator.of(context).push<void>(
                 CupertinoPageRoute<void>(
                   builder: (_) => _ChatHistorySearchPage(
@@ -431,14 +461,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
             ),
             if (_isGroup) ...[
               const SizedBox(height: 6),
-              _ChatSettingsActionRow(
-                palette: widget.palette,
-                label: '退出群聊',
-                destructive: true,
-                onTap: _exitGroup,
-              ),
               if (_isGroupOwner) ...[
-                const SizedBox(height: 6),
                 _ChatSettingsActionRow(
                   palette: widget.palette,
                   label: '解散群聊',
@@ -464,7 +487,54 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
           ],
         ),
       ),
+      if (_isGroup)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(44, 12, 44, 20),
+          child: _GroupExitButton(onPressed: _exitGroup),
+        ),
     ],
+  );
+}
+
+class _GroupExitButton extends StatelessWidget {
+  const _GroupExitButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: const Size.fromHeight(52),
+    onPressed: onPressed,
+    child: SizedBox(
+      height: 52,
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: const Color(0x99EB4B6E),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xFFEB4B6E),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Center(
+              child: Text(
+                '退出群聊',
+                style: TextStyle(
+                  color: _white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   );
 }
 
@@ -545,13 +615,15 @@ class _ChatSettingsActionRow extends StatelessWidget {
   final bool destructive;
 
   @override
-  Widget build(BuildContext context) => ClipRRect(
-    borderRadius: BorderRadius.circular(16),
-    child: CupertinoButton(
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: const Size.fromHeight(58),
+    onPressed: onTap,
+    child: Container(
+      height: 58,
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      minimumSize: const Size.fromHeight(46),
       color: const Color(0xFF191919),
-      onPressed: onTap,
       child: Row(
         children: [
           Text(
@@ -560,14 +632,56 @@ class _ChatSettingsActionRow extends StatelessWidget {
               color: destructive
                   ? const Color(0xFFFF5A5F)
                   : palette.primaryText,
-              fontSize: 15,
+              fontSize: 18,
             ),
           ),
           const Spacer(),
-          Icon(
-            CupertinoIcons.chevron_right,
-            color: palette.mutedText,
-            size: 16,
+          Image.asset(_settingsArrowAsset, width: 7, fit: BoxFit.contain),
+        ],
+      ),
+    ),
+  );
+}
+
+class _GroupSettingsCard extends StatelessWidget {
+  const _GroupSettingsCard({
+    required this.palette,
+    required this.groupName,
+    required this.onEditName,
+    required this.onShowQRCode,
+  });
+
+  final AcoPalette palette;
+  final String groupName;
+  final VoidCallback? onEditName;
+  final VoidCallback onShowQRCode;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xFF191919),
+        borderRadius: BorderRadius.circular(2),
+      ),
+      child: Column(
+        children: [
+          _GroupSettingsCardRow(
+            palette: palette,
+            label: '群聊名称',
+            value: groupName,
+            onTap: onEditName,
+          ),
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            color: palette.mutedText.withValues(alpha: .12),
+          ),
+          _GroupSettingsCardRow(
+            palette: palette,
+            label: '群二维码',
+            trailing: const Icon(CupertinoIcons.qrcode, size: 24),
+            onTap: onShowQRCode,
           ),
         ],
       ),
@@ -575,61 +689,75 @@ class _ChatSettingsActionRow extends StatelessWidget {
   );
 }
 
-class _ChatSettingsInfoRow extends StatelessWidget {
-  const _ChatSettingsInfoRow({
+class _GroupSettingsCardRow extends StatelessWidget {
+  const _GroupSettingsCardRow({
     required this.palette,
     required this.label,
-    required this.value,
-    this.onTap,
+    required this.onTap,
+    this.value,
+    this.trailing,
   });
 
   final AcoPalette palette;
   final String label;
-  final String value;
+  final String? value;
+  final Widget? trailing;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final content = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF191919),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(color: palette.primaryText, fontSize: 15),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  value,
-                  style: TextStyle(color: palette.mutedText, fontSize: 14),
-                ),
-              ],
+    final callback = onTap;
+    final rightContent = Row(
+      mainAxisAlignment: MainAxisAlignment.end,
+      children: [
+        if (value?.isNotEmpty == true)
+          Flexible(
+            child: Text(
+              value!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: palette.primaryText, fontSize: 18),
             ),
           ),
-          if (onTap != null)
-            Icon(
-              CupertinoIcons.chevron_right,
-              color: palette.mutedText,
-              size: 16,
-            ),
+        if (trailing != null) ...[
+          const SizedBox(width: 12),
+          IconTheme(
+            data: IconThemeData(color: palette.primaryText),
+            child: trailing!,
+          ),
         ],
+        if (callback != null) ...[
+          const SizedBox(width: 12),
+          Image.asset(_settingsArrowAsset, width: 7, fit: BoxFit.contain),
+        ],
+      ],
+    );
+    final right = callback == null
+        ? rightContent
+        : CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: Size.zero,
+            alignment: Alignment.centerRight,
+            onPressed: callback,
+            child: rightContent,
+          );
+    final content = SizedBox(
+      height: 58,
+      width: double.infinity,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Text(
+              label,
+              style: TextStyle(color: palette.primaryText, fontSize: 18),
+            ),
+            Expanded(child: right),
+          ],
+        ),
       ),
     );
-    final callback = onTap;
-    if (callback == null) return content;
-    return CupertinoButton(
-      padding: EdgeInsets.zero,
-      onPressed: callback,
-      child: content,
-    );
+    return content;
   }
 }
 
@@ -638,59 +766,113 @@ class _GroupMemberGrid extends StatelessWidget {
     required this.palette,
     required this.members,
     required this.loading,
+    required this.identityByUserID,
   });
 
   final AcoPalette palette;
   final List<GroupMembersInfo> members;
   final bool loading;
+  final Map<String, int> identityByUserID;
 
   @override
   Widget build(BuildContext context) {
     if (loading && members.isEmpty) {
       return const SizedBox(height: 126, child: CupertinoActivityIndicator());
     }
-    return Wrap(
-      spacing: 16,
-      runSpacing: 14,
-      children: [
-        for (final member in members.take(7))
-          _GroupMemberAvatar(
-            palette: palette,
-            name: member.nickname?.trim().isNotEmpty == true
-                ? member.nickname!.trim()
-                : (member.userID ?? '成员'),
-            avatarURL: member.faceURL,
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const columnCount = _memberGridColumnCount;
+        const spacing = _memberGridSpacing;
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columnCount - 1)) / columnCount;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: 14,
+          children: [
+            for (final member in members.take(_maxGroupMemberCount))
+              _GroupMemberAvatar(
+                width: itemWidth,
+                palette: palette,
+                name: member.nickname?.trim().isNotEmpty == true
+                    ? member.nickname!.trim()
+                    : (member.userID ?? '成员'),
+                avatarURL: member.faceURL,
+                identity: identityByUserID[member.userID] ?? 0,
+              ),
+            _GroupAddMemberButton(width: itemWidth),
+          ],
+        );
+      },
     );
   }
 }
 
 class _GroupMemberAvatar extends StatelessWidget {
   const _GroupMemberAvatar({
+    required this.width,
     required this.palette,
     required this.name,
+    required this.identity,
     this.avatarURL,
   });
 
+  final double width;
   final AcoPalette palette;
   final String name;
+  final int identity;
   final String? avatarURL;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 58,
+    width: width,
     child: Column(
       children: [
-        AcoAvatar(size: 56, imageUrl: avatarURL ?? ''),
+        AcoAvatar(size: 52, imageUrl: avatarURL ?? ''),
         const SizedBox(height: 6),
-        Text(
-          name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: TextStyle(color: palette.mutedText, fontSize: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: identity == 0
+                      ? palette.mutedText
+                      : _identityColor(identity, palette),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            if (_identityNodeAsset(identity) case final badgeAsset?) ...[
+              const SizedBox(width: 2),
+              Image.asset(badgeAsset, height: 14, fit: BoxFit.contain),
+            ],
+          ],
         ),
+      ],
+    ),
+  );
+}
+
+class _GroupAddMemberButton extends StatelessWidget {
+  const _GroupAddMemberButton({required this.width});
+
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    child: Column(
+      children: [
+        Image.asset(
+          'assets/images/add_group_member.png',
+          width: 52,
+          height: 52,
+        ),
+        const SizedBox(height: 20),
       ],
     ),
   );
@@ -711,23 +893,17 @@ class _ChatSettingsToggleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 46,
+    height: 58,
     padding: const EdgeInsets.symmetric(horizontal: 16),
-    decoration: BoxDecoration(
-      color: const Color(0xFF191919),
-      borderRadius: BorderRadius.circular(16),
-    ),
+    color: const Color(0xFF191919),
     child: Row(
       children: [
-        Text(label, style: TextStyle(color: palette.primaryText, fontSize: 15)),
+        Text(label, style: TextStyle(color: palette.primaryText, fontSize: 18)),
         const Spacer(),
-        Transform.scale(
-          scale: .78,
-          child: CupertinoSwitch(
-            value: value,
-            activeTrackColor: palette.accent,
-            onChanged: onChanged,
-          ),
+        CupertinoSwitch(
+          value: value,
+          activeTrackColor: palette.accent,
+          onChanged: onChanged,
         ),
       ],
     ),
