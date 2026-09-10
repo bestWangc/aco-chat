@@ -500,6 +500,10 @@ class _PostOptionStar extends StatelessWidget {
       const Icon(CupertinoIcons.sparkles, color: _lime, size: 10);
 }
 
+const _chatBubbleTailWidth = 7.0;
+const _chatBubbleTailHeight = 7.0;
+const _chatBubbleRadius = 6.0;
+
 class _Bubble extends StatelessWidget {
   const _Bubble({
     required this.palette,
@@ -559,23 +563,24 @@ class _OtherBubblePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const tailWidth = 6.0;
+    const tailWidth = _chatBubbleTailWidth;
     final bubbleLeft = tailWidth;
     final paint = Paint()..color = color;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(bubbleLeft, 0, size.width - tailWidth, size.height),
-        const Radius.circular(3),
+        const Radius.circular(_chatBubbleRadius),
       ),
       paint,
     );
-    // The message row is top-aligned and the avatar is 40px tall, so the
+    // The message row is top-aligned and the avatar is 40 logical units tall, so the
     // tail should stay at the avatar's vertical center even for long text.
     final tailCenter = math.min(20.0, size.height / 2);
     final tail = Path()
-      ..moveTo(bubbleLeft + 1, tailCenter - 6)
-      ..lineTo(0, tailCenter)
-      ..lineTo(bubbleLeft + 1, tailCenter + 6)
+      ..moveTo(bubbleLeft + 1, tailCenter - _chatBubbleTailHeight)
+      ..lineTo(1, tailCenter - 1)
+      ..quadraticBezierTo(0, tailCenter, 1, tailCenter + 1)
+      ..lineTo(bubbleLeft + 1, tailCenter + _chatBubbleTailHeight)
       ..close();
     canvas.drawPath(tail, paint);
   }
@@ -592,23 +597,29 @@ class _MineBubblePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    const tailWidth = 6.0;
+    const tailWidth = _chatBubbleTailWidth;
     final bubbleWidth = size.width - tailWidth;
     final paint = Paint()..color = color;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
         Rect.fromLTWH(0, 0, bubbleWidth, size.height),
-        const Radius.circular(3),
+        const Radius.circular(_chatBubbleRadius),
       ),
       paint,
     );
-    // The message row is top-aligned and the avatar is 40px tall, so the
+    // The message row is top-aligned and the avatar is 40 logical units tall, so the
     // tail should stay at the avatar's vertical center even for long text.
     final tailCenter = math.min(20.0, size.height / 2);
     final tail = Path()
-      ..moveTo(bubbleWidth - 1, tailCenter - 6)
-      ..lineTo(size.width, tailCenter)
-      ..lineTo(bubbleWidth - 1, tailCenter + 6)
+      ..moveTo(bubbleWidth - 1, tailCenter - _chatBubbleTailHeight)
+      ..lineTo(size.width - 1, tailCenter - 1)
+      ..quadraticBezierTo(
+        size.width,
+        tailCenter,
+        size.width - 1,
+        tailCenter + 1,
+      )
+      ..lineTo(bubbleWidth - 1, tailCenter + _chatBubbleTailHeight)
       ..close();
     canvas.drawPath(tail, paint);
   }
