@@ -8,17 +8,45 @@ Color _identityColor(int identity, AcoPalette palette) => switch (identity) {
 };
 
 String? _identityBadgeAsset(int identity) => switch (identity) {
-  1 => 'assets/images/identity_badges/shareholder_purple.png',
-  2 => 'assets/images/identity_badges/shareholder_blue.png',
-  3 => 'assets/images/identity_badges/shareholder_gold.png',
+  1 => 'assets/images/identity_badges/identity_long_shareholder_purple.png',
+  2 => 'assets/images/identity_badges/identity_long_shareholder_blue.png',
+  3 => 'assets/images/identity_badges/identity_long_shareholder_gold.png',
   _ => null,
 };
 
 String? _identityNodeAsset(int identity) => switch (identity) {
-  1 => 'assets/images/identity_badges/founder_node_purple.png',
-  2 => 'assets/images/identity_badges/super_node_blue.png',
-  3 => 'assets/images/identity_badges/partner_node_gold.png',
+  1 => 'assets/images/identity_badges/identity_short_founder_node_purple.png',
+  2 => 'assets/images/identity_badges/identity_short_super_node_blue.png',
+  3 => 'assets/images/identity_badges/identity_short_partner_node_gold.png',
   _ => null,
+};
+
+String? _staffBadgeAsset(int staffIdentity) => switch (staffIdentity) {
+  1 => 'assets/images/staff_badges/staff_short_1.png',
+  2 => 'assets/images/staff_badges/staff_short_2.png',
+  3 => 'assets/images/staff_badges/staff_short_3.png',
+  _ => null,
+};
+
+String? _staffLongBadgeAsset(int staffIdentity) => switch (staffIdentity) {
+  1 => 'assets/images/staff_badges/staff_long_1.png',
+  2 => 'assets/images/staff_badges/staff_long_2.png',
+  3 => 'assets/images/staff_badges/staff_long_3.png',
+  _ => null,
+};
+
+double _longBadgeWidth(int identity) => switch (identity) {
+  1 => 58,
+  2 => 61,
+  3 => 65,
+  _ => 0,
+};
+
+double _shortBadgeWidth(int identity) => switch (identity) {
+  1 => 16,
+  2 => 18,
+  3 => 18,
+  _ => 0,
 };
 
 Widget _identityBadge(
@@ -104,6 +132,7 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
           name: message.nickname,
           text: message.text,
           identity: message.identity,
+          staffIdentity: message.staffIdentity,
         );
       },
     );
@@ -521,17 +550,20 @@ class _RoomMessage extends StatelessWidget {
     required this.name,
     required this.text,
     required this.identity,
+    required this.staffIdentity,
   });
 
   final AcoPalette palette;
   final String name;
   final String text;
   final int identity;
+  final int staffIdentity;
 
   @override
   Widget build(BuildContext context) {
     final isSystemMessage = name.isEmpty;
     final badgeAsset = _identityBadgeAsset(identity);
+    final staffBadgeAsset = _staffLongBadgeAsset(staffIdentity);
     final nameColor = identity == 0
         ? _white
         : _identityColor(identity, palette);
@@ -584,11 +616,23 @@ class _RoomMessage extends StatelessWidget {
                       WidgetSpan(
                         alignment: PlaceholderAlignment.bottom,
                         child: Padding(
-                          padding: const EdgeInsets.only(right: 5),
+                          padding: const EdgeInsets.only(right: 2),
                           child: _identityBadge(
                             context,
                             identity,
                             widthFactor: .16,
+                          ),
+                        ),
+                      ),
+                    if (staffBadgeAsset != null)
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.bottom,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 1, right: 5),
+                          child: Image.asset(
+                            staffBadgeAsset,
+                            width: MediaQuery.sizeOf(context).width * .16,
+                            fit: BoxFit.contain,
                           ),
                         ),
                       ),

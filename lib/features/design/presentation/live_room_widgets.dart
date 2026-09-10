@@ -654,6 +654,15 @@ class _LiveRoomHostCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 _identityBadge(context, host.identity, widthFactor: .18),
               ],
+              if (_staffLongBadgeAsset(host.staffIdentity)
+                  case final staffAsset?) ...[
+                const SizedBox(width: 4),
+                Image.asset(
+                  staffAsset,
+                  width: MediaQuery.sizeOf(context).width * .18,
+                  fit: BoxFit.contain,
+                ),
+              ],
             ],
           ),
         ),
@@ -788,6 +797,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
       avatarUrl: participant.avatarUrl,
       role: participant.role,
       identity: participant.identity,
+      staffIdentity: participant.staffIdentity,
       handRaised: participant.handRaised,
       muted: viewerMuted,
       speakerInvited: participant.speakerInvited,
@@ -946,7 +956,16 @@ class _LiveRoomParticipantCard extends StatelessWidget {
               if (_identityNodeAsset(participant.identity)
                   case final nodeAsset?) ...[
                 const SizedBox(width: 3),
-                Image.asset(nodeAsset, width: 21, fit: BoxFit.contain),
+                Image.asset(nodeAsset, width: 20, fit: BoxFit.contain),
+              ],
+              if (_staffBadgeAsset(participant.staffIdentity)
+                  case final staffAsset?) ...[
+                const SizedBox(width: 3),
+                Image.asset(
+                  staffAsset,
+                  width: 20,
+                  fit: BoxFit.contain,
+                ),
               ],
             ],
           ),
@@ -1519,9 +1538,9 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     final isSpeaker = member.role == 'host' || member.role == 'speaker';
     if (member.role == 'listener') {
       return Image.asset(
-        'assets/icons/live_muted.png',
+        'assets/icons/live_muted_red.png',
         width: 18,
-        height: 18,
+        height: 23,
         fit: BoxFit.contain,
       );
     }
@@ -1582,6 +1601,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
             member.userId != widget.currentUserId &&
             member.role != 'host';
         final identityBadgeAsset = _identityBadgeAsset(member.identity);
+        final staffBadgeAsset = _staffLongBadgeAsset(member.staffIdentity);
         final nicknameColor = switch (member.identity) {
           1 => const Color(0xFF820089),
           2 => const Color(0xFF0057F2),
@@ -1616,7 +1636,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: nicknameColor,
-                                  fontSize: 18,
+                                  fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -1625,6 +1645,14 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
                               const SizedBox(width: 4),
                               Image.asset(
                                 identityBadgeAsset,
+                                width: 68,
+                                fit: BoxFit.contain,
+                              ),
+                            ],
+                            if (staffBadgeAsset != null) ...[
+                              const SizedBox(width: 4),
+                              Image.asset(
+                                staffBadgeAsset,
                                 width: 68,
                                 fit: BoxFit.contain,
                               ),

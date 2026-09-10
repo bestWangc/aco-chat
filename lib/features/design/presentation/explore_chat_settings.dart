@@ -43,6 +43,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
   var _isGroupOwner = false;
   List<GroupMembersInfo> _groupMembers = const [];
   Map<String, int> _identityByUserID = const {};
+  Map<String, int> _staffIdentityByUserID = const {};
   late String _groupName = widget.peerName;
 
   bool get _isGroup => widget.groupID?.isNotEmpty == true;
@@ -99,13 +100,13 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     final client = AccountApiClient();
     final session = AccountSession(client);
     try {
-      final identities = await Future.wait(
+      final profiles = await Future.wait(
         members.take(_maxGroupMemberCount).map((member) async {
           final userID = member.userID;
           if (userID == null || userID.isEmpty) return null;
           try {
             final profile = await session.profileByAccountId(userID);
-            return MapEntry(userID, profile.identity);
+            return MapEntry(userID, profile);
           } catch (_) {
             return null;
           }
@@ -114,8 +115,15 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
       if (!mounted) return;
       setState(() {
         _identityByUserID = {
-          for (final entry in identities.whereType<MapEntry<String, int>>())
-            if (entry.value > 0) entry.key: entry.value,
+          for (final entry
+              in profiles.whereType<MapEntry<String, AccountProfile>>())
+            if (entry.value.identity > 0) entry.key: entry.value.identity,
+        };
+        _staffIdentityByUserID = {
+          for (final entry
+              in profiles.whereType<MapEntry<String, AccountProfile>>())
+            if (entry.value.staffIdentity > 0)
+              entry.key: entry.value.staffIdentity,
         };
       });
     } finally {
@@ -447,6 +455,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                   members: _groupMembers,
                   loading: _groupMembersLoading,
                   identityByUserID: _identityByUserID,
+                  staffIdentityByUserID: _staffIdentityByUserID,
                   onAddPressed: _openAddMembers,
                 ),
               ),
@@ -788,6 +797,7 @@ class _GroupMemberGrid extends StatelessWidget {
     required this.members,
     required this.loading,
     required this.identityByUserID,
+    required this.staffIdentityByUserID,
     required this.onAddPressed,
   });
 
@@ -795,6 +805,7 @@ class _GroupMemberGrid extends StatelessWidget {
   final List<GroupMembersInfo> members;
   final bool loading;
   final Map<String, int> identityByUserID;
+  final Map<String, int> staffIdentityByUserID;
   final VoidCallback onAddPressed;
 
   @override
@@ -821,6 +832,7 @@ class _GroupMemberGrid extends StatelessWidget {
                     : (member.userID ?? '成员'),
                 avatarURL: member.faceURL,
                 identity: identityByUserID[member.userID] ?? 0,
+                staffIdentity: staffIdentityByUserID[member.userID] ?? 0,
               ),
             _GroupAddMemberButton(width: itemWidth, onPressed: onAddPressed),
           ],
@@ -836,6 +848,7 @@ class _GroupMemberAvatar extends StatelessWidget {
     required this.palette,
     required this.name,
     required this.identity,
+    required this.staffIdentity,
     this.avatarURL,
   });
 
@@ -843,6 +856,7 @@ class _GroupMemberAvatar extends StatelessWidget {
   final AcoPalette palette;
   final String name;
   final int identity;
+  final int staffIdentity;
   final String? avatarURL;
 
   @override
@@ -871,7 +885,19 @@ class _GroupMemberAvatar extends StatelessWidget {
             ),
             if (_identityNodeAsset(identity) case final badgeAsset?) ...[
               const SizedBox(width: 2),
-              Image.asset(badgeAsset, height: 14, fit: BoxFit.contain),
+              Image.asset(
+                badgeAsset,
+                width: _shortBadgeWidth(identity),
+                fit: BoxFit.contain,
+              ),
+            ],
+            if (_staffBadgeAsset(staffIdentity) case final staffAsset?) ...[
+              const SizedBox(width: 2),
+              Image.asset(
+                staffAsset,
+                width: _shortBadgeWidth(staffIdentity),
+                fit: BoxFit.contain,
+              ),
             ],
           ],
         ),
@@ -1117,46 +1143,62 @@ class _GroupSelectableContactRow extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: EdgeInsets.zero,
-    onPressed: onTap,
-    child: Container(
-      height: 64,
-      padding: const EdgeInsets.fromLTRB(18, 8, 32, 8),
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: palette.border.withValues(alpha: .55)),
+  Widget build(BuildContext context) {
+    final identityAsset = _identityBadgeAsset(friend.identity);
+    final staffAsset = _staffLongBadgeAsset(friend.staffIdentity);
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+      child: Container(
+        height: 64,
+        padding: const EdgeInsets.fromLTRB(18, 8, 32, 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: palette.border.withValues(alpha: .55)),
+          ),
+        ),
+        child: Row(
+          children: [
+            _GroupMemberSelectionIndicator(
+              palette: palette,
+              selected: selected,
+            ),
+            const SizedBox(width: 16),
+            AcoAvatar(size: 48, imageUrl: friend.avatarUrl),
+            const SizedBox(width: 16),
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: palette.primaryText, fontSize: 16),
+              ),
+            ),
+            if (identityAsset != null || staffAsset != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (identityAsset != null)
+                    Image.asset(
+                      identityAsset,
+                      width: _longBadgeWidth(friend.identity),
+                      fit: BoxFit.contain,
+                    ),
+                  if (identityAsset != null && staffAsset != null)
+                    const SizedBox(width: 4),
+                  if (staffAsset != null)
+                    Image.asset(
+                      staffAsset,
+                      width: _longBadgeWidth(friend.staffIdentity),
+                      fit: BoxFit.contain,
+                    ),
+                ],
+              ),
+          ],
         ),
       ),
-      child: Row(
-        children: [
-          _GroupMemberSelectionIndicator(palette: palette, selected: selected),
-          const SizedBox(width: 16),
-          AcoAvatar(size: 48, imageUrl: friend.avatarUrl),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: palette.primaryText, fontSize: 16),
-                  ),
-                ),
-                if (_identityBadgeAsset(friend.identity)
-                    case final badgeAsset?) ...[
-                  const SizedBox(width: 6),
-                  Image.asset(badgeAsset, height: 16, fit: BoxFit.contain),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
+    );
+  }
 }
 
 class _GroupMemberSelectionIndicator extends StatelessWidget {

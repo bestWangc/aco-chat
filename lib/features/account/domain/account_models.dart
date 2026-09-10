@@ -23,6 +23,7 @@ class AccountProfile {
     required this.nickname,
     required this.avatarUrl,
     this.identity = 0,
+    this.staffIdentity = 0,
   });
 
   final String accountId;
@@ -30,6 +31,7 @@ class AccountProfile {
   final String nickname;
   final String avatarUrl;
   final int identity;
+  final int staffIdentity;
 
   factory AccountProfile.fromJson(Map<String, dynamic> json) => AccountProfile(
     accountId: json['account_id'] as String,
@@ -37,13 +39,15 @@ class AccountProfile {
     nickname: json['nickname'] as String,
     avatarUrl: json['avatar_url'] as String? ?? '',
     identity: (json['identity'] as num?)?.toInt() ?? 0,
+    staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
   );
 
-  Map<String, String> toJson() => {
+  Map<String, dynamic> toJson() => {
     'account_id': accountId,
     'username': username,
     'nickname': nickname,
     'avatar_url': avatarUrl,
+    'staff_identity': staffIdentity,
   };
 }
 
@@ -55,6 +59,7 @@ class FriendContact {
     required this.status,
     this.initial = '#',
     this.identity = 0,
+    this.staffIdentity = 0,
   });
 
   final String accountId;
@@ -63,6 +68,7 @@ class FriendContact {
   final String status;
   final String initial;
   final int identity;
+  final int staffIdentity;
 
   factory FriendContact.fromJson(Map<String, dynamic> json) => FriendContact(
     accountId: json['account_id'] as String,
@@ -71,6 +77,7 @@ class FriendContact {
     status: (json['status'] as String?) ?? 'accepted',
     initial: (json['initial'] as String?) ?? '#',
     identity: (json['identity'] as num?)?.toInt() ?? 0,
+    staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -249,6 +256,7 @@ class LiveKitJoinInfo {
     required this.roomName,
     required this.role,
     required this.identity,
+    this.staffIdentity = 0,
     required this.canPublish,
     required this.canPublishData,
   });
@@ -260,6 +268,7 @@ class LiveKitJoinInfo {
         roomName: json['room_name'] as String,
         role: json['role'] as String,
         identity: (json['identity'] as num?)?.toInt() ?? 0,
+        staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
         canPublish: json['can_publish'] as bool? ?? false,
         canPublishData: json['can_publish_data'] as bool? ?? false,
       );
@@ -269,6 +278,7 @@ class LiveKitJoinInfo {
   final String roomName;
   final String role;
   final int identity;
+  final int staffIdentity;
   final bool canPublish;
   final bool canPublishData;
 }
@@ -304,6 +314,7 @@ class LiveMessage {
     required this.text,
     required this.createdAt,
     this.identity = 0,
+    this.staffIdentity = 0,
   });
 
   final int id;
@@ -311,6 +322,7 @@ class LiveMessage {
   final String text;
   final DateTime createdAt;
   final int identity;
+  final int staffIdentity;
 
   factory LiveMessage.fromJson(Map<String, dynamic> json) => LiveMessage(
     id: _messageId(json['id']),
@@ -318,6 +330,7 @@ class LiveMessage {
     text: json['text'] as String,
     createdAt: DateTime.parse(json['created_at'] as String),
     identity: (json['identity'] as num?)?.toInt() ?? 0,
+    staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
   );
 }
 
@@ -334,6 +347,7 @@ class LiveParticipant {
     required this.avatarUrl,
     required this.role,
     this.identity = 0,
+    this.staffIdentity = 0,
     required this.handRaised,
     required this.muted,
     this.speakerInvited = false,
@@ -345,6 +359,7 @@ class LiveParticipant {
   final String avatarUrl;
   final String role;
   final int identity;
+  final int staffIdentity;
   final bool handRaised;
   final bool muted;
   final bool speakerInvited;
@@ -357,6 +372,7 @@ class LiveParticipant {
         avatarUrl: json['avatar_url'] as String? ?? '',
         role: json['role'] as String,
         identity: (json['identity'] as num?)?.toInt() ?? 0,
+        staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
         handRaised: json['hand_raised'] as bool? ?? false,
         muted: json['muted'] as bool? ?? false,
         speakerInvited: json['speaker_invite'] as bool? ?? false,

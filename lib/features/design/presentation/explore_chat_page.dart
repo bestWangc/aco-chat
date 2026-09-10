@@ -48,6 +48,7 @@ class _ChatPageState extends State<_ChatPage> {
   String? _resolvedPeerName;
   String? _resolvedPeerAvatar;
   int _resolvedPeerIdentity = 0;
+  int _resolvedPeerStaffIdentity = 0;
   bool _loadingOlder = false;
   bool _historyEnd = false;
   bool _markingMessagesAsRead = false;
@@ -283,6 +284,7 @@ class _ChatPageState extends State<_ChatPage> {
       if (friend.nickname.isNotEmpty) _resolvedPeerName = friend.nickname;
       if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
       _resolvedPeerIdentity = friend.identity;
+      _resolvedPeerStaffIdentity = friend.staffIdentity;
       return true;
     } catch (error) {
       debugPrint('[API] chat profile load failed: $error');
@@ -1229,6 +1231,7 @@ class _ChatPageState extends State<_ChatPage> {
         palette: widget.palette,
         name: _peerName,
         identity: _resolvedPeerIdentity,
+        staffIdentity: _resolvedPeerStaffIdentity,
       ),
       headerRightPadding: 4,
       right: Semantics(
@@ -1482,11 +1485,13 @@ class _ChatHeaderTitle extends StatelessWidget {
     required this.palette,
     required this.name,
     required this.identity,
+    required this.staffIdentity,
   });
 
   final AcoPalette palette;
   final String name;
   final int identity;
+  final int staffIdentity;
 
   @override
   Widget build(BuildContext context) {
@@ -1510,7 +1515,19 @@ class _ChatHeaderTitle extends StatelessWidget {
           ),
           if (identityIconAsset != null) ...[
             const SizedBox(width: 5),
-            Image.asset(identityIconAsset, height: 20, fit: BoxFit.contain),
+            Image.asset(
+              identityIconAsset,
+              width: _shortBadgeWidth(identity),
+              fit: BoxFit.contain,
+            ),
+          ],
+          if (_staffBadgeAsset(staffIdentity) case final staffAsset?) ...[
+            const SizedBox(width: 3),
+            Image.asset(
+              staffAsset,
+              width: _shortBadgeWidth(staffIdentity),
+              fit: BoxFit.contain,
+            ),
           ],
         ],
       ),

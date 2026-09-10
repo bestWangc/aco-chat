@@ -21,7 +21,18 @@ int _parseLiveMessageIdentity(Object? payloadIdentity, String? metadata) {
   if (payloadIdentity is num) return payloadIdentity.toInt();
   final parsedPayloadIdentity = int.tryParse('$payloadIdentity');
   if (parsedPayloadIdentity != null) return parsedPayloadIdentity;
-  return int.tryParse(metadata ?? '') ?? 0;
+  return int.tryParse((metadata ?? '').split(':').first) ?? 0;
+}
+
+int _parseLiveMessageStaffIdentity(
+  Object? payloadStaffIdentity,
+  String? metadata,
+) {
+  if (payloadStaffIdentity is num) return payloadStaffIdentity.toInt();
+  final parsedPayloadStaffIdentity = int.tryParse('$payloadStaffIdentity');
+  if (parsedPayloadStaffIdentity != null) return parsedPayloadStaffIdentity;
+  final parts = (metadata ?? '').split(':');
+  return parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
 }
 
 class _VoiceRoomPage extends StatefulWidget {
@@ -124,6 +135,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _liveKitPublishReady = false;
   String? _liveKitRole;
   int _liveKitIdentity = 0;
+  int _liveKitStaffIdentity = 0;
   bool _microphoneUpdating = false;
   bool _liveKitMicrophoneOperationInFlight = false;
   bool _liveKitPermissionReconnectInFlight = false;
@@ -856,6 +868,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
             avatarUrl: participant.avatarUrl,
             role: participant.role,
             identity: participant.identity,
+            staffIdentity: participant.staffIdentity,
             handRaised: participant.handRaised,
             muted: muted,
             speakerInvited: participant.speakerInvited,
@@ -1196,7 +1209,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           '请选择签到时长，成员将在房间内看到签到提醒。',
           style: TextStyle(fontSize: AcoTypography.bodySmall),
         ),
-        actions: [5, 10, 15, 30]
+        actions: [2, 5, 10, 15, 30]
             .map(
               (minutes) => CupertinoActionSheetAction(
                 onPressed: () {
@@ -1501,11 +1514,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         payload['identity'],
         event.participant?.metadata,
       );
+      final staffIdentity = _parseLiveMessageStaffIdentity(
+        payload['staff_identity'],
+        event.participant?.metadata,
+      );
       final nickname = event.participant?.name.trim();
       _appendChatMessage(
         nickname: nickname == null || nickname.isEmpty ? '成员' : nickname,
         text: text,
         identity: identity,
+        staffIdentity: staffIdentity,
       );
     } catch (_) {
       // Ignore malformed or non-chat data packets from other clients.
@@ -1525,7 +1543,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       return;
     }
     final payload = utf8.encode(
-      jsonEncode({'text': text, 'identity': _liveKitIdentity}),
+      jsonEncode({
+        'text': text,
+        'identity': _liveKitIdentity,
+        'staff_identity': _liveKitStaffIdentity,
+      }),
     );
     if (!_checkMessageSendLimits(payload.length)) return;
     setState(() => _sending = true);
@@ -1545,6 +1567,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         nickname: _localChatNickname,
         text: text,
         identity: _liveKitIdentity,
+        staffIdentity: _liveKitStaffIdentity,
       );
       if (mounted) {
         setState(() {
@@ -1604,6 +1627,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     required String nickname,
     required String text,
     int identity = 0,
+    int staffIdentity = 0,
   }) {
     final now = DateTime.now();
     _chatBuffer.append(
@@ -1613,6 +1637,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         text: text.trim(),
         createdAt: now,
         identity: identity,
+        staffIdentity: staffIdentity,
       ),
     );
   }

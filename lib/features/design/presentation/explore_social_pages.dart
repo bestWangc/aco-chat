@@ -356,6 +356,7 @@ class _SocialGlobalSearchResultsState
                   : friend.nickname,
               avatarUrl: friend.avatarUrl,
               identity: friend.identity,
+              staffIdentity: friend.staffIdentity,
               onTap: () => _openFriend(friend),
               avatarSize: 40,
               avatarGap: 16,
@@ -517,6 +518,7 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
                         name:
                             '${request.nickname.isEmpty ? request.accountId : request.nickname} 请求添加你为好友',
                         avatarUrl: request.avatarUrl,
+                        staffIdentity: request.staffIdentity,
                         onTap: () => _respond(request, true),
                         backgroundColor: const Color(0xFF151515),
                         borderRadius: BorderRadius.circular(10),
@@ -778,13 +780,14 @@ class _ContactsPageState extends State<_ContactsPage> {
                             name: _displayNameOf(friend),
                             avatarUrl: friend.avatarUrl,
                             identity: friend.identity,
+                            staffIdentity: friend.staffIdentity,
                             onTap: () => _openFriend(context, friend),
                             avatarSize: 40,
                             avatarGap: 16,
                             contentPadding: const EdgeInsets.symmetric(
                               vertical: 10,
                             ),
-                            nameFontSize: 15,
+                            nameFontSize: 17,
                           ),
                         ),
                     ],
@@ -1140,6 +1143,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
   late Future<List<ConversationInfo>> _conversations;
   Timer? _reloadTimer;
   Map<String, int> _identityByUserID = const {};
+  Map<String, int> _staffIdentityByUserID = const {};
   Map<String, List<String>> _groupAvatarUrls = const {};
 
   String _latestMessagePreview(Message? message) {
@@ -1237,6 +1241,11 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
             for (final friend in friends)
               if (friend.identity > 0) friend.accountId: friend.identity,
           };
+          _staffIdentityByUserID = {
+            for (final friend in friends)
+              if (friend.staffIdentity > 0)
+                friend.accountId: friend.staffIdentity,
+          };
           for (final conversation in conversations) {
             final friend = profiles[conversation.userID];
             if (friend != null) {
@@ -1262,6 +1271,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
         } catch (error) {
           debugPrint('[API] conversation authorization failed: $error');
           _identityByUserID = const {};
+          _staffIdentityByUserID = const {};
           return const <ConversationInfo>[];
         } finally {
           client.close();
@@ -1437,6 +1447,7 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
                   ? (_groupAvatarUrls[conversation.groupID] ?? const <String>[])
                   : null,
               identity: _identityByUserID[conversation.userID] ?? 0,
+              staffIdentity: _staffIdentityByUserID[conversation.userID] ?? 0,
               horizontalMargin: 16,
               unreadCount: conversation.unreadCount,
               timestamp: conversation.latestMsgSendTime,

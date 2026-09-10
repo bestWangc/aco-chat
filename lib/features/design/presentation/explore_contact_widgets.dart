@@ -130,6 +130,7 @@ class _ContactListTile extends StatelessWidget {
     this.nameFontSize,
     this.avatarGap = 20,
     this.identity = 0,
+    this.staffIdentity = 0,
   });
 
   final AcoPalette palette;
@@ -145,52 +146,72 @@ class _ContactListTile extends StatelessWidget {
   final double? nameFontSize;
   final double avatarGap;
   final int identity;
+  final int staffIdentity;
 
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: EdgeInsets.zero,
-    onPressed: onTap,
-    child: Container(
-      width: double.infinity,
-      padding: contentPadding,
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: borderRadius,
-      ),
-      child: Row(
-        children: [
-          AcoAvatar(
-            size: avatarSize,
-            imageUrl: avatarUrl,
-            assetPath: _defaultAvatarAsset,
-          ),
-          SizedBox(width: avatarGap),
-          Flexible(
-            child: Text(
-              name,
-              maxLines: nameMaxLines,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: palette.primaryText,
-                fontSize: nameFontSize ?? AcoTypography.body,
-                fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    final identityAsset = _identityBadgeAsset(identity);
+    final staffAsset = _staffLongBadgeAsset(staffIdentity);
+    final identityBadgeWidth = _longBadgeWidth(identity) * 1.15;
+    final staffBadgeWidth = _longBadgeWidth(staffIdentity) * 1.15;
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: contentPadding,
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: borderRadius,
+        ),
+        child: Row(
+          children: [
+            AcoAvatar(
+              size: avatarSize,
+              imageUrl: avatarUrl,
+              assetPath: _defaultAvatarAsset,
+            ),
+            SizedBox(width: avatarGap),
+            Flexible(
+              child: Text(
+                name,
+                maxLines: nameMaxLines,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: nameFontSize ?? AcoTypography.body,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
-          ),
-          if (identity > 0) ...[
-            const SizedBox(width: 10),
-            Image.asset(
-              _identityBadgeAsset(identity) ??
-                  'assets/images/identity_badges/shareholder_gold.png',
-              height: 18,
-              fit: BoxFit.contain,
-            ),
+            if (identityAsset != null || staffAsset != null)
+              const SizedBox(width: 10),
+            if (identityAsset != null || staffAsset != null)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (identityAsset != null)
+                    Image.asset(
+                      identityAsset,
+                      width: identityBadgeWidth,
+                      fit: BoxFit.contain,
+                    ),
+                  if (identityAsset != null && staffAsset != null)
+                    const SizedBox(width: 4),
+                  if (staffAsset != null)
+                    Image.asset(
+                      staffAsset,
+                      width: staffBadgeWidth,
+                      fit: BoxFit.contain,
+                    ),
+                ],
+              ),
+            if (trailing != null) ...[const Spacer(), trailing!],
           ],
-          if (trailing != null) ...[const Spacer(), trailing!],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _PinnedHeaderDelegate extends SliverPersistentHeaderDelegate {

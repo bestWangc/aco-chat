@@ -159,6 +159,7 @@ class _SocialMessageTile extends StatelessWidget {
     required this.onTap,
     required this.message,
     this.identity = 0,
+    this.staffIdentity = 0,
     this.horizontalMargin = 0,
     this.avatarUrl,
     this.groupAvatarUrls,
@@ -171,6 +172,7 @@ class _SocialMessageTile extends StatelessWidget {
   final VoidCallback onTap;
   final String message;
   final int identity;
+  final int staffIdentity;
   final double horizontalMargin;
   final String? avatarUrl;
   final List<String>? groupAvatarUrls;
@@ -180,6 +182,7 @@ class _SocialMessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final badgeAsset = _identityBadgeAsset(identity);
+    final staffBadgeAsset = _staffLongBadgeAsset(staffIdentity);
     return Container(
       margin: EdgeInsets.only(left: horizontalMargin),
       child: Stack(
@@ -220,7 +223,19 @@ class _SocialMessageTile extends StatelessWidget {
                     ),
                     if (badgeAsset != null) ...[
                       const SizedBox(width: 5),
-                      Image.asset(badgeAsset, width: 56, fit: BoxFit.contain),
+                      Image.asset(
+                        badgeAsset,
+                        width: _longBadgeWidth(identity),
+                        fit: BoxFit.contain,
+                      ),
+                    ],
+                    if (staffBadgeAsset != null) ...[
+                      const SizedBox(width: 4),
+                      Image.asset(
+                        staffBadgeAsset,
+                        width: _longBadgeWidth(staffIdentity),
+                        fit: BoxFit.contain,
+                      ),
                     ],
                   ],
                 ),
@@ -293,32 +308,26 @@ class _GroupConversationAvatar extends StatelessWidget {
     final avatars = imageUrls.isEmpty
         ? <String?>[fallbackAvatarUrl]
         : imageUrls.take(4).cast<String?>().toList(growable: false);
-    return Container(
-      width: 40,
-      height: 40,
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: const Color(0xFF3A3A3A),
-        borderRadius: BorderRadius.circular(8),
+    return ClipOval(
+      child: Container(
+        width: 40,
+        height: 40,
+        padding: const EdgeInsets.all(2),
+        decoration: const BoxDecoration(color: Color(0xFF3A3A3A)),
+        child: avatars.length == 1
+            ? _GroupAvatarCell(imageUrl: avatars.single)
+            : GridView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: avatars.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 2,
+                  crossAxisSpacing: 2,
+                ),
+                itemBuilder: (_, index) =>
+                    _GroupAvatarCell(imageUrl: avatars[index]),
+              ),
       ),
-      child: avatars.length == 1
-          ? ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: _GroupAvatarCell(imageUrl: avatars.single),
-            )
-          : GridView.builder(
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: avatars.length,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 2,
-                crossAxisSpacing: 2,
-              ),
-              itemBuilder: (_, index) => ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: _GroupAvatarCell(imageUrl: avatars[index]),
-              ),
-            ),
     );
   }
 }
@@ -333,20 +342,22 @@ class _GroupAvatarCell extends StatelessWidget {
     final parsed = imageUrl == null || imageUrl!.isEmpty
         ? null
         : Uri.tryParse(imageUrl!);
-    final url = parsed?.hasScheme == true
-        ? imageUrl
-        : (parsed == null
-              ? null
-              : Uri.parse(
-                  const AppConfig().apiBaseUrl,
-                ).replace(path: parsed.path).toString());
+    String? url;
+    if (parsed?.hasScheme == true) {
+      url = imageUrl;
+    } else if (parsed != null) {
+      url = Uri.parse(
+        const AppConfig().apiBaseUrl,
+      ).replace(path: parsed.path).toString();
+    }
     final fallback = Image.asset(_defaultAvatarAsset, fit: BoxFit.cover);
-    return url == null
+    final image = url == null
         ? fallback
         : Image.network(
             url,
             fit: BoxFit.cover,
             errorBuilder: (_, _, _) => fallback,
           );
+    return ClipOval(child: image);
   }
 }
