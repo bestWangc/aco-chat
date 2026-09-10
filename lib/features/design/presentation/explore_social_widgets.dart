@@ -31,6 +31,7 @@ class _ChatHistoryMessage {
     this.text, {
     required this.mine,
     this.clientMsgID,
+    this.timestamp,
     this.isVoiceCallRecord = false,
     this.sendFailed = false,
   }) : imageBytes = null,
@@ -45,6 +46,7 @@ class _ChatHistoryMessage {
   const _ChatHistoryMessage.image({
     required this.mine,
     this.clientMsgID,
+    this.timestamp,
     this.imageBytes,
     this.imagePath,
     this.imageUrl,
@@ -60,6 +62,7 @@ class _ChatHistoryMessage {
   const _ChatHistoryMessage.sound({
     required this.mine,
     this.clientMsgID,
+    this.timestamp,
     this.soundPath,
     this.soundUrl,
     this.soundDuration,
@@ -96,6 +99,7 @@ class _ChatHistoryMessage {
         callRecord,
         mine: mine,
         clientMsgID: message.clientMsgID,
+        timestamp: message.sendTime ?? message.createTime,
         isVoiceCallRecord: true,
       );
     }
@@ -105,6 +109,7 @@ class _ChatHistoryMessage {
         text,
         mine: mine,
         clientMsgID: message.clientMsgID,
+        timestamp: message.sendTime ?? message.createTime,
       );
     }
     final sound = message.soundElem;
@@ -112,6 +117,7 @@ class _ChatHistoryMessage {
       return _ChatHistoryMessage.sound(
         mine: mine,
         clientMsgID: message.clientMsgID,
+        timestamp: message.sendTime ?? message.createTime,
         soundPath: sound.soundPath,
         soundUrl: sound.sourceUrl,
         soundDuration: sound.duration,
@@ -122,6 +128,7 @@ class _ChatHistoryMessage {
     return _ChatHistoryMessage.image(
       mine: mine,
       clientMsgID: message.clientMsgID,
+      timestamp: message.sendTime ?? message.createTime,
       imagePath: picture?.sourcePath,
       imageUrl: imageUrlOf(picture),
       previewImageUrl: previewImageUrlOf(picture),
@@ -131,6 +138,7 @@ class _ChatHistoryMessage {
 
   final String text;
   final String? clientMsgID;
+  final int? timestamp;
   final bool mine;
   final Uint8List? imageBytes;
   final String? imagePath;

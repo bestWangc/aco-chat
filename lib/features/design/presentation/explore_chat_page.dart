@@ -100,6 +100,33 @@ class _ChatPageState extends State<_ChatPage> {
     return aTime.compareTo(bTime);
   }
 
+  bool _shouldShowMessageTime(int index) {
+    final timestamp = _chatHistory[index].timestamp;
+    if (timestamp == null || timestamp <= 0) return false;
+    if (index == 0) return true;
+    final previous = _chatHistory[index - 1].timestamp;
+    if (previous == null || previous <= 0) return true;
+    return (timestamp - previous).abs() >=
+        const Duration(hours: 1).inMilliseconds;
+  }
+
+  String? _messageTimeLabel(int index) {
+    if (!_shouldShowMessageTime(index)) return null;
+    final timestamp = _chatHistory[index].timestamp;
+    if (timestamp == null || timestamp <= 0) return null;
+    final value = timestamp > 100000000000 ? timestamp : timestamp * 1000;
+    final date = DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+    final now = DateTime.now();
+    String twoDigits(int number) => number.toString().padLeft(2, '0');
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
+      return '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+    }
+    return '${date.year}年${date.month}月${date.day}日 '
+        '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -182,6 +209,7 @@ class _ChatPageState extends State<_ChatPage> {
       historyMessage = _ChatHistoryMessage.image(
         mine: mine,
         clientMsgID: clientMsgID,
+        timestamp: messageFromOpenIM.timestamp,
         imageBytes: retainedImageBytes,
         imageUrl: messageFromOpenIM.imageUrl,
         previewImageUrl: messageFromOpenIM.previewImageUrl,
@@ -1298,34 +1326,58 @@ class _ChatPageState extends State<_ChatPage> {
                             final sourceMessage = message.clientMsgID == null
                                 ? null
                                 : _messagesByClientMsgID[message.clientMsgID];
+                            final timeLabel = _messageTimeLabel(
+                              _chatHistory.length - 1 - index,
+                            );
                             return KeyedSubtree(
                               key: _messageKey(message),
-                              child: _ChatMessage(
-                                palette: widget.palette,
-                                text: message.text,
-                                imageBytes: message.imageBytes,
-                                imagePath: message.imagePath,
-                                imageUrl: message.imageUrl,
-                                previewImageUrl: message.previewImageUrl,
-                                shouldCacheThumbnail:
-                                    message.shouldCacheThumbnail,
-                                soundPath: message.soundPath,
-                                soundUrl: message.soundUrl,
-                                soundDuration: message.soundDuration,
-                                isVoiceCallRecord: message.isVoiceCallRecord,
-                                sendFailed: message.sendFailed,
-                                mine: message.mine,
-                                avatarUrl: _isGroup
-                                    ? sourceMessage?.senderFaceUrl ??
-                                          _resolvedPeerAvatar
-                                    : _resolvedPeerAvatar,
-                                ownAvatarUrl: widget.ownAvatarUrl,
-                                onAvatarLongPress: _isGroup
-                                    ? () => _mentionMessageSender(
-                                        userID: sourceMessage?.sendID,
-                                        nickname: sourceMessage?.senderNickname,
-                                      )
-                                    : null,
+                              child: Column(
+                                children: [
+                                  if (timeLabel != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          timeLabel,
+                                          style: const TextStyle(
+                                            color: Color(0xFF8D8D8D),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  _ChatMessage(
+                                    palette: widget.palette,
+                                    text: message.text,
+                                    imageBytes: message.imageBytes,
+                                    imagePath: message.imagePath,
+                                    imageUrl: message.imageUrl,
+                                    previewImageUrl: message.previewImageUrl,
+                                    shouldCacheThumbnail:
+                                        message.shouldCacheThumbnail,
+                                    soundPath: message.soundPath,
+                                    soundUrl: message.soundUrl,
+                                    soundDuration: message.soundDuration,
+                                    isVoiceCallRecord:
+                                        message.isVoiceCallRecord,
+                                    sendFailed: message.sendFailed,
+                                    mine: message.mine,
+                                    avatarUrl: _isGroup
+                                        ? sourceMessage?.senderFaceUrl ??
+                                              _resolvedPeerAvatar
+                                        : _resolvedPeerAvatar,
+                                    ownAvatarUrl: widget.ownAvatarUrl,
+                                    onAvatarLongPress: _isGroup
+                                        ? () => _mentionMessageSender(
+                                            userID: sourceMessage?.sendID,
+                                            nickname:
+                                                sourceMessage?.senderNickname,
+                                          )
+                                        : null,
+                                  ),
+                                ],
                               ),
                             );
                           },
