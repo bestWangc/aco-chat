@@ -24,6 +24,7 @@ class _ChatPage extends StatefulWidget {
 
 class _ChatPageState extends State<_ChatPage> {
   static const _chatImageMaxBytes = 1536 * 1024;
+  static const _messageTimeGap = Duration(hours: 1);
 
   final _messageController = TextEditingController();
   final _messageFocusNode = FocusNode();
@@ -106,8 +107,7 @@ class _ChatPageState extends State<_ChatPage> {
     if (index == 0) return true;
     final previous = _chatHistory[index - 1].timestamp;
     if (previous == null || previous <= 0) return true;
-    return (timestamp - previous).abs() >=
-        const Duration(hours: 1).inMilliseconds;
+    return (timestamp - previous).abs() >= _messageTimeGap.inMilliseconds;
   }
 
   String? _messageTimeLabel(int index) {
