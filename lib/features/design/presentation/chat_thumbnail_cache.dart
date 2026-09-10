@@ -109,10 +109,15 @@ class _CachedChatThumbnailState extends State<_CachedChatThumbnail> {
     future: _thumbnail,
     builder: (context, snapshot) {
       final file = snapshot.data;
-      if (file != null) return Image.file(file, fit: BoxFit.contain);
-      if (snapshot.hasError) {
-        return Image.network(widget.url, fit: BoxFit.contain);
+      if (file != null) {
+        return Image.file(
+          file,
+          fit: BoxFit.contain,
+          errorBuilder: (_, error, stackTrace) =>
+              const _ImageUnavailable(),
+        );
       }
+      if (snapshot.hasError) return const _ImageUnavailable();
       return const SizedBox(
         width: 64,
         height: 64,

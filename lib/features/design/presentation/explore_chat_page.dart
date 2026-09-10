@@ -2485,7 +2485,16 @@ class _VoiceCallRecordBubble extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(CupertinoIcons.phone_fill, color: foreground, size: 18),
+            SizedBox(
+              width: 24,
+              height: 18,
+              child: Image.asset(
+                'assets/icons/chat_voice_call_record.png',
+                fit: BoxFit.contain,
+                color: foreground,
+                colorBlendMode: BlendMode.srcIn,
+              ),
+            ),
             const SizedBox(width: 8),
             Text(text, style: TextStyle(color: foreground, fontSize: 16)),
           ],
