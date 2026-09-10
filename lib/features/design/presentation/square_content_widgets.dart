@@ -500,7 +500,7 @@ class _PostOptionStar extends StatelessWidget {
       const Icon(CupertinoIcons.sparkles, color: _lime, size: 10);
 }
 
-const _chatBubbleTailWidth = 7.0;
+const _chatBubbleTailWidth = 5.0;
 const _chatBubbleTailHeight = 7.0;
 const _chatBubbleRadius = 6.0;
 
