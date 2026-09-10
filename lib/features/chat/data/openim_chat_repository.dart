@@ -111,7 +111,7 @@ final class OpenIMChatRepository implements ChatRepository {
     final latestMessage = conversation.latestMsg;
     // Clearing history can leave OpenIM's unread counter stale even though the
     // conversation no longer contains a message the user can open.
-    if (latestMessage == null) return 0;
+    if (latestMessage == null || !isNotifiableMessage(latestMessage)) return 0;
     final currentUserID = _currentUserID;
     if (currentUserID == null) return conversation.unreadCount;
     final target = _conversationTarget(conversation);

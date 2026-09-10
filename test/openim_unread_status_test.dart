@@ -37,11 +37,26 @@ void main() {
     final conversation = ConversationInfo(
       conversationID: 'sg_joined',
       unreadCount: 1,
-      latestMsg: Message(sendID: 'member'),
+      latestMsg: Message(
+        sendID: 'member',
+        textElem: TextElem(content: '你好'),
+      ),
     );
 
     OpenIMChatRepository.updateAuthorizedConversations([conversation]);
 
     expect(OpenIMChatRepository.messageUnreadNotifier.value, isTrue);
+  });
+
+  test('unsupported latest messages do not create a global badge', () {
+    final conversation = ConversationInfo(
+      conversationID: 'sg_system',
+      unreadCount: 1,
+      latestMsg: Message(sendID: 'member'),
+    );
+
+    OpenIMChatRepository.updateAuthorizedConversations([conversation]);
+
+    expect(OpenIMChatRepository.messageUnreadNotifier.value, isFalse);
   });
 }
