@@ -266,6 +266,26 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     }
   }
 
+  Future<void> _openAddMembers() async {
+    final groupID = widget.groupID;
+    if (groupID == null || groupID.isEmpty) return;
+    final memberIDs = _groupMembers
+        .map((member) => member.userID)
+        .whereType<String>()
+        .where((userID) => userID.isNotEmpty)
+        .toSet();
+    final added = await Navigator.of(context).push<bool>(
+      CupertinoPageRoute<bool>(
+        builder: (_) => _GroupMemberSelectionPage(
+          palette: widget.palette,
+          groupID: groupID,
+          existingMemberIDs: memberIDs,
+        ),
+      ),
+    );
+    if (mounted && added == true) unawaited(_loadGroupMembers());
+  }
+
   Future<void> _exitGroup() async {
     final groupID = widget.groupID;
     if (groupID == null || groupID.isEmpty) return;
@@ -427,6 +447,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                   members: _groupMembers,
                   loading: _groupMembersLoading,
                   identityByUserID: _identityByUserID,
+                  onAddPressed: _openAddMembers,
                 ),
               ),
               const SizedBox(height: 18),
@@ -767,12 +788,14 @@ class _GroupMemberGrid extends StatelessWidget {
     required this.members,
     required this.loading,
     required this.identityByUserID,
+    required this.onAddPressed,
   });
 
   final AcoPalette palette;
   final List<GroupMembersInfo> members;
   final bool loading;
   final Map<String, int> identityByUserID;
+  final VoidCallback onAddPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -799,7 +822,7 @@ class _GroupMemberGrid extends StatelessWidget {
                 avatarURL: member.faceURL,
                 identity: identityByUserID[member.userID] ?? 0,
               ),
-            _GroupAddMemberButton(width: itemWidth),
+            _GroupAddMemberButton(width: itemWidth, onPressed: onAddPressed),
           ],
         );
       },
@@ -858,22 +881,350 @@ class _GroupMemberAvatar extends StatelessWidget {
 }
 
 class _GroupAddMemberButton extends StatelessWidget {
-  const _GroupAddMemberButton({required this.width});
+  const _GroupAddMemberButton({required this.width, required this.onPressed});
 
   final double width;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) => SizedBox(
     width: width,
     child: Column(
       children: [
-        Image.asset(
-          'assets/images/add_group_member.png',
-          width: 52,
-          height: 52,
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          onPressed: onPressed,
+          child: Image.asset(
+            'assets/images/add_group_member.png',
+            width: 52,
+            height: 52,
+          ),
         ),
         const SizedBox(height: 20),
       ],
+    ),
+  );
+}
+
+class _GroupMemberSelectionPage extends StatefulWidget {
+  const _GroupMemberSelectionPage({
+    required this.palette,
+    required this.groupID,
+    required this.existingMemberIDs,
+  });
+
+  final AcoPalette palette;
+  final String groupID;
+  final Set<String> existingMemberIDs;
+
+  @override
+  State<_GroupMemberSelectionPage> createState() =>
+      _GroupMemberSelectionPageState();
+}
+
+class _GroupMemberSelectionPageState extends State<_GroupMemberSelectionPage> {
+  static final _alphabetInitial = RegExp(r'^[A-Z]$');
+  final _searchController = TextEditingController();
+  final _selected = <String>{};
+  late Future<List<FriendContact>> _friends;
+  var _query = '';
+  var _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _friends = _loadFriends();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<List<FriendContact>> _loadFriends() async {
+    final client = AccountApiClient();
+    try {
+      return await AccountSession(client).listFriends();
+    } finally {
+      client.close();
+    }
+  }
+
+  String _initialOf(FriendContact friend) {
+    final initial = friend.initial.trim().toUpperCase();
+    return _alphabetInitial.hasMatch(initial) ? initial : '#';
+  }
+
+  String _displayNameOf(FriendContact friend) =>
+      friend.nickname.isEmpty ? friend.accountId : friend.nickname;
+
+  Future<void> _complete() async {
+    if (_selected.isEmpty || _submitting) return;
+    setState(() => _submitting = true);
+    try {
+      await OpenIM.iMManager.groupManager.inviteUserToGroup(
+        groupID: widget.groupID,
+        userIDList: _selected.toList(growable: false),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) _showNotice(context, '添加成员失败', '请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    child: SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 28, 0),
+            child: AcoPageHeader(
+              palette: widget.palette,
+              title: '选择联系人',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: CupertinoTextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() => _query = value.trim()),
+              clearButtonMode: OverlayVisibilityMode.editing,
+              prefix: Padding(
+                padding: const EdgeInsets.only(left: 14),
+                child: Icon(
+                  CupertinoIcons.search,
+                  color: widget.palette.mutedText,
+                  size: 22,
+                ),
+              ),
+              placeholder: '搜索',
+              placeholderStyle: TextStyle(
+                color: widget.palette.mutedText,
+                fontSize: 18,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 13),
+              style: TextStyle(color: widget.palette.primaryText, fontSize: 18),
+              decoration: BoxDecoration(
+                color: widget.palette.inputSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          Expanded(child: _buildFriendList()),
+          _GroupMemberSelectionBottomBar(
+            palette: widget.palette,
+            selectedCount: _selected.length,
+            submitting: _submitting,
+            onComplete: _complete,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _buildFriendList() => FutureBuilder<List<FriendContact>>(
+    future: _friends,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CupertinoActivityIndicator());
+      }
+      if (snapshot.hasError) {
+        return _ContactsStateMessage(
+          message: '联系人加载失败，点击重试',
+          onRetry: () => setState(() => _friends = _loadFriends()),
+        );
+      }
+      final keyword = _query.toLowerCase();
+      final groupedFriends = <String, List<FriendContact>>{};
+      final availableFriends = (snapshot.data ?? const <FriendContact>[])
+          .where(
+            (friend) => !widget.existingMemberIDs.contains(friend.accountId),
+          )
+          .toList(growable: false);
+      for (final friend in availableFriends) {
+        final name = _displayNameOf(friend).toLowerCase();
+        if (keyword.isNotEmpty &&
+            !name.contains(keyword) &&
+            !friend.accountId.toLowerCase().contains(keyword)) {
+          continue;
+        }
+        groupedFriends.putIfAbsent(_initialOf(friend), () => []).add(friend);
+      }
+      final letters = groupedFriends.keys.toList()..sort();
+      if (letters.isEmpty) {
+        return const _ContactsStateMessage(message: '暂无可添加的联系人');
+      }
+      return Stack(
+        children: [
+          ListView(
+            padding: const EdgeInsets.only(bottom: 12),
+            children: [
+              for (final letter in letters) ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
+                  child: Text(
+                    letter,
+                    style: TextStyle(
+                      color: widget.palette.mutedText,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                for (final friend in groupedFriends[letter]!)
+                  _GroupSelectableContactRow(
+                    palette: widget.palette,
+                    friend: friend,
+                    name: _displayNameOf(friend),
+                    selected: _selected.contains(friend.accountId),
+                    onTap: () => setState(() {
+                      if (_selected.contains(friend.accountId)) {
+                        _selected.remove(friend.accountId);
+                      } else {
+                        _selected.add(friend.accountId);
+                      }
+                    }),
+                  ),
+              ],
+            ],
+          ),
+        ],
+      );
+    },
+  );
+}
+
+class _GroupSelectableContactRow extends StatelessWidget {
+  const _GroupSelectableContactRow({
+    required this.palette,
+    required this.friend,
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AcoPalette palette;
+  final FriendContact friend;
+  final String name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    onPressed: onTap,
+    child: Container(
+      height: 64,
+      padding: const EdgeInsets.fromLTRB(18, 8, 32, 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: palette.border.withValues(alpha: .55)),
+        ),
+      ),
+      child: Row(
+        children: [
+          _GroupMemberSelectionIndicator(palette: palette, selected: selected),
+          const SizedBox(width: 16),
+          AcoAvatar(size: 48, imageUrl: friend.avatarUrl),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: palette.primaryText, fontSize: 16),
+                  ),
+                ),
+                if (_identityBadgeAsset(friend.identity)
+                    case final badgeAsset?) ...[
+                  const SizedBox(width: 6),
+                  Image.asset(badgeAsset, height: 16, fit: BoxFit.contain),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _GroupMemberSelectionIndicator extends StatelessWidget {
+  const _GroupMemberSelectionIndicator({
+    required this.palette,
+    required this.selected,
+  });
+
+  final AcoPalette palette;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 24,
+    height: 24,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      color: selected ? palette.accent : null,
+      border: selected ? null : Border.all(color: palette.mutedText, width: 2),
+    ),
+    child: selected
+        ? Icon(CupertinoIcons.check_mark, color: palette.background, size: 15)
+        : null,
+  );
+}
+
+class _GroupMemberSelectionBottomBar extends StatelessWidget {
+  const _GroupMemberSelectionBottomBar({
+    required this.palette,
+    required this.selectedCount,
+    required this.submitting,
+    required this.onComplete,
+  });
+
+  final AcoPalette palette;
+  final int selectedCount;
+  final bool submitting;
+  final VoidCallback onComplete;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+    decoration: BoxDecoration(
+      color: palette.surfaceRaised,
+      border: Border(top: BorderSide(color: palette.border)),
+    ),
+    child: SafeArea(
+      top: false,
+      child: Row(
+        children: [
+          const Spacer(),
+          CupertinoButton(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            borderRadius: BorderRadius.circular(8),
+            color: selectedCount == 0 ? palette.border : palette.accent,
+            onPressed: selectedCount == 0 || submitting ? null : onComplete,
+            child: Text(
+              submitting ? '添加中' : '完成',
+              style: TextStyle(
+                color: selectedCount == 0
+                    ? palette.mutedText
+                    : palette.background,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
