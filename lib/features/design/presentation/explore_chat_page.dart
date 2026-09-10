@@ -2533,7 +2533,6 @@ class _VoiceMessageBubble extends StatefulWidget {
 class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
   final _player = AudioPlayer();
   StreamSubscription<void>? _completeSubscription;
-  StreamSubscription<PlayerState>? _playerStateSubscription;
   Timer? _playbackAnimationTimer;
   bool _playing = false;
   int _playbackAnimationFrame = 0;
@@ -2550,33 +2549,20 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
         });
       }
     });
-    _playerStateSubscription = _player.onPlayerStateChanged.listen(
-      _logPlayerState,
-    );
   }
 
   @override
   void dispose() {
     _completeSubscription?.cancel();
-    _playerStateSubscription?.cancel();
     _stopPlaybackAnimation();
     _player.dispose();
     super.dispose();
   }
 
   Future<void> _toggle() async {
-    final stopwatch = Stopwatch()..start();
-    debugPrint(
-      '[VoicePlayback] toggle playing=$_playing '
-      'path=${widget.path?.isNotEmpty == true} '
-      'url=${widget.url?.isNotEmpty == true}',
-    );
     try {
       if (_playing) {
         await _player.pause();
-        debugPrint(
-          '[VoicePlayback] pause returned after ${stopwatch.elapsedMilliseconds}ms',
-        );
         _stopPlaybackAnimation();
         if (mounted) {
           setState(() {
@@ -2587,16 +2573,8 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
         return;
       }
       final source = await _source();
-      debugPrint(
-        '[VoicePlayback] source resolved=${source != null} '
-        'after ${stopwatch.elapsedMilliseconds}ms',
-      );
       if (source == null) return;
       await _player.play(source);
-      debugPrint(
-        '[VoicePlayback] player.play returned after '
-        '${stopwatch.elapsedMilliseconds}ms',
-      );
       _stopPlaybackAnimation();
       _playbackAnimationTimer = Timer.periodic(
         const Duration(milliseconds: 280),
@@ -2613,14 +2591,8 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
           _playbackAnimationFrame = 0;
         });
       }
-      debugPrint(
-        '[VoicePlayback] animation started after '
-        '${stopwatch.elapsedMilliseconds}ms',
-      );
     } catch (error) {
-      debugPrint(
-        '[VoicePlayback] failed after ${stopwatch.elapsedMilliseconds}ms: $error',
-      );
+      debugPrint('[OpenIM] voice playback failed: $error');
     }
   }
 
@@ -2629,21 +2601,15 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
     _playbackAnimationTimer = null;
   }
 
-  void _logPlayerState(PlayerState state) {
-    debugPrint('[VoicePlayback] player state=$state');
-  }
-
   Future<Source?> _source() async {
     final path = widget.path;
     if (path?.isNotEmpty == true) {
       final exists = await File(path!).exists();
-      debugPrint('[VoicePlayback] local source exists=$exists');
       if (exists) return DeviceFileSource(path);
     }
 
     final url = widget.url;
     if (url != null && url.isNotEmpty) {
-      debugPrint('[VoicePlayback] using remote source');
       return UrlSource(_playbackUrl(url), mimeType: 'audio/mp4');
     }
     return null;
