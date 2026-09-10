@@ -2533,6 +2533,7 @@ class _VoiceMessageBubble extends StatefulWidget {
 class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
   final _player = AudioPlayer();
   StreamSubscription<void>? _completeSubscription;
+  StreamSubscription<PlayerState>? _playerStateSubscription;
   Timer? _playbackAnimationTimer;
   bool _playing = false;
   int _playbackAnimationFrame = 0;
@@ -2549,20 +2550,33 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
         });
       }
     });
+    _playerStateSubscription = _player.onPlayerStateChanged.listen(
+      _logPlayerState,
+    );
   }
 
   @override
   void dispose() {
     _completeSubscription?.cancel();
-    _playbackAnimationTimer?.cancel();
+    _playerStateSubscription?.cancel();
+    _stopPlaybackAnimation();
     _player.dispose();
     super.dispose();
   }
 
   Future<void> _toggle() async {
+    final stopwatch = Stopwatch()..start();
+    debugPrint(
+      '[VoicePlayback] toggle playing=$_playing '
+      'path=${widget.path?.isNotEmpty == true} '
+      'url=${widget.url?.isNotEmpty == true}',
+    );
     try {
       if (_playing) {
         await _player.pause();
+        debugPrint(
+          '[VoicePlayback] pause returned after ${stopwatch.elapsedMilliseconds}ms',
+        );
         _stopPlaybackAnimation();
         if (mounted) {
           setState(() {
@@ -2573,9 +2587,17 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
         return;
       }
       final source = await _source();
+      debugPrint(
+        '[VoicePlayback] source resolved=${source != null} '
+        'after ${stopwatch.elapsedMilliseconds}ms',
+      );
       if (source == null) return;
       await _player.play(source);
-      _playbackAnimationTimer?.cancel();
+      debugPrint(
+        '[VoicePlayback] player.play returned after '
+        '${stopwatch.elapsedMilliseconds}ms',
+      );
+      _stopPlaybackAnimation();
       _playbackAnimationTimer = Timer.periodic(
         const Duration(milliseconds: 280),
         (_) {
@@ -2591,8 +2613,14 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
           _playbackAnimationFrame = 0;
         });
       }
+      debugPrint(
+        '[VoicePlayback] animation started after '
+        '${stopwatch.elapsedMilliseconds}ms',
+      );
     } catch (error) {
-      debugPrint('[OpenIM] voice playback failed: $error');
+      debugPrint(
+        '[VoicePlayback] failed after ${stopwatch.elapsedMilliseconds}ms: $error',
+      );
     }
   }
 
@@ -2601,15 +2629,22 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
     _playbackAnimationTimer = null;
   }
 
+  void _logPlayerState(PlayerState state) {
+    debugPrint('[VoicePlayback] player state=$state');
+  }
+
   Future<Source?> _source() async {
-    final url = widget.url;
-    if (url != null && url.isNotEmpty) {
-      return UrlSource(_playbackUrl(url), mimeType: 'audio/mp4');
+    final path = widget.path;
+    if (path?.isNotEmpty == true) {
+      final exists = await File(path!).exists();
+      debugPrint('[VoicePlayback] local source exists=$exists');
+      if (exists) return DeviceFileSource(path);
     }
 
-    final path = widget.path;
-    if (path?.isNotEmpty == true && await File(path!).exists()) {
-      return DeviceFileSource(path);
+    final url = widget.url;
+    if (url != null && url.isNotEmpty) {
+      debugPrint('[VoicePlayback] using remote source');
+      return UrlSource(_playbackUrl(url), mimeType: 'audio/mp4');
     }
     return null;
   }
@@ -2620,6 +2655,46 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
       return url;
     }
     return uri.replace(scheme: 'https').toString();
+  }
+
+  Widget _voiceIcon(Color foreground) {
+    final frame = _playing ? _playbackAnimationFrame : 2;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Image.asset(
+          'assets/icons/chat_voice_play_0.png',
+          width: 5,
+          height: 7,
+          fit: BoxFit.contain,
+          color: foreground,
+          colorBlendMode: BlendMode.srcIn,
+        ),
+        if (frame >= 1)
+          Transform.translate(
+            offset: const Offset(-1, 0),
+            child: Image.asset(
+              'assets/icons/chat_voice_play_1.png',
+              height: 13,
+              fit: BoxFit.contain,
+              color: foreground,
+              colorBlendMode: BlendMode.srcIn,
+            ),
+          ),
+        if (frame >= 2)
+          Transform.translate(
+            offset: const Offset(-2, 0),
+            child: Image.asset(
+              'assets/icons/chat_voice_play_2.png',
+              height: 17,
+              fit: BoxFit.contain,
+              color: foreground,
+              colorBlendMode: BlendMode.srcIn,
+            ),
+          ),
+      ],
+    );
   }
 
   @override
@@ -2656,23 +2731,14 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
                 ],
                 Transform.flip(
                   flipX: widget.mine,
-                  child: _playing
-                      ? Image.asset(
-                          'assets/icons/chat_voice_play_$_playbackAnimationFrame.png',
-                          width: 23,
-                          height: 23,
-                          fit: BoxFit.contain,
-                          color: foreground,
-                          colorBlendMode: BlendMode.srcIn,
-                        )
-                      : Image.asset(
-                          'assets/icons/chat_voice_message.png',
-                          width: 23,
-                          height: 23,
-                          fit: BoxFit.contain,
-                          color: foreground,
-                          colorBlendMode: BlendMode.srcIn,
-                        ),
+                  child: SizedBox(
+                    width: 20,
+                    height: 18,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _voiceIcon(foreground),
+                    ),
+                  ),
                 ),
                 if (!widget.mine) ...[
                   const SizedBox(width: 8),
