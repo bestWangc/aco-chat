@@ -2533,19 +2533,28 @@ class _VoiceMessageBubble extends StatefulWidget {
 class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
   final _player = AudioPlayer();
   StreamSubscription<void>? _completeSubscription;
+  Timer? _playbackAnimationTimer;
   bool _playing = false;
+  int _playbackAnimationFrame = 0;
 
   @override
   void initState() {
     super.initState();
     _completeSubscription = _player.onPlayerComplete.listen((_) {
-      if (mounted) setState(() => _playing = false);
+      _stopPlaybackAnimation();
+      if (mounted) {
+        setState(() {
+          _playing = false;
+          _playbackAnimationFrame = 0;
+        });
+      }
     });
   }
 
   @override
   void dispose() {
     _completeSubscription?.cancel();
+    _playbackAnimationTimer?.cancel();
     _player.dispose();
     super.dispose();
   }
@@ -2554,16 +2563,42 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
     try {
       if (_playing) {
         await _player.pause();
-        if (mounted) setState(() => _playing = false);
+        _stopPlaybackAnimation();
+        if (mounted) {
+          setState(() {
+            _playing = false;
+            _playbackAnimationFrame = 0;
+          });
+        }
         return;
       }
       final source = await _source();
       if (source == null) return;
       await _player.play(source);
-      if (mounted) setState(() => _playing = true);
+      _playbackAnimationTimer?.cancel();
+      _playbackAnimationTimer = Timer.periodic(
+        const Duration(milliseconds: 280),
+        (_) {
+          if (!mounted || !_playing) return;
+          setState(
+            () => _playbackAnimationFrame = (_playbackAnimationFrame + 1) % 3,
+          );
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _playing = true;
+          _playbackAnimationFrame = 0;
+        });
+      }
     } catch (error) {
       debugPrint('[OpenIM] voice playback failed: $error');
     }
+  }
+
+  void _stopPlaybackAnimation() {
+    _playbackAnimationTimer?.cancel();
+    _playbackAnimationTimer = null;
   }
 
   Future<Source?> _source() async {
@@ -2620,14 +2655,24 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
                   const SizedBox(width: 8),
                 ],
                 Transform.flip(
-                  flipX: widget.mine && !_playing,
-                  child: Icon(
-                    _playing
-                        ? CupertinoIcons.pause_fill
-                        : CupertinoIcons.volume_up,
-                    color: foreground,
-                    size: 23,
-                  ),
+                  flipX: widget.mine,
+                  child: _playing
+                      ? Image.asset(
+                          'assets/icons/chat_voice_play_$_playbackAnimationFrame.png',
+                          width: 23,
+                          height: 23,
+                          fit: BoxFit.contain,
+                          color: foreground,
+                          colorBlendMode: BlendMode.srcIn,
+                        )
+                      : Image.asset(
+                          'assets/icons/chat_voice_message.png',
+                          width: 23,
+                          height: 23,
+                          fit: BoxFit.contain,
+                          color: foreground,
+                          colorBlendMode: BlendMode.srcIn,
+                        ),
                 ),
                 if (!widget.mine) ...[
                   const SizedBox(width: 8),
