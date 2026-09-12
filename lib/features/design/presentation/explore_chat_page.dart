@@ -3280,7 +3280,7 @@ class _ComingSoonPage extends StatelessWidget {
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 220),
             child: Image.asset(
-              'assets/images/coming_soon_mark.png',
+              'assets/images/coming_soon_mark.gif',
               fit: BoxFit.contain,
               semanticLabel: 'Aco 标志',
             ),
