@@ -697,6 +697,28 @@ class _AddTokenPageState extends State<_AddTokenPage> {
           onSubmit: () => setState(() {}),
         ),
         const SizedBox(height: 30),
+        if (_searchQuery.isNotEmpty) ...[
+          for (final token in _tokens.where(_matchesToken))
+            _AddTokenHotRow(
+              token: WalletHotToken(
+                symbol: token.symbol,
+                name: token.assetName,
+                address: token.tokenAddress ?? '',
+                decimals: token.decimals,
+              ),
+              palette: widget.palette,
+            ),
+          if (!_tokens.any(_matchesToken))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                '暂无匹配代币',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: widget.palette.mutedText),
+              ),
+            ),
+          const SizedBox(height: 12),
+        ],
         _AddTokenEntry(
           label: '首页资产',
           palette: widget.palette,
@@ -729,46 +751,55 @@ class _AddTokenPageState extends State<_AddTokenPage> {
             }
           },
         ),
-        const SizedBox(height: 12),
-        Text(
-          '热门代币',
-          style: TextStyle(
-            color: widget.palette.primaryText,
-            fontSize: AcoTypography.bodyEmphasis,
-            fontWeight: FontWeight.w600,
+        if (_searchQuery.isEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            '热门代币',
+            style: TextStyle(
+              color: widget.palette.primaryText,
+              fontSize: AcoTypography.bodyEmphasis,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-        ),
-        const SizedBox(height: 14),
-        FutureBuilder<List<WalletHotToken>>(
-          key: ValueKey(widget.selectedChain.network),
-          future: _hotTokensFuture,
-          builder: (_, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: CupertinoActivityIndicator(),
+          const SizedBox(height: 14),
+          FutureBuilder<List<WalletHotToken>>(
+            key: ValueKey(widget.selectedChain.network),
+            future: _hotTokensFuture,
+            builder: (_, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: CupertinoActivityIndicator(),
+                );
+              }
+              final query = _searchQuery;
+              final tokens = (snapshot.data ?? const <WalletHotToken>[]).where((
+                token,
+              ) {
+                if (query.isEmpty) return true;
+                return token.symbol.toLowerCase().contains(query) ||
+                    token.name.toLowerCase().contains(query) ||
+                    token.address.toLowerCase().contains(query);
+              });
+              return Column(
+                children: [
+                  for (final token in tokens)
+                    _AddTokenHotRow(token: token, palette: widget.palette),
+                ],
               );
-            }
-            final query = _searchQuery;
-            final tokens = (snapshot.data ?? const <WalletHotToken>[]).where((
-              token,
-            ) {
-              if (query.isEmpty) return true;
-              return token.symbol.toLowerCase().contains(query) ||
-                  token.name.toLowerCase().contains(query) ||
-                  token.address.toLowerCase().contains(query);
-            });
-            return Column(
-              children: [
-                for (final token in tokens)
-                  _AddTokenHotRow(token: token, palette: widget.palette),
-              ],
-            );
-          },
-        ),
+            },
+          ),
+        ],
       ],
     ),
   );
+
+  bool _matchesToken(WalletBalance token) {
+    final query = _searchQuery;
+    return token.symbol.toLowerCase().contains(query) ||
+        token.assetName.toLowerCase().contains(query) ||
+        (token.tokenAddress?.toLowerCase().contains(query) ?? false);
+  }
 
   Future<void> _removeToken(WalletBalance token) async {
     if (token.isNative) return;
