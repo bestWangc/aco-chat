@@ -716,19 +716,21 @@ class _ChatPageState extends State<_ChatPage> {
     return name?.isNotEmpty == true ? name! : (_conversationTarget ?? '聊天');
   }
 
-  Future<void> _pickChatImage(ImageSource source) async {
+  Future<void> _pickChatImage(ImageSource source, {XFile? selected}) async {
     setState(() => _morePanelVisible = false);
     File? pickedImage;
     Uint8List? pickedImageBytes;
     String? outgoingClientMsgID;
     final target = _conversationTarget;
     try {
-      final photo = await ImagePicker().pickImage(
-        source: source,
-        imageQuality: 70,
-        maxWidth: 1280,
-        maxHeight: 1280,
-      );
+      final photo =
+          selected ??
+          await ImagePicker().pickImage(
+            source: source,
+            imageQuality: 70,
+            maxWidth: 1280,
+            maxHeight: 1280,
+          );
       if (photo == null) return;
       pickedImage = File(photo.path);
       final photoSize = await photo.length();
@@ -824,9 +826,120 @@ class _ChatPageState extends State<_ChatPage> {
     }
   }
 
+  Future<void> _pickChatVideo({XFile? selected}) async {
+    setState(() => _morePanelVisible = false);
+    final target = _conversationTarget;
+    File? videoFile;
+    File? snapshotFile;
+    String? outgoingClientMsgID;
+    try {
+      final picked =
+          selected ??
+          await ImagePicker().pickVideo(
+            source: ImageSource.gallery,
+            maxDuration: const Duration(minutes: 5),
+          );
+      if (picked == null) return;
+      videoFile = File(picked.path);
+      final size = await picked.length();
+      if (size <= 0 || size > 50 * 1024 * 1024) {
+        if (mounted) _showNotice(context, '视频过大', '请选择不超过 50 MB 的视频。');
+        return;
+      }
+      if (target == null || target.isEmpty) return;
+      if (!_isGroup) await _loadPeerBlockedState(target);
+      if (_peerIsBlocked) {
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.video(
+                mine: true,
+                videoPath: picked.path,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
+      if (!_chatAccessGranted) {
+        if (mounted) _showNotice(context, '无法发送', '请先确认你们仍是好友。');
+        return;
+      }
+      if (!OpenIMChatRepository.conversationReady.value) {
+        if (mounted) _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
+        return;
+      }
+      final controller = VideoPlayerController.file(videoFile);
+      await controller.initialize();
+      final duration = controller.value.duration.inSeconds.clamp(1, 300);
+      await controller.dispose();
+      final snapshotPath = await video_thumbnail.VideoThumbnail.thumbnailFile(
+        video: picked.path,
+        imageFormat: video_thumbnail.ImageFormat.JPEG,
+        maxHeight: 640,
+        quality: 75,
+      );
+      if (snapshotPath == null || snapshotPath.isEmpty) {
+        if (mounted) _showNotice(context, '视频发送失败', '无法生成视频预览。');
+        return;
+      }
+      snapshotFile = File(snapshotPath);
+      final message = await OpenIM.iMManager.messageManager
+          .createVideoMessageFromFullPath(
+            videoPath: picked.path,
+            videoType: picked.mimeType ?? 'video/mp4',
+            duration: duration,
+            snapshotPath: snapshotPath,
+          );
+      outgoingClientMsgID = message.clientMsgID;
+      _rememberMessage(message);
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
+        offlinePushInfo: OfflinePushInfo(title: '新消息', desc: '[视频]'),
+      );
+      if (!mounted) return;
+      _rememberMessage(sent);
+      final added = _upsertDisplayedMessage(sent, mine: true);
+      if (added) _scrollToBottom(force: true, animate: false);
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      _removeTrackedMessage(outgoingClientMsgID);
+      if (mounted) _showNotice(context, '视频发送失败', '请稍后重试。');
+      debugPrint('[OpenIM] video send failed: $error');
+    } finally {
+      await _deletePickedImage(videoFile);
+      await _deletePickedImage(snapshotFile);
+    }
+  }
+
+  Future<void> _pickChatGalleryMedia() async {
+    final picked = await ImagePicker().pickMedia();
+    if (picked == null) return;
+    final mimeType = picked.mimeType?.toLowerCase();
+    final isVideo =
+        mimeType?.startsWith('video/') == true ||
+        RegExp(
+          r'\.(mp4|mov|m4v|avi|webm|mkv)$',
+          caseSensitive: false,
+        ).hasMatch(picked.path);
+    if (isVideo) {
+      await _pickChatVideo(selected: picked);
+    } else {
+      await _pickChatImage(ImageSource.gallery, selected: picked);
+    }
+  }
+
   Future<void> _handleMorePanelSelection(String label) async {
+    if (label == '文件') {
+      await _pickChatFile();
+      return;
+    }
     if (label == '照片') {
-      await _pickChatImage(ImageSource.gallery);
+      await _pickChatGalleryMedia();
       return;
     }
     if (label == '拍摄') {
@@ -883,6 +996,51 @@ class _ChatPageState extends State<_ChatPage> {
     }
     setState(() => _morePanelVisible = false);
     _showNotice(context, label, '$label功能暂未开放。');
+  }
+
+  Future<void> _pickChatFile() async {
+    setState(() => _morePanelVisible = false);
+    final result = await FilePicker.pickFiles();
+    final picked = result.isEmpty ? null : result.first;
+    final target = _conversationTarget;
+    if (picked == null || target == null || target.isEmpty) return;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > 50 * 1024 * 1024) {
+      if (mounted) _showNotice(context, '文件过大', '请选择不超过 50 MB 的文件。');
+      return;
+    }
+    if (!_chatAccessGranted || !OpenIMChatRepository.conversationReady.value) {
+      if (mounted) _showNotice(context, '无法发送', '聊天连接未就绪或你们已不是好友。');
+      return;
+    }
+    try {
+      final upload = await AccountSession(
+        AccountApiClient(),
+      ).uploadChatFile(bytes: bytes, filename: picked.name);
+      final message = await OpenIM.iMManager.messageManager.createCustomMessage(
+        data: jsonEncode({
+          'url': upload.url,
+          'name': upload.name,
+          'size': upload.size,
+        }),
+        extension: 'aco.chat.file',
+        description: upload.name,
+      );
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
+        offlinePushInfo: OfflinePushInfo(title: '文件', desc: upload.name),
+      );
+      if (!mounted) return;
+      _rememberMessage(sent);
+      _upsertDisplayedMessage(sent, mine: true);
+      _scrollToBottom(force: true, animate: false);
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      if (mounted) _showNotice(context, '文件发送失败', '请稍后重试。');
+      debugPrint('[OpenIM] file send failed: $error');
+    }
   }
 
   void _hidePanels() {
@@ -1365,6 +1523,15 @@ class _ChatPageState extends State<_ChatPage> {
                                     soundPath: message.soundPath,
                                     soundUrl: message.soundUrl,
                                     soundDuration: message.soundDuration,
+                                    videoPath: message.videoPath,
+                                    videoUrl: message.videoUrl,
+                                    videoSnapshotPath:
+                                        message.videoSnapshotPath,
+                                    videoSnapshotUrl: message.videoSnapshotUrl,
+                                    videoDuration: message.videoDuration,
+                                    fileName: message.fileName,
+                                    fileUrl: message.fileUrl,
+                                    fileSize: message.fileSize,
                                     isVoiceCallRecord:
                                         message.isVoiceCallRecord,
                                     sendFailed: message.sendFailed,
@@ -2187,6 +2354,11 @@ class _ChatMorePanel extends StatelessWidget {
       assetPath: 'assets/icons/chat_more_transfer.png',
       availableInGroup: false,
     ),
+    (
+      label: '文件',
+      assetPath: 'assets/icons/chat_more_transfer.png',
+      availableInGroup: true,
+    ),
   ];
 
   @override
@@ -2194,8 +2366,11 @@ class _ChatMorePanel extends StatelessWidget {
     final items = isGroup
         ? _items.where((item) => item.availableInGroup).toList()
         : _items;
+    final rowCount = (items.length + 3) ~/ 4;
     return Container(
-      height: 116,
+      // Each tile is roughly 96 px tall at phone widths; reserve a full
+      // second row so the last entry is not clipped by the panel bounds.
+      height: rowCount == 1 ? 116 : 224,
       decoration: const BoxDecoration(
         color: Color(0xFF1E1D1B),
         border: Border(top: BorderSide(color: Color(0xFF515151))),
@@ -2206,7 +2381,7 @@ class _ChatMorePanel extends StatelessWidget {
         itemCount: items.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 4,
-          mainAxisSpacing: 10,
+          mainAxisSpacing: 2,
           crossAxisSpacing: 16,
           childAspectRatio: .77,
         ),
@@ -2230,11 +2405,20 @@ class _ChatMorePanel extends StatelessWidget {
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
-                      child: SizedBox(
-                        width: 26,
-                        height: 26,
-                        child: Image.asset(item.assetPath, fit: BoxFit.contain),
-                      ),
+                      child: item.label == '文件'
+                          ? const Icon(
+                              CupertinoIcons.doc_fill,
+                              color: Color(0xFFB7B7B7),
+                              size: 28,
+                            )
+                          : SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: Image.asset(
+                                item.assetPath,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -2271,6 +2455,14 @@ class _ChatMessage extends StatelessWidget {
     required this.soundPath,
     required this.soundUrl,
     required this.soundDuration,
+    required this.videoPath,
+    required this.videoUrl,
+    required this.videoSnapshotPath,
+    required this.videoSnapshotUrl,
+    required this.videoDuration,
+    required this.fileName,
+    required this.fileUrl,
+    required this.fileSize,
     required this.isVoiceCallRecord,
     required this.sendFailed,
     required this.mine,
@@ -2289,6 +2481,14 @@ class _ChatMessage extends StatelessWidget {
   final String? soundPath;
   final String? soundUrl;
   final int? soundDuration;
+  final String? videoPath;
+  final String? videoUrl;
+  final String? videoSnapshotPath;
+  final String? videoSnapshotUrl;
+  final int? videoDuration;
+  final String? fileName;
+  final String? fileUrl;
+  final int? fileSize;
   final bool isVoiceCallRecord;
   final bool sendFailed;
   final bool mine;
@@ -2379,6 +2579,26 @@ class _ChatMessage extends StatelessWidget {
         url: soundUrl,
         duration: soundDuration ?? 0,
         mine: mine,
+      );
+    }
+
+    if (videoPath != null || videoUrl != null) {
+      return _ChatVideoBubble(
+        videoPath: videoPath,
+        videoUrl: videoUrl,
+        snapshotPath: videoSnapshotPath,
+        snapshotUrl: videoSnapshotUrl,
+        duration: videoDuration ?? 0,
+        mine: mine,
+      );
+    }
+
+    if (fileUrl != null) {
+      return _Bubble(
+        palette: palette,
+        text: '📎 ${fileName ?? '文件'}',
+        mine: mine,
+        onTextSelected: (selectedText) => _copyText(context, selectedText),
       );
     }
 
@@ -2502,6 +2722,218 @@ class _VoiceCallRecordBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ChatVideoBubble extends StatelessWidget {
+  const _ChatVideoBubble({
+    required this.videoPath,
+    required this.videoUrl,
+    required this.snapshotPath,
+    required this.snapshotUrl,
+    required this.duration,
+    required this.mine,
+  });
+
+  final String? videoPath;
+  final String? videoUrl;
+  final String? snapshotPath;
+  final String? snapshotUrl;
+  final int duration;
+  final bool mine;
+
+  String _playbackUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'http' || uri.host != 'im.aco.chat') {
+      return url;
+    }
+    return uri.replace(scheme: 'https').toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final localSnapshot = snapshotPath?.isNotEmpty == true
+        ? File(snapshotPath!)
+        : null;
+    final networkSnapshot = snapshotUrl?.isNotEmpty == true
+        ? _playbackUrl(snapshotUrl!)
+        : null;
+    final hasLocal = localSnapshot != null;
+    final hasNetwork = networkSnapshot != null;
+    return Semantics(
+      button: true,
+      label: '播放视频消息，$duration秒',
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push<void>(
+          CupertinoPageRoute<void>(
+            builder: (_) => _ChatVideoPlayerPage(
+              videoPath: videoPath,
+              videoUrl: videoUrl == null ? null : _playbackUrl(videoUrl!),
+            ),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            width: 215,
+            height: 150,
+            color: mine ? const Color(0xFF28B561) : const Color(0xFF2C2C2C),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasLocal)
+                  Image.file(localSnapshot, fit: BoxFit.cover)
+                else if (hasNetwork)
+                  _CachedChatThumbnail(url: networkSnapshot)
+                else
+                  const _VideoUnavailable(),
+                const Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color(0xB3000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(
+                        CupertinoIcons.play_fill,
+                        color: Color(0xFFFFFFFF),
+                        size: 25,
+                      ),
+                    ),
+                  ),
+                ),
+                if (duration > 0)
+                  Positioned(
+                    right: 7,
+                    bottom: 6,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xB3000000),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          _formatDuration(duration),
+                          style: const TextStyle(
+                            color: Color(0xFFFFFFFF),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return '$minutes:${remainder.toString().padLeft(2, '0')}';
+  }
+}
+
+class _VideoUnavailable extends StatelessWidget {
+  const _VideoUnavailable();
+
+  @override
+  Widget build(BuildContext context) => const Center(
+    child: Icon(
+      CupertinoIcons.videocam_fill,
+      color: Color(0xFFAAAAAA),
+      size: 42,
+    ),
+  );
+}
+
+class _ChatVideoPlayerPage extends StatefulWidget {
+  const _ChatVideoPlayerPage({this.videoPath, this.videoUrl});
+
+  final String? videoPath;
+  final String? videoUrl;
+
+  @override
+  State<_ChatVideoPlayerPage> createState() => _ChatVideoPlayerPageState();
+}
+
+class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
+  VideoPlayerController? _controller;
+  Object? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      final path = widget.videoPath;
+      final url = widget.videoUrl;
+      final cachedFile = path?.isNotEmpty != true && url?.isNotEmpty == true
+          ? await _ChatMediaCache.load(url!, kind: 'video')
+          : null;
+      final controller = path?.isNotEmpty == true
+          ? VideoPlayerController.file(File(path!))
+          : cachedFile != null
+          ? VideoPlayerController.file(cachedFile)
+          : null;
+      if (controller == null) throw StateError('视频地址无效');
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+      await controller.play();
+      setState(() {});
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: const Color(0xFF000000),
+    navigationBar: const CupertinoNavigationBar(
+      backgroundColor: Color(0xCC000000),
+      middle: Text('视频', style: TextStyle(color: Color(0xFFFFFFFF))),
+    ),
+    child: SafeArea(
+      child: Center(
+        child: _error != null
+            ? const Text('视频播放失败', style: TextStyle(color: Color(0xFFFFFFFF)))
+            : _controller == null
+            ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
+            : GestureDetector(
+                onTap: () => setState(() {
+                  final controller = _controller!;
+                  controller.value.isPlaying
+                      ? controller.pause()
+                      : controller.play();
+                }),
+                child: AspectRatio(
+                  aspectRatio: _controller!.value.aspectRatio,
+                  child: VideoPlayer(_controller!),
+                ),
+              ),
+      ),
+    ),
+  );
 }
 
 class _ChatImagePreview extends StatelessWidget {
@@ -2638,17 +3070,10 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
 
     final url = widget.url;
     if (url != null && url.isNotEmpty) {
-      return UrlSource(_playbackUrl(url), mimeType: 'audio/mp4');
+      final file = await _ChatMediaCache.load(url, kind: 'audio');
+      return DeviceFileSource(file.path);
     }
     return null;
-  }
-
-  String _playbackUrl(String url) {
-    final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme != 'http' || uri.host != 'im.aco.chat') {
-      return url;
-    }
-    return uri.replace(scheme: 'https').toString();
   }
 
   Widget _voiceIcon(Color foreground) {

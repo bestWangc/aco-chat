@@ -83,6 +83,30 @@ class AccountApiException implements Exception {
     if (normalized.contains('cannot leave group')) {
       return '退出群聊失败，请稍后重试。';
     }
+    if (normalized.contains('group invitations require friends')) {
+      return '只能邀请已成为好友的联系人。';
+    }
+    if (normalized.contains('group member limit is 500')) {
+      return '群成员已达到 500 人上限。';
+    }
+    if (normalized.contains('no new group members')) {
+      return '所选联系人已经在群聊中。';
+    }
+    if (normalized.contains('invalid group member request')) {
+      return '请选择要添加的联系人。';
+    }
+    if (normalized.contains('cannot add group members')) {
+      return '添加成员失败，请稍后重试。';
+    }
+    if (normalized.contains('invalid friend account')) {
+      return '不能添加自己为好友，请检查 UID。';
+    }
+    if (normalized.contains('cannot notify friend request')) {
+      return '好友申请发送失败，请稍后重试。';
+    }
+    if (normalized.contains('friend request')) {
+      return '好友申请处理失败，请稍后重试。';
+    }
     if (normalized.contains('cannot dismiss group')) {
       return '解散群聊失败，请稍后重试。';
     }
@@ -333,6 +357,19 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<void> addGroupMembers({
+    required String groupID,
+    required List<String> memberAccountIds,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('groups/${Uri.encodeComponent(groupID)}/members'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'member_account_ids': memberAccountIds}),
+    );
+    _body(response);
+  }
+
   Future<ChatGroup> joinGroupByCode({
     required String inviteCode,
     required String token,
@@ -390,6 +427,20 @@ class AccountApiClient {
     return AccountProfile.fromJson(
       _body(response)['user'] as Map<String, dynamic>,
     );
+  }
+
+  Future<List<AccountProfile>> searchUsers({
+    required String query,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('users/search').replace(queryParameters: {'q': query}),
+      headers: _authorizedHeaders(token),
+    );
+    final users = _body(response)['users'] as List<dynamic>? ?? const [];
+    return users
+        .map((user) => AccountProfile.fromJson(user as Map<String, dynamic>))
+        .toList(growable: false);
   }
 
   Future<void> addFriend({
@@ -481,6 +532,26 @@ class AccountApiClient {
     final response = await _httpClient.send(request);
     return AccountProfile.fromJson(
       _body(await _readResponse(response))['user'] as Map<String, dynamic>,
+    );
+  }
+
+  Future<ChatFileUpload> uploadChatFile({
+    required Uint8List bytes,
+    required String filename,
+    required String token,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('uploads/chat-files'))
+      ..headers['x-app-version'] = AppConfig.appVersion
+      ..headers['authorization'] = 'Bearer $token'
+      ..files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: filename),
+      );
+    final response = await _httpClient.send(request);
+    final body = _body(await _readResponse(response));
+    return ChatFileUpload(
+      url: body['url'] as String,
+      name: body['name'] as String? ?? filename,
+      size: (body['size'] as num?)?.toInt() ?? bytes.length,
     );
   }
 
@@ -971,6 +1042,17 @@ class AccountApiClient {
       }
     }
   }
+}
+
+class ChatFileUpload {
+  const ChatFileUpload({
+    required this.url,
+    required this.name,
+    required this.size,
+  });
+  final String url;
+  final String name;
+  final int size;
 }
 
 class _RecordingClient extends http.BaseClient {

@@ -29,6 +29,7 @@ import 'package:aco_chat/services/wallet_transfer_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
     show
         InteractiveViewer,
@@ -52,6 +53,7 @@ import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:video_player/video_player.dart';
+import 'package:video_thumbnail/video_thumbnail.dart' as video_thumbnail;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
 
@@ -76,6 +78,7 @@ part 'explore_social_pages.dart';
 part 'explore_square_pages.dart';
 part 'explore_chat_page.dart';
 part 'chat_thumbnail_cache.dart';
+part 'chat_media_cache.dart';
 part 'wallet_welcome_page.dart';
 part 'wallet_setup_flow.dart';
 part 'wallet_home_page.dart';

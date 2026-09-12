@@ -41,7 +41,15 @@ class _ChatHistoryMessage {
        shouldCacheThumbnail = false,
        soundPath = null,
        soundUrl = null,
-       soundDuration = null;
+       soundDuration = null,
+       videoPath = null,
+       videoUrl = null,
+       videoSnapshotPath = null,
+       videoSnapshotUrl = null,
+       videoDuration = null,
+       fileName = null,
+       fileUrl = null,
+       fileSize = null;
 
   const _ChatHistoryMessage.image({
     required this.mine,
@@ -57,6 +65,38 @@ class _ChatHistoryMessage {
        soundPath = null,
        soundUrl = null,
        soundDuration = null,
+       videoPath = null,
+       videoUrl = null,
+       videoSnapshotPath = null,
+       videoSnapshotUrl = null,
+       videoDuration = null,
+       isVoiceCallRecord = false,
+       fileName = null,
+       fileUrl = null,
+       fileSize = null;
+
+  const _ChatHistoryMessage.file({
+    required this.mine,
+    required this.fileName,
+    required this.fileUrl,
+    required this.fileSize,
+    this.clientMsgID,
+    this.timestamp,
+    this.sendFailed = false,
+  }) : text = '',
+       imageBytes = null,
+       imagePath = null,
+       imageUrl = null,
+       previewImageUrl = null,
+       shouldCacheThumbnail = false,
+       soundPath = null,
+       soundUrl = null,
+       soundDuration = null,
+       videoPath = null,
+       videoUrl = null,
+       videoSnapshotPath = null,
+       videoSnapshotUrl = null,
+       videoDuration = null,
        isVoiceCallRecord = false;
 
   const _ChatHistoryMessage.sound({
@@ -73,12 +113,46 @@ class _ChatHistoryMessage {
        imageUrl = null,
        previewImageUrl = null,
        shouldCacheThumbnail = false,
-       isVoiceCallRecord = false;
+       videoPath = null,
+       videoUrl = null,
+       videoSnapshotPath = null,
+       videoSnapshotUrl = null,
+       videoDuration = null,
+       isVoiceCallRecord = false,
+       fileName = null,
+       fileUrl = null,
+       fileSize = null;
+
+  const _ChatHistoryMessage.video({
+    required this.mine,
+    this.clientMsgID,
+    this.timestamp,
+    this.videoPath,
+    this.videoUrl,
+    this.videoSnapshotPath,
+    this.videoSnapshotUrl,
+    this.videoDuration,
+    this.sendFailed = false,
+  }) : text = '',
+       imageBytes = null,
+       imagePath = null,
+       imageUrl = null,
+       previewImageUrl = null,
+       shouldCacheThumbnail = false,
+       soundPath = null,
+       soundUrl = null,
+       soundDuration = null,
+       isVoiceCallRecord = false,
+       fileName = null,
+       fileUrl = null,
+       fileSize = null;
 
   static bool isDisplayable(Message message) =>
       OpenIMChatRepository.messageText(message) != null ||
       message.pictureElem != null ||
+      message.videoElem != null ||
       message.soundElem != null ||
+      message.customElem?.extension == 'aco.chat.file' ||
       _voiceCallRecordTextFromMessage(message) != null;
 
   static String? imageUrlOf(PictureElem? picture) =>
@@ -103,6 +177,20 @@ class _ChatHistoryMessage {
         isVoiceCallRecord: true,
       );
     }
+    if (message.customElem?.extension == 'aco.chat.file') {
+      try {
+        final data =
+            jsonDecode(message.customElem?.data ?? '') as Map<String, dynamic>;
+        return _ChatHistoryMessage.file(
+          mine: mine,
+          clientMsgID: message.clientMsgID,
+          timestamp: message.sendTime ?? message.createTime,
+          fileName: data['name'] as String? ?? '文件',
+          fileUrl: data['url'] as String? ?? '',
+          fileSize: (data['size'] as num?)?.toInt() ?? 0,
+        );
+      } catch (_) {}
+    }
     final text = OpenIMChatRepository.messageText(message);
     if (text != null) {
       return _ChatHistoryMessage(
@@ -121,6 +209,19 @@ class _ChatHistoryMessage {
         soundPath: sound.soundPath,
         soundUrl: sound.sourceUrl,
         soundDuration: sound.duration,
+      );
+    }
+    final video = message.videoElem;
+    if (video != null) {
+      return _ChatHistoryMessage.video(
+        mine: mine,
+        clientMsgID: message.clientMsgID,
+        timestamp: message.sendTime ?? message.createTime,
+        videoPath: video.videoPath,
+        videoUrl: video.videoUrl,
+        videoSnapshotPath: video.snapshotPath,
+        videoSnapshotUrl: video.snapshotUrl,
+        videoDuration: video.duration,
       );
     }
     final picture = message.pictureElem;
@@ -148,8 +249,16 @@ class _ChatHistoryMessage {
   final String? soundPath;
   final String? soundUrl;
   final int? soundDuration;
+  final String? videoPath;
+  final String? videoUrl;
+  final String? videoSnapshotPath;
+  final String? videoSnapshotUrl;
+  final int? videoDuration;
   final bool isVoiceCallRecord;
   final bool sendFailed;
+  final String? fileName;
+  final String? fileUrl;
+  final int? fileSize;
 }
 
 class _SocialMessageTile extends StatelessWidget {

@@ -146,6 +146,15 @@ class AccountSession {
     return profile;
   }
 
+  Future<ChatFileUpload> uploadChatFile({
+    required Uint8List bytes,
+    required String filename,
+  }) async => _apiClient.uploadChatFile(
+    bytes: bytes,
+    filename: filename,
+    token: await _requireToken(),
+  );
+
   Future<AccountProfile?> activeProfile() async {
     final preferences = await SharedPreferences.getInstance();
     final value = preferences.getString(activeAccountKey);
@@ -156,6 +165,15 @@ class AccountSession {
   Future<AccountProfile> profileByAccountId(String accountId) async {
     final token = await _requireToken();
     return _apiClient.profileByAccountId(accountId: accountId, token: token);
+  }
+
+  Future<List<AccountProfile>> searchUsers(String query) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return const <AccountProfile>[];
+    return _apiClient.searchUsers(
+      query: normalized,
+      token: await _requireToken(),
+    );
   }
 
   Future<void> addFriend(String accountId) async {
@@ -207,6 +225,15 @@ class AccountSession {
 
   Future<List<ChatGroup>> listGroups() async =>
       _apiClient.listGroups(token: await _requireToken());
+
+  Future<void> addGroupMembers({
+    required String groupID,
+    required List<String> memberAccountIds,
+  }) async => _apiClient.addGroupMembers(
+    groupID: groupID,
+    memberAccountIds: memberAccountIds,
+    token: await _requireToken(),
+  );
 
   Future<ChatGroup> joinGroupByCode(String inviteCode) async => _apiClient
       .joinGroupByCode(inviteCode: inviteCode, token: await _requireToken());
