@@ -694,7 +694,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
           palette: widget.palette,
           onChanged: (value) =>
               setState(() => _searchQuery = value.trim().toLowerCase()),
-          onSubmit: _dismissKeyboard,
+          onSubmit: _searchContract,
         ),
         const SizedBox(height: 30),
         if (_searchQuery.isNotEmpty) ...[
@@ -795,6 +795,21 @@ class _AddTokenPageState extends State<_AddTokenPage> {
     return token.tokenAddress?.toLowerCase() == query;
   }
 
+  Future<void> _searchContract() async {
+    final address = _searchQuery.trim();
+    if (address.isEmpty) return;
+    await Navigator.of(context).push<bool>(
+      _AcoPageRoute(
+        builder: (_) => _CustomTokenPage(
+          palette: widget.palette,
+          selectedChain: widget.selectedChain,
+          walletIdentity: widget.walletIdentity,
+          initialContract: address,
+        ),
+      ),
+    );
+  }
+
   Future<void> _removeToken(WalletBalance token) async {
     if (token.isNative) return;
     setState(() => _removed.add(token.symbol));
@@ -817,11 +832,13 @@ class _CustomTokenPage extends StatefulWidget {
     required this.palette,
     required this.selectedChain,
     this.walletIdentity,
+    this.initialContract,
   });
 
   final AcoPalette palette;
   final _WalletChain selectedChain;
   final WalletIdentity? walletIdentity;
+  final String? initialContract;
 
   @override
   State<_CustomTokenPage> createState() => _CustomTokenPageState();
@@ -851,6 +868,12 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialContract?.isNotEmpty ?? false) {
+      _contractController.text = widget.initialContract!;
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _lookupTokenMetadata(),
+      );
+    }
     for (final controller in [
       _contractController,
       _symbolController,
