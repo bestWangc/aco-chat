@@ -751,43 +751,41 @@ class _AddTokenPageState extends State<_AddTokenPage> {
             }
           },
         ),
-        if (_searchQuery.isEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            '热门代币',
-            style: TextStyle(
-              color: widget.palette.primaryText,
-              fontSize: AcoTypography.bodyEmphasis,
-              fontWeight: FontWeight.w600,
-            ),
+        const SizedBox(height: 12),
+        Text(
+          '热门代币',
+          style: TextStyle(
+            color: widget.palette.primaryText,
+            fontSize: AcoTypography.bodyEmphasis,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(height: 14),
-          FutureBuilder<List<WalletHotToken>>(
-            key: ValueKey(widget.selectedChain.network),
-            future: _hotTokensFuture,
-            builder: (_, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: CupertinoActivityIndicator(),
-                );
-              }
-              final query = _searchQuery;
-              final tokens = (snapshot.data ?? const <WalletHotToken>[]).where((
-                token,
-              ) {
-                if (query.isEmpty) return true;
-                return token.address.toLowerCase().contains(query);
-              });
-              return Column(
-                children: [
-                  for (final token in tokens)
-                    _AddTokenHotRow(token: token, palette: widget.palette),
-                ],
+        ),
+        const SizedBox(height: 14),
+        FutureBuilder<List<WalletHotToken>>(
+          key: ValueKey(widget.selectedChain.network),
+          future: _hotTokensFuture,
+          builder: (_, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: CupertinoActivityIndicator(),
               );
-            },
-          ),
-        ],
+            }
+            final query = _searchQuery;
+            final tokens = (snapshot.data ?? const <WalletHotToken>[]).where((
+              token,
+            ) {
+              if (query.isEmpty) return true;
+              return token.address.toLowerCase().contains(query);
+            });
+            return Column(
+              children: [
+                for (final token in tokens)
+                  _AddTokenHotRow(token: token, palette: widget.palette),
+              ],
+            );
+          },
+        ),
       ],
     ),
   );
