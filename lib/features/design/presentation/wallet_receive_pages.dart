@@ -616,7 +616,7 @@ class _AddTokenPage extends StatefulWidget {
 class _AddTokenPageState extends State<_AddTokenPage> {
   late final WalletMetadataStore _metadataStore = WalletMetadataStore();
   late final WalletHotTokenService _hotTokenService = WalletHotTokenService();
-  late final List<WalletBalance> _tokens = _defaultTokens();
+  late List<WalletBalance> _tokens = _defaultTokens();
   late Future<List<WalletHotToken>> _hotTokensFuture;
   final Set<String> _removed = {};
   String _searchQuery = '';
@@ -639,9 +639,13 @@ class _AddTokenPageState extends State<_AddTokenPage> {
   void didUpdateWidget(covariant _AddTokenPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedChain.network != widget.selectedChain.network) {
-      _hotTokensFuture = _hotTokenService.load(
-        widget.selectedChain.network.name,
-      );
+      setState(() {
+        _tokens = _defaultTokens();
+        _searchQuery = '';
+        _hotTokensFuture = _hotTokenService.load(
+          widget.selectedChain.network.name,
+        );
+      });
     }
   }
 
@@ -736,6 +740,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
         ),
         const SizedBox(height: 14),
         FutureBuilder<List<WalletHotToken>>(
+          key: ValueKey(widget.selectedChain.network),
           future: _hotTokensFuture,
           builder: (_, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
