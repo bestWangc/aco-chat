@@ -212,6 +212,18 @@ class _WalletHomeState extends State<_WalletHome> {
       (balance.tokenAddress != null &&
           hidden.contains(balance.tokenAddress!.toLowerCase()));
 
+  WalletBalance _assetPlaceholder(WalletAsset asset, String address) =>
+      WalletBalance(
+        chain: widget.selectedChain.label,
+        symbol: asset.symbol,
+        assetName: asset.name,
+        isNative: asset.isNative,
+        address: address,
+        decimals: asset.decimals,
+        tokenAddress: asset.tokenAddress,
+        balance: BigInt.zero,
+      );
+
   void _setInitialBalances(
     WalletNetwork network,
     List<WalletBalance> balances,
@@ -323,35 +335,8 @@ class _WalletHomeState extends State<_WalletHome> {
     );
     final assets = _assetsFor(network, custom);
     final placeholders = assets
-        .where(
-          (a) =>
-              a.isNative ||
-              (!_isHidden(
-                WalletBalance(
-                  chain: widget.selectedChain.label,
-                  symbol: a.symbol,
-                  assetName: a.name,
-                  isNative: a.isNative,
-                  address: identity.address,
-                  decimals: a.decimals,
-                  tokenAddress: a.tokenAddress,
-                  balance: BigInt.zero,
-                ),
-                hidden,
-              )),
-        )
-        .map(
-          (a) => WalletBalance(
-            chain: widget.selectedChain.label,
-            symbol: a.symbol,
-            assetName: a.name,
-            isNative: a.isNative,
-            address: identity.address,
-            decimals: a.decimals,
-            tokenAddress: a.tokenAddress,
-            balance: BigInt.zero,
-          ),
-        )
+        .map((asset) => _assetPlaceholder(asset, identity.address))
+        .where((balance) => balance.isNative || !_isHidden(balance, hidden))
         .toList();
     if (mounted && generation == _loadGeneration) {
       setState(() => _displayBalances = placeholders);
@@ -383,23 +368,10 @@ class _WalletHomeState extends State<_WalletHome> {
       final ordered = assets
           .where(
             (a) =>
-                !(!a.isNative &&
-                    hidden.contains(a.tokenAddress?.toLowerCase())),
+                a.isNative ||
+                !_isHidden(_assetPlaceholder(a, identity.address), hidden),
           )
-          .map(
-            (a) =>
-                byId[a.id] ??
-                WalletBalance(
-                  chain: widget.selectedChain.label,
-                  symbol: a.symbol,
-                  assetName: a.name,
-                  isNative: a.isNative,
-                  address: identity.address,
-                  decimals: a.decimals,
-                  tokenAddress: a.tokenAddress,
-                  balance: BigInt.zero,
-                ),
-          )
+          .map((a) => byId[a.id] ?? _assetPlaceholder(a, identity.address))
           .toList();
       setState(() => _displayBalances = ordered);
     }

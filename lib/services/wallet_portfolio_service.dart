@@ -124,30 +124,42 @@ class WalletPortfolioService {
       return;
     }
     final updates = assets.map(
-      (asset) => chain.isEvm
-          ? _evmReader.loadAssetBalance(
-              asset: asset,
-              chain: chain,
-              address: address,
-              rpcEndpoints: endpoints,
-            )
-          : network == WalletNetwork.tron
-          ? _tronReader.loadAssetBalance(
-              asset: asset,
-              chain: chain,
-              address: address,
-              rpcEndpoints: endpoints,
-            )
-          : _solanaReader.loadAssetBalance(
-              asset: asset,
-              chain: chain,
-              address: address,
-              rpcEndpoints: endpoints,
-            ),
+      (asset) => _loadAsset(network, chain, asset, address, endpoints),
     );
     await for (final balance in Stream.fromFutures(updates)) {
       yield balance;
     }
+  }
+
+  Future<WalletBalance> _loadAsset(
+    WalletNetwork network,
+    WalletChainDefinition chain,
+    WalletAsset asset,
+    String address,
+    List<Uri> endpoints,
+  ) {
+    if (chain.isEvm) {
+      return _evmReader.loadAssetBalance(
+        asset: asset,
+        chain: chain,
+        address: address,
+        rpcEndpoints: endpoints,
+      );
+    }
+    if (network == WalletNetwork.tron) {
+      return _tronReader.loadAssetBalance(
+        asset: asset,
+        chain: chain,
+        address: address,
+        rpcEndpoints: endpoints,
+      );
+    }
+    return _solanaReader.loadAssetBalance(
+      asset: asset,
+      chain: chain,
+      address: address,
+      rpcEndpoints: endpoints,
+    );
   }
 
   void close() {
