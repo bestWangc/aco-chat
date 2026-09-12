@@ -726,7 +726,11 @@ class _GroupSettingsCard extends StatelessWidget {
           _GroupSettingsCardRow(
             palette: palette,
             label: '群二维码',
-            trailing: const Icon(CupertinoIcons.qrcode, size: 24),
+            trailing: Image.asset(
+              'assets/icons/group_qr_code.png',
+              width: 18,
+              filterQuality: FilterQuality.high,
+            ),
             onTap: onShowQRCode,
           ),
         ],
