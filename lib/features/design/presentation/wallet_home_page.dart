@@ -31,6 +31,8 @@ class _WalletHomeState extends State<_WalletHome> {
   late Future<List<WalletBalance>> _balancesFuture;
   late Future<double?> _totalBalanceFuture;
   late List<WalletBalance> _initialBalances;
+  List<WalletBalance> _displayBalances = const [];
+  int _loadGeneration = 0;
   final Map<WalletNetwork, List<WalletBalance>> _balanceCache = {};
   final LayerLink _walletActionsLink = LayerLink();
   OverlayEntry? _walletActionsEntry;
@@ -46,9 +48,11 @@ class _WalletHomeState extends State<_WalletHome> {
     _initialBalances = widget.walletIdentity == null
         ? _placeholderBalances()
         : _placeholderBalances().where((balance) => balance.isNative).toList();
+    _displayBalances = _initialBalances;
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
     _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
     unawaited(_prepareInitialBalances(widget.selectedChain.network));
+    unawaited(_streamBalances(widget.selectedChain.network, ++_loadGeneration));
     _watchWalletLogin(widget.walletLoginFuture);
   }
 
@@ -82,42 +86,109 @@ class _WalletHomeState extends State<_WalletHome> {
     if (identity == null) return _placeholderBalances();
     final tokens = await _tokenStore.read();
     if (tokens == null) return _visiblePlaceholderBalancesAsync(network);
-    final addresses = await WalletPreferences.derivedAddresses(identity);
-    final balances = await _portfolioService.loadBalances(
-      network: network,
-      identity: identity,
-      derivedAddresses: addresses,
-      accessToken: tokens.accessToken,
-    );
     final customTokens = await _metadataStore.customTokens(identity);
     final hidden = await _metadataStore.hiddenTokenSymbols(
       identity,
       network.name,
     );
-    final customBalances = customTokens
-        .where((token) => token.network == network.name)
-        .where(
-          (token) => !balances.any(
-            (balance) =>
-                balance.tokenAddress?.toLowerCase() ==
-                token.address.toLowerCase(),
-          ),
-        )
-        .map(
-          (token) => WalletBalance(
-            chain: widget.selectedChain.label,
+    final assets = _assetsFor(network, customTokens);
+    final results = <WalletBalance>[];
+    await for (final balance in _portfolioService.loadAssetBalances(
+      network: network,
+      identity: identity,
+      accessToken: tokens.accessToken,
+      assets: assets,
+    )) {
+      if (balance.isNative || !_isHidden(balance, hidden)) results.add(balance);
+    }
+    return results;
+  }
+
+  List<WalletAsset> _assetsFor(
+    WalletNetwork network,
+    List<CustomTokenDefinition> custom,
+  ) {
+    final chain = WalletChainRegistry.chains[network]!;
+    final assets = <WalletAsset>[
+      WalletAsset(
+        network: network,
+        symbol: chain.symbol,
+        name: chain.nativeAssetName,
+        decimals: chain.decimals,
+        isNative: true,
+      ),
+      if (chain.usdt != null)
+        WalletAsset(
+          network: network,
+          symbol: chain.usdt!.symbol,
+          name: chain.usdt!.name,
+          decimals: chain.usdt!.decimals,
+          isNative: false,
+          tokenAddress: chain.usdt!.address,
+        ),
+      if (chain.usdc != null)
+        WalletAsset(
+          network: network,
+          symbol: chain.usdc!.symbol,
+          name: chain.usdc!.name,
+          decimals: chain.usdc!.decimals,
+          isNative: false,
+          tokenAddress: chain.usdc!.address,
+        ),
+      if (network == WalletNetwork.tron) ...[
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.tronUsdt.symbol,
+          name: WalletChainRegistry.tronUsdt.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.tronUsdt.address,
+        ),
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.tronUsdc.symbol,
+          name: WalletChainRegistry.tronUsdc.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.tronUsdc.address,
+        ),
+      ],
+      if (network == WalletNetwork.solana) ...[
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.solanaUsdt.symbol,
+          name: WalletChainRegistry.solanaUsdt.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.solanaUsdt.address,
+        ),
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.solanaUsdc.symbol,
+          name: WalletChainRegistry.solanaUsdc.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.solanaUsdc.address,
+        ),
+      ],
+    ];
+    for (final token in custom.where((t) => t.network == network.name)) {
+      if (!assets.any(
+        (a) => a.tokenAddress?.toLowerCase() == token.address.toLowerCase(),
+      )) {
+        assets.add(
+          WalletAsset(
+            network: network,
             symbol: token.symbol,
-            assetName: token.symbol,
-            isNative: false,
-            address: identity.address,
+            name: token.symbol,
             decimals: token.decimals,
+            isNative: false,
             tokenAddress: token.address,
-            balance: BigInt.zero,
           ),
         );
-    return [...balances, ...customBalances]
-        .where((balance) => balance.isNative || !_isHidden(balance, hidden))
-        .toList();
+      }
+    }
+    return assets;
   }
 
   Future<void> _prepareInitialBalances(WalletNetwork network) async {
@@ -233,8 +304,105 @@ class _WalletHomeState extends State<_WalletHome> {
               : _placeholderBalances()
                     .where((balance) => balance.isNative)
                     .toList());
+      _displayBalances = _initialBalances;
     });
     unawaited(_prepareInitialBalances(network));
+    final generation = ++_loadGeneration;
+    unawaited(_streamBalances(network, generation));
+  }
+
+  Future<void> _streamBalances(WalletNetwork network, int generation) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return;
+    final tokens = await _tokenStore.read();
+    if (tokens == null) return;
+    final custom = await _metadataStore.customTokens(identity);
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    final assets = _assetsFor(network, custom);
+    final placeholders = assets
+        .where(
+          (a) =>
+              a.isNative ||
+              (!_isHidden(
+                WalletBalance(
+                  chain: widget.selectedChain.label,
+                  symbol: a.symbol,
+                  assetName: a.name,
+                  isNative: a.isNative,
+                  address: identity.address,
+                  decimals: a.decimals,
+                  tokenAddress: a.tokenAddress,
+                  balance: BigInt.zero,
+                ),
+                hidden,
+              )),
+        )
+        .map(
+          (a) => WalletBalance(
+            chain: widget.selectedChain.label,
+            symbol: a.symbol,
+            assetName: a.name,
+            isNative: a.isNative,
+            address: identity.address,
+            decimals: a.decimals,
+            tokenAddress: a.tokenAddress,
+            balance: BigInt.zero,
+          ),
+        )
+        .toList();
+    if (mounted && generation == _loadGeneration) {
+      setState(() => _displayBalances = placeholders);
+    }
+    final byId = <String, WalletBalance>{};
+    await for (final balance in _portfolioService.loadAssetBalances(
+      network: network,
+      identity: identity,
+      accessToken: tokens.accessToken,
+      assets: assets,
+    )) {
+      if (generation != _loadGeneration ||
+          !mounted ||
+          widget.selectedChain.network != network) {
+        return;
+      }
+      if (!balance.isNative && _isHidden(balance, hidden)) {
+        continue;
+      }
+      byId[WalletAsset(
+            network: network,
+            symbol: balance.symbol,
+            name: balance.assetName,
+            decimals: balance.decimals,
+            isNative: balance.isNative,
+            tokenAddress: balance.tokenAddress,
+          ).id] =
+          balance;
+      final ordered = assets
+          .where(
+            (a) =>
+                !(!a.isNative &&
+                    hidden.contains(a.tokenAddress?.toLowerCase())),
+          )
+          .map(
+            (a) =>
+                byId[a.id] ??
+                WalletBalance(
+                  chain: widget.selectedChain.label,
+                  symbol: a.symbol,
+                  assetName: a.name,
+                  isNative: a.isNative,
+                  address: identity.address,
+                  decimals: a.decimals,
+                  tokenAddress: a.tokenAddress,
+                  balance: BigInt.zero,
+                ),
+          )
+          .toList();
+      setState(() => _displayBalances = ordered);
+    }
   }
 
   Future<double?> _loadTotalBalance(
@@ -600,35 +768,21 @@ class _WalletHomeState extends State<_WalletHome> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<List<WalletBalance>>(
-              key: ValueKey(widget.selectedChain.network),
-              future: _balancesFuture,
-              initialData: _initialBalances,
-              builder: (context, snapshot) {
-                final balancesToDisplay =
-                    snapshot.connectionState == ConnectionState.waiting
-                    ? _initialBalances
-                    : snapshot.data ?? const <WalletBalance>[];
-                return ListView.builder(
-                  padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
-                  itemCount: balancesToDisplay.length,
-                  itemBuilder: (context, index) {
-                    final balance = balancesToDisplay[index];
-                    final rawAmount = balance.balance ?? BigInt.zero;
-                    final amount = rawAmount == BigInt.zero
-                        ? '0.00'
-                        : formatChainAmount(
-                            rawAmount,
-                            decimals: balance.decimals,
-                          );
-                    return _WalletAssetRow(
-                      palette: widget.palette,
-                      symbol: balance.symbol,
-                      title: balance.assetName,
-                      amount: amount,
-                      value: '≈0.00 USD',
-                    );
-                  },
+            child: ListView.builder(
+              padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
+              itemCount: _displayBalances.length,
+              itemBuilder: (context, index) {
+                final balance = _displayBalances[index];
+                final rawAmount = balance.balance ?? BigInt.zero;
+                final amount = rawAmount == BigInt.zero
+                    ? '0.00'
+                    : formatChainAmount(rawAmount, decimals: balance.decimals);
+                return _WalletAssetRow(
+                  palette: widget.palette,
+                  symbol: balance.symbol,
+                  title: balance.assetName,
+                  amount: amount,
+                  value: '≈0.00 USD',
                 );
               },
             ),

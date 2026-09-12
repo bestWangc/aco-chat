@@ -8,6 +8,51 @@ class SolanaBalanceReader {
 
   final WalletRpcClient _rpcClient;
 
+  Future<WalletBalance> loadAssetBalance({
+    required WalletAsset asset,
+    required WalletChainDefinition chain,
+    required String address,
+    required List<Uri> rpcEndpoints,
+  }) => loadWalletBalance(
+    chain: chain.name,
+    symbol: asset.symbol,
+    assetName: asset.name,
+    isNative: asset.isNative,
+    address: address,
+    decimals: asset.decimals,
+    tokenAddress: asset.tokenAddress,
+    request: () => asset.isNative
+        ? _nativeBalance(address, rpcEndpoints)
+        : _splBalance(asset.tokenAddress!, address, rpcEndpoints),
+  );
+
+  Future<BigInt> _splBalance(
+    String mint,
+    String address,
+    List<Uri> rpcEndpoints,
+  ) async {
+    final response = await _rpcClient.postJson(rpcEndpoints, {
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': 'getTokenAccountsByOwner',
+      'params': [
+        address,
+        {'mint': mint},
+        {'encoding': 'jsonParsed'},
+      ],
+    });
+    final balances = _parseTokenBalances(
+      WalletChainRegistry.chains[WalletNetwork.solana]!,
+      address,
+      response,
+    );
+    var total = BigInt.zero;
+    for (final item in balances) {
+      total += item.balance ?? BigInt.zero;
+    }
+    return total;
+  }
+
   Future<List<WalletBalance>> loadBalances({
     required WalletChainDefinition chain,
     required String address,

@@ -8,6 +8,30 @@ class TronBalanceReader {
 
   final WalletRpcClient _rpcClient;
 
+  Future<WalletBalance> loadAssetBalance({
+    required WalletAsset asset,
+    required WalletChainDefinition chain,
+    required String address,
+    required List<Uri> rpcEndpoints,
+  }) => loadWalletBalance(
+    chain: chain.name,
+    symbol: asset.symbol,
+    assetName: asset.name,
+    isNative: asset.isNative,
+    address: address,
+    decimals: asset.decimals,
+    tokenAddress: asset.tokenAddress,
+    request: () async {
+      final account = await _rpcClient.postJson(rpcEndpoints, {
+        'address': address,
+        'visible': true,
+      });
+      return asset.isNative
+          ? _nativeBalance(account)
+          : _trc20Balance(account, asset.tokenAddress!);
+    },
+  );
+
   Future<List<WalletBalance>> loadBalances({
     required WalletChainDefinition chain,
     required String address,

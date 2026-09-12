@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:http/http.dart' as http;
 
 export 'wallet_portfolio_models.dart';
@@ -101,14 +102,48 @@ class WalletPortfolioService {
       network: network.name,
       accessToken: accessToken,
     );
-    if (!chain.isEvm) return;
+    final address = chain.isEvm
+        ? identity.address
+        : (await WalletPreferences.derivedAddresses(
+            identity,
+          ))[chain.addressKey];
+    if (address == null || address.isEmpty) {
+      for (final asset in assets) {
+        yield WalletBalance(
+          chain: chain.name,
+          symbol: asset.symbol,
+          assetName: asset.name,
+          isNative: asset.isNative,
+          address: '',
+          decimals: asset.decimals,
+          tokenAddress: asset.tokenAddress,
+          balance: BigInt.zero,
+          error: const FormatException('Missing derived address'),
+        );
+      }
+      return;
+    }
     final updates = assets.map(
-      (asset) => _evmReader.loadAssetBalance(
-        asset: asset,
-        chain: chain,
-        address: identity.address,
-        rpcEndpoints: endpoints,
-      ),
+      (asset) => chain.isEvm
+          ? _evmReader.loadAssetBalance(
+              asset: asset,
+              chain: chain,
+              address: address,
+              rpcEndpoints: endpoints,
+            )
+          : network == WalletNetwork.tron
+          ? _tronReader.loadAssetBalance(
+              asset: asset,
+              chain: chain,
+              address: address,
+              rpcEndpoints: endpoints,
+            )
+          : _solanaReader.loadAssetBalance(
+              asset: asset,
+              chain: chain,
+              address: address,
+              rpcEndpoints: endpoints,
+            ),
     );
     await for (final balance in Stream.fromFutures(updates)) {
       yield balance;
