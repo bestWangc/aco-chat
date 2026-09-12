@@ -619,6 +619,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
   late final List<WalletBalance> _tokens = _defaultTokens();
   late Future<List<WalletHotToken>> _hotTokensFuture;
   final Set<String> _removed = {};
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -687,7 +688,9 @@ class _AddTokenPageState extends State<_AddTokenPage> {
       children: [
         _AddTokenSearch(
           palette: widget.palette,
-          onSubmit: () => _showNotice(context, '搜索', '已开始搜索代币。'),
+          onChanged: (value) =>
+              setState(() => _searchQuery = value.trim().toLowerCase()),
+          onSubmit: () => setState(() {}),
         ),
         const SizedBox(height: 30),
         _AddTokenEntry(
@@ -741,9 +744,18 @@ class _AddTokenPageState extends State<_AddTokenPage> {
                 child: CupertinoActivityIndicator(),
               );
             }
+            final query = _searchQuery;
+            final tokens = (snapshot.data ?? const <WalletHotToken>[]).where((
+              token,
+            ) {
+              if (query.isEmpty) return true;
+              return token.symbol.toLowerCase().contains(query) ||
+                  token.name.toLowerCase().contains(query) ||
+                  token.address.toLowerCase().contains(query);
+            });
             return Column(
               children: [
-                for (final token in snapshot.data ?? const <WalletHotToken>[])
+                for (final token in tokens)
                   _AddTokenHotRow(token: token, palette: widget.palette),
               ],
             );
@@ -1208,9 +1220,14 @@ class _HomeAssetPageState extends State<_HomeAssetPage> {
 }
 
 class _AddTokenSearch extends StatelessWidget {
-  const _AddTokenSearch({required this.palette, required this.onSubmit});
+  const _AddTokenSearch({
+    required this.palette,
+    required this.onSubmit,
+    required this.onChanged,
+  });
   final AcoPalette palette;
   final VoidCallback onSubmit;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -1240,6 +1257,7 @@ class _AddTokenSearch extends StatelessWidget {
               color: palette.primaryText,
               fontSize: AcoTypography.caption,
             ),
+            onChanged: onChanged,
             onSubmitted: (_) {
               _dismissKeyboard();
               onSubmit();
