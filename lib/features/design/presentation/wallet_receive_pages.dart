@@ -776,7 +776,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
               token,
             ) {
               if (query.isEmpty) return true;
-              return token.address.toLowerCase().contains(query);
+                return token.address.toLowerCase() == query;
             });
             return Column(
               children: [
@@ -792,7 +792,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
 
   bool _matchesToken(WalletBalance token) {
     final query = _searchQuery;
-    return token.tokenAddress?.toLowerCase().contains(query) ?? false;
+    return token.tokenAddress?.toLowerCase() == query;
   }
 
   Future<void> _removeToken(WalletBalance token) async {
