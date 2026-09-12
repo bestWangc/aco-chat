@@ -61,7 +61,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
     label: '选择转账代币',
     child: Align(
       alignment: Alignment.bottomCenter,
-      child: SafeArea(
+      child: AcoSafeArea(
         top: false,
         child: Container(
           key: const Key('send-token-picker'),
@@ -389,7 +389,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
     palette: widget.palette,
     title: '转账',
     titleFontSize: AcoTypography.body,
-    child: SafeArea(
+    child: AcoSafeArea(
       top: false,
       child: Column(
         children: [

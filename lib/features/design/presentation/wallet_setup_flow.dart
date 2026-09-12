@@ -61,7 +61,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     final palette = AcoPalette(widget.dark);
     return ColoredBox(
       color: palette.background,
-      child: SafeArea(
+      child: AcoSafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
           child: Column(

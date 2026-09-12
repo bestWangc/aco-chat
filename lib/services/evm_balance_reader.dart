@@ -19,6 +19,8 @@ class EvmBalanceReader {
   }) => Future.wait([
     _loadNativeBalance(chain, address, rpcEndpoints),
     if (chain.usdt != null) _loadUsdtBalance(chain, address, rpcEndpoints),
+    if (chain.usdc != null)
+      _loadTokenBalance(chain.usdc!, address, rpcEndpoints, chain),
   ]);
 
   Future<WalletBalance> _loadNativeBalance(
@@ -41,17 +43,24 @@ class EvmBalanceReader {
     List<Uri> rpcEndpoints,
   ) {
     final usdt = chain.usdt!;
-    return loadWalletBalance(
-      chain: chain.name,
-      symbol: usdt.symbol,
-      assetName: usdt.name,
-      isNative: false,
-      address: address,
-      decimals: usdt.decimals,
-      tokenAddress: usdt.address,
-      request: () => _erc20Balance(usdt.address, address, rpcEndpoints),
-    );
+    return _loadTokenBalance(usdt, address, rpcEndpoints, chain);
   }
+
+  Future<WalletBalance> _loadTokenBalance(
+    WalletTokenDefinition token,
+    String address,
+    List<Uri> rpcEndpoints,
+    WalletChainDefinition chain,
+  ) => loadWalletBalance(
+    chain: chain.name,
+    symbol: token.symbol,
+    assetName: token.name,
+    isNative: false,
+    address: address,
+    decimals: token.decimals,
+    tokenAddress: token.address,
+    request: () => _erc20Balance(token.address, address, rpcEndpoints),
+  );
 
   Future<BigInt> _nativeBalance(String address, List<Uri> rpcEndpoints) async {
     final body = await _rpcClient.postJson(rpcEndpoints, {

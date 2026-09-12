@@ -1403,7 +1403,7 @@ class _ChatPageState extends State<_ChatPage> {
               _AcoPageRoute<bool>(
                 builder: (_) => CupertinoPageScaffold(
                   backgroundColor: widget.palette.background,
-                  child: SafeArea(
+                  child: AcoSafeArea(
                     left: false,
                     right: false,
                     bottom: false,
@@ -1569,7 +1569,7 @@ class _ChatPageState extends State<_ChatPage> {
                     color: Color(0xFF1E1D1B),
                     border: Border(top: BorderSide(color: Color(0xFF2D2D2D))),
                   ),
-                  child: SafeArea(
+                  child: AcoSafeArea(
                     top: false,
                     bottom: !compactBottomBar,
                     minimum: compactBottomBar
@@ -2085,7 +2085,7 @@ class _VoiceCallPageState extends State<_VoiceCallPage> {
     child: Stack(
       fit: StackFit.expand,
       children: [
-        SafeArea(
+        AcoSafeArea(
           child: Column(
             children: [
               const Spacer(flex: 2),
@@ -2913,7 +2913,7 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
       backgroundColor: Color(0xCC000000),
       middle: Text('视频', style: TextStyle(color: Color(0xFFFFFFFF))),
     ),
-    child: SafeArea(
+    child: AcoSafeArea(
       child: Center(
         child: _error != null
             ? const Text('视频播放失败', style: TextStyle(color: Color(0xFFFFFFFF)))
@@ -2944,7 +2944,7 @@ class _ChatImagePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: const Color(0xFF000000),
-    child: SafeArea(
+    child: AcoSafeArea(
       child: Stack(
         children: [
           Center(

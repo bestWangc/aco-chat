@@ -25,7 +25,10 @@ import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
 import 'package:aco_chat/services/wallet_valuation_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
+import 'package:aco_chat/services/wallet_metadata_store.dart';
+import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_transfer_service.dart';
+import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -231,6 +234,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
   TransferToken? _selectedTransferToken;
   int _liveListRevision = 0;
+  int _walletAssetRevision = 0;
   String? _accountId;
   final ValueNotifier<String> _username = ValueNotifier<String>('');
   final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
@@ -496,6 +500,9 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
           ),
         )
         .then((created) {
+          if (screen == AcoScreen.addTokenV2 && mounted) {
+            setState(() => _walletAssetRevision++);
+          }
           if (screen != AcoScreen.createLive || !mounted) return;
           setState(() => _liveListRevision++);
           if (created is! LiveSession || created.status != 'live') return;
@@ -504,7 +511,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
               builder: (_) => CupertinoPageScaffold(
                 backgroundColor: AcoPalette(_isDark.value).background,
                 resizeToAvoidBottomInset: true,
-                child: SafeArea(
+                child: AcoSafeArea(
                   bottom: false,
                   child: ColoredBox(
                     color: AcoPalette(_isDark.value).background,
@@ -548,6 +555,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       walletName: _walletName.value,
       onWalletNameChanged: _saveWalletName,
       walletChainIndex: _selectedWalletChain.value,
+      walletAssetRevision: _walletAssetRevision,
       onWalletChainSelected: _selectWalletChain,
       transferToken: _selectedTransferToken,
       onSendTokenSelected: _sendToken,
@@ -584,7 +592,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
             ? _black
             : AcoPalette(dark).background,
         child: _AcoViewport(
-          child: SafeArea(
+          child: AcoSafeArea(
             left: false,
             right: false,
             bottom: false,
@@ -611,6 +619,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       walletName: _walletName.value,
                       onWalletNameChanged: _saveWalletName,
                       walletChainIndex: _selectedWalletChain.value,
+                      walletAssetRevision: _walletAssetRevision,
                       onWalletChainSelected: _selectWalletChain,
                       transferToken: _selectedTransferToken,
                       onSendTokenSelected: _sendToken,

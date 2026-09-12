@@ -371,6 +371,47 @@ class _TimeRangeSelector extends StatelessWidget {
   );
 }
 
+class _WalletAssetIcon extends StatelessWidget {
+  const _WalletAssetIcon({required this.symbol});
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = symbol.toUpperCase();
+    final asset = switch (normalized) {
+      'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
+      'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
+      'IOST' => null,
+      _ => 'assets/icons/crypto/tokens/${normalized.toLowerCase()}.svg',
+    };
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: asset == null
+          ? DecoratedBox(
+              decoration: BoxDecoration(
+                color: normalized == 'IOST'
+                    ? const Color(0xFFE0E0E0)
+                    : const Color(0xFF2680D9),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  normalized.substring(0, 1),
+                  style: const TextStyle(
+                    color: _white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            )
+          : asset.endsWith('.png')
+          ? ClipOval(child: Image.asset(asset, fit: BoxFit.cover))
+          : SvgPicture.asset(asset),
+    );
+  }
+}
+
 class _WalletAssetRow extends StatelessWidget {
   const _WalletAssetRow({
     required this.palette,
@@ -383,12 +424,6 @@ class _WalletAssetRow extends StatelessWidget {
   final String symbol, title, amount, value;
   @override
   Widget build(BuildContext context) {
-    final normalizedSymbol = symbol.toUpperCase();
-    final iconAsset = switch (normalizedSymbol) {
-      'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
-      'IOST' => null,
-      _ => 'assets/icons/crypto/tokens/${normalizedSymbol.toLowerCase()}.svg',
-    };
     final primaryTextStyle = TextStyle(
       color: palette.primaryText,
       fontSize: AcoTypography.body,
@@ -409,33 +444,7 @@ class _WalletAssetRow extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: iconAsset == null
-                        ? Container(
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: switch (normalizedSymbol) {
-                                'IOST' => const Color(0xFFE0E0E0),
-                                _ => const Color(0xFF2680D9),
-                              },
-                              shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              normalizedSymbol.substring(0, 1),
-                              style: const TextStyle(
-                                color: _white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          )
-                        : iconAsset.endsWith('.png')
-                        ? ClipOval(
-                            child: Image.asset(iconAsset, fit: BoxFit.cover),
-                          )
-                        : SvgPicture.asset(iconAsset),
-                  ),
+                  _WalletAssetIcon(symbol: symbol),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(

@@ -598,7 +598,7 @@ class _GroupQRCodePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: palette.background,
-    child: SafeArea(
+    child: AcoSafeArea(
       child: Column(
         children: [
           Padding(
@@ -1025,7 +1025,7 @@ class _GroupMemberSelectionPageState extends State<_GroupMemberSelectionPage> {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: widget.palette.background,
-    child: SafeArea(
+    child: AcoSafeArea(
       bottom: false,
       child: Column(
         children: [
@@ -1265,7 +1265,7 @@ class _GroupMemberSelectionBottomBar extends StatelessWidget {
       color: palette.surfaceRaised,
       border: Border(top: BorderSide(color: palette.border)),
     ),
-    child: SafeArea(
+    child: AcoSafeArea(
       top: false,
       child: Row(
         children: [

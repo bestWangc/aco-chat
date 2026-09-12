@@ -121,7 +121,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
         child: Container(
           height: 332,
           color: palette.surface,
-          child: SafeArea(
+          child: AcoSafeArea(
             top: false,
             child: Column(
               children: [
@@ -504,7 +504,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
               ],
             ),
           ),
-          SafeArea(
+          AcoSafeArea(
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),

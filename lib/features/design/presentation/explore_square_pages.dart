@@ -117,7 +117,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
             builder: (_) => CupertinoPageScaffold(
               backgroundColor: widget.palette.background,
               resizeToAvoidBottomInset: true,
-              child: SafeArea(
+              child: AcoSafeArea(
                 bottom: false,
                 child: ColoredBox(
                   color: widget.palette.background,
@@ -276,7 +276,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           _AcoPageRoute<bool>(
             builder: (_) => CupertinoPageScaffold(
               backgroundColor: widget.palette.background,
-              child: SafeArea(
+              child: AcoSafeArea(
                 bottom: false,
                 child: ColoredBox(
                   color: widget.palette.background,

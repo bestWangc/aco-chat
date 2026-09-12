@@ -33,9 +33,8 @@ class AppConfig {
     if (relayApiBaseUrl.isNotEmpty) _selectedApiBaseUrl = relayApiBaseUrl;
   }
 
-  String get apiBaseUrl => _apiBaseUrl ??
-      _selectedApiBaseUrl ??
-      cloudflareApiBaseUrl;
+  String get apiBaseUrl =>
+      _apiBaseUrl ?? _selectedApiBaseUrl ?? cloudflareApiBaseUrl;
 
   /// Keeps credentials for local debug servers separate from production.
   String get accountStorageScope {

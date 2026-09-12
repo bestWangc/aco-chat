@@ -6,9 +6,10 @@ class WalletChainDefinition {
     this.name,
     this.symbol,
     this.nativeAssetName,
-    this.usdt,
-  ) : addressKey = null,
-      decimals = 18;
+    this.usdt, [
+    this.usdc,
+  ]) : addressKey = null,
+       decimals = 18;
 
   const WalletChainDefinition.nonEvm(
     this.network,
@@ -17,12 +18,14 @@ class WalletChainDefinition {
     this.nativeAssetName,
     this.addressKey,
     this.decimals,
-  ) : usdt = null;
+  ) : usdt = null,
+      usdc = null;
 
   final String name;
   final String symbol;
   final String nativeAssetName;
   final WalletTokenDefinition? usdt;
+  final WalletTokenDefinition? usdc;
   final WalletNetwork network;
   final String? addressKey;
   final int decimals;
@@ -56,6 +59,12 @@ abstract final class WalletChainRegistry {
         6,
         'Tether USD',
       ),
+      WalletTokenDefinition(
+        '0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        6,
+        'USD Coin',
+        symbol: 'USDC',
+      ),
     ),
     WalletNetwork.bsc: WalletChainDefinition.evm(
       WalletNetwork.bsc,
@@ -66,6 +75,12 @@ abstract final class WalletChainRegistry {
         '0x55d398326f99059fF775485246999027B3197955',
         18,
         'Tether USD',
+      ),
+      WalletTokenDefinition(
+        '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+        18,
+        'USD Coin',
+        symbol: 'USDC',
       ),
     ),
     WalletNetwork.polygon: WalletChainDefinition.evm(
@@ -78,6 +93,12 @@ abstract final class WalletChainRegistry {
         6,
         'Tether USD',
       ),
+      WalletTokenDefinition(
+        '0x3c499c542cef5E3811e1192ce70d8cC03d5c3359',
+        6,
+        'USD Coin',
+        symbol: 'USDC',
+      ),
     ),
     WalletNetwork.base: WalletChainDefinition.evm(
       WalletNetwork.base,
@@ -88,6 +109,12 @@ abstract final class WalletChainRegistry {
         '0xfde4c96c8593536e31f229ea8f37b2ada2699bb2',
         6,
         'Tether USD',
+      ),
+      WalletTokenDefinition(
+        '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        6,
+        'USD Coin',
+        symbol: 'USDC',
       ),
     ),
     WalletNetwork.arbitrum: WalletChainDefinition.evm(
@@ -100,6 +127,12 @@ abstract final class WalletChainRegistry {
         6,
         'Tether USD',
       ),
+      WalletTokenDefinition(
+        '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+        6,
+        'USD Coin',
+        symbol: 'USDC',
+      ),
     ),
     WalletNetwork.optimism: WalletChainDefinition.evm(
       WalletNetwork.optimism,
@@ -110,6 +143,12 @@ abstract final class WalletChainRegistry {
         '0x94b008aA00579c1307B0EF2C499aD98a8ce58e58',
         6,
         'Tether USD',
+      ),
+      WalletTokenDefinition(
+        '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+        6,
+        'USD Coin',
+        symbol: 'USDC',
       ),
     ),
     WalletNetwork.tron: WalletChainDefinition.nonEvm(
@@ -140,10 +179,22 @@ abstract final class WalletChainRegistry {
     6,
     'Tether USD',
   );
+  static const tronUsdc = WalletTokenDefinition(
+    'TEkxiTehnzSmSe2XqrBj4w32RUN666sabM',
+    6,
+    'USD Coin',
+    symbol: 'USDC',
+  );
   static const solanaUsdt = WalletTokenDefinition(
     'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',
     6,
     'Tether USD',
+  );
+  static const solanaUsdc = WalletTokenDefinition(
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+    6,
+    'USD Coin',
+    symbol: 'USDC',
   );
 
   static final solanaKnownTokens = {

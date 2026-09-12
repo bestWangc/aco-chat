@@ -65,8 +65,12 @@ class WalletPortfolioService {
         ),
         if (network == WalletNetwork.tron)
           _zeroTokenBalance(chain, WalletChainRegistry.tronUsdt),
+        if (network == WalletNetwork.tron)
+          _zeroTokenBalance(chain, WalletChainRegistry.tronUsdc),
         if (network == WalletNetwork.solana)
           _zeroTokenBalance(chain, WalletChainRegistry.solanaUsdt),
+        if (network == WalletNetwork.solana)
+          _zeroTokenBalance(chain, WalletChainRegistry.solanaUsdc),
       ];
     }
     if (network == WalletNetwork.solana) {

@@ -33,7 +33,7 @@ class _MessageSearchPageState extends State<_MessageSearchPage> {
     final results = _results;
     return CupertinoPageScaffold(
       backgroundColor: widget.palette.background,
-      child: SafeArea(
+      child: AcoSafeArea(
         bottom: false,
         child: Column(
           children: [
@@ -127,7 +127,7 @@ class _ChatHistorySearchPageState extends State<_ChatHistorySearchPage> {
     final results = _results;
     return CupertinoPageScaffold(
       backgroundColor: widget.palette.background,
-      child: SafeArea(
+      child: AcoSafeArea(
         bottom: false,
         child: Column(
           children: [

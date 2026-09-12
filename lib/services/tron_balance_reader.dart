@@ -38,6 +38,17 @@ class TronBalanceReader {
         request: () async =>
             _trc20Balance(await account, WalletChainRegistry.tronUsdt.address),
       ),
+      loadWalletBalance(
+        chain: chain.name,
+        symbol: WalletChainRegistry.tronUsdc.symbol,
+        assetName: WalletChainRegistry.tronUsdc.name,
+        isNative: false,
+        address: address,
+        decimals: WalletChainRegistry.tronUsdc.decimals,
+        tokenAddress: WalletChainRegistry.tronUsdc.address,
+        request: () async =>
+            _trc20Balance(await account, WalletChainRegistry.tronUsdc.address),
+      ),
     ]);
   }
 

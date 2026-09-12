@@ -354,7 +354,7 @@ class _ScanPageState extends State<_ScanPage> {
           ),
         ),
       ),
-      SafeArea(
+      AcoSafeArea(
         child: Column(
           children: [
             Padding(
@@ -379,7 +379,7 @@ class _ScanPageState extends State<_ScanPage> {
                       : widget.palette.primaryText,
                   width: 2,
                 ),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Align(
                 alignment: Alignment.center,
@@ -615,8 +615,34 @@ class _AddTokenPage extends StatefulWidget {
 
 class _AddTokenPageState extends State<_AddTokenPage> {
   late final WalletMetadataStore _metadataStore = WalletMetadataStore();
+  late final WalletHotTokenService _hotTokenService = WalletHotTokenService();
   late final List<WalletBalance> _tokens = _defaultTokens();
+  late Future<List<WalletHotToken>> _hotTokensFuture;
   final Set<String> _removed = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _hotTokensFuture = _hotTokenService.load(widget.selectedChain.network.name);
+    final identity = widget.walletIdentity;
+    if (identity != null) {
+      _metadataStore
+          .hiddenTokenSymbols(identity, widget.selectedChain.network.name)
+          .then((symbols) {
+            if (mounted) setState(() => _removed.addAll(symbols));
+          });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _AddTokenPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedChain.network != widget.selectedChain.network) {
+      _hotTokensFuture = _hotTokenService.load(
+        widget.selectedChain.network.name,
+      );
+    }
+  }
 
   List<WalletBalance> _defaultTokens() {
     final chain = WalletChainRegistry.chains[widget.selectedChain.network]!;
@@ -638,6 +664,16 @@ class _AddTokenPageState extends State<_AddTokenPage> {
           address: widget.walletIdentity?.address ?? '',
           decimals: chain.usdt!.decimals,
           tokenAddress: chain.usdt!.address,
+        ),
+      if (chain.usdc != null)
+        WalletBalance(
+          chain: chain.name,
+          symbol: chain.usdc!.symbol,
+          assetName: chain.usdc!.name,
+          isNative: false,
+          address: widget.walletIdentity?.address ?? '',
+          decimals: chain.usdc!.decimals,
+          tokenAddress: chain.usdc!.address,
         ),
     ];
   }
@@ -668,8 +704,24 @@ class _AddTokenPageState extends State<_AddTokenPage> {
             ),
           ),
         ),
-        _AddTokenEntry(label: '我的资产', palette: widget.palette, count: '47'),
-        _AddTokenEntry(label: '自定义代币', palette: widget.palette),
+        _AddTokenEntry(
+          label: '自定义代币',
+          palette: widget.palette,
+          onPressed: () async {
+            final added = await Navigator.of(context).push<bool>(
+              _AcoPageRoute(
+                builder: (_) => _CustomTokenPage(
+                  palette: widget.palette,
+                  selectedChain: widget.selectedChain,
+                  walletIdentity: widget.walletIdentity,
+                ),
+              ),
+            );
+            if (added == true && context.mounted) {
+              _showNotice(context, '添加成功', '自定义代币已添加至资产列表。');
+            }
+          },
+        ),
         const SizedBox(height: 12),
         Text(
           '热门代币',
@@ -680,15 +732,22 @@ class _AddTokenPageState extends State<_AddTokenPage> {
           ),
         ),
         const SizedBox(height: 14),
-        _AddTokenHotRow(
-          symbol: 'USDT',
-          assetSymbol: 'usdt',
-          palette: widget.palette,
-        ),
-        _AddTokenHotRow(
-          symbol: 'USDC',
-          assetSymbol: 'usdc',
-          palette: widget.palette,
+        FutureBuilder<List<WalletHotToken>>(
+          future: _hotTokensFuture,
+          builder: (_, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: CupertinoActivityIndicator(),
+              );
+            }
+            return Column(
+              children: [
+                for (final token in snapshot.data ?? const <WalletHotToken>[])
+                  _AddTokenHotRow(token: token, palette: widget.palette),
+              ],
+            );
+          },
         ),
       ],
     ),
@@ -709,7 +768,333 @@ class _AddTokenPageState extends State<_AddTokenPage> {
   }
 }
 
-class _HomeAssetPage extends StatelessWidget {
+/// Form for importing a token that is not included in the default token list.
+class _CustomTokenPage extends StatefulWidget {
+  const _CustomTokenPage({
+    required this.palette,
+    required this.selectedChain,
+    this.walletIdentity,
+  });
+
+  final AcoPalette palette;
+  final _WalletChain selectedChain;
+  final WalletIdentity? walletIdentity;
+
+  @override
+  State<_CustomTokenPage> createState() => _CustomTokenPageState();
+}
+
+class _CustomTokenPageState extends State<_CustomTokenPage> {
+  static const _symbolSelector = '0x95d89b41';
+  static const _decimalsSelector = '0x313ce567';
+  final _contractController = TextEditingController();
+  final _symbolController = TextEditingController();
+  final _decimalsController = TextEditingController();
+  final _contractFocus = FocusNode();
+  final _symbolFocus = FocusNode();
+  final _decimalsFocus = FocusNode();
+  bool _saving = false;
+  bool _loadingMetadata = false;
+
+  bool get _canSubmit {
+    final decimals = int.tryParse(_decimalsController.text.trim());
+    return _contractController.text.trim().isNotEmpty &&
+        _symbolController.text.trim().isNotEmpty &&
+        decimals != null &&
+        decimals >= 0 &&
+        decimals <= 36;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in [
+      _contractController,
+      _symbolController,
+      _decimalsController,
+    ]) {
+      controller.addListener(_changed);
+    }
+  }
+
+  Future<void> _lookupTokenMetadata() async {
+    if (_loadingMetadata || !_contractController.text.trim().isNotEmpty) return;
+    final chain = WalletChainRegistry.chains[widget.selectedChain.network];
+    if (chain == null || !chain.isEvm) return;
+    final tokens = await SecureAccountTokenStore().read();
+    if (tokens == null) return;
+    final rpc = WalletRpcClient(
+      client: http.Client(),
+      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+      ownsClient: true,
+    );
+    setState(() => _loadingMetadata = true);
+    try {
+      final endpoints = await rpc.loadEndpoints(
+        network: widget.selectedChain.network.name,
+        accessToken: tokens.accessToken,
+      );
+      final address = _contractController.text.trim();
+      final symbolResult = await _ethCall(
+        rpc,
+        endpoints,
+        _symbolSelector,
+        address,
+        1,
+      );
+      final decimalsResult = await _ethCall(
+        rpc,
+        endpoints,
+        _decimalsSelector,
+        address,
+        2,
+      );
+      final decodedSymbol = _decodeAbiString(symbolResult);
+      final decodedDecimals = _decodeHexInt(decimalsResult);
+      if (mounted && decodedSymbol != null && decodedDecimals != null) {
+        _symbolController.text = decodedSymbol;
+        _decimalsController.text = decodedDecimals.toString();
+      }
+    } catch (_) {
+      // Keep manual entry available when the node cannot read token metadata.
+    } finally {
+      rpc.close();
+      if (mounted) setState(() => _loadingMetadata = false);
+    }
+  }
+
+  Future<String?> _ethCall(
+    WalletRpcClient rpc,
+    List<Uri> endpoints,
+    String selector,
+    String address,
+    int id,
+  ) async {
+    final result = await rpc.postJson(endpoints, {
+      'jsonrpc': '2.0',
+      'id': id,
+      'method': 'eth_call',
+      'params': [
+        {'to': address, 'data': selector},
+        'latest',
+      ],
+    });
+    return result['result'] as String?;
+  }
+
+  int? _decodeHexInt(String? value) => value == null
+      ? null
+      : int.tryParse(value.replaceFirst('0x', ''), radix: 16);
+
+  String? _decodeAbiString(String? value) {
+    if (value == null || !value.startsWith('0x')) return null;
+    final hex = value.substring(2);
+    if (hex.length < 128) return null;
+    final length = int.tryParse(hex.substring(64, 128), radix: 16);
+    if (length == null || length <= 0 || hex.length < 128 + length * 2)
+      return null;
+    final bytes = <int>[];
+    for (var i = 0; i < length; i++) {
+      bytes.add(int.parse(hex.substring(128 + i * 2, 130 + i * 2), radix: 16));
+    }
+    return String.fromCharCodes(bytes);
+  }
+
+  void _changed() => setState(() {});
+
+  @override
+  void dispose() {
+    _contractController.dispose();
+    _symbolController.dispose();
+    _decimalsController.dispose();
+    _contractFocus.dispose();
+    _symbolFocus.dispose();
+    _decimalsFocus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_canSubmit || _saving) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _saving = true);
+    final definition = CustomTokenDefinition(
+      network: widget.selectedChain.network.name,
+      address: _contractController.text.trim(),
+      symbol: _symbolController.text.trim().toUpperCase(),
+      decimals: int.parse(_decimalsController.text.trim()),
+    );
+    if (widget.walletIdentity != null) {
+      await WalletMetadataStore().saveCustomToken(
+        widget.walletIdentity!,
+        definition,
+      );
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(true);
+  }
+
+  Widget _field({
+    required String label,
+    required String placeholder,
+    required TextEditingController controller,
+    required FocusNode focusNode,
+    TextInputType? keyboardType,
+    TextInputAction? textInputAction,
+    Widget? suffix,
+    Key? key,
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final fieldHeight = (constraints.maxWidth * .14).clamp(54.0, 64.0);
+      final horizontalPadding = (constraints.maxWidth * .07).clamp(18.0, 26.0);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(color: widget.palette.primaryText, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            height: fieldHeight,
+            decoration: BoxDecoration(
+              color: widget.palette.surfaceRaised,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+            child: Row(
+              children: [
+                Expanded(
+                  child: CupertinoTextField(
+                    key: key,
+                    controller: controller,
+                    focusNode: focusNode,
+                    padding: EdgeInsets.zero,
+                    decoration: const BoxDecoration(color: _transparent),
+                    placeholder: placeholder,
+                    placeholderStyle: TextStyle(
+                      color: Color(0xFF777777),
+                      fontSize: 16,
+                    ),
+                    style: TextStyle(
+                      color: widget.palette.primaryText,
+                      fontSize: 16,
+                    ),
+                    keyboardType: keyboardType,
+                    textInputAction: textInputAction,
+                    onSubmitted: (_) async {
+                      if (focusNode == _contractFocus)
+                        await _lookupTokenMetadata();
+                      _nextFocus(focusNode);
+                    },
+                  ),
+                ),
+                ?suffix,
+              ],
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  void _nextFocus(FocusNode node) {
+    if (node == _contractFocus) {
+      _symbolFocus.requestFocus();
+    } else if (node == _symbolFocus) {
+      _decimalsFocus.requestFocus();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: widget.palette.background,
+    child: AcoSafeAreaPage(
+      backgroundColor: widget.palette.background,
+      applyTopSafeArea: true,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
+            child: AcoPageHeader(
+              palette: widget.palette,
+              title: '添加代币',
+              backButtonOffset: Offset.zero,
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 20),
+              children: [
+                _field(
+                  label: '代币合约',
+                  placeholder: '请输入代币合约地址',
+                  controller: _contractController,
+                  focusNode: _contractFocus,
+                  key: const Key('custom-token-contract-field'),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 20),
+                _field(
+                  label: '代币符号',
+                  placeholder: '请输入代币符号',
+                  controller: _symbolController,
+                  focusNode: _symbolFocus,
+                  key: const Key('custom-token-symbol-field'),
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 20),
+                _field(
+                  label: '代币精度',
+                  placeholder: '请输入代币精度',
+                  controller: _decimalsController,
+                  focusNode: _decimalsFocus,
+                  key: const Key('custom-token-decimals-field'),
+                  keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.done,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 8, 32, 24),
+            child: SizedBox(
+              height: 54,
+              width: double.infinity,
+              child: CupertinoButton(
+                key: const Key('custom-token-confirm-button'),
+                padding: EdgeInsets.zero,
+                onPressed: _canSubmit ? _submit : null,
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _canSubmit
+                        ? widget.palette.accent
+                        : widget.palette.accent.withValues(alpha: .35),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: _saving
+                      ? CupertinoActivityIndicator(
+                          color: widget.palette.dark ? _black : _white,
+                        )
+                      : Text(
+                          '确认',
+                          style: TextStyle(
+                            color: widget.palette.dark ? _black : _white,
+                            fontSize: 22,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _HomeAssetPage extends StatefulWidget {
   const _HomeAssetPage({
     required this.palette,
     required this.tokens,
@@ -722,36 +1107,98 @@ class _HomeAssetPage extends StatelessWidget {
   final ValueChanged<WalletBalance> onRemove;
 
   @override
-  Widget build(BuildContext context) => _DetailScaffold(
-    palette: palette,
-    title: '首页资产',
-    child: ListView(
-      padding: const EdgeInsets.fromLTRB(27, 12, 27, 26),
+  State<_HomeAssetPage> createState() => _HomeAssetPageState();
+}
+
+class _HomeAssetPageState extends State<_HomeAssetPage> {
+  late final Set<String> _removed = {...widget.removed};
+
+  @override
+  Widget build(BuildContext context) => AcoSafeAreaPage(
+    backgroundColor: widget.palette.background,
+    applyTopSafeArea: true,
+    child: Column(
       children: [
-        for (final token in tokens)
-          if (!removed.contains(token.symbol))
-            CupertinoListTile(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              title: Text(
-                token.symbol,
-                style: TextStyle(color: palette.primaryText),
-              ),
-              subtitle: Text(
-                token.assetName,
-                style: TextStyle(color: palette.mutedText),
-              ),
-              trailing: CupertinoButton(
-                padding: EdgeInsets.zero,
-                onPressed: token.isNative ? null : () => onRemove(token),
-                child: Icon(
-                  CupertinoIcons.minus_circle_fill,
-                  color: token.isNative ? palette.mutedText : _danger,
-                ),
-              ),
-            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
+          child: AcoPageHeader(
+            palette: widget.palette,
+            title: '首页资产',
+            backButtonOffset: Offset.zero,
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.only(top: 12, bottom: 26),
+            children: [
+              for (final token in widget.tokens)
+                if (!_removed.contains(token.symbol))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(27, 10, 8, 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: _WalletAssetIcon(symbol: token.symbol),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                token.symbol,
+                                style: TextStyle(
+                                  color: widget.palette.primaryText,
+                                ),
+                              ),
+                              Text(
+                                token.assetName,
+                                style: TextStyle(
+                                  color: widget.palette.mutedText,
+                                ),
+                              ),
+                              if (token.tokenAddress != null)
+                                Text(
+                                  _breakAddress(token.tokenAddress!),
+                                  style: TextStyle(
+                                    color: widget.palette.mutedText,
+                                    fontSize: 12,
+                                  ),
+                                  softWrap: true,
+                                ),
+                            ],
+                          ),
+                        ),
+                        CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          onPressed: token.isNative
+                              ? null
+                              : () {
+                                  setState(() => _removed.add(token.symbol));
+                                  widget.onRemove(token);
+                                },
+                          child: Icon(
+                            CupertinoIcons.minus_circle_fill,
+                            color: token.isNative
+                                ? widget.palette.mutedText
+                                : _danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
       ],
     ),
   );
+
+  String _breakAddress(String address) =>
+      '地址: ${address.replaceAllMapped(RegExp(r'(.{8})'), (match) => '${match.group(1)}\u200b')}';
 }
 
 class _AddTokenSearch extends StatelessWidget {
@@ -820,16 +1267,16 @@ class _AddTokenEntry extends StatelessWidget {
   const _AddTokenEntry({
     required this.label,
     required this.palette,
-    this.count,
+    this.onPressed,
   });
   final String label;
-  final String? count;
   final AcoPalette palette;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: const EdgeInsets.symmetric(vertical: 15),
-    onPressed: () => _showNotice(context, label, '$label列表即将开放。'),
+    onPressed: onPressed ?? () => _showNotice(context, label, '$label列表即将开放。'),
     child: Row(
       children: [
         Text(
@@ -841,10 +1288,6 @@ class _AddTokenEntry extends StatelessWidget {
           ),
         ),
         const Spacer(),
-        if (count != null) ...[
-          _CountPill(palette: palette, label: count!, size: 24),
-          const SizedBox(width: 16),
-        ],
         Icon(CupertinoIcons.chevron_right, color: palette.mutedText, size: 18),
       ],
     ),
@@ -852,19 +1295,18 @@ class _AddTokenEntry extends StatelessWidget {
 }
 
 class _AddTokenHotRow extends StatelessWidget {
-  const _AddTokenHotRow({
-    required this.symbol,
-    required this.assetSymbol,
-    required this.palette,
-  });
-  final String symbol;
-  final String assetSymbol;
+  const _AddTokenHotRow({required this.token, required this.palette});
+  final WalletHotToken token;
   final AcoPalette palette;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: const EdgeInsets.symmetric(vertical: 12),
-    onPressed: () => _showNotice(context, '已添加 $symbol', '$symbol 已添加至资产列表。'),
+    onPressed: () => _showNotice(
+      context,
+      '已添加 ${token.symbol}',
+      '${token.symbol} 已添加至资产列表。',
+    ),
     child: Container(
       padding: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -877,12 +1319,7 @@ class _AddTokenHotRow extends StatelessWidget {
           SizedBox(
             width: 46,
             height: 46,
-            child: ClipOval(
-              child: Image.asset(
-                'assets/icons/crypto/domi/tokens/$assetSymbol.png',
-                fit: BoxFit.cover,
-              ),
-            ),
+            child: _HotTokenIcon(symbol: token.symbol),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -890,7 +1327,7 @@ class _AddTokenHotRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  symbol,
+                  token.symbol,
                   style: TextStyle(
                     color: palette.primaryText,
                     fontSize: AcoTypography.body,
@@ -899,12 +1336,21 @@ class _AddTokenHotRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 5),
                 Text(
-                  '0s232sdsfs...das232s',
+                  token.name,
                   style: TextStyle(
                     color: palette.mutedText,
                     fontSize: AcoTypography.caption,
                   ),
                 ),
+                if (token.address.isNotEmpty)
+                  Text(
+                    _breakHotTokenAddress(token.address),
+                    softWrap: true,
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.caption,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -913,4 +1359,37 @@ class _AddTokenHotRow extends StatelessWidget {
       ),
     ),
   );
+
+  String _breakHotTokenAddress(String address) =>
+      '地址: ${address.replaceAllMapped(RegExp(r'(.{8})'), (match) => '${match.group(1)}\u200b')}';
+}
+
+class _HotTokenIcon extends StatelessWidget {
+  const _HotTokenIcon({required this.symbol});
+  final String symbol;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = symbol.toUpperCase();
+    final asset = switch (normalized) {
+      'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
+      'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
+      _ => null,
+    };
+    if (asset != null) {
+      return ClipOval(child: Image.asset(asset, fit: BoxFit.cover));
+    }
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        color: Color(0xFF2680D9),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          normalized.isEmpty ? '?' : normalized.substring(0, 1),
+          style: const TextStyle(color: _white, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
 }

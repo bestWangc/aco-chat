@@ -605,7 +605,7 @@ class _RoomMessage extends StatelessWidget {
                 textAlign: TextAlign.center,
                 textHeightBehavior: textHeightBehavior,
                 style: messageStyle,
-            )
+              )
             : RichText(
                 textAlign: TextAlign.start,
                 textHeightBehavior: textHeightBehavior,

@@ -483,7 +483,7 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: widget.palette.background,
-    child: SafeArea(
+    child: AcoSafeArea(
       bottom: false,
       child: Column(
         children: [
@@ -830,7 +830,7 @@ class _ContactsPageState extends State<_ContactsPage> {
     if (widget.embedded) return content;
     return CupertinoPageScaffold(
       backgroundColor: widget.palette.background,
-      child: SafeArea(bottom: false, child: content),
+      child: AcoSafeArea(bottom: false, child: content),
     );
   }
 
@@ -928,7 +928,7 @@ class _AddFriendPageState extends State<_AddFriendPage> {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: widget.palette.background,
-    child: SafeArea(
+    child: AcoSafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
@@ -1076,7 +1076,7 @@ class _CreateGroupPageState extends State<_CreateGroupPage> {
         child: Text(_submitting ? '创建中' : '创建'),
       ),
     ),
-    child: SafeArea(
+    child: AcoSafeArea(
       child: FutureBuilder<List<FriendContact>>(
         future: _friends,
         builder: (_, snapshot) => ListView(

@@ -302,7 +302,7 @@ class _AssetDetailState extends State<_AssetDetail> {
               ],
             ),
           ),
-          SafeArea(
+          AcoSafeArea(
             top: false,
             minimum: const EdgeInsets.fromLTRB(53, 8, 53, 25),
             child: _WalletDetailDeleteButton(onPressed: _confirmDeleteWallet),

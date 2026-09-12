@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_portfolio_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists display-only wallet metadata separately from wallet identities.
@@ -9,6 +10,47 @@ class WalletMetadataStore {
   static const _derivedAddressesKeyPrefix = 'wallet.derived-addresses.';
   static const _walletNameKeyPrefix = 'wallet.name.';
   static const _hiddenTokenSymbolsKeyPrefix = 'wallet.hidden-token-symbols.';
+  static const _customTokensKeyPrefix = 'wallet.custom-tokens.';
+  static final Map<String, Set<String>> _hiddenTokenCache = {};
+
+  Future<List<CustomTokenDefinition>> customTokens(
+    WalletIdentity identity,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(_customTokensKey(identity));
+    if (encoded == null) return const [];
+    try {
+      final values = jsonDecode(encoded) as List<dynamic>;
+      return values
+          .whereType<Map<String, dynamic>>()
+          .map(CustomTokenDefinition.fromJson)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveCustomToken(
+    WalletIdentity identity,
+    CustomTokenDefinition token,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final tokens = await customTokens(identity);
+    final index = tokens.indexWhere(
+      (item) =>
+          item.network == token.network &&
+          item.address.toLowerCase() == token.address.toLowerCase(),
+    );
+    if (index >= 0) {
+      tokens[index] = token;
+    } else {
+      tokens.add(token);
+    }
+    await preferences.setString(
+      _customTokensKey(identity),
+      jsonEncode(tokens.map((item) => item.toJson()).toList()),
+    );
+  }
 
   Future<String> walletName(
     WalletIdentity identity, {
@@ -57,13 +99,20 @@ class WalletMetadataStore {
     WalletIdentity identity,
     String network,
   ) async {
+    final key = _hiddenTokenSymbolsKey(identity, network);
+    final cached = _hiddenTokenCache[key];
+    if (cached != null) return {...cached};
     final preferences = await SharedPreferences.getInstance();
-    return (preferences.getStringList(
-              _hiddenTokenSymbolsKey(identity, network),
-            ) ??
-            const <String>[])
+    final symbols = (preferences.getStringList(key) ?? const <String>[])
         .toSet();
+    _hiddenTokenCache[key] = symbols;
+    return {...symbols};
   }
+
+  Set<String> cachedHiddenTokenSymbols(
+    WalletIdentity identity,
+    String network,
+  ) => {...?_hiddenTokenCache[_hiddenTokenSymbolsKey(identity, network)]};
 
   Future<void> setTokenHidden(
     WalletIdentity identity,
@@ -73,13 +122,14 @@ class WalletMetadataStore {
   ) async {
     final preferences = await SharedPreferences.getInstance();
     final key = _hiddenTokenSymbolsKey(identity, network);
-    final symbols = (preferences.getStringList(key) ?? const <String>[])
-        .toSet();
+    final symbols = _hiddenTokenCache[key] ??
+        (preferences.getStringList(key) ?? const <String>[]).toSet();
     if (hidden) {
       symbols.add(symbol);
     } else {
       symbols.remove(symbol);
     }
+    _hiddenTokenCache[key] = symbols;
     await preferences.setStringList(key, symbols.toList());
   }
 
@@ -101,4 +151,7 @@ class WalletMetadataStore {
     String network,
   ) =>
       '$_hiddenTokenSymbolsKeyPrefix${identity.address.toLowerCase()}.$network';
+
+  static String _customTokensKey(WalletIdentity identity) =>
+      '$_customTokensKeyPrefix${identity.address.toLowerCase()}';
 }

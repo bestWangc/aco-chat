@@ -26,6 +26,10 @@ class SolanaBalanceReader {
         (balance) => balance.symbol == WalletChainRegistry.solanaUsdt.symbol,
       ))
         _zeroTokenBalance(chain, WalletChainRegistry.solanaUsdt, address),
+      if (!tokenBalances.any(
+        (balance) => balance.symbol == WalletChainRegistry.solanaUsdc.symbol,
+      ))
+        _zeroTokenBalance(chain, WalletChainRegistry.solanaUsdc, address),
     ];
   }
 

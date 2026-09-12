@@ -147,7 +147,7 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
             alpha: .72,
           ),
         ),
-        SafeArea(
+        AcoSafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
               final horizontalInset = (constraints.maxWidth * 0.08).clamp(

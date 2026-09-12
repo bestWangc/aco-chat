@@ -16,7 +16,7 @@ class _ContactDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: palette.background,
-    child: SafeArea(
+    child: AcoSafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),

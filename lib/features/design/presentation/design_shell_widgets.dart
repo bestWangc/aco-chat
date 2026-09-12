@@ -5,6 +5,25 @@ class _AcoPageRoute<T> extends CupertinoPageRoute<T> {
 
   @override
   Color? get barrierColor => null;
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final backgroundColor = CupertinoTheme.of(context).scaffoldBackgroundColor;
+    return ColoredBox(
+      color: backgroundColor,
+      child: super.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      ),
+    );
+  }
 }
 
 class AcoScreenPage extends StatelessWidget {
@@ -32,6 +51,7 @@ class AcoScreenPage extends StatelessWidget {
     this.walletName = 'Wallet1',
     this.onWalletNameChanged,
     this.walletChainIndex = 0,
+    this.walletAssetRevision = 0,
     this.onWalletChainSelected,
     this.transferToken,
     this.onSendTokenSelected,
@@ -71,6 +91,7 @@ class AcoScreenPage extends StatelessWidget {
   final String walletName;
   final Future<void> Function(String name)? onWalletNameChanged;
   final int walletChainIndex;
+  final int walletAssetRevision;
   final ValueChanged<int>? onWalletChainSelected;
   final TransferToken? transferToken;
   final ValueChanged<TransferToken>? onSendTokenSelected;
@@ -102,6 +123,7 @@ class AcoScreenPage extends StatelessWidget {
         Navigator.of(context).maybePop();
     final page = switch (screen) {
       AcoScreen.walletHome => _WalletHome(
+        key: ValueKey('wallet-home-$walletAssetRevision'),
         palette: palette,
         onOpen: onOpen,
         walletIdentity: walletIdentity,
@@ -294,24 +316,78 @@ class AcoScreenPage extends StatelessWidget {
       ),
     };
 
-    return SizedBox.expand(
-      child: ColoredBox(
-        color: dark && screen == AcoScreen.walletHome
-            ? _black
-            : palette.background,
-        child: _AcoViewport(
-          child: SafeArea(
-            top: !isRoot,
-            minimum: EdgeInsets.zero,
-            left: false,
-            right: false,
-            bottom: false,
-            child: page,
-          ),
-        ),
-      ),
+    return AcoSafeAreaPage(
+      backgroundColor: dark && screen == AcoScreen.walletHome
+          ? _black
+          : palette.background,
+      applyTopSafeArea: !isRoot,
+      child: page,
     );
   }
+}
+
+/// Shared full-size viewport for every design page.
+/// Secondary pages receive the top inset here; child pages must not add a
+/// second SafeArea or their content will be pushed down twice on notched
+/// devices.
+class AcoSafeAreaPage extends StatelessWidget {
+  const AcoSafeAreaPage({
+    required this.child,
+    required this.backgroundColor,
+    required this.applyTopSafeArea,
+    super.key,
+  });
+
+  final Widget child;
+  final Color backgroundColor;
+  final bool applyTopSafeArea;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.expand(
+    child: ColoredBox(
+      color: backgroundColor,
+      child: _AcoViewport(
+        child: AcoSafeArea(
+          top: applyTopSafeArea,
+          minimum: EdgeInsets.zero,
+          left: false,
+          right: false,
+          bottom: false,
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
+/// The only SafeArea entry point used by design pages and overlays.
+class AcoSafeArea extends StatelessWidget {
+  const AcoSafeArea({
+    required this.child,
+    this.top = true,
+    this.bottom = true,
+    this.left = true,
+    this.right = true,
+    this.minimum = EdgeInsets.zero,
+    super.key,
+  });
+
+  final Widget child;
+  final bool top;
+  final bool bottom;
+  final bool left;
+  final bool right;
+  final EdgeInsets minimum;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: top,
+    bottom: bottom,
+    left: left,
+    right: right,
+    minimum: minimum,
+    child: child,
+  );
 }
 
 class _AcoViewport extends StatelessWidget {
@@ -348,7 +424,7 @@ class AcoBottomNav extends StatelessWidget {
       color:
           backgroundColor ??
           (dark ? const Color(0xFF000000) : palette.background),
-      child: SafeArea(
+      child: AcoSafeArea(
         top: false,
         left: false,
         right: false,

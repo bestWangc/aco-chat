@@ -1376,7 +1376,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
       color: CupertinoColors.white,
       borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
     ),
-    child: SafeArea(
+    child: AcoSafeArea(
       top: false,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -1473,7 +1473,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
       color: CupertinoColors.white,
       border: Border(top: BorderSide(color: Color(0x14000000))),
     ),
-    child: SafeArea(
+    child: AcoSafeArea(
       top: false,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,

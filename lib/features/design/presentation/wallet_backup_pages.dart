@@ -182,7 +182,7 @@ class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
     title: _isMnemonicExport ? '备份助记词' : '导出私钥',
     headerTopPadding: 8,
     titleFontSize: AcoTypography.body,
-    child: SafeArea(
+    child: AcoSafeArea(
       top: false,
       child: Column(
         children: [
@@ -215,7 +215,7 @@ class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
               ],
             ),
           ),
-          SafeArea(
+          AcoSafeArea(
             top: false,
             minimum: const EdgeInsets.fromLTRB(24, 8, 24, 24),
             child: SizedBox(

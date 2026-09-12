@@ -3,14 +3,31 @@ PODS:
   - flutter_openim_sdk (0.0.1):
     - Flutter
     - OpenIMSDKCore (= 3.8.3-hotfix.14)
+  - libwebp (1.6.0):
+    - libwebp/demux (= 1.6.0)
+    - libwebp/mux (= 1.6.0)
+    - libwebp/sharpyuv (= 1.6.0)
+    - libwebp/webp (= 1.6.0)
+  - libwebp/demux (1.6.0):
+    - libwebp/webp
+  - libwebp/mux (1.6.0):
+    - libwebp/demux
+  - libwebp/sharpyuv (1.6.0)
+  - libwebp/webp (1.6.0):
+    - libwebp/sharpyuv
   - OpenIMSDKCore (3.8.3-hotfix.14)
+  - video_thumbnail (0.0.1):
+    - Flutter
+    - libwebp
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_openim_sdk (from `.symlinks/plugins/flutter_openim_sdk/ios`)
+  - video_thumbnail (from `.symlinks/plugins/video_thumbnail/ios`)
 
 SPEC REPOS:
   trunk:
+    - libwebp
     - OpenIMSDKCore
 
 EXTERNAL SOURCES:
@@ -18,11 +35,15 @@ EXTERNAL SOURCES:
     :path: Flutter
   flutter_openim_sdk:
     :path: ".symlinks/plugins/flutter_openim_sdk/ios"
+  video_thumbnail:
+    :path: ".symlinks/plugins/video_thumbnail/ios"
 
 SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_openim_sdk: 04f6f9846f56a8b371773c7ea9e2f1b5180dee49
+  libwebp: af5937a13536ef73f3784d69cc342b98961acf33
   OpenIMSDKCore: bfa4a42abb7896a8f24b7c5d307da7ee9bb4d22d
+  video_thumbnail: b637e0ad5f588ca9945f6e2c927f73a69a661140
 
 PODFILE CHECKSUM: 07de65af562856e27e5951c84a3a6721564f5f7f
 

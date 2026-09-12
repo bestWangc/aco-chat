@@ -10,6 +10,35 @@ enum WalletNetwork {
   base,
 }
 
+class CustomTokenDefinition {
+  const CustomTokenDefinition({
+    required this.network,
+    required this.address,
+    required this.symbol,
+    required this.decimals,
+  });
+
+  final String network;
+  final String address;
+  final String symbol;
+  final int decimals;
+
+  Map<String, Object> toJson() => {
+    'network': network,
+    'address': address,
+    'symbol': symbol,
+    'decimals': decimals,
+  };
+
+  static CustomTokenDefinition fromJson(Map<String, dynamic> json) =>
+      CustomTokenDefinition(
+        network: json['network'] as String,
+        address: json['address'] as String,
+        symbol: json['symbol'] as String,
+        decimals: (json['decimals'] as num).toInt(),
+      );
+}
+
 class WalletBalance {
   const WalletBalance({
     required this.chain,

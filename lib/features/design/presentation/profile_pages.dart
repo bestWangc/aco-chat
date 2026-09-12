@@ -299,7 +299,7 @@ class _AvatarCropPageState extends State<_AvatarCropPage> {
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: _black,
-    child: SafeArea(
+    child: AcoSafeArea(
       child: Column(
         children: [
           SizedBox(
