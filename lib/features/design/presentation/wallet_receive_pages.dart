@@ -868,8 +868,9 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
   @override
   void initState() {
     super.initState();
-    if (widget.initialContract?.isNotEmpty ?? false) {
-      _contractController.text = widget.initialContract!;
+    final initialContract = widget.initialContract;
+    if (initialContract != null && initialContract.isNotEmpty) {
+      _contractController.text = initialContract;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => _lookupTokenMetadata(),
       );
