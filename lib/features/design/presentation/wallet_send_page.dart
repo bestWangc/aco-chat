@@ -19,8 +19,17 @@ class _TokenAvatar extends StatelessWidget {
     width: 35,
     height: 35,
     child: token.iconAsset.endsWith('.png')
-        ? ClipOval(child: Image.asset(token.iconAsset, fit: BoxFit.cover))
-        : SvgPicture.asset(token.iconAsset),
+        ? ClipOval(
+            child: Image.asset(
+              token.iconAsset,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => const _MissingTokenIcon(),
+            ),
+          )
+        : SvgPicture.asset(
+            token.iconAsset,
+            errorBuilder: (_, _, _) => const _MissingTokenIcon(),
+          ),
   );
 }
 

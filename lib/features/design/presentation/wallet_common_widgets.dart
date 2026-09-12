@@ -406,10 +406,41 @@ class _WalletAssetIcon extends StatelessWidget {
               ),
             )
           : asset.endsWith('.png')
-          ? ClipOval(child: Image.asset(asset, fit: BoxFit.cover))
-          : SvgPicture.asset(asset),
+          ? ClipOval(
+              child: Image.asset(
+                asset,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => const _MissingTokenIcon(),
+              ),
+            )
+          : SvgPicture.asset(
+              asset,
+              errorBuilder: (_, _, _) => const _MissingTokenIcon(),
+            ),
     );
   }
+}
+
+class _MissingTokenIcon extends StatelessWidget {
+  const _MissingTokenIcon();
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: const BoxDecoration(
+      color: Color(0xFF777777),
+      shape: BoxShape.circle,
+    ),
+    child: const Center(
+      child: Text(
+        '?',
+        style: TextStyle(
+          color: _white,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    ),
+  );
 }
 
 class _WalletAssetRow extends StatelessWidget {
