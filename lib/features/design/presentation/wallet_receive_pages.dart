@@ -1254,7 +1254,7 @@ class _AddTokenSearch extends StatelessWidget {
             width: 52,
             height: 38,
             decoration: const BoxDecoration(
-              color: _lime,
+              color: Color(0xFFD6D6D6),
               borderRadius: BorderRadius.all(Radius.circular(19)),
             ),
             child: const Icon(
