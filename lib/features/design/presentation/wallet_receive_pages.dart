@@ -777,9 +777,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
                 token,
               ) {
                 if (query.isEmpty) return true;
-                return token.symbol.toLowerCase().contains(query) ||
-                    token.name.toLowerCase().contains(query) ||
-                    token.address.toLowerCase().contains(query);
+                return token.address.toLowerCase().contains(query);
               });
               return Column(
                 children: [
@@ -796,9 +794,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
 
   bool _matchesToken(WalletBalance token) {
     final query = _searchQuery;
-    return token.symbol.toLowerCase().contains(query) ||
-        token.assetName.toLowerCase().contains(query) ||
-        (token.tokenAddress?.toLowerCase().contains(query) ?? false);
+    return token.tokenAddress?.toLowerCase().contains(query) ?? false;
   }
 
   Future<void> _removeToken(WalletBalance token) async {
@@ -1284,7 +1280,7 @@ class _AddTokenSearch extends StatelessWidget {
             padding: EdgeInsets.zero,
             decoration: const BoxDecoration(color: _transparent),
             cursorColor: _lime,
-            placeholder: '通过代币名称或合约进行搜索',
+            placeholder: '通过合约地址进行搜索',
             placeholderStyle: TextStyle(
               color: palette.mutedText,
               fontSize: AcoTypography.caption,
