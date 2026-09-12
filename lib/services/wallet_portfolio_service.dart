@@ -90,6 +90,31 @@ class WalletPortfolioService {
     throw StateError('Unsupported wallet network: $network');
   }
 
+  Stream<WalletBalance> loadAssetBalances({
+    required WalletNetwork network,
+    required WalletIdentity identity,
+    required String accessToken,
+    required List<WalletAsset> assets,
+  }) async* {
+    final chain = WalletChainRegistry.chains[network]!;
+    final endpoints = await _rpcClient.loadEndpoints(
+      network: network.name,
+      accessToken: accessToken,
+    );
+    if (!chain.isEvm) return;
+    final updates = assets.map(
+      (asset) => _evmReader.loadAssetBalance(
+        asset: asset,
+        chain: chain,
+        address: identity.address,
+        rpcEndpoints: endpoints,
+      ),
+    );
+    await for (final balance in Stream.fromFutures(updates)) {
+      yield balance;
+    }
+  }
+
   void close() {
     _rpcClient.close();
   }

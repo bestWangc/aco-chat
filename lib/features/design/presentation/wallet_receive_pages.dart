@@ -763,6 +763,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
         widget.selectedChain.network.name,
         token.symbol,
         true,
+        tokenAddress: token.tokenAddress,
       );
     }
   }
@@ -1133,7 +1134,7 @@ class _HomeAssetPageState extends State<_HomeAssetPage> {
             padding: const EdgeInsets.only(top: 12, bottom: 26),
             children: [
               for (final token in widget.tokens)
-                if (!_removed.contains(token.symbol))
+                if (!_isRemoved(token))
                   Padding(
                     padding: const EdgeInsets.fromLTRB(27, 10, 8, 10),
                     child: Row(
@@ -1199,6 +1200,11 @@ class _HomeAssetPageState extends State<_HomeAssetPage> {
 
   String _breakAddress(String address) =>
       '地址: ${address.replaceAllMapped(RegExp(r'(.{8})'), (match) => '${match.group(1)}\u200b')}';
+
+  bool _isRemoved(WalletBalance token) =>
+      _removed.contains(token.symbol) ||
+      (token.tokenAddress != null &&
+          _removed.contains(token.tokenAddress!.toLowerCase()));
 }
 
 class _AddTokenSearch extends StatelessWidget {

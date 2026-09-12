@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:aco_chat/services/wallet_portfolio_models.dart';
 import 'package:http/http.dart' as http;
@@ -54,15 +55,25 @@ class WalletRpcClient {
     List<Uri> endpoints,
     Map<String, Object> request,
   ) async {
+    final result = Completer<Map<String, dynamic>>();
+    var remaining = endpoints.length;
     Object? lastError;
     for (final uri in endpoints) {
-      try {
-        return await _postJsonToUri(uri, request);
-      } catch (error) {
-        lastError = error;
-      }
+      _postJsonToUri(uri, request)
+          .then((value) {
+            if (!result.isCompleted) result.complete(value);
+          })
+          .catchError((error) {
+            lastError = error;
+            remaining -= 1;
+            if (remaining == 0 && !result.isCompleted) {
+              result.completeError(
+                HttpException('All wallet RPC endpoints failed: $lastError'),
+              );
+            }
+          });
     }
-    throw HttpException('All wallet RPC endpoints failed: $lastError');
+    return result.future.timeout(requestTimeout);
   }
 
   Future<Map<String, dynamic>> _postJsonToUri(

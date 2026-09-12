@@ -10,6 +10,28 @@ enum WalletNetwork {
   base,
 }
 
+/// A locally configured asset. Balance loading is independent from visibility.
+class WalletAsset {
+  const WalletAsset({
+    required this.network,
+    required this.symbol,
+    required this.name,
+    required this.decimals,
+    required this.isNative,
+    this.tokenAddress,
+  });
+
+  final WalletNetwork network;
+  final String symbol;
+  final String name;
+  final int decimals;
+  final bool isNative;
+  final String? tokenAddress;
+
+  String get id =>
+      '${network.name}:${tokenAddress?.toLowerCase() ?? symbol.toUpperCase()}';
+}
+
 class CustomTokenDefinition {
   const CustomTokenDefinition({
     required this.network,

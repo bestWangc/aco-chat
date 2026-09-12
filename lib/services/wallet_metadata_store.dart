@@ -12,13 +12,14 @@ class WalletMetadataStore {
   static const _hiddenTokenSymbolsKeyPrefix = 'wallet.hidden-token-symbols.';
   static const _customTokensKeyPrefix = 'wallet.custom-tokens.';
   static final Map<String, Set<String>> _hiddenTokenCache = {};
+  static final Map<String, Set<String>> _pendingHiddenTokenCache = {};
 
   Future<List<CustomTokenDefinition>> customTokens(
     WalletIdentity identity,
   ) async {
     final preferences = await SharedPreferences.getInstance();
     final encoded = preferences.getString(_customTokensKey(identity));
-    if (encoded == null) return const [];
+    if (encoded == null) return <CustomTokenDefinition>[];
     try {
       final values = jsonDecode(encoded) as List<dynamic>;
       return values
@@ -26,7 +27,7 @@ class WalletMetadataStore {
           .map(CustomTokenDefinition.fromJson)
           .toList();
     } catch (_) {
-      return const [];
+      return <CustomTokenDefinition>[];
     }
   }
 
@@ -105,6 +106,7 @@ class WalletMetadataStore {
     final preferences = await SharedPreferences.getInstance();
     final symbols = (preferences.getStringList(key) ?? const <String>[])
         .toSet();
+    symbols.addAll(_pendingHiddenTokenCache[key] ?? const <String>[]);
     _hiddenTokenCache[key] = symbols;
     return {...symbols};
   }
@@ -118,19 +120,30 @@ class WalletMetadataStore {
     WalletIdentity identity,
     String network,
     String symbol,
-    bool hidden,
-  ) async {
-    final preferences = await SharedPreferences.getInstance();
+    bool hidden, {
+    String? tokenAddress,
+  }) async {
     final key = _hiddenTokenSymbolsKey(identity, network);
-    final symbols = _hiddenTokenCache[key] ??
+    final tokenKey = tokenAddress?.toLowerCase() ?? symbol;
+    final pending = _pendingHiddenTokenCache.putIfAbsent(key, () => <String>{});
+    if (hidden) {
+      pending.add(tokenKey);
+    } else {
+      pending.remove(tokenKey);
+    }
+    final preferences = await SharedPreferences.getInstance();
+    final symbols =
+        _hiddenTokenCache[key] ??
         (preferences.getStringList(key) ?? const <String>[]).toSet();
     if (hidden) {
-      symbols.add(symbol);
+      symbols.add(tokenKey);
     } else {
-      symbols.remove(symbol);
+      symbols.remove(tokenKey);
     }
     _hiddenTokenCache[key] = symbols;
     await preferences.setStringList(key, symbols.toList());
+    pending.remove(tokenKey);
+    if (pending.isEmpty) _pendingHiddenTokenCache.remove(key);
   }
 
   static String normalizeWalletName(String name) {

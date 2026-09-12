@@ -43,9 +43,9 @@ class _WalletHomeState extends State<_WalletHome> {
     _valuationService = WalletValuationService();
     _tokenStore = SecureAccountTokenStore();
     _metadataStore = WalletMetadataStore();
-    _initialBalances = _visiblePlaceholderBalances(
-      widget.selectedChain.network,
-    );
+    _initialBalances = widget.walletIdentity == null
+        ? _placeholderBalances()
+        : _placeholderBalances().where((balance) => balance.isNative).toList();
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
     _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
     unawaited(_prepareInitialBalances(widget.selectedChain.network));
@@ -81,7 +81,7 @@ class _WalletHomeState extends State<_WalletHome> {
     final identity = widget.walletIdentity;
     if (identity == null) return _placeholderBalances();
     final tokens = await _tokenStore.read();
-    if (tokens == null) return _placeholderBalances();
+    if (tokens == null) return _visiblePlaceholderBalancesAsync(network);
     final addresses = await WalletPreferences.derivedAddresses(identity);
     final balances = await _portfolioService.loadBalances(
       network: network,
@@ -116,9 +116,7 @@ class _WalletHomeState extends State<_WalletHome> {
           ),
         );
     return [...balances, ...customBalances]
-        .where(
-          (balance) => balance.isNative || !hidden.contains(balance.symbol),
-        )
+        .where((balance) => balance.isNative || !_isHidden(balance, hidden))
         .toList();
   }
 
@@ -133,12 +131,15 @@ class _WalletHomeState extends State<_WalletHome> {
     _setInitialBalances(
       network,
       _placeholderBalances()
-          .where(
-            (balance) => balance.isNative || !hidden.contains(balance.symbol),
-          )
+          .where((balance) => balance.isNative || !_isHidden(balance, hidden))
           .toList(),
     );
   }
+
+  bool _isHidden(WalletBalance balance, Set<String> hidden) =>
+      hidden.contains(balance.symbol) ||
+      (balance.tokenAddress != null &&
+          hidden.contains(balance.tokenAddress!.toLowerCase()));
 
   void _setInitialBalances(
     WalletNetwork network,
@@ -150,20 +151,6 @@ class _WalletHomeState extends State<_WalletHome> {
     });
   }
 
-  List<WalletBalance> _visiblePlaceholderBalances(WalletNetwork network) {
-    final identity = widget.walletIdentity;
-    if (identity == null) return _placeholderBalances();
-    final hidden = _metadataStore.cachedHiddenTokenSymbols(
-      identity,
-      network.name,
-    );
-    return _placeholderBalances()
-        .where(
-          (balance) => balance.isNative || !hidden.contains(balance.symbol),
-        )
-        .toList();
-  }
-
   Future<List<WalletBalance>> _loadAndCacheBalances(
     WalletNetwork network,
   ) async {
@@ -172,8 +159,22 @@ class _WalletHomeState extends State<_WalletHome> {
       _balanceCache[network] = balances;
       return balances;
     } catch (_) {
-      return _placeholderBalances();
+      return _visiblePlaceholderBalancesAsync(network);
     }
+  }
+
+  Future<List<WalletBalance>> _visiblePlaceholderBalancesAsync(
+    WalletNetwork network,
+  ) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return _placeholderBalances();
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    return _placeholderBalances()
+        .where((balance) => balance.isNative || !_isHidden(balance, hidden))
+        .toList();
   }
 
   List<WalletBalance> _placeholderBalances() {
@@ -225,7 +226,13 @@ class _WalletHomeState extends State<_WalletHome> {
     setState(() {
       _balancesFuture = balancesFuture;
       _totalBalanceFuture = _loadTotalBalance(balancesFuture);
-      _initialBalances = cachedBalances ?? _visiblePlaceholderBalances(network);
+      _initialBalances =
+          cachedBalances ??
+          (widget.walletIdentity == null
+              ? _placeholderBalances()
+              : _placeholderBalances()
+                    .where((balance) => balance.isNative)
+                    .toList());
     });
     unawaited(_prepareInitialBalances(network));
   }
@@ -599,7 +606,9 @@ class _WalletHomeState extends State<_WalletHome> {
               initialData: _initialBalances,
               builder: (context, snapshot) {
                 final balancesToDisplay =
-                    snapshot.data ?? const <WalletBalance>[];
+                    snapshot.connectionState == ConnectionState.waiting
+                    ? _initialBalances
+                    : snapshot.data ?? const <WalletBalance>[];
                 return ListView.builder(
                   padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
                   itemCount: balancesToDisplay.length,

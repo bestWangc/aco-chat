@@ -23,6 +23,24 @@ class EvmBalanceReader {
       _loadTokenBalance(chain.usdc!, address, rpcEndpoints, chain),
   ]);
 
+  Future<WalletBalance> loadAssetBalance({
+    required WalletAsset asset,
+    required WalletChainDefinition chain,
+    required String address,
+    required List<Uri> rpcEndpoints,
+  }) => loadWalletBalance(
+    chain: chain.name,
+    symbol: asset.symbol,
+    assetName: asset.name,
+    isNative: asset.isNative,
+    address: address,
+    decimals: asset.decimals,
+    tokenAddress: asset.tokenAddress,
+    request: () => asset.isNative
+        ? _nativeBalance(address, rpcEndpoints)
+        : _erc20Balance(asset.tokenAddress!, address, rpcEndpoints),
+  );
+
   Future<WalletBalance> _loadNativeBalance(
     WalletChainDefinition chain,
     String address,
