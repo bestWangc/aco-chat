@@ -1248,10 +1248,10 @@ class _AddTokenSearch extends StatelessWidget {
         ),
         CupertinoButton(
           padding: EdgeInsets.zero,
-          minimumSize: const Size(48, 38),
+          minimumSize: const Size(50, 38),
           onPressed: onSubmit,
           child: Container(
-            width: 48,
+            width: 50,
             height: 38,
             decoration: const BoxDecoration(
               color: Color(0xFFD6D6D6),
