@@ -708,6 +708,24 @@ class _ContactsPageState extends State<_ContactsPage> {
                 padding: EdgeInsets.zero,
                 children: [
                   const SizedBox(height: 8),
+                  _ContactsQuickAction(
+                    palette: widget.palette,
+                    label: '添加好友',
+                    icon: CupertinoIcons.person_add,
+                    color: const Color(0xFF3478F6),
+                    dividerLeftPadding: 18 + 40 + 16,
+                    onTap: () async {
+                      _alphabetOverlay?.remove();
+                      _alphabetOverlay = null;
+                      await Navigator.of(context).push(
+                        CupertinoPageRoute<void>(
+                          builder: (_) =>
+                              _AddFriendPage(palette: widget.palette),
+                        ),
+                      );
+                      if (mounted) setState(() {});
+                    },
+                  ),
                   ValueListenableBuilder<int>(
                     valueListenable:
                         OpenIMChatRepository.friendRequestCountNotifier,
@@ -843,6 +861,149 @@ class _ContactsPageState extends State<_ContactsPage> {
     );
     if (mounted) setState(() {});
   }
+}
+
+class _AddFriendPage extends StatefulWidget {
+  const _AddFriendPage({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  State<_AddFriendPage> createState() => _AddFriendPageState();
+}
+
+class _AddFriendPageState extends State<_AddFriendPage> {
+  final _controller = TextEditingController();
+  final _session = AccountSession(AccountApiClient());
+  List<AccountProfile> _results = const [];
+  bool _loading = false;
+  String? _error;
+  final _sent = <String>{};
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search(String value) async {
+    final query = value.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _results = const [];
+        _error = null;
+      });
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final results = await _session.searchUsers(query);
+      if (mounted) {
+        setState(() {
+          _results = results;
+          _error = null;
+        });
+      }
+    } on AccountApiException catch (error) {
+      if (mounted) setState(() => _error = error.localizedMessage);
+    } catch (_) {
+      if (mounted) setState(() => _error = '搜索失败，请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _add(AccountProfile profile) async {
+    try {
+      await _session.addFriend(profile.accountId);
+      if (mounted) setState(() => _sent.add(profile.accountId));
+      if (mounted) _showNotice(context, '好友申请已发送', '等待对方通过后即可成为好友。');
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '添加好友失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '添加好友失败', '请稍后重试。');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    child: SafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+        children: [
+          AcoPageHeader(
+            palette: widget.palette,
+            title: '添加好友',
+            onBack: () => Navigator.of(context).maybePop(),
+          ),
+          const SizedBox(height: 12),
+          CupertinoSearchTextField(
+            controller: _controller,
+            placeholder: '搜索用户名或 UID',
+            onChanged: _search,
+            onSubmitted: _search,
+          ),
+          const SizedBox(height: 16),
+          if (_loading) const Center(child: CupertinoActivityIndicator()),
+          if (_error != null)
+            Text(_error!, style: TextStyle(color: widget.palette.mutedText)),
+          if (!_loading &&
+              _error == null &&
+              _controller.text.trim().isNotEmpty &&
+              _results.isEmpty)
+            Text('未找到匹配用户', style: TextStyle(color: widget.palette.mutedText)),
+          for (final profile in _results)
+            CupertinoListTile(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              leading: AcoAvatar(size: 40, imageUrl: profile.avatarUrl),
+              title: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      profile.nickname.isEmpty
+                          ? profile.username
+                          : profile.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (_identityBadgeAsset(profile.identity) != null ||
+                      _staffLongBadgeAsset(profile.staffIdentity) != null)
+                    const SizedBox(width: 10),
+                  if (_identityBadgeAsset(profile.identity)
+                      case final identityAsset?)
+                    Image.asset(
+                      identityAsset,
+                      width: _longBadgeWidth(profile.identity) * 1.15,
+                      fit: BoxFit.contain,
+                    ),
+                  if (_identityBadgeAsset(profile.identity) != null &&
+                      _staffLongBadgeAsset(profile.staffIdentity) != null)
+                    const SizedBox(width: 4),
+                  if (_staffLongBadgeAsset(profile.staffIdentity)
+                      case final staffAsset?)
+                    Image.asset(
+                      staffAsset,
+                      width: _longBadgeWidth(profile.staffIdentity) * 1.15,
+                      fit: BoxFit.contain,
+                    ),
+                ],
+              ),
+              subtitle: Text('${profile.username} · UID ${profile.accountId}'),
+              trailing: CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: _sent.contains(profile.accountId)
+                    ? null
+                    : () => _add(profile),
+                child: Text(_sent.contains(profile.accountId) ? '已发送' : '添加'),
+              ),
+            ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _CreateGroupPage extends StatefulWidget {

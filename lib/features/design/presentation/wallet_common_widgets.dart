@@ -197,8 +197,6 @@ class _WalletTabs extends StatelessWidget {
             ),
             const SizedBox(width: 22),
             _WalletTab(label: 'NFT', selected: selected == 1, onPressed: null),
-            const SizedBox(width: 22),
-            _WalletTab(label: '最近活动', selected: selected == 2, onPressed: null),
           ],
         ),
       ),

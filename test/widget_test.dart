@@ -574,15 +574,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('comming soon'), findsOneWidget);
 
-    for (final label in ['NFT', '最近活动']) {
-      final tab = tester.widget<CupertinoButton>(
-        find.ancestor(
-          of: find.text(label),
-          matching: find.byType(CupertinoButton),
-        ),
-      );
-      expect(tab.onPressed, isNull, reason: '$label 暂未开放');
-    }
+    final nftTab = tester.widget<CupertinoButton>(
+      find.ancestor(
+        of: find.text('NFT'),
+        matching: find.byType(CupertinoButton),
+      ),
+    );
+    expect(nftTab.onPressed, isNull, reason: 'NFT 暂未开放');
+    expect(find.text('最近活动'), findsNothing);
   });
 
   testWidgets('uses a consistent 44 point back button on detail pages', (

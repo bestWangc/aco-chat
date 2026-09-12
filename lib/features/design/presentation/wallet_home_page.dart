@@ -26,6 +26,7 @@ class _WalletHomeState extends State<_WalletHome> {
   late final WalletPortfolioService _portfolioService;
   late final WalletValuationService _valuationService;
   late final AccountTokenStore _tokenStore;
+  late final WalletMetadataStore _metadataStore;
   late Future<List<WalletBalance>> _balancesFuture;
   late Future<double?> _totalBalanceFuture;
   late List<WalletBalance> _initialBalances;
@@ -40,6 +41,7 @@ class _WalletHomeState extends State<_WalletHome> {
     _portfolioService = WalletPortfolioService();
     _valuationService = WalletValuationService();
     _tokenStore = SecureAccountTokenStore();
+    _metadataStore = WalletMetadataStore();
     _initialBalances = _placeholderBalances();
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
     _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
@@ -77,12 +79,21 @@ class _WalletHomeState extends State<_WalletHome> {
     final tokens = await _tokenStore.read();
     if (tokens == null) return _placeholderBalances();
     final addresses = await WalletPreferences.derivedAddresses(identity);
-    return _portfolioService.loadBalances(
+    final balances = await _portfolioService.loadBalances(
       network: network,
       identity: identity,
       derivedAddresses: addresses,
       accessToken: tokens.accessToken,
     );
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    return balances
+        .where(
+          (balance) => balance.isNative || !hidden.contains(balance.symbol),
+        )
+        .toList();
   }
 
   Future<List<WalletBalance>> _loadAndCacheBalances(
@@ -222,7 +233,10 @@ class _WalletHomeState extends State<_WalletHome> {
                       icon: CupertinoIcons.add,
                       label: '添加代币',
                       palette: widget.palette,
-                      onPressed: null,
+                      onPressed: () {
+                        _dismissWalletActions();
+                        widget.onOpen(AcoScreen.addTokenV2);
+                      },
                     ),
                   ],
                 ),

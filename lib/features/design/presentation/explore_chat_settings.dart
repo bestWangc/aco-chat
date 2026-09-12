@@ -291,7 +291,23 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
         ),
       ),
     );
-    if (mounted && added == true) unawaited(_loadGroupMembers());
+    if (mounted && added == true) {
+      unawaited(_refreshGroupMembersAfterInvite());
+    }
+  }
+
+  Future<void> _refreshGroupMembersAfterInvite() async {
+    // OpenIM delivers the membership update asynchronously after the invite
+    // request succeeds. Refresh a few times so the grid reflects the server
+    // state without requiring the user to leave and reopen this page.
+    for (final delay in const [
+      Duration(milliseconds: 300),
+      Duration(milliseconds: 900),
+    ]) {
+      await Future<void>.delayed(delay);
+      if (!mounted) return;
+      await _loadGroupMembers();
+    }
   }
 
   Future<void> _exitGroup() async {
@@ -989,15 +1005,19 @@ class _GroupMemberSelectionPageState extends State<_GroupMemberSelectionPage> {
   Future<void> _complete() async {
     if (_selected.isEmpty || _submitting) return;
     setState(() => _submitting = true);
+    final client = AccountApiClient();
     try {
-      await OpenIM.iMManager.groupManager.inviteUserToGroup(
+      await AccountSession(client).addGroupMembers(
         groupID: widget.groupID,
-        userIDList: _selected.toList(growable: false),
+        memberAccountIds: _selected.toList(growable: false),
       );
       if (mounted) Navigator.of(context).pop(true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '添加成员失败', error.localizedMessage);
     } catch (_) {
       if (mounted) _showNotice(context, '添加成员失败', '请稍后重试。');
     } finally {
+      client.close();
       if (mounted) setState(() => _submitting = false);
     }
   }

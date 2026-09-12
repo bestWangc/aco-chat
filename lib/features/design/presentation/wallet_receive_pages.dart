@@ -599,36 +599,156 @@ class _ReceiveAction extends StatelessWidget {
   );
 }
 
-class _AddTokenPage extends StatelessWidget {
-  const _AddTokenPage({required this.palette});
+class _AddTokenPage extends StatefulWidget {
+  const _AddTokenPage({
+    required this.palette,
+    required this.selectedChain,
+    this.walletIdentity,
+  });
   final AcoPalette palette;
+  final _WalletChain selectedChain;
+  final WalletIdentity? walletIdentity;
+
+  @override
+  State<_AddTokenPage> createState() => _AddTokenPageState();
+}
+
+class _AddTokenPageState extends State<_AddTokenPage> {
+  late final WalletMetadataStore _metadataStore = WalletMetadataStore();
+  late final List<WalletBalance> _tokens = _defaultTokens();
+  final Set<String> _removed = {};
+
+  List<WalletBalance> _defaultTokens() {
+    final chain = WalletChainRegistry.chains[widget.selectedChain.network]!;
+    return [
+      WalletBalance(
+        chain: chain.name,
+        symbol: chain.symbol,
+        assetName: chain.nativeAssetName,
+        isNative: true,
+        address: widget.walletIdentity?.address ?? '',
+        decimals: chain.decimals,
+      ),
+      if (chain.usdt != null)
+        WalletBalance(
+          chain: chain.name,
+          symbol: chain.usdt!.symbol,
+          assetName: chain.usdt!.name,
+          isNative: false,
+          address: widget.walletIdentity?.address ?? '',
+          decimals: chain.usdt!.decimals,
+          tokenAddress: chain.usdt!.address,
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) => _DetailScaffold(
-    palette: palette,
+    palette: widget.palette,
     title: '添加代币',
     child: ListView(
       padding: const EdgeInsets.fromLTRB(27, 12, 27, 26),
       children: [
         _AddTokenSearch(
-          palette: palette,
+          palette: widget.palette,
           onSubmit: () => _showNotice(context, '搜索', '已开始搜索代币。'),
         ),
         const SizedBox(height: 30),
-        _AddTokenEntry(label: '首页资产', palette: palette),
-        _AddTokenEntry(label: '我的资产', palette: palette, count: '47'),
-        _AddTokenEntry(label: '自定义代币', palette: palette),
+        _AddTokenEntry(
+          label: '首页资产',
+          palette: widget.palette,
+          onPressed: () => Navigator.of(context).push(
+            _AcoPageRoute(
+              builder: (_) => _HomeAssetPage(
+                palette: widget.palette,
+                tokens: _tokens,
+                removed: _removed,
+                onRemove: _removeToken,
+              ),
+            ),
+          ),
+        ),
+        _AddTokenEntry(label: '我的资产', palette: widget.palette, count: '47'),
+        _AddTokenEntry(label: '自定义代币', palette: widget.palette),
         const SizedBox(height: 12),
         Text(
           '热门代币',
           style: TextStyle(
-            color: palette.primaryText,
+            color: widget.palette.primaryText,
             fontSize: AcoTypography.bodyEmphasis,
             fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 14),
-        _AddTokenHotRow(symbol: 'USDT', assetSymbol: 'usdt', palette: palette),
-        _AddTokenHotRow(symbol: 'USDC', assetSymbol: 'usdc', palette: palette),
+        _AddTokenHotRow(
+          symbol: 'USDT',
+          assetSymbol: 'usdt',
+          palette: widget.palette,
+        ),
+        _AddTokenHotRow(
+          symbol: 'USDC',
+          assetSymbol: 'usdc',
+          palette: widget.palette,
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _removeToken(WalletBalance token) async {
+    if (token.isNative) return;
+    setState(() => _removed.add(token.symbol));
+    final identity = widget.walletIdentity;
+    if (identity != null) {
+      await _metadataStore.setTokenHidden(
+        identity,
+        widget.selectedChain.network.name,
+        token.symbol,
+        true,
+      );
+    }
+  }
+}
+
+class _HomeAssetPage extends StatelessWidget {
+  const _HomeAssetPage({
+    required this.palette,
+    required this.tokens,
+    required this.removed,
+    required this.onRemove,
+  });
+  final AcoPalette palette;
+  final List<WalletBalance> tokens;
+  final Set<String> removed;
+  final ValueChanged<WalletBalance> onRemove;
+
+  @override
+  Widget build(BuildContext context) => _DetailScaffold(
+    palette: palette,
+    title: '首页资产',
+    child: ListView(
+      padding: const EdgeInsets.fromLTRB(27, 12, 27, 26),
+      children: [
+        for (final token in tokens)
+          if (!removed.contains(token.symbol))
+            CupertinoListTile(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              title: Text(
+                token.symbol,
+                style: TextStyle(color: palette.primaryText),
+              ),
+              subtitle: Text(
+                token.assetName,
+                style: TextStyle(color: palette.mutedText),
+              ),
+              trailing: CupertinoButton(
+                padding: EdgeInsets.zero,
+                onPressed: token.isNative ? null : () => onRemove(token),
+                child: Icon(
+                  CupertinoIcons.minus_circle_fill,
+                  color: token.isNative ? palette.mutedText : _danger,
+                ),
+              ),
+            ),
       ],
     ),
   );

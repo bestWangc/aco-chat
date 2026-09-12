@@ -8,6 +8,7 @@ class WalletMetadataStore {
   static const walletNameMaxLength = 12;
   static const _derivedAddressesKeyPrefix = 'wallet.derived-addresses.';
   static const _walletNameKeyPrefix = 'wallet.name.';
+  static const _hiddenTokenSymbolsKeyPrefix = 'wallet.hidden-token-symbols.';
 
   Future<String> walletName(
     WalletIdentity identity, {
@@ -52,6 +53,36 @@ class WalletMetadataStore {
     );
   }
 
+  Future<Set<String>> hiddenTokenSymbols(
+    WalletIdentity identity,
+    String network,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    return (preferences.getStringList(
+              _hiddenTokenSymbolsKey(identity, network),
+            ) ??
+            const <String>[])
+        .toSet();
+  }
+
+  Future<void> setTokenHidden(
+    WalletIdentity identity,
+    String network,
+    String symbol,
+    bool hidden,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final key = _hiddenTokenSymbolsKey(identity, network);
+    final symbols = (preferences.getStringList(key) ?? const <String>[])
+        .toSet();
+    if (hidden) {
+      symbols.add(symbol);
+    } else {
+      symbols.remove(symbol);
+    }
+    await preferences.setStringList(key, symbols.toList());
+  }
+
   static String normalizeWalletName(String name) {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return 'Wallet1';
@@ -64,4 +95,10 @@ class WalletMetadataStore {
 
   static String _walletNameKey(WalletIdentity identity) =>
       '$_walletNameKeyPrefix${identity.address.toLowerCase()}';
+
+  static String _hiddenTokenSymbolsKey(
+    WalletIdentity identity,
+    String network,
+  ) =>
+      '$_hiddenTokenSymbolsKeyPrefix${identity.address.toLowerCase()}.$network';
 }

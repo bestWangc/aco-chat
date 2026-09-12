@@ -2,10 +2,14 @@ part of 'aco_design_shell.dart';
 
 final class _ChatThumbnailCache {
   static const _retention = Duration(days: 30);
+  static const _maxBytes = 100 * 1024 * 1024;
+  static const _cleanupInterval = Duration(hours: 6);
   static const _directoryName = 'chat-thumbnails';
   static const _requestTimeout = Duration(seconds: 10);
   static Future<Directory>? _directoryFuture;
   static Future<void>? _cleanupFuture;
+  static DateTime? _lastCleanup;
+  static Timer? _cleanupTimer;
   static final Map<String, Future<File>> _inFlight = {};
 
   static Future<File> load(String url) {
@@ -46,15 +50,28 @@ final class _ChatThumbnailCache {
 
   static Future<Directory> _createDirectory() async {
     final cacheDirectory = await getTemporaryDirectory();
-    return Directory(
+    final directory = await Directory(
       '${cacheDirectory.path}/$_directoryName',
     ).create(recursive: true);
+    _cleanupTimer ??= Timer.periodic(
+      _cleanupInterval,
+      (_) => _scheduleCleanup(directory),
+    );
+    return directory;
   }
 
   static void _scheduleCleanup(Directory directory) {
-    _cleanupFuture ??= _removeExpired(directory).catchError((error) {
-      debugPrint('[Chat] thumbnail cache cleanup failed: $error');
-    });
+    final now = DateTime.now();
+    if (_cleanupFuture != null ||
+        (_lastCleanup != null &&
+            now.difference(_lastCleanup!) < _cleanupInterval))
+      return;
+    _lastCleanup = now;
+    _cleanupFuture = _removeExpired(directory)
+        .catchError((error) {
+          debugPrint('[Chat] thumbnail cache cleanup failed: $error');
+        })
+        .whenComplete(() => _cleanupFuture = null);
   }
 
   static Future<bool> _isFresh(File file) async {
@@ -64,9 +81,31 @@ final class _ChatThumbnailCache {
   }
 
   static Future<void> _removeExpired(Directory directory) async {
+    final files = <File>[];
     await for (final entity in directory.list()) {
-      if (entity is! File || await _isFresh(entity)) continue;
-      await entity.delete();
+      if (entity is! File) continue;
+      if (await _isFresh(entity)) {
+        files.add(entity);
+      } else {
+        await entity.delete();
+      }
+    }
+    var total = 0;
+    final sizes = <File, int>{};
+    for (final file in files) {
+      final size = await file.length();
+      sizes[file] = size;
+      total += size;
+    }
+    if (total > _maxBytes) {
+      files.sort(
+        (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()),
+      );
+      for (final file in files) {
+        if (total <= _maxBytes) break;
+        await file.delete();
+        total -= sizes[file] ?? 0;
+      }
     }
   }
 
@@ -113,8 +152,7 @@ class _CachedChatThumbnailState extends State<_CachedChatThumbnail> {
         return Image.file(
           file,
           fit: BoxFit.contain,
-          errorBuilder: (_, error, stackTrace) =>
-              const _ImageUnavailable(),
+          errorBuilder: (_, error, stackTrace) => const _ImageUnavailable(),
         );
       }
       if (snapshot.hasError) return const _ImageUnavailable();

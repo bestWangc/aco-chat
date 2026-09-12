@@ -82,6 +82,7 @@ final class OpenIMChatRepository implements ChatRepository {
   static bool isNotifiableMessage(Message message) =>
       messageText(message) != null ||
       message.pictureElem != null ||
+      message.videoElem != null ||
       message.soundElem != null ||
       isVoiceCallInvite(message);
 
@@ -460,6 +461,7 @@ final class OpenIMChatRepository implements ChatRepository {
     }
     if (message.soundElem != null) return '[语音消息]';
     if (message.pictureElem != null) return '[图片]';
+    if (message.videoElem != null) return '[视频]';
     if (isVoiceCallInvite(message)) return '[语音通话]';
     return '[新消息]';
   }

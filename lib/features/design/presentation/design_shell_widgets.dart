@@ -180,8 +180,16 @@ class AcoScreenPage extends StatelessWidget {
         palette: palette,
         currentAccountId: currentAccountId,
       ),
-      AcoScreen.addTokenV1 => _AddTokenPage(palette: palette),
-      AcoScreen.addTokenV2 => _AddTokenPage(palette: palette),
+      AcoScreen.addTokenV1 => _AddTokenPage(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+      ),
+      AcoScreen.addTokenV2 => _AddTokenPage(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+      ),
       AcoScreen.dexToken => _DexTokenPage(palette: palette, onOpen: onOpen),
       AcoScreen.dexSwap => _DexSwapPage(palette: palette),
       AcoScreen.browserDiscover => _BrowserDiscoverPage(
