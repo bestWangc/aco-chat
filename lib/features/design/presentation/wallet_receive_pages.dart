@@ -694,7 +694,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
           palette: widget.palette,
           onChanged: (value) =>
               setState(() => _searchQuery = value.trim().toLowerCase()),
-          onSubmit: () => setState(() {}),
+          onSubmit: _dismissKeyboard,
         ),
         const SizedBox(height: 30),
         if (_searchQuery.isNotEmpty) ...[
@@ -776,7 +776,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
               token,
             ) {
               if (query.isEmpty) return true;
-                return token.address.toLowerCase() == query;
+              return token.address.toLowerCase() == query;
             });
             return Column(
               children: [
