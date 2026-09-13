@@ -384,7 +384,6 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                               child: AcoTopActions(
                                 palette: palette,
                                 onOpen: onOpen,
-                                scale: headerScale,
                               ),
                             ),
                           ),

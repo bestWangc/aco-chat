@@ -49,7 +49,12 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _PinnedHeaderDelegate(
-                    extent: 46 * .672 + 8 + 61,
+                    // The root actions occupy 46 px and quick actions occupy
+                    // 61 px (44 px content, 4/12 px vertical padding, and a
+                    // 1 px bottom divider).
+                    // Keep the pinned extent in sync so the header is never
+                    // constrained shorter than its content.
+                    extent: 46 + 2 + 61,
                     backgroundColor: widget.palette.background,
                     child: _header(),
                   ),
@@ -109,14 +114,7 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
 
   Widget _header() => Column(
     children: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 35),
-        child: AcoRootHeader(
-          palette: widget.palette,
-          onOpen: widget.onOpen,
-          scale: .672,
-        ),
-      ),
+      AcoRootHeader(palette: widget.palette, onOpen: widget.onOpen),
       const SizedBox(height: 2),
       ValueListenableBuilder<bool>(
         valueListenable: OpenIMChatRepository.messageUnreadNotifier,

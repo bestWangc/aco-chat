@@ -1127,6 +1127,30 @@ void main() {
     expect(listTileWidth, greaterThan(searchWidth));
   });
 
+  testWidgets('keeps the social header within its pinned extent', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+
+    await tester.tap(find.bySemanticsLabel('社交').first);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('opens explore page from root navigation', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+
+    await tester.tap(find.bySemanticsLabel('探索').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('发现'), findsOneWidget);
+    expect(find.text('请输入网址或搜索'), findsOneWidget);
+    expect(find.text('Coming Soon'), findsNothing);
+  });
+
   testWidgets('opens the create live page from the square action button', (
     WidgetTester tester,
   ) async {

@@ -582,15 +582,9 @@ class _DexBottomNavIcon extends StatelessWidget {
 }
 
 class AcoTopActions extends StatelessWidget {
-  const AcoTopActions({
-    required this.palette,
-    required this.onOpen,
-    this.scale = 1,
-    super.key,
-  });
+  const AcoTopActions({required this.palette, required this.onOpen, super.key});
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
-  final double scale;
 
   @override
   Widget build(BuildContext context) => Row(
@@ -599,15 +593,13 @@ class AcoTopActions extends StatelessWidget {
       _AcoDesignActionButton(
         asset: 'assets/icons/source_scan_custom.png',
         palette: palette,
-        scale: scale,
         label: '扫描二维码',
         onPressed: () => onOpen(AcoScreen.scan),
       ),
-      SizedBox(width: 6 * scale),
+      const SizedBox(width: 16),
       _AcoDesignActionButton(
         asset: 'assets/icons/source_person_custom.png',
         palette: palette,
-        scale: scale,
         label: '账户',
         onPressed: () => onOpen(AcoScreen.profile),
       ),
@@ -621,14 +613,12 @@ class _AcoDesignActionButton extends StatelessWidget {
     required this.palette,
     required this.label,
     required this.onPressed,
-    this.scale = 1,
   });
 
   final String asset;
   final AcoPalette palette;
   final String label;
   final VoidCallback onPressed;
-  final double scale;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -636,7 +626,7 @@ class _AcoDesignActionButton extends StatelessWidget {
     label: label,
     child: CupertinoButton(
       padding: EdgeInsets.zero,
-      minimumSize: Size(44 * scale, 44 * scale),
+      minimumSize: Size.zero,
       onPressed: onPressed,
       child: ColorFiltered(
         colorFilter: ColorFilter.mode(
@@ -645,10 +635,9 @@ class _AcoDesignActionButton extends StatelessWidget {
         ),
         child: Image.asset(
           asset,
-          // Keep the original aspect ratios while reducing the visual weight;
-          // the surrounding 44pt button remains the touch target.
-          width: (asset.contains('source_scan') ? 26 : 27) * scale,
-          height: 26 * scale,
+          // Keep the original aspect ratio while using the icon itself as the
+          // compact action target.
+          width: 19,
         ),
       ),
     ),
@@ -663,7 +652,6 @@ class AcoRootHeader extends StatelessWidget {
     this.trailing,
     this.onLeadingPressed,
     this.leadingButtonOffset = Offset.zero,
-    this.scale = 1,
     super.key,
   });
 
@@ -673,11 +661,10 @@ class AcoRootHeader extends StatelessWidget {
   final Widget? trailing;
   final VoidCallback? onLeadingPressed;
   final Offset leadingButtonOffset;
-  final double scale;
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    height: 46 * scale,
+    height: 46,
     child: Stack(
       alignment: Alignment.center,
       children: [
@@ -705,9 +692,10 @@ class AcoRootHeader extends StatelessWidget {
           ),
         Align(
           alignment: Alignment.centerRight,
-          child:
-              trailing ??
-              AcoTopActions(palette: palette, onOpen: onOpen, scale: scale),
+          child: Padding(
+            padding: const EdgeInsets.only(right: 35),
+            child: trailing ?? AcoTopActions(palette: palette, onOpen: onOpen),
+          ),
         ),
       ],
     ),

@@ -174,11 +174,8 @@ const _walletHeaderLime = _accentGreen;
 const _walletNavInactive = Color(0xFFC2C2C2);
 // Root pages already sit inside the shell's SafeArea. Keep only a compact
 // visual breathing room below the status bar instead of duplicating it.
-const _rootPageTopInset = 0.0;
-const _walletHeaderWalletIconWidth = 36.0;
-const _walletHeaderWalletIconHeight = 32.0;
-const _walletHeaderWalletArrowWidth = 15.50;
-const _walletHeaderWalletArrowHeight = 13.42;
+const _walletHeaderWalletIconWidth = 24.0;
+const _walletHeaderWalletArrowWidth = 13.0;
 const _walletChainRailWidth = 78.0;
 const _walletChainRailItemHeight = 70.0;
 const _walletChainRailIndicatorWidth = 4.0;
@@ -663,7 +660,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                           onSelected: (index) {
                             const destinations = [
                               AcoScreen.walletHome,
-                              AcoScreen.comingSoon,
+                              AcoScreen.browserDiscover,
                               AcoScreen.comingSoon,
                               AcoScreen.squareFeed,
                               AcoScreen.socialMessages,

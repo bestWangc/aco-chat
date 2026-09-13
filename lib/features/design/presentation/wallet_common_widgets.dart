@@ -98,6 +98,8 @@ class _OutlineButton extends StatelessWidget {
     this.fontSize = AcoTypography.bodySmall,
     this.backgroundColor,
     this.foregroundColor,
+    this.borderColor,
+    this.borderWidth = 0,
     this.radius = 8,
     this.fontWeight = FontWeight.w600,
     this.leadingAsset,
@@ -113,6 +115,8 @@ class _OutlineButton extends StatelessWidget {
   final double fontSize;
   final Color? backgroundColor;
   final Color? foregroundColor;
+  final Color? borderColor;
+  final double borderWidth;
   final double radius;
   final FontWeight fontWeight;
   final String? leadingAsset;
@@ -133,6 +137,12 @@ class _OutlineButton extends StatelessWidget {
           decoration: BoxDecoration(
             color: backgroundColor ?? palette.surface,
             borderRadius: BorderRadius.circular(radius),
+            border: borderWidth > 0
+                ? Border.all(
+                    color: borderColor ?? palette.border,
+                    width: borderWidth,
+                  )
+                : null,
           ),
           child: Center(
             child: Row(
@@ -250,18 +260,30 @@ class _WalletTab extends StatelessWidget {
       children: [
         DecoratedBox(
           decoration: BoxDecoration(
-            color: selected ? const Color(0xFF212121) : _transparent,
-            borderRadius: BorderRadius.circular(8),
+            color: selected ? const Color(0xFF141414) : _transparent,
+            borderRadius: BorderRadius.circular(18),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            child: Text(
-              label,
-              style: TextStyle(
-                color: selected ? _white : _walletHeaderMuted,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                fontSize: selected ? 14 : 15,
-                height: 1,
+            padding: selected ? const EdgeInsets.all(5) : EdgeInsets.zero,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFF292929) : _transparent,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: selected ? _white : _walletHeaderMuted,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    fontSize: 16,
+                    height: 1,
+                  ),
+                ),
               ),
             ),
           ),

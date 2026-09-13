@@ -57,6 +57,7 @@ class _ProfilePage extends StatelessWidget {
     children: [
       AcoPageHeader(
         palette: palette,
+        title: '个人中心',
         onBack: onBack,
         backButtonOffset: const Offset(-16, 0),
       ),
