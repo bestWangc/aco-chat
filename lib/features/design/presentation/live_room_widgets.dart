@@ -92,6 +92,7 @@ class _LiveRoomOverview extends StatelessWidget {
           palette: palette,
           speakers: room.speakers,
           listeners: room.listeners,
+          hostUserId: room.host.userId,
           viewerUserId: room.viewerUserId,
           viewerMuted: viewerMuted,
           speakingParticipantIds: speakingParticipantIds,
@@ -776,6 +777,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     required this.palette,
     required this.speakers,
     required this.listeners,
+    required this.hostUserId,
     required this.viewerUserId,
     required this.viewerMuted,
     required this.speakingParticipantIds,
@@ -785,6 +787,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
   final AcoPalette palette;
   final List<LiveParticipant> speakers;
   final List<LiveParticipant> listeners;
+  final int hostUserId;
   final int viewerUserId;
   final bool viewerMuted;
   final Set<String> speakingParticipantIds;
@@ -806,12 +809,20 @@ class _LiveRoomParticipantSection extends StatelessWidget {
     );
   }
 
+  List<LiveParticipant> _prepareParticipants(
+    Iterable<LiveParticipant> participants,
+  ) => participants
+      .where((participant) => participant.userId != hostUserId)
+      .map(_withViewerMute)
+      .toList(growable: false);
+
   @override
   Widget build(BuildContext context) {
-    final effectiveSpeakers = speakers
-        .map(_withViewerMute)
-        .toList(growable: false);
-    final effectiveListeners = listeners.map(_withViewerMute).toList()
+    // The host is rendered in the dedicated card above. Realtime snapshots
+    // can briefly contain the host in a speaker/listener list during a role
+    // transition, so filter that entry and de-duplicate the remaining grid.
+    final effectiveSpeakers = _prepareParticipants(speakers);
+    final effectiveListeners = _prepareParticipants(listeners).toList()
       ..sort((left, right) {
         final leftIsViewer = left.userId == viewerUserId;
         final rightIsViewer = right.userId == viewerUserId;
@@ -840,10 +851,14 @@ class _LiveRoomParticipantSection extends StatelessWidget {
       ...unmutedSpeakers,
       ...mutedSpeakers,
     ].take(12).toList(growable: false);
-    final participants = [
+    final participants = <LiveParticipant>[
       ...visibleSpeakers,
       ...effectiveListeners.take(12 - visibleSpeakers.length),
     ];
+    final seenParticipantIds = <int>{};
+    final uniqueParticipants = participants
+        .where((participant) => seenParticipantIds.add(participant.userId))
+        .toList(growable: false);
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 4, 18, 0),
       child: LayoutBuilder(
@@ -858,7 +873,7 @@ class _LiveRoomParticipantSection extends StatelessWidget {
             spacing: spacing,
             runSpacing: 14,
             children: [
-              for (final participant in participants)
+              for (final participant in uniqueParticipants)
                 _LiveRoomParticipantCard(
                   palette: palette,
                   participant: participant,
