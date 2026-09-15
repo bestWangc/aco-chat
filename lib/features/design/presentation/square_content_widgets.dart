@@ -26,34 +26,31 @@ class _DiscoverShortcut extends StatelessWidget {
         background = const Color(0xFFEB2535);
     }
 
-    return SizedBox(
-      width: 108,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        onPressed: onTap,
-        child: Column(
-          children: [
-            Container(
-              width: 82,
-              height: 82,
-              decoration: BoxDecoration(
-                color: background,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(CupertinoIcons.app_badge, color: _white),
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(20),
             ),
-            const SizedBox(height: 7),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: palette.primaryText,
-                fontSize: AcoTypography.caption,
-              ),
+            child: const Icon(CupertinoIcons.app_badge, color: _white),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.caption,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

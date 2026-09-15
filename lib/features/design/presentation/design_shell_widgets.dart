@@ -843,13 +843,9 @@ class AcoSearch extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSquareComposer = variant == AcoSearchVariant.squareComposer;
     final submitWidth = isSquareComposer ? 48.0 : height;
-    final borderColor = _borderColor(isSquareComposer);
-    var iconColor = palette.mutedText;
+    final borderColor = _borderColor();
     var hintColor = palette.mutedText;
     if (palette.dark) {
-      iconColor = isSquareComposer
-          ? const Color(0xFF212121)
-          : const Color(0xFFF7F7F7);
       hintColor = isSquareComposer
           ? const Color(0xFFF2F2F2)
           : const Color(0xFF888888);
@@ -866,7 +862,7 @@ class AcoSearch extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const SizedBox(width: 14),
+          SizedBox(width: isSquareComposer ? 14 : 18),
           if (isSquareComposer)
             SizedBox(
               width: 20,
@@ -877,16 +873,18 @@ class AcoSearch extends StatelessWidget {
               ),
             )
           else
-            Icon(CupertinoIcons.search, color: iconColor, size: 20),
-          const SizedBox(width: 8),
+            Image.asset(
+              'assets/icons/search_input.png',
+              width: 20,
+              filterQuality: FilterQuality.high,
+            ),
+          SizedBox(width: isSquareComposer ? 8 : 12),
           Expanded(
             child: Text(
               hint,
               style: TextStyle(
                 color: hintColor,
-                fontSize: isSquareComposer
-                    ? AcoTypography.caption
-                    : AcoTypography.body,
+                fontSize: isSquareComposer ? AcoTypography.caption : 18,
               ),
             ),
           ),
@@ -914,9 +912,9 @@ class AcoSearch extends StatelessWidget {
     );
   }
 
-  Color _borderColor(bool isSquareComposer) {
+  Color _borderColor() {
     if (!palette.dark) return palette.border;
-    return isSquareComposer ? const Color(0xFFD7D7D7) : const Color(0xFFC1C1C1);
+    return const Color(0xFFD7D7D7);
   }
 
   Widget _buildSubmitChild(bool isSquareComposer) {

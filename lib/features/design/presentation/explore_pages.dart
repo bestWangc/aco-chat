@@ -8,83 +8,240 @@ class _BrowserDiscoverPage extends StatelessWidget {
   final ValueChanged<AcoScreen> onOpen;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
+    padding: const EdgeInsets.fromLTRB(0, 14, 0, 24),
     children: [
-      AcoPageHeader(
-        palette: palette,
-        title: '发现',
-        onBack: () => Navigator.of(context).maybePop(),
-        backButtonOffset: const Offset(-20, 0),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: AcoSearch(
+          palette: palette,
+          hint: '请输入网址或搜索',
+          height: 40,
+          action: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/icons/search_scan.png',
+                width: 18,
+                filterQuality: FilterQuality.high,
+              ),
+              const SizedBox(width: 18),
+            ],
+          ),
+        ),
       ),
-      const SizedBox(height: 20),
-      AcoSearch(
-        palette: palette,
-        hint: '请输入网址或搜索',
-        onSubmit: () => _showNotice(context, '浏览器', '正在打开搜索结果。'),
-        height: 60,
-        action: Row(
-          mainAxisSize: MainAxisSize.min,
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: _DiscoverAdCarousel(palette: palette),
+      ),
+      const SizedBox(height: 24),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(CupertinoIcons.qrcode_viewfinder, color: palette.mutedText),
-            const SizedBox(width: 14),
-            _CountPill(palette: palette, label: '7'),
-            const SizedBox(width: 4),
+            Expanded(
+              child: _SectionTabs(
+                palette: palette,
+                labels: const ['热门', '探索', '我的'],
+                selected: 0,
+                itemSpacing: 20,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Row(
+                children: [
+                  Text(
+                    '更多',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.body,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Image.asset(
+                    'assets/icons/explore_more_chevron.png',
+                    width: 8,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-      const SizedBox(height: 18),
-      AcoSurface(
-        palette: palette,
-        padding: EdgeInsets.zero,
-        child: Container(
-          height: 236,
-          decoration: BoxDecoration(
-            color: palette.surfaceRaised,
-            borderRadius: BorderRadius.circular(18),
+      const SizedBox(height: 10),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            for (final app in const ['链上数据', 'NFT 市场', '交易工具', 'Aco 学院'])
+              _DiscoverShortcut(
+                palette: palette,
+                label: app,
+                onTap: () => onOpen(AcoScreen.marketOverview),
+              ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 22),
+      const _DiscoverPromoCarousel(),
+    ],
+  );
+}
+
+class _DiscoverAdCarousel extends StatefulWidget {
+  const _DiscoverAdCarousel({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  State<_DiscoverAdCarousel> createState() => _DiscoverAdCarouselState();
+}
+
+class _DiscoverAdCarouselState extends State<_DiscoverAdCarousel> {
+  static const _adAssets = [
+    'assets/images/explore_ad_newcomer.jpg',
+    'assets/images/explore_ad_referral.jpg',
+    'assets/images/explore_ad_promotion.jpg',
+  ];
+  var _currentPage = 0;
+
+  @override
+  Widget build(BuildContext context) => AspectRatio(
+    aspectRatio: 1.76,
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: ColoredBox(
+        color: const Color(0xFF212121),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Positioned.fill(
+              child: LayoutBuilder(
+                builder: (context, constraints) => CarouselSlider.builder(
+                  options: CarouselOptions(
+                    height: constraints.maxHeight,
+                    autoPlay: true,
+                    autoPlayInterval: const Duration(seconds: 4),
+                    autoPlayAnimationDuration: const Duration(
+                      milliseconds: 280,
+                    ),
+                    autoPlayCurve: Curves.easeOut,
+                    enlargeCenterPage: false,
+                    viewportFraction: 1,
+                    padEnds: false,
+                    onPageChanged: (page, _) =>
+                        setState(() => _currentPage = page),
+                  ),
+                  itemCount: _adAssets.length,
+                  itemBuilder: (_, index, _) => SizedBox.expand(
+                    child: Image.asset(
+                      _adAssets[index],
+                      fit: BoxFit.fitWidth,
+                      filterQuality: FilterQuality.high,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 18,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  for (var index = 0; index < _adAssets.length; index++)
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      width: 28,
+                      height: 3,
+                      margin: EdgeInsets.only(
+                        right: index == _adAssets.length - 1 ? 0 : 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: index == _currentPage ? _lime : _black,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _DiscoverPromoCarousel extends StatefulWidget {
+  const _DiscoverPromoCarousel();
+
+  @override
+  State<_DiscoverPromoCarousel> createState() => _DiscoverPromoCarouselState();
+}
+
+class _DiscoverPromoCarouselState extends State<_DiscoverPromoCarousel> {
+  static const _adAssets = [
+    'assets/images/explore_promo_msb_license.jpg',
+    'assets/images/explore_promo_cayman_qualification.jpg',
+    'assets/images/explore_promo_us_qualification.jpg',
+  ];
+  var _currentPage = 0;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      SizedBox(
+        height: 92,
+        child: CarouselSlider.builder(
+          options: CarouselOptions(
+            height: 92,
+            autoPlay: true,
+            autoPlayInterval: const Duration(seconds: 4),
+            autoPlayAnimationDuration: const Duration(milliseconds: 280),
+            autoPlayCurve: Curves.easeOut,
+            enlargeCenterPage: false,
+            viewportFraction: .72,
+            padEnds: false,
+            onPageChanged: (page, _) => setState(() => _currentPage = page),
           ),
-          child: Center(
-            child: Icon(
-              CupertinoIcons.compass,
-              color: _lime.withValues(alpha: .8),
-              size: 38,
+          itemCount: _adAssets.length,
+          itemBuilder: (_, index, _) => Padding(
+            padding: EdgeInsets.only(left: index == 0 ? 20 : 12, right: 12),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                _adAssets[index],
+                width: double.infinity,
+                height: double.infinity,
+                fit: BoxFit.cover,
+                filterQuality: FilterQuality.high,
+              ),
             ),
           ),
         ),
       ),
-      const SizedBox(height: 56),
+      const SizedBox(height: 12),
       Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Expanded(
-            child: _SectionTabs(
-              palette: palette,
-              labels: const ['热门', '探索', '我的'],
-              selected: 0,
-            ),
-          ),
-          Text(
-            '更多',
-            style: TextStyle(
-              color: palette.mutedText,
-              fontSize: AcoTypography.body,
-            ),
-          ),
-          Icon(
-            CupertinoIcons.chevron_right,
-            color: palette.mutedText,
-            size: 18,
-          ),
-        ],
-      ),
-      const SizedBox(height: 28),
-      Wrap(
-        spacing: 12,
-        runSpacing: 16,
-        children: [
-          for (final app in const ['链上数据', 'NFT 市场', '交易工具', 'Aco 学院'])
-            _DiscoverShortcut(
-              palette: palette,
-              label: app,
-              onTap: () => onOpen(AcoScreen.marketOverview),
+          for (var index = 0; index < _adAssets.length; index++)
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 20,
+              height: 2,
+              margin: EdgeInsets.only(
+                right: index == _adAssets.length - 1 ? 0 : 2,
+              ),
+              decoration: BoxDecoration(
+                color: index == _currentPage ? _lime : _black,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
         ],
       ),

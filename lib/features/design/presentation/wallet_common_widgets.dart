@@ -310,25 +310,30 @@ class _SectionTabs extends StatelessWidget {
     required this.labels,
     required this.selected,
     this.onChanged,
+    this.itemSpacing = 32,
   });
   final AcoPalette palette;
   final List<String> labels;
   final int selected;
   final ValueChanged<int>? onChanged;
+  final double itemSpacing;
   @override
   Widget build(BuildContext context) => Row(
     children: [
       for (var i = 0; i < labels.length; i++)
         Padding(
-          padding: const EdgeInsets.only(right: 32),
+          padding: EdgeInsets.only(
+            right: i == labels.length - 1 ? 0 : itemSpacing,
+          ),
           child: CupertinoButton(
             padding: EdgeInsets.zero,
             minimumSize: const Size(30, 42),
             onPressed: onChanged == null ? null : () => onChanged!(i),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
+            child: SizedBox(
+              height: 42,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Container(
                   height: 28.42,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
@@ -337,21 +342,20 @@ class _SectionTabs extends StatelessWidget {
                         : _transparent,
                     borderRadius: BorderRadius.circular(12.11),
                   ),
-                  child: Center(
-                    child: Text(
-                      labels[i],
-                      style: TextStyle(
-                        color: i == selected ? _white : _walletHeaderMuted,
-                        fontWeight: i == selected
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                        fontSize: i == selected ? 24 : 26,
-                        height: 1,
-                      ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    labels[i],
+                    style: TextStyle(
+                      color: i == selected ? _white : _walletHeaderMuted,
+                      fontWeight: i == selected
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                      fontSize: 18,
+                      height: 1,
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -551,32 +555,6 @@ class _WalletAssetRow extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CountPill extends StatelessWidget {
-  const _CountPill({
-    required this.palette,
-    required this.label,
-    this.size = 32,
-  });
-  final AcoPalette palette;
-  final String label;
-  final double size;
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    alignment: Alignment.center,
-    decoration: const BoxDecoration(color: _lime, shape: BoxShape.circle),
-    child: Text(
-      label,
-      style: TextStyle(
-        color: _black,
-        fontSize: size <= 24 ? 10 : AcoTypography.caption,
-        fontWeight: FontWeight.w700,
-      ),
-    ),
-  );
 }
 
 class _SwapField extends StatelessWidget {
