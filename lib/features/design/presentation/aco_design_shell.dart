@@ -29,6 +29,7 @@ import 'package:aco_chat/services/wallet_metadata_store.dart';
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_transfer_service.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
+import 'package:aco_chat/services/dapp_directory_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';

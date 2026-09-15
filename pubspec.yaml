@@ -80,6 +80,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/dapps/
     - assets/images/identity_badges/
     - assets/images/staff_badges/
     - assets/sounds/

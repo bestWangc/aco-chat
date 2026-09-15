@@ -2,10 +2,39 @@ part of 'aco_design_shell.dart';
 
 const _squareComposerHorizontalInset = 35.0;
 
-class _BrowserDiscoverPage extends StatelessWidget {
-  const _BrowserDiscoverPage({required this.palette, required this.onOpen});
+class _BrowserDiscoverPage extends StatefulWidget {
+  const _BrowserDiscoverPage({
+    required this.palette,
+    required this.onOpen,
+    required this.chain,
+  });
+
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
+  final String chain;
+
+  @override
+  State<_BrowserDiscoverPage> createState() => _BrowserDiscoverPageState();
+}
+
+class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
+  late Future<List<DappEntry>> _hotDapps;
+
+  @override
+  void initState() {
+    super.initState();
+    _hotDapps = DappDirectoryService().loadHot(widget.chain);
+  }
+
+  @override
+  void didUpdateWidget(covariant _BrowserDiscoverPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.chain != widget.chain) {
+      _hotDapps = DappDirectoryService().loadHot(widget.chain);
+    }
+  }
+
+  @override
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(0, 14, 0, 24),
@@ -13,7 +42,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: AcoSearch(
-          palette: palette,
+          palette: widget.palette,
           hint: '请输入网址或搜索',
           height: 40,
           action: Row(
@@ -32,7 +61,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
       const SizedBox(height: 12),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: _DiscoverAdCarousel(palette: palette),
+        child: _DiscoverAdCarousel(palette: widget.palette),
       ),
       const SizedBox(height: 24),
       Padding(
@@ -42,7 +71,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
           children: [
             Expanded(
               child: _SectionTabs(
-                palette: palette,
+                palette: widget.palette,
                 labels: const ['热门', '探索', '我的'],
                 selected: 0,
                 itemSpacing: 20,
@@ -55,7 +84,7 @@ class _BrowserDiscoverPage extends StatelessWidget {
                   Text(
                     '更多',
                     style: TextStyle(
-                      color: palette.mutedText,
+                      color: widget.palette.mutedText,
                       fontSize: AcoTypography.body,
                     ),
                   ),
@@ -74,20 +103,46 @@ class _BrowserDiscoverPage extends StatelessWidget {
       const SizedBox(height: 10),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            for (final app in const ['链上数据', 'NFT 市场', '交易工具', 'Aco 学院'])
-              _DiscoverShortcut(
-                palette: palette,
-                label: app,
-                onTap: () => onOpen(AcoScreen.marketOverview),
-              ),
-          ],
+        child: FutureBuilder<List<DappEntry>>(
+          future: _hotDapps,
+          builder: (_, snapshot) {
+            final dapps = snapshot.data ?? const <DappEntry>[];
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const SizedBox(height: 85);
+            }
+            if (dapps.isEmpty) {
+              return SizedBox(
+                height: 85,
+                child: Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    '${widget.chain} 暂无热门 DApp',
+                    style: TextStyle(
+                      color: widget.palette.mutedText,
+                      fontSize: AcoTypography.caption,
+                    ),
+                  ),
+                ),
+              );
+            }
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (final dapp in dapps.take(4))
+                  _DiscoverShortcut(
+                    palette: widget.palette,
+                    dapp: dapp,
+                    onTap: () => widget.onOpen(AcoScreen.marketOverview),
+                  ),
+              ],
+            );
+          },
         ),
       ),
       const SizedBox(height: 22),
       const _DiscoverPromoCarousel(),
+      const SizedBox(height: 30),
+      _DiscoverEarningsHeader(palette: widget.palette),
     ],
   );
 }
@@ -131,6 +186,7 @@ class _DiscoverAdCarouselState extends State<_DiscoverAdCarousel> {
                     ),
                     autoPlayCurve: Curves.easeOut,
                     enlargeCenterPage: false,
+                    enableInfiniteScroll: false,
                     viewportFraction: 1,
                     padEnds: false,
                     onPageChanged: (page, _) =>
@@ -206,6 +262,7 @@ class _DiscoverPromoCarouselState extends State<_DiscoverPromoCarousel> {
             autoPlayAnimationDuration: const Duration(milliseconds: 280),
             autoPlayCurve: Curves.easeOut,
             enlargeCenterPage: false,
+            enableInfiniteScroll: false,
             viewportFraction: .72,
             padEnds: false,
             onPageChanged: (page, _) => setState(() => _currentPage = page),
@@ -246,6 +303,57 @@ class _DiscoverPromoCarouselState extends State<_DiscoverPromoCarousel> {
         ],
       ),
     ],
+  );
+}
+
+class _DiscoverEarningsHeader extends StatelessWidget {
+  const _DiscoverEarningsHeader({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '收益专区',
+                style: TextStyle(
+                  color: const Color(0xFFC2C2C2),
+                  fontSize: AcoTypography.title,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Text(
+              '更多',
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.body,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Image.asset(
+              'assets/icons/explore_more_chevron.png',
+              width: 8,
+              filterQuality: FilterQuality.high,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          '实用、快速赚币工具集合，最大化闲置资金收益!',
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.bodySmall,
+          ),
+        ),
+      ],
+    ),
   );
 }
 

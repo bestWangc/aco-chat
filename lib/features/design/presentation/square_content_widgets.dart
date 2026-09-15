@@ -3,27 +3,33 @@ part of 'aco_design_shell.dart';
 class _DiscoverShortcut extends StatelessWidget {
   const _DiscoverShortcut({
     required this.palette,
-    required this.label,
+    required this.dapp,
     required this.onTap,
   });
   final AcoPalette palette;
-  final String label;
+  final DappEntry dapp;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final Color background;
-    switch (label) {
-      case '链上数据':
+    final IconData icon;
+    switch (dapp.category) {
+      case 'dex':
+      case 'swap':
         background = const Color(0xFF3566D6);
+        icon = CupertinoIcons.arrow_2_squarepath;
         break;
-      case 'NFT 市场':
+      case 'nft':
         background = _black;
+        icon = CupertinoIcons.photo;
         break;
-      case '交易工具':
+      case 'lending':
         background = palette.surfaceRaised;
+        icon = CupertinoIcons.money_dollar_circle;
         break;
       default:
         background = const Color(0xFFEB2535);
+        icon = CupertinoIcons.chart_bar_alt_fill;
     }
 
     return CupertinoButton(
@@ -38,11 +44,20 @@ class _DiscoverShortcut extends StatelessWidget {
               color: background,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Icon(CupertinoIcons.app_badge, color: _white),
+            child: dapp.iconUrl.isEmpty
+                ? Icon(icon, color: _white)
+                : Padding(
+                    padding: const EdgeInsets.all(15),
+                    child: Image.network(
+                      dapp.iconUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => Icon(icon, color: _white),
+                    ),
+                  ),
           ),
           const SizedBox(height: 7),
           Text(
-            label,
+            dapp.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
