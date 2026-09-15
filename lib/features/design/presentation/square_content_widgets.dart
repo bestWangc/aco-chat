@@ -9,28 +9,66 @@ class _DiscoverShortcut extends StatelessWidget {
   final AcoPalette palette;
   final DappEntry dapp;
   final VoidCallback onTap;
+
+  static const _trustWalletLogos = <String, String>{
+    'aave': 'aave.com.png',
+    'balancer': 'balancer.finance.png',
+    'camelot': 'camelot.exchange.png',
+    'curve': 'curve.fi.png',
+    'eigenlayer': 'www.eigenlayer.xyz:.png.png',
+    'flap': 'flap.sh.png',
+    'fluid': 'fluid.instadapp.io.png',
+    'four-meme': 'four.meme.png',
+    'gmgn': 'gmgn.ai.png',
+    'gmx': 'gmx.io.png',
+    'hyperliquid': 'hyperliquid.png',
+    'jito': 'www.jito.network.png',
+    'lido': 'lido.fi.png',
+    'lista': 'lista.org.png',
+    'morpho': 'app.morpho.org.png',
+    'ocra': 'www.orca.so.png',
+    'pancakeswap': 'pancakeswap.finance.png',
+    'pump-fun': 'pump.fun.png',
+    'raydium': 'raydium.io.png',
+    'sunpump': 'sunpump.meme.png',
+    'uniswap': 'app.uniswap.org.png',
+    'venus': 'app.venus.io.png',
+  };
+
+  Widget _fallbackIcon(IconData icon) {
+    if (dapp.iconUrl.isEmpty) {
+      return Icon(icon, color: palette.primaryText);
+    }
+    return Image.network(
+      dapp.iconUrl,
+      width: 52,
+      height: 52,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => Icon(icon, color: palette.primaryText),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final Color background;
     final IconData icon;
     switch (dapp.category) {
       case 'dex':
       case 'swap':
-        background = const Color(0xFF3566D6);
         icon = CupertinoIcons.arrow_2_squarepath;
         break;
       case 'nft':
-        background = _black;
         icon = CupertinoIcons.photo;
         break;
       case 'lending':
-        background = palette.surfaceRaised;
         icon = CupertinoIcons.money_dollar_circle;
         break;
       default:
-        background = const Color(0xFFEB2535);
         icon = CupertinoIcons.chart_bar_alt_fill;
     }
+    final trustWalletLogo = _trustWalletLogos[dapp.id];
+    final logoAsset = trustWalletLogo == null
+        ? 'assets/images/dapps/${dapp.id}.webp'
+        : 'assets/images/dapps/trustwallet/$trustWalletLogo';
 
     return CupertinoButton(
       padding: EdgeInsets.zero,
@@ -40,20 +78,17 @@ class _DiscoverShortcut extends StatelessWidget {
           Container(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(
-              color: background,
-              borderRadius: BorderRadius.circular(20),
+            alignment: Alignment.center,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                logoAsset,
+                width: 52,
+                height: 52,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => _fallbackIcon(icon),
+              ),
             ),
-            child: dapp.iconUrl.isEmpty
-                ? Icon(icon, color: _white)
-                : Padding(
-                    padding: const EdgeInsets.all(15),
-                    child: Image.network(
-                      dapp.iconUrl,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => Icon(icon, color: _white),
-                    ),
-                  ),
           ),
           const SizedBox(height: 7),
           Text(

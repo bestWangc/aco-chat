@@ -36,7 +36,32 @@ class DappDirectoryService {
 
   final http.Client _client;
 
+  static const _cacheTtl = Duration(minutes: 5);
+  static final _cache = <String, _DappCacheEntry>{};
+  static final _pending = <String, Future<List<DappEntry>>>{};
+
   Future<List<DappEntry>> loadHot(String chain) async {
+    final key = chain.trim().toLowerCase();
+    final cached = _cache[key];
+    if (cached != null) {
+      final age = DateTime.now().difference(cached.createdAt);
+      if (age < _cacheTtl) return cached.dapps;
+    }
+    final inFlight = _pending[key];
+    if (inFlight != null) return inFlight;
+
+    final request = _fetchHot(key);
+    _pending[key] = request;
+    try {
+      final dapps = await request;
+      _cache[key] = _DappCacheEntry(DateTime.now(), dapps);
+      return dapps;
+    } finally {
+      _pending.remove(key);
+    }
+  }
+
+  Future<List<DappEntry>> _fetchHot(String chain) async {
     final base = const AppConfig().apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
     final response = await _client
         .get(
@@ -58,4 +83,11 @@ class DappDirectoryService {
         .where((dapp) => dapp.id.isNotEmpty && dapp.name.isNotEmpty)
         .toList(growable: false);
   }
+}
+
+class _DappCacheEntry {
+  const _DappCacheEntry(this.createdAt, this.dapps);
+
+  final DateTime createdAt;
+  final List<DappEntry> dapps;
 }

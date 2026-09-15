@@ -81,6 +81,7 @@ flutter:
   assets:
     - assets/images/
     - assets/images/dapps/
+    - assets/images/dapps/trustwallet/
     - assets/images/identity_badges/
     - assets/images/staff_badges/
     - assets/sounds/

@@ -35,7 +35,6 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
   }
 
   @override
-  @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(0, 14, 0, 24),
     children: [
@@ -132,7 +131,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
                   _DiscoverShortcut(
                     palette: widget.palette,
                     dapp: dapp,
-                    onTap: () => widget.onOpen(AcoScreen.marketOverview),
+                    onTap: () => _showNotice(context, dapp.name, '功能暂未开放。'),
                   ),
               ],
             );
