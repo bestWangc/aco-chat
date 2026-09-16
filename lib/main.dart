@@ -256,8 +256,8 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    AndroidChatBackgroundService.updateAppLifecycle(state);
     if (state == AppLifecycleState.resumed && _accountProfile != null) {
+      unawaited(OpenIMChatRepository.restoreForegroundMessageListener());
       unawaited(
         WalletAccountAuthentication._connectOpenIM(_accountProfile!.accountId),
       );
@@ -430,6 +430,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
         ),
         appBuilder: (_) => CupertinoApp(
           navigatorKey: _navigatorKey,
+          navigatorObservers: [acoRouteObserver],
           title: 'Aco',
           debugShowCheckedModeBanner: false,
           locale: const Locale('zh', 'CN'),

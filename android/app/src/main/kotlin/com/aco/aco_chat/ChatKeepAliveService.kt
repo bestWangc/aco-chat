@@ -10,21 +10,69 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
+import org.json.JSONObject
+import java.lang.reflect.Proxy
 
 /** Keeps the authenticated Flutter/OpenIM process eligible to receive messages. */
 class ChatKeepAliveService : Service() {
     companion object {
         private const val SERVICE_CHANNEL_ID = "chat_keep_alive"
-        private const val MESSAGE_CHANNEL_ID = "chat_messages"
-        private const val URGENT_MESSAGE_CHANNEL_ID = "chat_urgent_messages"
+        // Channel importance cannot be raised after Android creates it. Keep a
+        // new ID so existing installs migrate from the old non-banner channel.
+        private const val MESSAGE_CHANNEL_ID = "chat_banner_messages_v2"
         private const val SERVICE_NOTIFICATION_ID = 4202
+        private var lastNotifiedMessageID: String? = null
+
+        fun listenForBackgroundMessages(context: Context) {
+            runCatching {
+                val listenerType = Class.forName("open_im_sdk_callback.OnAdvancedMsgListener")
+                val listener = Proxy.newProxyInstance(
+                    listenerType.classLoader,
+                    arrayOf(listenerType),
+                ) { _, method, arguments ->
+                    if (
+                        method.name == "onRecvNewMessage" ||
+                        method.name == "onRecvOfflineNewMessage"
+                    ) {
+                        (arguments?.firstOrNull() as? String)?.let {
+                            notifyIncomingMessage(context, it)
+                        }
+                    }
+                    null
+                }
+                Class.forName("open_im_sdk.Open_im_sdk")
+                    .getMethod("setAdvancedMsgListener", listenerType)
+                    .invoke(null, listener)
+                Log.i("AcoChatBackground", "OpenIM background listener registered")
+            }.onFailure {
+                Log.e("AcoChatBackground", "Failed to register OpenIM listener", it)
+            }
+        }
+
+        private fun notifyIncomingMessage(context: Context, payload: String) {
+            val message = runCatching { JSONObject(payload) }.getOrNull() ?: return
+            val messageID = message.optString("clientMsgID")
+            if (messageID.isNotEmpty() && messageID == lastNotifiedMessageID) return
+            lastNotifiedMessageID = messageID
+            val title = message.optString("senderNickname").ifEmpty { "新消息" }
+            val body = when {
+                message.has("textElem") ->
+                    message.optJSONObject("textElem")?.optString("content").orEmpty()
+                message.has("soundElem") -> "[语音消息]"
+                message.has("pictureElem") -> "[图片]"
+                message.has("videoElem") -> "[视频]"
+                else -> "你收到一条新消息"
+            }
+            Log.i("AcoChatBackground", "Background message received id=$messageID")
+            showMessage(context, title, body.ifEmpty { "你收到一条新消息" }, false)
+        }
 
         fun showMessage(context: Context, title: String, body: String, urgent: Boolean) {
             val manager = context.getSystemService(NotificationManager::class.java)
             ensureChannels(manager)
-            val channelID = if (urgent) URGENT_MESSAGE_CHANNEL_ID else MESSAGE_CHANNEL_ID
-            val notification = NotificationCompat.Builder(context, channelID)
+            val notification = NotificationCompat.Builder(context, MESSAGE_CHANNEL_ID)
                 .setSmallIcon(context.applicationInfo.icon)
                 .setContentTitle(title)
                 .setContentText(body)
@@ -32,6 +80,8 @@ class ChatKeepAliveService : Service() {
                 .setAutoCancel(true)
                 .setContentIntent(appLaunchPendingIntent(context))
                 .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
                 .build()
             val notificationID = (System.currentTimeMillis() and 0x7fffffff).toInt()
             manager.notify(notificationID, notification)
@@ -61,16 +111,14 @@ class ChatKeepAliveService : Service() {
             manager.createNotificationChannel(
                 NotificationChannel(
                     MESSAGE_CHANNEL_ID,
-                    "聊天消息",
-                    NotificationManager.IMPORTANCE_DEFAULT,
-                ),
-            )
-            manager.createNotificationChannel(
-                NotificationChannel(
-                    URGENT_MESSAGE_CHANNEL_ID,
-                    "重要聊天消息",
+                    "新消息横幅提醒",
                     NotificationManager.IMPORTANCE_HIGH,
-                ),
+                ).apply {
+                    description = "收到新聊天消息时显示横幅、声音和桌面角标"
+                    enableVibration(true)
+                    setShowBadge(true)
+                    lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+                },
             )
         }
     }

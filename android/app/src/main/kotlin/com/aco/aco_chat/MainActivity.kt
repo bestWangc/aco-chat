@@ -7,6 +7,8 @@ import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.view.WindowManager
 import androidx.biometric.BiometricManager
@@ -15,8 +17,28 @@ import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import open_im_sdk.Open_im_sdk
+import open_im_sdk_callback.Base
 
 class MainActivity : FlutterFragmentActivity() {
+    override fun onPause() {
+        super.onPause()
+        // Without FCM, OpenIM must keep its WebSocket active while Aco's
+        // foreground service is running instead of switching to push mode.
+        Handler(Looper.getMainLooper()).post {
+            Open_im_sdk.setAppBackgroundStatus(
+                object : Base {
+                    override fun onSuccess(value: String?) = Unit
+
+                    override fun onError(code: Int, message: String?) = Unit
+                },
+                System.currentTimeMillis().toString(),
+                false,
+            )
+            ChatKeepAliveService.listenForBackgroundMessages(applicationContext)
+        }
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/sensitive-screen")

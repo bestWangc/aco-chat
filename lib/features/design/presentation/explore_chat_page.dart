@@ -22,7 +22,7 @@ class _ChatPage extends StatefulWidget {
   State<_ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<_ChatPage> {
+class _ChatPageState extends State<_ChatPage> with RouteAware {
   static const _chatImageMaxBytes = 1536 * 1024;
   static const _messageTimeGap = Duration(hours: 1);
 
@@ -57,6 +57,8 @@ class _ChatPageState extends State<_ChatPage> {
   bool _peerIsBlocked = false;
   bool _mentionVisible = false;
   bool _mentionLoading = false;
+  bool _routeIsVisible = false;
+  PageRoute<dynamic>? _route;
   int _mentionStart = -1;
   String _mentionQuery = '';
   List<GroupMembersInfo> _mentionMembers = const [];
@@ -131,15 +133,42 @@ class _ChatPageState extends State<_ChatPage> {
   @override
   void initState() {
     super.initState();
-    final target = _conversationTarget;
-    if (target?.isNotEmpty == true) {
-      OpenIMChatRepository.beginActiveChat(target!);
-    }
     _loadFuture = _loadHistory();
     OpenIMChatRepository.conversationReady.addListener(_onReady);
     OpenIMChatRepository.messageNotifier.addListener(_onMessage);
     _chatScrollController.addListener(_onChatScroll);
     _messageController.addListener(_onComposerChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> || identical(route, _route)) return;
+    final previousRoute = _route;
+    if (previousRoute != null) acoRouteObserver.unsubscribe(this);
+    _route = route;
+    acoRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPush() => _setRouteVisible(true);
+
+  @override
+  void didPopNext() {
+    _setRouteVisible(true);
+    unawaited(_markCurrentConversationAsRead());
+  }
+
+  @override
+  void didPushNext() => _setRouteVisible(false);
+
+  @override
+  void didPop() => _setRouteVisible(false);
+
+  void _setRouteVisible(bool visible) {
+    if (_routeIsVisible == visible) return;
+    _routeIsVisible = visible;
   }
 
   void _onChatScroll() {
@@ -162,6 +191,9 @@ class _ChatPageState extends State<_ChatPage> {
     }
     if (_voiceCallInviteIDFromMessage(message) != null) return;
     if (!_ChatHistoryMessage.isDisplayable(message)) return;
+    if (_routeIsVisible) {
+      OpenIMChatRepository.markIncomingMessageVisible(message);
+    }
     _rememberMessage(message);
     final added = _upsertDisplayedMessage(message, mine: mine);
     unawaited(_markCurrentConversationAsRead());
@@ -238,6 +270,7 @@ class _ChatPageState extends State<_ChatPage> {
   }
 
   Future<void> _markCurrentConversationAsRead() async {
+    if (!_routeIsVisible) return;
     final conversationID = _currentConversationID;
     if (conversationID == null) return;
     if (_markingMessagesAsRead) {
@@ -638,10 +671,8 @@ class _ChatPageState extends State<_ChatPage> {
 
   @override
   void dispose() {
-    final target = _conversationTarget;
-    if (target?.isNotEmpty == true) {
-      OpenIMChatRepository.endActiveChat(target!);
-    }
+    acoRouteObserver.unsubscribe(this);
+    _setRouteVisible(false);
     OpenIMChatRepository.conversationReady.removeListener(_onReady);
     OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
     _chatScrollController.removeListener(_onChatScroll);

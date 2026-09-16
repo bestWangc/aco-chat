@@ -23,7 +23,6 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   static const _contentHorizontalInset = 35.0;
   static const _liveListHorizontalInset = 25.0;
 
-  final bool _showLive = true;
   final AccountApiClient _apiClient = AccountApiClient();
   List<LiveSession>? _loadedLives;
   Object? _livesError;
@@ -395,7 +394,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                         imageUrl: widget.avatarUrl,
                       ),
                       const SizedBox(height: 18),
-                      _SquareTabs(palette: palette, showLive: _showLive),
+                      _SquareTabs(palette: palette),
                       const SizedBox(height: 16),
                       SizedBox(
                         height: 1,
@@ -405,54 +404,15 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   ),
                 ),
               ),
-              if (_showLive)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(
-                    _liveListHorizontalInset,
-                    0,
-                    _liveListHorizontalInset,
-                    96,
-                  ),
-                  sliver: _buildLiveSliver(palette),
-                )
-              else
-                SliverPadding(
-                  padding: const EdgeInsets.only(bottom: 96),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: _contentHorizontalInset,
-                        ),
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 32),
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Row(
-                                children: [
-                                  _TopicChip(
-                                    palette: palette,
-                                    label: '买买买!!',
-                                    width: 164,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  _TopicChip(
-                                    palette: palette,
-                                    label: 'ALD! V587!',
-                                    width: 184,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 32),
-                            _PostCard(palette: palette),
-                          ],
-                        ),
-                      ),
-                    ]),
-                  ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(
+                  _liveListHorizontalInset,
+                  0,
+                  _liveListHorizontalInset,
+                  96,
                 ),
+                sliver: _buildLiveSliver(palette),
+              ),
             ],
           ),
         ),
@@ -532,10 +492,9 @@ class _SquareComposer extends StatelessWidget {
 }
 
 class _SquareTabs extends StatelessWidget {
-  const _SquareTabs({required this.palette, required this.showLive});
+  const _SquareTabs({required this.palette});
 
   final AcoPalette palette;
-  final bool showLive;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -546,28 +505,11 @@ class _SquareTabs extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          '推荐',
-          style: TextStyle(
-            color: showLive ? palette.mutedText : palette.primaryText,
-            fontSize: AcoTypography.body,
-            fontWeight: showLive ? FontWeight.w400 : FontWeight.w700,
-          ),
-        ),
-        const SizedBox(width: 54),
-        Text(
-          '好友',
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.body,
-          ),
-        ),
-        const SizedBox(width: 54),
-        Text(
           '会议',
           style: TextStyle(
-            color: showLive ? palette.primaryText : palette.mutedText,
+            color: palette.primaryText,
             fontSize: AcoTypography.body,
-            fontWeight: showLive ? FontWeight.w700 : FontWeight.w400,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ],

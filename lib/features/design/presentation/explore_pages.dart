@@ -112,10 +112,12 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 for (final dapp in dapps.take(5))
-                  _DiscoverShortcut(
-                    palette: widget.palette,
-                    dapp: dapp,
-                    onTap: () => _showNotice(context, dapp.name, '功能暂未开放。'),
+                  Flexible(
+                    child: _DiscoverShortcut(
+                      palette: widget.palette,
+                      dapp: dapp,
+                      onTap: () => _showNotice(context, dapp.name, '功能暂未开放。'),
+                    ),
                   ),
               ],
             );

@@ -106,6 +106,8 @@ const _white = Color(0xFFFFFFFF);
 const _transparent = Color(0x00000000);
 const _accentGreen = Color(0xFFA6DE00);
 
+final acoRouteObserver = RouteObserver<PageRoute<dynamic>>();
+
 void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
 // Leave a small amount of headroom while the system keyboard resizes the
 // voice-room body. Some Android viewport sizes otherwise round the remaining

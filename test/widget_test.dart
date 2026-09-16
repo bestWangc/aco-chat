@@ -290,7 +290,9 @@ void main() {
     await tester.pumpWidget(const AcoApp());
     await _openSquareTab(tester);
 
-    expect(find.text('推荐'), findsOneWidget);
+    expect(find.text('会议'), findsOneWidget);
+    expect(find.text('推荐'), findsNothing);
+    expect(find.text('好友'), findsNothing);
     expect(find.text('正在直播'), findsNothing);
     expect(find.textContaining('美股凭什么依然能打'), findsNothing);
   });
