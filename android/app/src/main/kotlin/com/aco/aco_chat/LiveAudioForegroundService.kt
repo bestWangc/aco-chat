@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -14,6 +15,7 @@ class LiveAudioForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "live_audio"
         private const val NOTIFICATION_ID = 4201
+        const val EXTRA_USE_MICROPHONE = "use_microphone"
     }
 
     override fun onCreate() {
@@ -28,11 +30,21 @@ class LiveAudioForegroundService : Service() {
                 ).apply { setShowBadge(false) },
             )
         }
-        startForeground(NOTIFICATION_ID, notification())
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
-        START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val useMicrophone = intent?.getBooleanExtra(EXTRA_USE_MICROPHONE, false) ?: false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var serviceTypes = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+            if (useMicrophone) {
+                serviceTypes = serviceTypes or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            }
+            startForeground(NOTIFICATION_ID, notification(), serviceTypes)
+        } else {
+            startForeground(NOTIFICATION_ID, notification())
+        }
+        return START_STICKY
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 

@@ -76,7 +76,13 @@ class MainActivity : FlutterFragmentActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "start" -> {
-                        val intent = Intent(this, LiveAudioForegroundService::class.java)
+                        val useMicrophone = call.argument<Boolean>("microphone") ?: false
+                        val intent = Intent(this, LiveAudioForegroundService::class.java).apply {
+                            putExtra(
+                                LiveAudioForegroundService.EXTRA_USE_MICROPHONE,
+                                useMicrophone,
+                            )
+                        }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(intent)
                         } else {

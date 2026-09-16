@@ -13,6 +13,17 @@ Future<void> _initializeLiveKitClient() {
 }
 
 extension _VoiceRoomLiveKit on _VoiceRoomPageState {
+  Future<void> _startLiveAudioBackground({required bool useMicrophone}) async {
+    if (!_supportsBackgroundAudio) return;
+    await _VoiceRoomPageState._liveAudioBackgroundChannel.invokeMethod<void>(
+      'start',
+      <String, Object?>{
+        'title': widget.live?.title ?? '会议',
+        'microphone': useMicrophone,
+      },
+    );
+  }
+
   Future<void> _connectLiveKit({bool showError = true}) async {
     final live = widget.live;
     if (live == null || !mounted || _leaving || _liveKitConnecting) return;
@@ -241,12 +252,6 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
             _showNotice(context, '语音连接中断', '连接已停止自动重试，请重新进入会议。');
           }
         });
-      if (_supportsBackgroundAudio) {
-        await _VoiceRoomPageState._liveAudioBackgroundChannel
-            .invokeMethod<void>('start', <String, Object?>{
-              'title': live.title,
-            });
-      }
       if (!joinInfo.canPublish) {
         await _startListenerAudioWarmup();
       } else {
@@ -278,6 +283,9 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       // UI present this participant as connected until this client has both
       // joined LiveKit and successfully initialized its local audio track.
       _liveKitPublishReady = joinInfo.canPublish && (_muted || microphoneReady);
+      await _startLiveAudioBackground(
+        useMicrophone: _liveKitPublishReady && !_muted,
+      );
       debugPrint(
         'LiveKit audio engine after local publish: '
         '${AudioManager.instance.audioEngineState}',
@@ -649,6 +657,9 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
         await publication.mute(stopOnMute: false);
       } else {
         await publication.unmute(stopOnMute: false);
+        if (defaultTargetPlatform == TargetPlatform.android) {
+          await _startLiveAudioBackground(useMicrophone: true);
+        }
       }
       return true;
     } finally {
@@ -722,6 +733,11 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       enabled,
       audioCaptureOptions: _VoiceRoomPageState._voiceRoomAudioCaptureOptions,
     );
+    if (defaultTargetPlatform == TargetPlatform.android &&
+        enabled &&
+        publication != null) {
+      await _startLiveAudioBackground(useMicrophone: true);
+    }
     final track = publication?.track;
     final effectiveRole = _liveKitRole ?? _room?.viewerRole ?? '<unknown>';
     debugPrint(
