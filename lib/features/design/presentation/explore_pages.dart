@@ -19,11 +19,13 @@ class _BrowserDiscoverPage extends StatefulWidget {
 
 class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
   late Future<List<DappEntry>> _hotDapps;
+  late Future<List<DappEntry>> _earningsDapps;
 
   @override
   void initState() {
     super.initState();
     _hotDapps = DappDirectoryService().loadHot(widget.chain);
+    _earningsDapps = DappDirectoryService().loadEarnings(widget.chain);
   }
 
   @override
@@ -31,6 +33,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.chain != widget.chain) {
       _hotDapps = DappDirectoryService().loadHot(widget.chain);
+      _earningsDapps = DappDirectoryService().loadEarnings(widget.chain);
     }
   }
 
@@ -44,6 +47,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
           palette: widget.palette,
           hint: '请输入网址或搜索',
           height: 40,
+          hintFontSize: 16,
           action: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -71,29 +75,9 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
             Expanded(
               child: _SectionTabs(
                 palette: widget.palette,
-                labels: const ['热门', '探索', '我的'],
+                labels: const ['热门'],
                 selected: 0,
                 itemSpacing: 20,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(top: 5),
-              child: Row(
-                children: [
-                  Text(
-                    '更多',
-                    style: TextStyle(
-                      color: widget.palette.mutedText,
-                      fontSize: AcoTypography.body,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Image.asset(
-                    'assets/icons/explore_more_chevron.png',
-                    width: 8,
-                    filterQuality: FilterQuality.high,
-                  ),
-                ],
               ),
             ),
           ],
@@ -127,7 +111,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
             return Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                for (final dapp in dapps.take(4))
+                for (final dapp in dapps.take(5))
                   _DiscoverShortcut(
                     palette: widget.palette,
                     dapp: dapp,
@@ -139,9 +123,35 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
         ),
       ),
       const SizedBox(height: 22),
-      const _DiscoverPromoCarousel(),
+      _DiscoverPromoCarousel(palette: widget.palette),
       const SizedBox(height: 30),
       _DiscoverEarningsHeader(palette: widget.palette),
+      const SizedBox(height: 12),
+      FutureBuilder<List<DappEntry>>(
+        future: _earningsDapps,
+        builder: (_, snapshot) {
+          final lendingDapps = (snapshot.data ?? const <DappEntry>[])
+              .take(5)
+              .toList(growable: false);
+          if (lendingDapps.isEmpty) return const SizedBox.shrink();
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              children: [
+                for (final dapp in lendingDapps)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _EarningsDappTile(
+                      palette: widget.palette,
+                      dapp: dapp,
+                      onTap: () => _showNotice(context, dapp.name, '功能暂未开放。'),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
     ],
   );
 }
@@ -218,7 +228,9 @@ class _DiscoverAdCarouselState extends State<_DiscoverAdCarousel> {
                         right: index == _adAssets.length - 1 ? 0 : 2,
                       ),
                       decoration: BoxDecoration(
-                        color: index == _currentPage ? _lime : _black,
+                        color: index == _currentPage
+                            ? widget.palette.accent
+                            : widget.palette.accent.withValues(alpha: .35),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -233,7 +245,9 @@ class _DiscoverAdCarouselState extends State<_DiscoverAdCarousel> {
 }
 
 class _DiscoverPromoCarousel extends StatefulWidget {
-  const _DiscoverPromoCarousel();
+  const _DiscoverPromoCarousel({required this.palette});
+
+  final AcoPalette palette;
 
   @override
   State<_DiscoverPromoCarousel> createState() => _DiscoverPromoCarouselState();
@@ -295,7 +309,9 @@ class _DiscoverPromoCarouselState extends State<_DiscoverPromoCarousel> {
                 right: index == _adAssets.length - 1 ? 0 : 2,
               ),
               decoration: BoxDecoration(
-                color: index == _currentPage ? _lime : _black,
+                color: index == _currentPage
+                    ? widget.palette.accent
+                    : widget.palette.accent.withValues(alpha: .35),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -327,19 +343,6 @@ class _DiscoverEarningsHeader extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-            Text(
-              '更多',
-              style: TextStyle(
-                color: palette.mutedText,
-                fontSize: AcoTypography.body,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Image.asset(
-              'assets/icons/explore_more_chevron.png',
-              width: 8,
-              filterQuality: FilterQuality.high,
             ),
           ],
         ),

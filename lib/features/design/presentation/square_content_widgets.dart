@@ -1,5 +1,105 @@
 part of 'aco_design_shell.dart';
 
+const _trustWalletDappLogos = <String, String>{
+  'aave': 'aave.com.png',
+  'aerodrome': 'aerodrome.finance.png',
+  'balancer': 'balancer.finance.png',
+  'camelot': 'camelot.exchange.png',
+  'curve': 'curve.fi.png',
+  'eigenlayer': 'www.eigenlayer.xyz:.png.png',
+  'flap': 'flap.sh.png',
+  'fluid': 'fluid.instadapp.io.png',
+  'four-meme': 'four.meme.png',
+  'gmgn': 'gmgn.ai.png',
+  'gmx': 'gmx.io.png',
+  'hyperliquid': 'hyperliquid.png',
+  'jito': 'www.jito.network.png',
+  'jupiter': 'jup.ag.png',
+  'lido': 'lido.fi.png',
+  'lista': 'lista.org.png',
+  'magic-eden': 'magiceden.io.png',
+  'morpho': 'app.morpho.org.png',
+  'orca': 'www.orca.so.png',
+  'opensea': 'opensea.io.png',
+  'pancakeswap': 'pancakeswap.finance.png',
+  'pump-fun': 'pump.fun.png',
+  'quickswap': 'quickswap.exchange.png',
+  'raydium': 'raydium.io.png',
+  'sunpump': 'sunpump.meme.png',
+  'uniswap': 'app.uniswap.org.png',
+  'venus': 'app.venus.io.png',
+};
+
+String _dappLogoAsset(String dappId) {
+  final trustWalletLogo = _trustWalletDappLogos[dappId];
+  return trustWalletLogo == null
+      ? 'assets/images/dapps/$dappId.webp'
+      : 'assets/images/dapps/trustwallet/$trustWalletLogo';
+}
+
+class _EarningsDappTile extends StatelessWidget {
+  const _EarningsDappTile({
+    required this.palette,
+    required this.dapp,
+    required this.onTap,
+  });
+  final AcoPalette palette;
+  final DappEntry dapp;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = dapp.description;
+
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      onPressed: onTap,
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.asset(
+              _dappLogoAsset(dapp.id),
+              width: 64,
+              height: 64,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => ColoredBox(
+                color: palette.surfaceRaised,
+                child: const SizedBox(width: 64, height: 64),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  dapp.name,
+                  style: TextStyle(color: palette.primaryText, fontSize: 16),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description == null || description.isEmpty
+                      ? '热门 DeFi 收益工具'
+                      : description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: 14,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DiscoverShortcut extends StatelessWidget {
   const _DiscoverShortcut({
     required this.palette,
@@ -9,31 +109,6 @@ class _DiscoverShortcut extends StatelessWidget {
   final AcoPalette palette;
   final DappEntry dapp;
   final VoidCallback onTap;
-
-  static const _trustWalletLogos = <String, String>{
-    'aave': 'aave.com.png',
-    'balancer': 'balancer.finance.png',
-    'camelot': 'camelot.exchange.png',
-    'curve': 'curve.fi.png',
-    'eigenlayer': 'www.eigenlayer.xyz:.png.png',
-    'flap': 'flap.sh.png',
-    'fluid': 'fluid.instadapp.io.png',
-    'four-meme': 'four.meme.png',
-    'gmgn': 'gmgn.ai.png',
-    'gmx': 'gmx.io.png',
-    'hyperliquid': 'hyperliquid.png',
-    'jito': 'www.jito.network.png',
-    'lido': 'lido.fi.png',
-    'lista': 'lista.org.png',
-    'morpho': 'app.morpho.org.png',
-    'ocra': 'www.orca.so.png',
-    'pancakeswap': 'pancakeswap.finance.png',
-    'pump-fun': 'pump.fun.png',
-    'raydium': 'raydium.io.png',
-    'sunpump': 'sunpump.meme.png',
-    'uniswap': 'app.uniswap.org.png',
-    'venus': 'app.venus.io.png',
-  };
 
   Widget _fallbackIcon(IconData icon) {
     if (dapp.iconUrl.isEmpty) {
@@ -65,11 +140,6 @@ class _DiscoverShortcut extends StatelessWidget {
       default:
         icon = CupertinoIcons.chart_bar_alt_fill;
     }
-    final trustWalletLogo = _trustWalletLogos[dapp.id];
-    final logoAsset = trustWalletLogo == null
-        ? 'assets/images/dapps/${dapp.id}.webp'
-        : 'assets/images/dapps/trustwallet/$trustWalletLogo';
-
     return CupertinoButton(
       padding: EdgeInsets.zero,
       onPressed: onTap,
@@ -82,7 +152,7 @@ class _DiscoverShortcut extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.asset(
-                logoAsset,
+                _dappLogoAsset(dapp.id),
                 width: 52,
                 height: 52,
                 fit: BoxFit.contain,

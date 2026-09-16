@@ -826,6 +826,7 @@ class AcoSearch extends StatelessWidget {
     this.onSubmit,
     this.action,
     this.height = 42,
+    this.hintFontSize = 18,
     this.submitIcon = CupertinoIcons.arrow_right,
     this.variant = AcoSearchVariant.standard,
     this.showSubmit = false,
@@ -836,6 +837,7 @@ class AcoSearch extends StatelessWidget {
   final VoidCallback? onSubmit;
   final Widget? action;
   final double height;
+  final double hintFontSize;
   final IconData submitIcon;
   final AcoSearchVariant variant;
   final bool showSubmit;
@@ -885,7 +887,9 @@ class AcoSearch extends StatelessWidget {
               hint,
               style: TextStyle(
                 color: hintColor,
-                fontSize: isSquareComposer ? AcoTypography.caption : 18,
+                fontSize: isSquareComposer
+                    ? AcoTypography.caption
+                    : hintFontSize,
               ),
             ),
           ),

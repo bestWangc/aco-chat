@@ -9,6 +9,7 @@ class DappEntry {
     required this.name,
     required this.category,
     required this.subcategory,
+    this.description,
     required this.url,
     required this.iconUrl,
   });
@@ -17,6 +18,7 @@ class DappEntry {
   final String name;
   final String category;
   final String subcategory;
+  final String? description;
   final String url;
   final String iconUrl;
 
@@ -25,6 +27,7 @@ class DappEntry {
     name: json['name'] as String? ?? '',
     category: json['category'] as String? ?? '',
     subcategory: json['subcategory'] as String? ?? '',
+    description: json['description'] as String?,
     url: json['url'] as String? ?? '',
     iconUrl: json['icon_url'] as String? ?? '',
   );
@@ -59,6 +62,23 @@ class DappDirectoryService {
     } finally {
       _pending.remove(key);
     }
+  }
+
+  Future<List<DappEntry>> loadEarnings(String chain) async {
+    final base = const AppConfig().apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final response = await _client.get(
+      Uri.parse(
+        '$base/dapps/hot',
+      ).replace(queryParameters: {'chain': chain.trim().toLowerCase()}),
+      headers: {'x-app-version': AppConfig.appVersion},
+    );
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final raw = body['earnings_dapps'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<String, dynamic>>()
+        .map(DappEntry.fromJson)
+        .toList(growable: false);
   }
 
   Future<List<DappEntry>> _fetchHot(String chain) async {
