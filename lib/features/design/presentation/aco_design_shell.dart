@@ -498,14 +498,14 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
             builder: (_) => _buildSecondaryScreen(destination),
           ),
         )
-        .then((created) {
+        .then((created) async {
           if (screen == AcoScreen.addTokenV2 && mounted) {
             setState(() => _walletAssetRevision++);
           }
           if (screen != AcoScreen.createLive || !mounted) return;
           setState(() => _liveListRevision++);
           if (created is! LiveSession || created.status != 'live') return;
-          Navigator.of(context).push<bool>(
+          await Navigator.of(context).push<bool>(
             _AcoPageRoute<bool>(
               builder: (_) => CupertinoPageScaffold(
                 backgroundColor: AcoPalette(_isDark.value).background,
@@ -523,6 +523,9 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
               ),
             ),
           );
+          if (mounted) {
+            setState(() => _liveListRevision++);
+          }
         });
   }
 

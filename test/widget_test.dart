@@ -1166,6 +1166,37 @@ void main() {
     expect(find.text('上传封面'), findsOneWidget);
   });
 
+  testWidgets('refreshes the live list after a newly created room closes', (
+    WidgetTester tester,
+  ) async {
+    final live = LiveSession(
+      id: 11,
+      title: '新创建的会议',
+      coverUrl: '/uploads/live-cover-11.jpg',
+      access: 'open',
+      status: 'live',
+      createdAt: DateTime(2026, 9, 16, 10),
+    );
+    await tester.pumpWidget(const AcoApp());
+    await _openSquareTab(tester);
+    expect(find.byKey(const ValueKey('square-feed-1')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('create-live-button')));
+    await tester.pumpAndSettle();
+    Navigator.of(tester.element(find.text('创建会议').first)).pop(live);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('新创建的会议'), findsWidgets);
+    Navigator.of(tester.element(find.text('新创建的会议').first)).pop(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.byKey(const ValueKey('square-feed-3')), findsOneWidget);
+  });
+
   testWidgets('matches the square feed search button proportions', (
     WidgetTester tester,
   ) async {
