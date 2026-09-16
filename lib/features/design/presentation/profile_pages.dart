@@ -1,6 +1,9 @@
 part of 'aco_design_shell.dart';
 
 const _profileBadgeWidth = 75.0;
+const _profileAvatarSize = 68.0;
+const _profileDetailsGap = 18.0;
+const _profileDetailsInset = _profileAvatarSize + _profileDetailsGap;
 
 Widget _profileBadges(int identity, int staffIdentity) {
   final identityAsset = _identityBadgeAsset(identity);
@@ -73,7 +76,7 @@ class _ProfilePage extends StatelessWidget {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  AcoAvatar(size: 68, imageUrl: avatarUrl),
+                  AcoAvatar(size: _profileAvatarSize, imageUrl: avatarUrl),
                   Positioned(
                     right: -2,
                     bottom: -2,
@@ -96,7 +99,7 @@ class _ProfilePage extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 18),
+          const SizedBox(width: _profileDetailsGap),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,7 +134,6 @@ class _ProfilePage extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: palette.mutedText, fontSize: 10),
                 ),
-                _profileBadges(identity, staffIdentity),
               ],
             ),
           ),
@@ -156,6 +158,10 @@ class _ProfilePage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+      Padding(
+        padding: const EdgeInsets.only(left: _profileDetailsInset),
+        child: _profileBadges(identity, staffIdentity),
       ),
       const SizedBox(height: 42),
       _ProfileSection(

@@ -630,9 +630,7 @@ class _MessageQuickActions extends StatelessWidget {
             selected: showContacts,
             useAssetColor: showContacts,
           ),
-          const Spacer(),
-          SizedBox(
-            width: 260,
+          Expanded(
             child: _MessageListSearchField(
               palette: palette,
               controller: controller,

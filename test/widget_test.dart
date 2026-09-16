@@ -1138,6 +1138,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('fits social quick actions on narrow screens', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(354, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const AcoApp());
+    await tester.tap(find.bySemanticsLabel('社交').first);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('opens explore page from root navigation', (
     WidgetTester tester,
   ) async {

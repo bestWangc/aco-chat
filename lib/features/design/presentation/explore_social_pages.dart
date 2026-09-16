@@ -652,7 +652,7 @@ class _ContactsPageState extends State<_ContactsPage> {
   void _updateAlphabetOverlay(BuildContext context, List<String> letters) {
     if (!widget.embedded) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
+      if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
       _alphabetOverlay?.remove();
       _alphabetOverlay = null;
       if (letters.isEmpty) return;
