@@ -3,6 +3,7 @@ part of 'aco_design_shell.dart';
 const _trustWalletDappLogos = <String, String>{
   'aave': 'aave.com.png',
   'aerodrome': 'aerodrome.finance.png',
+  'b-ai': 'chat.b.ai.png',
   'balancer': 'balancer.finance.png',
   'camelot': 'camelot.exchange.png',
   'curve': 'curve.fi.png',

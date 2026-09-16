@@ -607,14 +607,6 @@ class _MessageQuickActions extends StatelessWidget {
       height: 44,
       child: Row(
         children: [
-          Expanded(
-            child: _MessageListSearchField(
-              palette: palette,
-              controller: controller,
-              onChanged: onQueryChanged,
-            ),
-          ),
-          const SizedBox(width: 16),
           _MessageHeaderLabel(
             asset: showContacts
                 ? 'assets/icons/chat_messages.png'
@@ -638,6 +630,15 @@ class _MessageQuickActions extends StatelessWidget {
             selected: showContacts,
             useAssetColor: showContacts,
           ),
+          const Spacer(),
+          SizedBox(
+            width: 260,
+            child: _MessageListSearchField(
+              palette: palette,
+              controller: controller,
+              onChanged: onQueryChanged,
+            ),
+          ),
         ],
       ),
     ),
@@ -657,7 +658,7 @@ class _MessageListSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    height: 30,
+    height: 34,
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
       color: palette.dark ? const Color(0xFF191919) : const Color(0xFFF1F2F3),

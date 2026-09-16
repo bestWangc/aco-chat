@@ -710,6 +710,7 @@ class _ContactsPageState extends State<_ContactsPage> {
                     palette: widget.palette,
                     label: '添加好友',
                     icon: CupertinoIcons.person_add,
+                    assetPath: 'assets/icons/contact_add_friend.png',
                     color: const Color(0xFF3478F6),
                     dividerLeftPadding: 18 + 40 + 16,
                     onTap: () async {
@@ -1249,7 +1250,7 @@ class _ContactsAlphabetIndex extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
       final fittedFontSize = constraints.maxHeight / letters.length;
-      final fontSize = fittedFontSize < 16 ? fittedFontSize : 16.0;
+      final fontSize = fittedFontSize < 14 ? fittedFontSize : 14.0;
       return Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
