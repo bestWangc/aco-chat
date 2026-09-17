@@ -98,7 +98,7 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
                           palette: widget.palette,
                           onPressed: () => setState(() => _selectedTab = index),
                         ),
-                        if (index < 2) const SizedBox(width: 28),
+                        if (index < 2) const SizedBox(width: 12),
                       ],
                     ],
                   ),
