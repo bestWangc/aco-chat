@@ -232,6 +232,7 @@ void main() {
               'reply_count': 63,
               'like_count': 88,
               'liked': true,
+              'following': true,
               'created_at': '2026-09-17T07:30:00Z',
             },
           ],
@@ -245,6 +246,7 @@ void main() {
     expect(request.url.path, '/api/v1/posts/recommended');
     expect(request.headers['authorization'], 'Bearer signed-token');
     expect(posts.single.content, '来自推荐接口的动态');
+    expect(posts.single.authorId, 7);
     expect(posts.single.nickname, '素素姐');
     expect(posts.single.identity, 2);
     expect(posts.single.staffIdentity, 1);
@@ -252,6 +254,40 @@ void main() {
     expect(posts.single.replyCount, 63);
     expect(posts.single.likeCount, 88);
     expect(posts.single.liked, isTrue);
+    expect(posts.single.following, isTrue);
+  });
+
+  test('lists friends square posts with the active access token', () async {
+    late http.Request request;
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((value) async {
+        request = value;
+        return response({
+          'data': [
+            {
+              'id': 13,
+              'content': '来自好友的动态',
+              'author': {'user_id': 8, 'nickname': '好友'},
+              'images': [],
+              'reply_count': 2,
+              'like_count': 4,
+              'liked': false,
+              'following': false,
+              'created_at': '2026-09-17T07:30:00Z',
+            },
+          ],
+        });
+      }),
+    );
+
+    final posts = await client.listFriendsPosts(token: 'signed-token');
+
+    expect(request.method, 'GET');
+    expect(request.url.path, '/api/v1/posts/friends');
+    expect(request.headers['authorization'], 'Bearer signed-token');
+    expect(posts.single.content, '来自好友的动态');
+    expect(posts.single.authorId, 8);
   });
 
   test('likes posts and loads and creates replies', () async {
@@ -315,6 +351,33 @@ void main() {
     expect(requests[2].url.path, '/api/v1/posts/12/replies');
     expect(requests[3].url.path, '/api/v1/posts/12/unlike');
     expect(jsonDecode(requests[2].body), {'content': '新回复'});
+  });
+
+  test('follows and unfollows post authors', () async {
+    final requests = <http.Request>[];
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        return response({
+          'user_id': 7,
+          'following': request.url.path.endsWith('/follow'),
+        });
+      }),
+    );
+
+    final followed = await client.followUser(userID: 7, token: 'signed-token');
+    final unfollowed = await client.unfollowUser(
+      userID: 7,
+      token: 'signed-token',
+    );
+
+    expect(followed.userId, 7);
+    expect(followed.following, isTrue);
+    expect(unfollowed.following, isFalse);
+    expect(requests.map((request) => request.method), ['POST', 'POST']);
+    expect(requests[0].url.path, '/api/v1/users/7/follow');
+    expect(requests[1].url.path, '/api/v1/users/7/unfollow');
   });
 
   test('updates a scheduled live session', () async {

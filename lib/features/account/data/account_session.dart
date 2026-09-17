@@ -227,6 +227,12 @@ class AccountSession {
   Future<PostLikeResult> unlikePost(int postID) async =>
       _apiClient.unlikePost(postID: postID, token: await _requireToken());
 
+  Future<UserFollowResult> followUser(int userID) async =>
+      _apiClient.followUser(userID: userID, token: await _requireToken());
+
+  Future<UserFollowResult> unfollowUser(int userID) async =>
+      _apiClient.unfollowUser(userID: userID, token: await _requireToken());
+
   Future<List<PostReply>> listPostReplies(int postID) async =>
       _apiClient.listPostReplies(postID: postID, token: await _requireToken());
 
@@ -245,6 +251,10 @@ class AccountSession {
 
   Future<List<FriendContact>> listFriendRequests() async {
     return _apiClient.listFriendRequests(token: await _requireToken());
+  }
+
+  Future<List<SquarePost>> listFriendsPosts() async {
+    return _apiClient.listFriendsPosts(token: await _requireToken());
   }
 
   Future<ChatGroup> createGroup({

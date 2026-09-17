@@ -214,6 +214,7 @@ class OpenIMToken {
 class SquarePost {
   const SquarePost({
     required this.id,
+    required this.authorId,
     required this.content,
     required this.nickname,
     required this.avatarUrl,
@@ -223,10 +224,12 @@ class SquarePost {
     required this.replyCount,
     required this.likeCount,
     required this.liked,
+    required this.following,
     required this.createdAt,
   });
 
   final int id;
+  final int authorId;
   final String content;
   final String nickname;
   final String avatarUrl;
@@ -236,28 +239,36 @@ class SquarePost {
   final int replyCount;
   final int likeCount;
   final bool liked;
+  final bool following;
   final DateTime createdAt;
 
-  SquarePost copyWith({int? replyCount, int? likeCount, bool? liked}) =>
-      SquarePost(
-        id: id,
-        content: content,
-        nickname: nickname,
-        avatarUrl: avatarUrl,
-        identity: identity,
-        staffIdentity: staffIdentity,
-        imageUrls: imageUrls,
-        replyCount: replyCount ?? this.replyCount,
-        likeCount: likeCount ?? this.likeCount,
-        liked: liked ?? this.liked,
-        createdAt: createdAt,
-      );
+  SquarePost copyWith({
+    int? replyCount,
+    int? likeCount,
+    bool? liked,
+    bool? following,
+  }) => SquarePost(
+    id: id,
+    authorId: authorId,
+    content: content,
+    nickname: nickname,
+    avatarUrl: avatarUrl,
+    identity: identity,
+    staffIdentity: staffIdentity,
+    imageUrls: imageUrls,
+    replyCount: replyCount ?? this.replyCount,
+    likeCount: likeCount ?? this.likeCount,
+    liked: liked ?? this.liked,
+    following: following ?? this.following,
+    createdAt: createdAt,
+  );
 
   factory SquarePost.fromJson(Map<String, dynamic> json) {
     final author = json['author'] as Map<String, dynamic>? ?? const {};
     final images = json['images'] as List<dynamic>? ?? const [];
     return SquarePost(
-      id: (json['id'] as num).toInt(),
+      id: _jsonInt(json['id']),
+      authorId: _jsonInt(author['user_id']),
       content: json['content'] as String? ?? '',
       nickname: author['nickname'] as String? ?? '',
       avatarUrl: author['avatar_url'] as String? ?? '',
@@ -267,6 +278,7 @@ class SquarePost {
       replyCount: (json['reply_count'] as num?)?.toInt() ?? 0,
       likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
       liked: json['liked'] as bool? ?? false,
+      following: json['following'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
@@ -282,6 +294,19 @@ class PostLikeResult {
     liked: json['liked'] as bool? ?? false,
     likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
   );
+}
+
+class UserFollowResult {
+  const UserFollowResult({required this.userId, required this.following});
+
+  final int userId;
+  final bool following;
+
+  factory UserFollowResult.fromJson(Map<String, dynamic> json) =>
+      UserFollowResult(
+        userId: (json['user_id'] as num?)?.toInt() ?? 0,
+        following: json['following'] as bool? ?? false,
+      );
 }
 
 class PostReply {
@@ -306,7 +331,7 @@ class PostReply {
   factory PostReply.fromJson(Map<String, dynamic> json) {
     final author = json['author'] as Map<String, dynamic>? ?? const {};
     return PostReply(
-      id: (json['id'] as num).toInt(),
+      id: _jsonInt(json['id']),
       content: json['content'] as String? ?? '',
       nickname: author['nickname'] as String? ?? '',
       avatarUrl: author['avatar_url'] as String? ?? '',
@@ -343,7 +368,7 @@ class LiveSession {
   final DateTime? scheduledAt;
 
   factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
-    id: json['id'] as int,
+    id: _jsonInt(json['id']),
     title: json['title'] as String,
     coverUrl: json['cover_url'] as String,
     hostAvatarUrl: json['host_avatar_url'] as String? ?? '',
@@ -444,10 +469,14 @@ class LiveMessage {
   );
 }
 
-int _messageId(Object? value) {
-  if (value is int) return value;
-  return int.tryParse('$value') ?? 0;
-}
+int _jsonInt(Object? value) => switch (value) {
+  int value => value,
+  num value => value.toInt(),
+  String value => int.tryParse(value) ?? 0,
+  _ => 0,
+};
+
+int _messageId(Object? value) => _jsonInt(value);
 
 class LiveParticipant {
   const LiveParticipant({
@@ -476,7 +505,7 @@ class LiveParticipant {
 
   factory LiveParticipant.fromJson(Map<String, dynamic> json) =>
       LiveParticipant(
-        userId: json['user_id'] as int,
+        userId: _jsonInt(json['user_id']),
         nickname: json['nickname'] as String,
         username: json['username'] as String? ?? '',
         avatarUrl: json['avatar_url'] as String? ?? '',
@@ -561,9 +590,9 @@ class LiveRoom {
     live: LiveSession.fromJson(json['live'] as Map<String, dynamic>),
     host: LiveParticipant.fromJson(json['host'] as Map<String, dynamic>),
     hostActive: json['host_active'] as bool? ?? false,
-    viewerUserId: json['viewer_user_id'] as int? ?? 0,
+    viewerUserId: _jsonInt(json['viewer_user_id']),
     viewerRole: json['viewer_role'] as String,
-    participantCount: json['participant_count'] as int,
+    participantCount: _jsonInt(json['participant_count']),
     speakers: (json['speakers'] as List<dynamic>)
         .cast<Map<String, dynamic>>()
         .map(LiveParticipant.fromJson)

@@ -45,6 +45,7 @@ import 'package:flutter/material.dart'
         RefreshIndicator,
         SelectableText,
         Theme,
+        showGeneralDialog,
         showModalBottomSheet;
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/services.dart';

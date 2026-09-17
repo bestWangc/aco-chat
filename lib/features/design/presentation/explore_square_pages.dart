@@ -27,23 +27,25 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   static const _contentHorizontalInset = 35.0;
   static const _liveListHorizontalInset = 25.0;
 
-  var _selectedTab = _SquareFeedTab.live;
+  var _selectedTab = _SquareFeedTab.recommended;
   final AccountApiClient _apiClient = AccountApiClient();
   List<LiveSession>? _loadedLives;
   Object? _livesError;
   var _livesLoading = true;
   var _livesRequestID = 0;
   List<SquarePost>? _loadedPosts;
+  _SquareFeedTab? _loadedPostsTab;
   Object? _postsError;
   var _postsLoading = true;
   var _postsRequestID = 0;
   final Set<int> _pendingLikePostIDs = <int>{};
+  final Set<int> _pendingFollowUserIDs = <int>{};
 
   @override
   void initState() {
     super.initState();
     unawaited(_beginLivesLoad());
-    unawaited(_beginPostsLoad());
+    unawaited(_beginPostsLoad(_SquareFeedTab.recommended));
   }
 
   Future<List<LiveSession>> _loadLives({bool useInitialLives = true}) async {
@@ -84,21 +86,24 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     await _beginLivesLoad(useInitialLives: false);
   }
 
-  Future<List<SquarePost>> _loadPosts() async {
+  Future<List<SquarePost>> _loadPosts(_SquareFeedTab tab) async {
     await widget.walletLoginFuture;
-    return AccountSession(_apiClient).listRecommendedPosts();
+    final session = AccountSession(_apiClient);
+    if (tab == _SquareFeedTab.friends) return session.listFriendsPosts();
+    return session.listRecommendedPosts();
   }
 
-  Future<void> _beginPostsLoad() async {
+  Future<void> _beginPostsLoad(_SquareFeedTab tab) async {
     final requestID = ++_postsRequestID;
     _postsLoading = true;
     _postsError = null;
     if (mounted) setState(() {});
     try {
-      final posts = await _loadPosts();
+      final posts = await _loadPosts(tab);
       if (!mounted || requestID != _postsRequestID) return;
       setState(() {
         _loadedPosts = posts;
+        _loadedPostsTab = tab;
         _postsLoading = false;
       });
     } catch (error) {
@@ -110,12 +115,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     }
   }
 
-  void _retryLoadingPosts() {
-    unawaited(_beginPostsLoad());
+  void _retryLoadingPosts(_SquareFeedTab tab) {
+    unawaited(_beginPostsLoad(tab));
   }
 
   Future<void> _refreshPosts() async {
-    await _beginPostsLoad();
+    await _beginPostsLoad(_SquareFeedTab.recommended);
   }
 
   void _replacePost(SquarePost updatedPost) {
@@ -165,12 +170,53 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     _replacePost(updatedPost);
   }
 
+  Future<void> _togglePostFollow(SquarePost post) async {
+    if (post.authorId <= 0 || !_pendingFollowUserIDs.add(post.authorId)) {
+      return;
+    }
+    if (mounted) setState(() {});
+    try {
+      await widget.walletLoginFuture;
+      final session = AccountSession(_apiClient);
+      final result = post.following
+          ? await session.unfollowUser(post.authorId)
+          : await session.followUser(post.authorId);
+      if (!mounted) return;
+
+      final posts = _loadedPosts;
+      if (posts == null) return;
+      final updatedPosts = posts
+          .map((item) {
+            if (item.authorId == result.userId) {
+              return item.copyWith(following: result.following);
+            }
+            return item;
+          })
+          .toList(growable: false);
+      final reorderedPosts = _loadedPostsTab == _SquareFeedTab.recommended
+          ? _prioritizeFollowedSquarePosts(updatedPosts)
+          : updatedPosts;
+      setState(() => _loadedPosts = reorderedPosts);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '关注失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '关注失败', '请检查网络后重试。');
+    } finally {
+      _pendingFollowUserIDs.remove(post.authorId);
+      if (mounted) setState(() {});
+    }
+  }
+
   void _selectTab(_SquareFeedTab tab) {
-    if (_selectedTab != tab) setState(() => _selectedTab = tab);
+    if (_selectedTab == tab) return;
+    setState(() => _selectedTab = tab);
+    if (tab != _SquareFeedTab.live && _loadedPostsTab != tab) {
+      unawaited(_beginPostsLoad(tab));
+    }
   }
 
   void _handleFloatingAction() {
-    if (_selectedTab != _SquareFeedTab.recommended) {
+    if (_selectedTab == _SquareFeedTab.live) {
       widget.onOpen(AcoScreen.createLive);
       return;
     }
@@ -533,7 +579,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           bottom: 0,
           child: Semantics(
             button: true,
-            label: _selectedTab == _SquareFeedTab.recommended ? '发布动态' : '创建会议',
+            label: _selectedTab == _SquareFeedTab.live ? '创建会议' : '发布动态',
             child: CupertinoButton(
               key: const Key('create-live-button'),
               padding: EdgeInsets.zero,
@@ -568,10 +614,10 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       );
     }
     if (_selectedTab == _SquareFeedTab.friends) {
-      return SliverFillRemaining(
-        hasScrollBody: false,
-        child: Center(
-          child: _LiveListMessage(palette: palette, message: '暂无好友动态'),
+      return SliverPadding(
+        padding: const EdgeInsets.only(top: 24, bottom: 96),
+        sliver: SliverToBoxAdapter(
+          child: _buildPosts(palette, _SquareFeedTab.friends),
         ),
       );
     }
@@ -617,7 +663,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                 ),
                 const SizedBox(height: 32),
               ],
-              _buildRecommendedPosts(palette),
+              _buildPosts(palette, _SquareFeedTab.recommended),
             ],
           ),
         ]),
@@ -625,8 +671,10 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     );
   }
 
-  Widget _buildRecommendedPosts(AcoPalette palette) {
-    if (_postsLoading && _loadedPosts == null) {
+  Widget _buildPosts(AcoPalette palette, _SquareFeedTab tab) {
+    final isFriends = tab == _SquareFeedTab.friends;
+    final isCurrentTab = _loadedPostsTab == tab;
+    if (_postsLoading && !isCurrentTab) {
       return const Padding(
         padding: EdgeInsets.only(top: 24),
         child: Center(child: CupertinoActivityIndicator()),
@@ -637,17 +685,22 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         padding: const EdgeInsets.only(top: 24),
         child: _LiveListMessage(
           palette: palette,
-          message: '推荐动态加载失败，请检查网络后重试。',
+          message: isFriends ? '好友动态加载失败，请检查网络后重试。' : '推荐动态加载失败，请检查网络后重试。',
           actionLabel: '重试',
-          onPressed: _retryLoadingPosts,
+          onPressed: () => _retryLoadingPosts(tab),
         ),
       );
     }
-    final posts = _loadedPosts ?? const <SquarePost>[];
+    final posts = isCurrentTab
+        ? (_loadedPosts ?? const <SquarePost>[])
+        : const <SquarePost>[];
     if (posts.isEmpty) {
       return Padding(
         padding: const EdgeInsets.only(top: 24),
-        child: _LiveListMessage(palette: palette, message: '暂无推荐动态，发布一条吧。'),
+        child: _LiveListMessage(
+          palette: palette,
+          message: isFriends ? '暂无好友动态' : '暂无推荐动态，发布一条吧。',
+        ),
       );
     }
     return Column(
@@ -659,9 +712,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
               palette: palette,
               post: post,
               likePending: _pendingLikePostIDs.contains(post.id),
+              followPending: _pendingFollowUserIDs.contains(post.authorId),
               onLike: () => _togglePostLike(post),
               onOpen: () => _openPostDetail(post),
               onReply: () => _openPostDetail(post),
+              onFollow: () => _togglePostFollow(post),
             ),
           ),
       ],
@@ -676,6 +731,15 @@ Future<PostLikeResult> _requestPostLikeChange({
 }) {
   if (liked) return session.unlikePost(postID);
   return session.likePost(postID);
+}
+
+List<SquarePost> _prioritizeFollowedSquarePosts(List<SquarePost> posts) {
+  final followed = <SquarePost>[];
+  final others = <SquarePost>[];
+  for (final post in posts) {
+    (post.following ? followed : others).add(post);
+  }
+  return [...followed, ...others];
 }
 
 void _showPostLikeError(BuildContext context, Object error) {
@@ -897,6 +961,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                       identity: widget.post.identity,
                       staffIdentity: widget.post.staffIdentity,
                     ),
+                    if (widget.post.following) ...[
+                      const SizedBox(width: 7),
+                      _PostFollowBadge(palette: widget.palette),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),

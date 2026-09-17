@@ -483,7 +483,9 @@ class _PostCard extends StatelessWidget {
     required this.onLike,
     required this.onOpen,
     required this.onReply,
+    required this.onFollow,
     this.likePending = false,
+    this.followPending = false,
   });
 
   final AcoPalette palette;
@@ -491,7 +493,79 @@ class _PostCard extends StatelessWidget {
   final VoidCallback onLike;
   final VoidCallback onOpen;
   final VoidCallback onReply;
+  final VoidCallback onFollow;
   final bool likePending;
+  final bool followPending;
+
+  Future<void> _showMoreMenu(BuildContext context) async {
+    final buttonBox = context.findRenderObject() as RenderBox;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox;
+    const popupWidth = 112.0;
+    final buttonTopLeft = buttonBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final maxLeft = math.max(8.0, overlayBox.size.width - popupWidth - 8);
+    final left = math.min(
+      maxLeft,
+      math.max(8.0, buttonTopLeft.dx + buttonBox.size.width - popupWidth),
+    );
+    final maxTop = math.max(8.0, overlayBox.size.height - 58);
+    final top = math.min(maxTop, buttonTopLeft.dy + buttonBox.size.height + 4);
+
+    final shouldFollow = await showGeneralDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭动态操作菜单',
+      barrierColor: const Color(0x33000000),
+      transitionDuration: const Duration(milliseconds: 120),
+      pageBuilder: (dialogContext, _, _) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => Navigator.of(dialogContext).pop(),
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: top,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: palette.border),
+              ),
+              child: SizedBox(
+                width: popupWidth,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  minimumSize: Size.zero,
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      post.following ? '取消关注' : '关注',
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: AcoTypography.body,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
+    );
+    if (shouldFollow == true && !followPending) onFollow();
+  }
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -529,27 +603,34 @@ class _PostCard extends StatelessWidget {
                             identity: post.identity,
                             staffIdentity: post.staffIdentity,
                           ),
+                          if (post.following) ...[
+                            const SizedBox(width: 7),
+                            _PostFollowBadge(palette: palette),
+                          ],
                           const SizedBox(width: 10),
-                          Flexible(
-                            child: Text(
-                              _formatPostDateTime(post.createdAt),
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: palette.mutedText,
-                                fontSize: AcoTypography.bodySmall,
-                              ),
+                          Text(
+                            _formatPostDateTime(post.createdAt),
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              color: palette.mutedText,
+                              fontSize: AcoTypography.bodySmall,
                             ),
                           ),
                         ],
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Image.asset(
-                        'assets/icons/post_more_indicator.png',
-                        width: 20,
-                        filterQuality: FilterQuality.high,
-                        semanticLabel: '更多操作',
+                    Builder(
+                      builder: (menuContext) => CupertinoButton(
+                        padding: const EdgeInsets.only(right: 12),
+                        minimumSize: Size.zero,
+                        onPressed: () => unawaited(_showMoreMenu(menuContext)),
+                        child: Image.asset(
+                          'assets/icons/post_more_indicator.png',
+                          width: 20,
+                          filterQuality: FilterQuality.high,
+                          semanticLabel: '更多操作',
+                        ),
                       ),
                     ),
                   ],
@@ -612,55 +693,125 @@ class _PostImageGallery extends StatelessWidget {
   final List<String> imageUrls;
 
   @override
-  Widget build(BuildContext context) {
-    const height = 220.0;
-    if (imageUrls.length == 1) {
-      return _imageTile(imageUrls.first, height: height);
-    }
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      if (imageUrls.length == 1) {
+        return ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: math.min(208.0, constraints.maxWidth),
+            maxHeight: 208,
+          ),
+          child: _imageTile(context, imageUrls.first, fit: BoxFit.contain),
+        );
+      }
 
-    final columns = imageUrls.length == 2 ? 2 : 3;
-    final rows = (imageUrls.length + columns - 1) ~/ columns;
-    final itemHeight = (height - (rows - 1) * 4) / rows;
-    return SizedBox(
-      height: height,
-      child: GridView.builder(
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: imageUrls.length,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: columns,
-          crossAxisSpacing: 4,
-          mainAxisSpacing: 4,
-          mainAxisExtent: itemHeight,
+      const columns = 3;
+      const spacing = 4.0;
+      final width = math.min(260.0, constraints.maxWidth);
+      final rows = (imageUrls.length + columns - 1) ~/ columns;
+      final itemSize = (width - (columns - 1) * spacing) / columns;
+      final height = rows * itemSize + (rows - 1) * spacing;
+      return SizedBox(
+        width: width,
+        height: height,
+        child: GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: imageUrls.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            mainAxisExtent: itemSize,
+          ),
+          itemBuilder: (_, index) =>
+              _imageTile(context, imageUrls[index], width: double.infinity),
         ),
-        itemBuilder: (_, index) => _imageTile(imageUrls[index]),
+      );
+    },
+  );
+
+  Widget _imageTile(
+    BuildContext context,
+    String imageUrl, {
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.cover,
+  }) => Semantics(
+    button: true,
+    label: '查看动态大图',
+    child: GestureDetector(
+      onTap: () => _openImage(context, imageUrl),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: ColoredBox(
+          color: palette.surface,
+          child: Image.network(
+            _liveCoverUrl(imageUrl),
+            width: width,
+            height: height,
+            fit: fit,
+            semanticLabel: '动态图片缩略图',
+            errorBuilder: (_, _, _) => Center(
+              child: Icon(
+                CupertinoIcons.photo,
+                color: palette.mutedText,
+                size: 30,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  void _openImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push<void>(
+      _AcoPageRoute<void>(
+        builder: (_) => _PostImagePreview(imageUrl: _liveCoverUrl(imageUrl)),
       ),
     );
   }
+}
 
-  Widget _imageTile(String imageUrl, {double? height}) => ClipRRect(
-    borderRadius: BorderRadius.circular(18),
-    child: Image.network(
-      _liveCoverUrl(imageUrl),
-      width: double.infinity,
-      height: height,
-      fit: BoxFit.cover,
-      semanticLabel: '动态图片',
-      errorBuilder: (_, _, _) => ColoredBox(
-        color: palette.surface,
-        child: Center(
-          child: Icon(CupertinoIcons.photo, color: palette.mutedText, size: 30),
-        ),
+class _PostImagePreview extends StatelessWidget {
+  const _PostImagePreview({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: _black,
+    child: AcoSafeArea(
+      child: Stack(
+        children: [
+          Center(
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              semanticLabel: '动态大图',
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: CupertinoButton(
+              padding: const EdgeInsets.all(10),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Icon(CupertinoIcons.xmark, color: _white, size: 22),
+            ),
+          ),
+        ],
       ),
     ),
   );
 }
 
 String _formatPostDateTime(DateTime value) {
-  String pad(int number) => number.toString().padLeft(2, '0');
-
-  return '${value.year.toString().padLeft(4, '0')}-'
-      '${pad(value.month)}-${pad(value.day)} '
-      '${pad(value.hour)}:${pad(value.minute)}';
+  final elapsed = DateTime.now().difference(value);
+  if (elapsed.isNegative || elapsed.inSeconds < 60) return '刚刚';
+  if (elapsed.inMinutes < 60) return '${elapsed.inMinutes}分钟前';
+  if (elapsed.inHours < 24) return '${elapsed.inHours}小时前';
+  return '${elapsed.inDays}天前';
 }
 
 class _PostIdentityBadges extends StatelessWidget {
@@ -674,7 +825,7 @@ class _PostIdentityBadges extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final identityAsset = _identityBadgeAsset(identity);
+    final identityAsset = _identityNodeAsset(identity);
     final staffAsset = _staffBadgeAsset(staffIdentity);
     if (identityAsset == null && staffAsset == null) {
       return const SizedBox.shrink();
@@ -686,7 +837,7 @@ class _PostIdentityBadges extends StatelessWidget {
         if (identityAsset != null)
           Image.asset(
             identityAsset,
-            width: _longBadgeWidth(identity),
+            width: _shortBadgeWidth(identity),
             fit: BoxFit.contain,
           ),
         if (identityAsset != null && staffAsset != null)
@@ -696,6 +847,22 @@ class _PostIdentityBadges extends StatelessWidget {
       ],
     );
   }
+}
+
+class _PostFollowBadge extends StatelessWidget {
+  const _PostFollowBadge({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    '已关注',
+    style: TextStyle(
+      color: palette.accent,
+      fontSize: AcoTypography.caption,
+      fontWeight: FontWeight.w600,
+    ),
+  );
 }
 
 class _PostAction extends StatelessWidget {

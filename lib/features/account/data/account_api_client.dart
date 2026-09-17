@@ -124,6 +124,13 @@ class AccountApiException implements Exception {
     if (normalized.contains('invalid friend account')) {
       return '不能添加自己为好友，请检查 UID。';
     }
+    if (normalized.contains('cannot follow yourself')) {
+      return '不能关注自己。';
+    }
+    if (normalized.contains('cannot follow user') ||
+        normalized.contains('cannot unfollow user')) {
+      return '关注操作失败，请稍后重试。';
+    }
     if (normalized.contains('cannot notify friend request')) {
       return '好友申请发送失败，请稍后重试。';
     }
@@ -577,6 +584,18 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<List<SquarePost>> listFriendsPosts({required String token}) async {
+    final response = await _httpClient.get(
+      _uri('posts/friends'),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return (body['data'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(SquarePost.fromJson)
+        .toList(growable: false);
+  }
+
   Future<SquarePost> createPost({
     required String content,
     required List<Uint8List> images,
@@ -619,6 +638,29 @@ class AccountApiClient {
       headers: _authorizedHeaders(token),
     );
     return PostLikeResult.fromJson(_body(response));
+  }
+
+  Future<UserFollowResult> followUser({
+    required int userID,
+    required String token,
+  }) => _setUserFollow(userID: userID, token: token, following: true);
+
+  Future<UserFollowResult> unfollowUser({
+    required int userID,
+    required String token,
+  }) => _setUserFollow(userID: userID, token: token, following: false);
+
+  Future<UserFollowResult> _setUserFollow({
+    required int userID,
+    required String token,
+    required bool following,
+  }) async {
+    final action = following ? 'follow' : 'unfollow';
+    final response = await _httpClient.post(
+      _uri('users/$userID/$action'),
+      headers: _authorizedHeaders(token),
+    );
+    return UserFollowResult.fromJson(_body(response));
   }
 
   Future<List<PostReply>> listPostReplies({
