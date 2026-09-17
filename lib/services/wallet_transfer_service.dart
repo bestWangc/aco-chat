@@ -69,7 +69,7 @@ class WalletTransferService {
     int gasLimit = 21000,
     Future<String> Function(String rawTransaction)? broadcast,
   }) async {
-    final value = _decimalToWei(amount);
+    final value = int.parse(decimalToBaseUnits(amount));
     final privateKey = WalletIdentity.privateKeyFromMnemonic(mnemonic);
     final unsigned = _rlp([
       _intBytes(nonce),
@@ -107,13 +107,24 @@ class WalletTransferService {
     );
   }
 
-  static int _decimalToWei(String value) {
+  static String decimalToBaseUnits(String value, {int decimals = 18}) {
+    if (decimals < 0 || decimals > 36) {
+      throw const FormatException('代币精度无效');
+    }
     final parts = value.trim().split('.');
-    final whole = int.parse(parts.first);
-    final fraction = (parts.length > 1 ? parts[1] : '').padRight(18, '0');
-    if (fraction.length > 18) throw const FormatException('金额精度最多 18 位');
-    return whole * 1000000000000000000 +
-        int.parse(fraction.isEmpty ? '0' : fraction);
+    if (parts.length > 2 || parts.first.isEmpty) {
+      throw const FormatException('金额格式无效');
+    }
+    final whole = BigInt.parse(parts.first);
+    final fractionText = parts.length > 1 ? parts[1] : '';
+    if (fractionText.length > decimals) {
+      throw FormatException('金额精度最多 $decimals 位');
+    }
+    final paddedFraction = fractionText.padRight(decimals, '0');
+    final fraction = BigInt.parse(
+      paddedFraction.isEmpty ? '0' : paddedFraction,
+    );
+    return (whole * BigInt.from(10).pow(decimals) + fraction).toString();
   }
 
   static List<int> _addressBytes(String value) => _hexBytes(value.substring(2));

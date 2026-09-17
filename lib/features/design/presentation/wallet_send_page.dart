@@ -349,6 +349,28 @@ class _SendTransferPageState extends State<_SendTransferPage> {
       } finally {
         rpc.close();
       }
+      if (result.status == '已广播') {
+        final transactionService = WalletTransactionService();
+        try {
+          await transactionService
+              .recordAppTransfer(
+                network: _networkForToken(widget.token),
+                address: identity.address,
+                symbol: widget.token.symbol,
+                decimals: 18,
+                to: _recipientController.text.trim(),
+                amountRaw: WalletTransferService.decimalToBaseUnits(
+                  _amountController.text.trim(),
+                ),
+                hash: result.hash,
+              )
+              .timeout(const Duration(seconds: 2));
+        } catch (error) {
+          debugPrint('record wallet transaction failed: $error');
+        } finally {
+          transactionService.close();
+        }
+      }
       if (mounted) {
         final title = result.status == '已广播' ? '转账成功' : '交易已签名';
         _showNotice(context, title, '交易哈希：${result.hash}');

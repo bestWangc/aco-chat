@@ -572,6 +572,37 @@ class AccountApiClient {
     return WalletTransactionPage.fromJson(_body(response));
   }
 
+  Future<void> recordWalletTransaction({
+    required WalletNetwork network,
+    required String address,
+    String? contractAddress,
+    required String symbol,
+    required int decimals,
+    required String from,
+    required String to,
+    required String amountRaw,
+    required String hash,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('wallets/transactions'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({
+        'network': network.name,
+        'address': address,
+        if (contractAddress != null && contractAddress.isNotEmpty)
+          'contract_address': contractAddress,
+        'symbol': symbol,
+        'decimals': decimals,
+        'from': from,
+        'to': to,
+        'amount_raw': amountRaw,
+        'hash': hash,
+      }),
+    );
+    _body(response);
+  }
+
   Future<List<SquarePost>> listRecommendedPosts({required String token}) async {
     final response = await _httpClient.get(
       _uri('posts/recommended'),

@@ -35,6 +35,32 @@ class WalletTransactionService {
     );
   }
 
+  Future<void> recordAppTransfer({
+    required WalletNetwork network,
+    required String address,
+    String? contractAddress,
+    required String symbol,
+    required int decimals,
+    required String to,
+    required String amountRaw,
+    required String hash,
+  }) async {
+    final tokens = await _tokenStore.read();
+    if (tokens == null) throw StateError('No access token is available');
+    await _apiClient.recordWalletTransaction(
+      network: network,
+      address: address,
+      contractAddress: contractAddress,
+      symbol: symbol,
+      decimals: decimals,
+      from: address,
+      to: to,
+      amountRaw: amountRaw,
+      hash: hash,
+      token: tokens.accessToken,
+    );
+  }
+
   void close() {
     if (_ownsApiClient) _apiClient.close();
   }
