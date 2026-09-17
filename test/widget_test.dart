@@ -14,6 +14,7 @@ import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_portfolio_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 
@@ -689,7 +690,7 @@ void main() {
     }
   });
 
-  testWidgets('does not make wallet assets tappable', (
+  testWidgets('does not render wallet assets before address derivation', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -698,6 +699,46 @@ void main() {
     expect(find.text('地址派生中，请稍后刷新。'), findsOneWidget);
     expect(find.text('USDT'), findsNothing);
     expect(find.text('BTC'), findsNothing);
+  });
+
+  testWidgets('renders the token detail page for a selected wallet asset', (
+    WidgetTester tester,
+  ) async {
+    var openedScreen = AcoScreen.comingSoon;
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.tokenDetail,
+          dark: false,
+          isRoot: false,
+          onOpen: (screen) => openedScreen = screen,
+          onThemeToggle: () {},
+          selectedAsset: WalletBalance(
+            chain: '以太坊',
+            symbol: 'USDT',
+            assetName: 'Tether USD',
+            isNative: false,
+            address: '0x1234',
+            decimals: 6,
+            tokenAddress: '0xtoken',
+            balance: BigInt.zero,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Tether USD'), findsOneWidget);
+    expect(find.text('USDT'), findsOneWidget);
+    expect(find.text('市场价格'), findsOneWidget);
+    expect(find.text('没有找到您的交易？'), findsOneWidget);
+    expect(find.bySemanticsLabel('转账'), findsOneWidget);
+    expect(find.bySemanticsLabel('收款'), findsOneWidget);
+    expect(find.bySemanticsLabel('闪兑'), findsOneWidget);
+
+    final browserLink = find.bySemanticsLabel('查看浏览器');
+    await tester.ensureVisible(browserLink);
+    await tester.tap(browserLink);
+    expect(openedScreen, AcoScreen.browserDiscover);
   });
 
   testWidgets('opens wallet list from the network selector', (

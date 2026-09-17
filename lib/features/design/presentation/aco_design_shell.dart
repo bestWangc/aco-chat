@@ -94,6 +94,7 @@ part 'wallet_chains_page.dart';
 part 'wallet_transfer_widgets.dart';
 part 'wallet_detail_widgets.dart';
 part 'wallet_detail_page.dart';
+part 'wallet_token_detail_page.dart';
 part 'wallet_chain_widgets.dart';
 part 'wallet_backup_pages.dart';
 part 'wallet_receive_pages.dart';
@@ -236,6 +237,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<String> _walletName = ValueNotifier<String>('Wallet1');
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
   TransferToken? _selectedTransferToken;
+  WalletBalance? _selectedAssetBalance;
   int _liveListRevision = 0;
   int _walletAssetRevision = 0;
   String? _accountId;
@@ -429,6 +431,11 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _open(AcoScreen.send);
   }
 
+  void _openAsset(WalletBalance balance) {
+    setState(() => _selectedAssetBalance = balance);
+    _open(AcoScreen.tokenDetail);
+  }
+
   Future<void> _completeAddedWallet(
     WalletIdentity identity,
     String mnemonic,
@@ -479,9 +486,11 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.walletSetupCreate => AcoScreen.walletSetupCreate,
       AcoScreen.walletSetupImport => AcoScreen.walletSetupImport,
       AcoScreen.assetDetail => AcoScreen.assetDetail,
+      AcoScreen.tokenDetail => AcoScreen.tokenDetail,
       AcoScreen.backupMnemonic => AcoScreen.backupMnemonic,
       AcoScreen.exportPrivateKey => AcoScreen.exportPrivateKey,
       AcoScreen.scan => AcoScreen.scan,
+      AcoScreen.browserDiscover => AcoScreen.browserDiscover,
       AcoScreen.profile => AcoScreen.profile,
       AcoScreen.profileQr => AcoScreen.profileQr,
       AcoScreen.profileEdit => AcoScreen.profileEdit,
@@ -565,6 +574,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       onWalletChainSelected: _selectWalletChain,
       transferToken: _selectedTransferToken,
       onSendTokenSelected: _sendToken,
+      selectedAsset: _selectedAssetBalance,
+      onAssetSelected: _openAsset,
       accountId: _accountId,
       walletLoginFuture: widget.walletLoginFuture,
       username: _username.value,
@@ -629,6 +640,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       onWalletChainSelected: _selectWalletChain,
                       transferToken: _selectedTransferToken,
                       onSendTokenSelected: _sendToken,
+                      selectedAsset: _selectedAssetBalance,
+                      onAssetSelected: _openAsset,
                       accountId: _accountId,
                       walletLoginFuture: widget.walletLoginFuture,
                       username: _username.value,

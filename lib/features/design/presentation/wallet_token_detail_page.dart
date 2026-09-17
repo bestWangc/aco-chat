@@ -1,0 +1,570 @@
+part of 'aco_design_shell.dart';
+
+const _tokenDetailBlue = Color(0xFF2F80ED);
+const _tokenDetailGreen = Color(0xFF52C7A0);
+const _tokenDetailEmptyIcon = Color(0xFFB8BEC7);
+
+class _TokenDetailPage extends StatefulWidget {
+  const _TokenDetailPage({
+    required this.palette,
+    required this.balance,
+    required this.selectedChain,
+    required this.onOpen,
+    this.onSendTokenSelected,
+  });
+
+  final AcoPalette palette;
+  final WalletBalance balance;
+  final _WalletChain selectedChain;
+  final ValueChanged<AcoScreen> onOpen;
+  final ValueChanged<TransferToken>? onSendTokenSelected;
+
+  @override
+  State<_TokenDetailPage> createState() => _TokenDetailPageState();
+}
+
+class _TokenDetailPageState extends State<_TokenDetailPage> {
+  int _selectedTab = 0;
+
+  String get _symbol => widget.balance.symbol.toUpperCase();
+
+  String get _title => widget.balance.assetName.trim().isEmpty
+      ? widget.balance.symbol
+      : widget.balance.assetName;
+
+  String get _amount {
+    final balance = widget.balance.balance ?? BigInt.zero;
+    if (balance == BigInt.zero) return '0';
+    return formatChainAmount(balance, decimals: widget.balance.decimals);
+  }
+
+  bool get _isStablecoin => _symbol == 'USDT' || _symbol == 'USDC';
+
+  String get _marketPrice => _isStablecoin ? '1.000' : '—';
+
+  String get _marketUsd => _isStablecoin ? '\$1.0000' : '—';
+
+  String _tokenIconAsset() => switch (_symbol) {
+    'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
+    'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
+    _ => 'assets/icons/crypto/tokens/${_symbol.toLowerCase()}.svg',
+  };
+
+  void _showTokenInfo() {
+    final contract = widget.balance.tokenAddress;
+    final message = contract == null || contract.isEmpty
+        ? '网络：${widget.selectedChain.displayLabel}\n原生资产'
+        : '网络：${widget.selectedChain.displayLabel}\n合约：$contract';
+    showAcoAlertNotice(context, '代币信息', message);
+  }
+
+  Future<void> _copyTokenAddress() async {
+    final text = widget.balance.tokenAddress ?? widget.balance.address;
+    if (text.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: text));
+    if (mounted) showAcoAlertNotice(context, '已复制', '代币地址已复制到剪贴板。');
+  }
+
+  void _sendToken() {
+    final token = TransferToken(
+      symbol: widget.balance.symbol,
+      name: _title,
+      chain: widget.balance.chain,
+      iconAsset: _tokenIconAsset(),
+      feeSymbol: widget.selectedChain.nativeToken.symbol,
+      availableAmount: _amount,
+    );
+    if (widget.onSendTokenSelected == null) {
+      widget.onOpen(AcoScreen.send);
+    } else {
+      widget.onSendTokenSelected!(token);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final background = widget.palette.dark
+        ? widget.palette.background
+        : const Color(0xFFF5F6FB);
+    final cardColor = widget.palette.dark
+        ? widget.palette.surfaceRaised
+        : widget.palette.background;
+    return ColoredBox(
+      color: background,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 16, 0),
+            child: AcoPageHeader(
+              palette: widget.palette,
+              title: _title,
+              titleFontSize: 22,
+              right: AcoIconButton(
+                icon: CupertinoIcons.info,
+                size: 28,
+                palette: widget.palette,
+                label: '代币信息',
+                onPressed: _showTokenInfo,
+              ),
+              backButtonOffset: Offset.zero,
+            ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+              child: Column(
+                children: [
+                  _TokenBalanceSummary(
+                    palette: widget.palette,
+                    balance: _amount,
+                    symbol: widget.balance.symbol,
+                    iconSymbol: widget.balance.symbol,
+                    copyAvailable:
+                        (widget.balance.tokenAddress ?? widget.balance.address)
+                            .isNotEmpty,
+                    onCopy: _copyTokenAddress,
+                  ),
+                  const SizedBox(height: 30),
+                  _TokenMarketCard(
+                    palette: widget.palette,
+                    cardColor: cardColor,
+                    price: _marketPrice,
+                    usdPrice: _marketUsd,
+                  ),
+                  const SizedBox(height: 26),
+                  Row(
+                    children: [
+                      for (var index = 0; index < 3; index++) ...[
+                        _TokenDetailTab(
+                          label: ['全部', '转入', '转出'][index],
+                          selected: _selectedTab == index,
+                          palette: widget.palette,
+                          onPressed: () => setState(() => _selectedTab = index),
+                        ),
+                        if (index < 2) const SizedBox(width: 28),
+                      ],
+                      const Spacer(),
+                      Semantics(
+                        button: true,
+                        label: '筛选交易记录',
+                        child: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(40, 40),
+                          onPressed: () => showAcoAlertNotice(
+                            context,
+                            '筛选交易记录',
+                            '交易筛选功能即将开放。',
+                          ),
+                          child: Icon(
+                            CupertinoIcons.line_horizontal_3_decrease,
+                            color: widget.palette.primaryText,
+                            size: 24,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  _TokenDetailEmptyState(
+                    palette: widget.palette,
+                    onOpenBrowser: () =>
+                        widget.onOpen(AcoScreen.browserDiscover),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _TokenDetailActions(
+            palette: widget.palette,
+            onSend: _sendToken,
+            onReceive: () => widget.onOpen(AcoScreen.receive),
+            onSwap: () => showAcoAlertNotice(context, '提示', '闪兑功能即将开放。'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TokenBalanceSummary extends StatelessWidget {
+  const _TokenBalanceSummary({
+    required this.palette,
+    required this.balance,
+    required this.symbol,
+    required this.iconSymbol,
+    required this.copyAvailable,
+    required this.onCopy,
+  });
+
+  final AcoPalette palette;
+  final String balance;
+  final String symbol;
+  final String iconSymbol;
+  final bool copyAvailable;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      _WalletAssetIcon(symbol: iconSymbol, size: 58),
+      const SizedBox(width: 14),
+      Expanded(
+        child: Row(
+          children: [
+            Flexible(
+              child: Text(
+                symbol,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(width: 5),
+            Semantics(
+              button: copyAvailable,
+              label: '复制代币地址',
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(30, 30),
+                onPressed: copyAvailable ? onCopy : null,
+                child: Icon(
+                  CupertinoIcons.doc_on_doc,
+                  color: palette.mutedText,
+                  size: 22,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: 12),
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            balance,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 30,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          Text(
+            '≈ \$$balance',
+            style: TextStyle(color: palette.mutedText, fontSize: 19),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+class _TokenMarketCard extends StatelessWidget {
+  const _TokenMarketCard({
+    required this.palette,
+    required this.cardColor,
+    required this.price,
+    required this.usdPrice,
+  });
+
+  final AcoPalette palette;
+  final Color cardColor;
+  final String price;
+  final String usdPrice;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 116,
+    padding: const EdgeInsets.fromLTRB(22, 18, 14, 18),
+    decoration: BoxDecoration(
+      color: cardColor,
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Row(
+      children: [
+        Text(
+          '市场价格',
+          style: TextStyle(
+            color: palette.primaryText,
+            fontSize: 21,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        const Spacer(),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              price,
+              style: TextStyle(color: palette.primaryText, fontSize: 25),
+            ),
+            Text(
+              usdPrice,
+              style: TextStyle(color: palette.mutedText, fontSize: 20),
+            ),
+          ],
+        ),
+        const SizedBox(width: 20),
+        Container(
+          width: 112,
+          height: 62,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: palette.dark
+                ? const Color(0xFF3A3A3A)
+                : const Color(0xFFBEC2C8),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Text(
+            '0.00%',
+            style: TextStyle(
+              color: palette.dark ? palette.primaryText : _white,
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        const SizedBox(width: 11),
+        Icon(CupertinoIcons.chevron_right, color: palette.mutedText, size: 25),
+      ],
+    ),
+  );
+}
+
+class _TokenDetailTab extends StatelessWidget {
+  const _TokenDetailTab({
+    required this.label,
+    required this.selected,
+    required this.palette,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final AcoPalette palette;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: const EdgeInsets.only(bottom: 8),
+    minimumSize: Size.zero,
+    onPressed: onPressed,
+    child: Column(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: selected ? palette.primaryText : palette.mutedText,
+            fontSize: 21,
+            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Container(
+          width: selected ? 64 : 0,
+          height: 4,
+          decoration: BoxDecoration(
+            color: palette.primaryText,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _TokenDetailEmptyState extends StatelessWidget {
+  const _TokenDetailEmptyState({
+    required this.palette,
+    required this.onOpenBrowser,
+  });
+
+  final AcoPalette palette;
+  final VoidCallback onOpenBrowser;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 330,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        SizedBox(
+          width: 112,
+          height: 112,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Icon(
+                CupertinoIcons.doc_text,
+                color: _tokenDetailEmptyIcon,
+                size: 92,
+              ),
+              Positioned(
+                right: 0,
+                bottom: 4,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: palette.dark
+                        ? palette.background
+                        : const Color(0xFFF5F6FB),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      CupertinoIcons.refresh,
+                      color: _tokenDetailEmptyIcon,
+                      size: 35,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 22),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '没有找到您的交易？',
+              style: TextStyle(color: palette.mutedText, fontSize: 18),
+            ),
+            CupertinoButton(
+              padding: const EdgeInsets.only(left: 5),
+              minimumSize: Size.zero,
+              onPressed: onOpenBrowser,
+              child: const Text(
+                '查看浏览器',
+                style: TextStyle(color: _tokenDetailBlue, fontSize: 18),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+class _TokenDetailActions extends StatelessWidget {
+  const _TokenDetailActions({
+    required this.palette,
+    required this.onSend,
+    required this.onReceive,
+    required this.onSwap,
+  });
+
+  final AcoPalette palette;
+  final VoidCallback onSend;
+  final VoidCallback onReceive;
+  final VoidCallback onSwap;
+
+  @override
+  Widget build(BuildContext context) {
+    final surface = palette.dark ? palette.surfaceRaised : palette.background;
+    return AcoSafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 6,
+            child: _TokenActionButton(
+              label: '转账',
+              icon: CupertinoIcons.arrow_up,
+              background: _tokenDetailGreen,
+              foreground: _white,
+              onPressed: onSend,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 6,
+            child: _TokenActionButton(
+              label: '收款',
+              icon: CupertinoIcons.arrow_down,
+              background: _tokenDetailBlue,
+              foreground: _white,
+              onPressed: onReceive,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 4,
+            child: _TokenActionButton(
+              label: '闪兑',
+              icon: CupertinoIcons.arrow_right_arrow_left,
+              background: surface,
+              foreground: palette.primaryText,
+              borderColor: palette.border,
+              onPressed: onSwap,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TokenActionButton extends StatelessWidget {
+  const _TokenActionButton({
+    required this.label,
+    required this.icon,
+    required this.background,
+    required this.foreground,
+    required this.onPressed,
+    this.borderColor,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color background;
+  final Color foreground;
+  final Color? borderColor;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    excludeSemantics: true,
+    label: label,
+    child: SizedBox(
+      height: 58,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        borderRadius: BorderRadius.circular(18),
+        onPressed: onPressed,
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: background,
+            borderRadius: BorderRadius.circular(18),
+            border: borderColor == null
+                ? null
+                : Border.all(color: borderColor!),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: foreground, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: foreground,
+                  fontSize: 21,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}

@@ -7,6 +7,7 @@ enum AcoScreen {
   walletSetupCreate,
   walletSetupImport,
   assetDetail,
+  tokenDetail,
   backupMnemonic,
   exportPrivateKey,
   send,

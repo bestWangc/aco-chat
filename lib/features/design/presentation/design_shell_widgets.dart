@@ -55,6 +55,8 @@ class AcoScreenPage extends StatelessWidget {
     this.onWalletChainSelected,
     this.transferToken,
     this.onSendTokenSelected,
+    this.selectedAsset,
+    this.onAssetSelected,
     this.onDisplayNameChanged,
     this.onUsernameChanged,
     this.onAvatarUrlChanged,
@@ -95,6 +97,8 @@ class AcoScreenPage extends StatelessWidget {
   final ValueChanged<int>? onWalletChainSelected;
   final TransferToken? transferToken;
   final ValueChanged<TransferToken>? onSendTokenSelected;
+  final WalletBalance? selectedAsset;
+  final ValueChanged<WalletBalance>? onAssetSelected;
   final ValueChanged<String>? onDisplayNameChanged;
   final ValueChanged<String>? onUsernameChanged;
   final ValueChanged<String>? onAvatarUrlChanged;
@@ -131,6 +135,7 @@ class AcoScreenPage extends StatelessWidget {
         walletName: walletName,
         selectedChain: _supportedWalletChains[walletChainIndex],
         onSendTokenSelected: onSendTokenSelected ?? (_) {},
+        onAssetSelected: onAssetSelected ?? (_) {},
       ),
       AcoScreen.walletChains => _WalletChains(
         palette: palette,
@@ -172,6 +177,16 @@ class AcoScreenPage extends StatelessWidget {
         onWalletNameChanged: onWalletNameChanged,
         onOpen: onOpen,
       ),
+      AcoScreen.tokenDetail =>
+        selectedAsset == null
+            ? const _ComingSoonPage()
+            : _TokenDetailPage(
+                palette: palette,
+                balance: selectedAsset!,
+                selectedChain: _supportedWalletChains[walletChainIndex],
+                onOpen: onOpen,
+                onSendTokenSelected: onSendTokenSelected,
+              ),
       AcoScreen.backupMnemonic => _BackupMnemonicFlow(
         palette: palette,
         walletIdentity: walletIdentity,

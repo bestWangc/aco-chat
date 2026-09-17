@@ -398,8 +398,9 @@ class _TimeRangeSelector extends StatelessWidget {
 }
 
 class _WalletAssetIcon extends StatelessWidget {
-  const _WalletAssetIcon({required this.symbol});
+  const _WalletAssetIcon({required this.symbol, this.size = 24});
   final String symbol;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -411,8 +412,8 @@ class _WalletAssetIcon extends StatelessWidget {
       _ => 'assets/icons/crypto/tokens/${normalized.toLowerCase()}.svg',
     };
     return SizedBox(
-      width: 24,
-      height: 24,
+      width: size,
+      height: size,
       child: asset == null
           ? DecoratedBox(
               decoration: BoxDecoration(
@@ -476,9 +477,11 @@ class _WalletAssetRow extends StatelessWidget {
     required this.title,
     required this.amount,
     required this.value,
+    this.onTap,
   });
   final AcoPalette palette;
   final String symbol, title, amount, value;
+  final VoidCallback? onTap;
   @override
   Widget build(BuildContext context) {
     final primaryTextStyle = TextStyle(
@@ -491,67 +494,76 @@ class _WalletAssetRow extends StatelessWidget {
       fontSize: AcoTypography.caption,
     );
 
-    return SizedBox(
-      height: 65,
-      child: Stack(
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  _WalletAssetIcon(symbol: symbol),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(symbol, style: primaryTextStyle),
-                        const SizedBox(height: 3),
-                        Text(title, style: secondaryTextStyle),
-                      ],
-                    ),
-                  ),
-                  SizedBox(
-                    width: 76,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          amount,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: primaryTextStyle,
+    return Semantics(
+      button: onTap != null,
+      enabled: onTap != null,
+      label: onTap == null ? null : '查看$symbol详情',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(
+          height: 65,
+          child: Stack(
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      _WalletAssetIcon(symbol: symbol),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(symbol, style: primaryTextStyle),
+                            const SizedBox(height: 3),
+                            Text(title, style: secondaryTextStyle),
+                          ],
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          value,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.right,
-                          style: secondaryTextStyle,
+                      ),
+                      SizedBox(
+                        width: 76,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              amount,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: primaryTextStyle,
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              value,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                              style: secondaryTextStyle,
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
-            ),
+              Positioned(
+                left: 40,
+                right: 0,
+                bottom: 0,
+                child: SizedBox(
+                  height: 1,
+                  child: const ColoredBox(color: Color(0xFF161616)),
+                ),
+              ),
+            ],
           ),
-          Positioned(
-            left: 40,
-            right: 0,
-            bottom: 0,
-            child: SizedBox(
-              height: 1,
-              child: const ColoredBox(color: Color(0xFF161616)),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

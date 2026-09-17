@@ -7,6 +7,7 @@ class _WalletHome extends StatefulWidget {
     required this.onOpen,
     required this.selectedChain,
     required this.onSendTokenSelected,
+    required this.onAssetSelected,
     required this.walletName,
     this.walletIdentity,
     this.walletLoginFuture,
@@ -15,6 +16,7 @@ class _WalletHome extends StatefulWidget {
   final ValueChanged<AcoScreen> onOpen;
   final _WalletChain selectedChain;
   final ValueChanged<TransferToken> onSendTokenSelected;
+  final ValueChanged<WalletBalance> onAssetSelected;
   final String walletName;
   final WalletIdentity? walletIdentity;
   final Future<AccountProfile?>? walletLoginFuture;
@@ -736,6 +738,7 @@ class _WalletHomeState extends State<_WalletHome> {
                   title: balance.assetName,
                   amount: amount,
                   value: '≈0.00 USD',
+                  onTap: () => widget.onAssetSelected(balance),
                 );
               },
             ),
