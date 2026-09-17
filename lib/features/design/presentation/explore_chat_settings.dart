@@ -3,6 +3,7 @@ part of 'aco_design_shell.dart';
 const _maxGroupMemberCount = 19;
 const _memberGridColumnCount = 5;
 const _memberGridSpacing = 12.0;
+const _memberGridMaxItemWidth = 96.0;
 const _settingsArrowAsset = 'assets/images/right_arrow.png';
 
 class _ChatMoreSettingsPage extends StatefulWidget {
@@ -41,6 +42,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
   var _blockUpdating = false;
   var _groupMembersLoading = false;
   var _isGroupOwner = false;
+  String? _groupOwnerUserID;
   List<GroupMembersInfo> _groupMembers = const [];
   Map<String, int> _identityByUserID = const {};
   Map<String, int> _staffIdentityByUserID = const {};
@@ -89,11 +91,36 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
           if (name?.isNotEmpty == true) _groupName = name!;
           _isGroupOwner =
               info?.ownerUserID == OpenIMChatRepository.currentUserID;
+          _groupOwnerUserID = info?.ownerUserID;
         });
       }
     } catch (_) {
       // The name already shown by the conversation remains usable offline.
     }
+  }
+
+  Future<void> _openAllMembers() async {
+    final groupID = widget.groupID;
+    if (groupID == null || groupID.isEmpty) return;
+    await Navigator.of(context).push<void>(
+      CupertinoPageRoute<void>(
+        builder: (_) => _GroupMembersPage(
+          palette: widget.palette,
+          groupID: groupID,
+          ownerUserID: _groupOwnerUserID,
+          isGroupOwner: _isGroupOwner,
+          onMemberRemoved: (userID) {
+            if (mounted) {
+              setState(
+                () => _groupMembers = _groupMembers
+                    .where((member) => member.userID != userID)
+                    .toList(growable: false),
+              );
+            }
+          },
+        ),
+      ),
+    );
   }
 
   Future<void> _loadMemberIdentities(List<GroupMembersInfo> members) async {
@@ -472,7 +499,9 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                   loading: _groupMembersLoading,
                   identityByUserID: _identityByUserID,
                   staffIdentityByUserID: _staffIdentityByUserID,
+                  ownerUserID: _groupOwnerUserID,
                   onAddPressed: _openAddMembers,
+                  onShowAllMembers: _openAllMembers,
                 ),
               ),
               const SizedBox(height: 18),
@@ -818,7 +847,9 @@ class _GroupMemberGrid extends StatelessWidget {
     required this.loading,
     required this.identityByUserID,
     required this.staffIdentityByUserID,
+    required this.ownerUserID,
     required this.onAddPressed,
+    required this.onShowAllMembers,
   });
 
   final AcoPalette palette;
@@ -826,7 +857,9 @@ class _GroupMemberGrid extends StatelessWidget {
   final bool loading;
   final Map<String, int> identityByUserID;
   final Map<String, int> staffIdentityByUserID;
+  final String? ownerUserID;
   final VoidCallback onAddPressed;
+  final VoidCallback onShowAllMembers;
 
   @override
   Widget build(BuildContext context) {
@@ -835,26 +868,58 @@ class _GroupMemberGrid extends StatelessWidget {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
-        const columnCount = _memberGridColumnCount;
-        const spacing = _memberGridSpacing;
-        final itemWidth =
-            (constraints.maxWidth - spacing * (columnCount - 1)) / columnCount;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: 14,
+        final availableItemWidth =
+            (constraints.maxWidth -
+                _memberGridSpacing * (_memberGridColumnCount - 1)) /
+            _memberGridColumnCount;
+        final itemWidth = math.min(_memberGridMaxItemWidth, availableItemWidth);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final member in members.take(_maxGroupMemberCount))
-              _GroupMemberAvatar(
-                width: itemWidth,
-                palette: palette,
-                name: member.nickname?.trim().isNotEmpty == true
-                    ? member.nickname!.trim()
-                    : (member.userID ?? '成员'),
-                avatarURL: member.faceURL,
-                identity: identityByUserID[member.userID] ?? 0,
-                staffIdentity: staffIdentityByUserID[member.userID] ?? 0,
+            Wrap(
+              alignment: WrapAlignment.start,
+              spacing: _memberGridSpacing,
+              runSpacing: 14,
+              children: [
+                for (final member in members.take(_maxGroupMemberCount))
+                  _GroupMemberAvatar(
+                    width: itemWidth,
+                    palette: palette,
+                    name: member.nickname?.trim().isNotEmpty == true
+                        ? member.nickname!.trim()
+                        : (member.userID ?? '成员'),
+                    avatarURL: member.faceURL,
+                    identity: identityByUserID[member.userID] ?? 0,
+                    staffIdentity: staffIdentityByUserID[member.userID] ?? 0,
+                    isOwner: member.userID == ownerUserID,
+                  ),
+                _GroupAddMemberButton(
+                  width: itemWidth,
+                  onPressed: onAddPressed,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            CupertinoButton(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              onPressed: onShowAllMembers,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '全部成员',
+                    style: TextStyle(color: palette.primaryText, fontSize: 14),
+                  ),
+                  const SizedBox(width: 6),
+                  Image.asset(
+                    _settingsArrowAsset,
+                    width: 7,
+                    fit: BoxFit.contain,
+                  ),
+                ],
               ),
-            _GroupAddMemberButton(width: itemWidth, onPressed: onAddPressed),
+            ),
           ],
         );
       },
@@ -869,6 +934,7 @@ class _GroupMemberAvatar extends StatelessWidget {
     required this.name,
     required this.identity,
     required this.staffIdentity,
+    required this.isOwner,
     this.avatarURL,
   });
 
@@ -877,51 +943,327 @@ class _GroupMemberAvatar extends StatelessWidget {
   final String name;
   final int identity;
   final int staffIdentity;
+  final bool isOwner;
   final String? avatarURL;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: width,
-    child: Column(
+  Widget build(BuildContext context) {
+    final avatar = Stack(
+      clipBehavior: Clip.none,
       children: [
         AcoAvatar(size: 52, imageUrl: avatarURL ?? ''),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: identity == 0
-                      ? palette.mutedText
-                      : _identityColor(identity, palette),
-                  fontSize: 12,
+        if (isOwner)
+          const Positioned(top: -7, right: -7, child: _GroupOwnerCrown()),
+      ],
+    );
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          avatar,
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              Flexible(
+                child: Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.left,
+                  style: TextStyle(
+                    color: identity == 0
+                        ? palette.mutedText
+                        : _identityColor(identity, palette),
+                    fontSize: 12,
+                  ),
                 ),
               ),
+              if (_identityNodeAsset(identity) case final badgeAsset?) ...[
+                const SizedBox(width: 2),
+                Image.asset(
+                  badgeAsset,
+                  width: _shortBadgeWidth(identity),
+                  fit: BoxFit.contain,
+                ),
+              ],
+              if (_staffBadgeAsset(staffIdentity) case final staffAsset?) ...[
+                const SizedBox(width: 2),
+                Image.asset(
+                  staffAsset,
+                  width: _shortBadgeWidth(staffIdentity),
+                  fit: BoxFit.contain,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupOwnerCrown extends StatelessWidget {
+  const _GroupOwnerCrown();
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(size: const Size(24, 20), painter: _GroupOwnerCrownPainter());
+}
+
+class _GroupOwnerCrownPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final crown = Path()
+      ..moveTo(2, 3)
+      ..lineTo(7.5, 8)
+      ..lineTo(12, 1)
+      ..lineTo(16.5, 8)
+      ..lineTo(22, 3)
+      ..lineTo(19, 17)
+      ..quadraticBezierTo(12, 20, 5, 17)
+      ..close();
+    canvas.drawPath(
+      crown.shift(const Offset(0, 1)),
+      Paint()
+        ..color = const Color(0xA6000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+    );
+    canvas.drawPath(crown, Paint()..color = const Color(0xFFFFC83D));
+    canvas.drawPath(
+      Path()
+        ..moveTo(5, 14)
+        ..lineTo(19, 14)
+        ..lineTo(18.3, 17)
+        ..quadraticBezierTo(12, 18.5, 5.7, 17)
+        ..close(),
+      Paint()..color = const Color(0xFFE69B1F),
+    );
+    canvas.drawCircle(
+      const Offset(12, 12),
+      1.8,
+      Paint()..color = const Color(0xFFFFF3B0),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_GroupOwnerCrownPainter oldDelegate) => false;
+}
+
+class _GroupMembersPage extends StatefulWidget {
+  const _GroupMembersPage({
+    required this.palette,
+    required this.groupID,
+    required this.ownerUserID,
+    required this.isGroupOwner,
+    required this.onMemberRemoved,
+  });
+
+  final AcoPalette palette;
+  final String groupID;
+  final String? ownerUserID;
+  final bool isGroupOwner;
+  final ValueChanged<String> onMemberRemoved;
+
+  @override
+  State<_GroupMembersPage> createState() => _GroupMembersPageState();
+}
+
+class _GroupMembersPageState extends State<_GroupMembersPage> {
+  List<GroupMembersInfo> _members = const [];
+  var _loading = true;
+  String? _removingUserID;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadMembers());
+  }
+
+  Future<void> _loadMembers() async {
+    try {
+      final members = await OpenIM.iMManager.groupManager.getGroupMemberList(
+        groupID: widget.groupID,
+        count: 500,
+      );
+      if (mounted) setState(() => _members = members);
+    } catch (_) {
+      if (mounted) _showNotice(context, '加载成员失败', '请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _removeMember(GroupMembersInfo member) async {
+    final userID = member.userID;
+    if (!widget.isGroupOwner ||
+        userID == null ||
+        userID.isEmpty ||
+        userID == widget.ownerUserID ||
+        _removingUserID != null) {
+      return;
+    }
+    final name = member.nickname?.trim().isNotEmpty == true
+        ? member.nickname!.trim()
+        : userID;
+    final confirmed =
+        await showCupertinoDialog<bool>(
+          context: context,
+          builder: (dialogContext) => CupertinoAlertDialog(
+            title: const Text('移出群成员'),
+            content: Text('确定要将 $name 移出群聊吗？'),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('移出'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return;
+    setState(() => _removingUserID = userID);
+    try {
+      await AccountSession(
+        AccountApiClient(),
+      ).removeGroupMember(groupID: widget.groupID, memberAccountID: userID);
+      if (mounted) {
+        setState(
+          () => _members = _members
+              .where((candidate) => candidate.userID != userID)
+              .toList(growable: false),
+        );
+        widget.onMemberRemoved(userID);
+      }
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '移出成员失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '移出成员失败', '请稍后重试。');
+    } finally {
+      if (mounted) setState(() => _removingUserID = null);
+    }
+  }
+
+  Future<void> _showMemberActions(GroupMembersInfo member) async {
+    if (_removingUserID != null) return;
+    final remove =
+        await showCupertinoModalPopup<bool>(
+          context: context,
+          builder: (sheetContext) => CupertinoActionSheet(
+            actions: [
+              CupertinoActionSheetAction(
+                isDestructiveAction: true,
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                child: const Text('移出群聊'),
+              ),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(sheetContext).pop(false),
+              child: const Text('取消'),
             ),
-            if (_identityNodeAsset(identity) case final badgeAsset?) ...[
-              const SizedBox(width: 2),
-              Image.asset(
-                badgeAsset,
-                width: _shortBadgeWidth(identity),
-                fit: BoxFit.contain,
-              ),
-            ],
-            if (_staffBadgeAsset(staffIdentity) case final staffAsset?) ...[
-              const SizedBox(width: 2),
-              Image.asset(
-                staffAsset,
-                width: _shortBadgeWidth(staffIdentity),
-                fit: BoxFit.contain,
-              ),
-            ],
-          ],
-        ),
-      ],
+          ),
+        ) ??
+        false;
+    if (remove) await _removeMember(member);
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    child: AcoSafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 28, 0),
+            child: AcoPageHeader(
+              palette: widget.palette,
+              title: '全部成员',
+              onBack: () => Navigator.of(context).maybePop(),
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CupertinoActivityIndicator())
+                : ListView.builder(
+                    itemCount: _members.length,
+                    itemBuilder: (context, index) {
+                      final member = _members[index];
+                      final userID = member.userID;
+                      final isOwner = userID == widget.ownerUserID;
+                      final canRemove =
+                          widget.isGroupOwner &&
+                          !isOwner &&
+                          userID?.isNotEmpty == true;
+                      final row = Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          children: [
+                            Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                AcoAvatar(
+                                  size: 46,
+                                  imageUrl: member.faceURL ?? '',
+                                ),
+                                if (isOwner)
+                                  const Positioned(
+                                    top: -6,
+                                    right: -6,
+                                    child: _GroupOwnerCrown(),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                member.nickname?.trim().isNotEmpty == true
+                                    ? member.nickname!.trim()
+                                    : (userID ?? '成员'),
+                                style: TextStyle(
+                                  color: widget.palette.primaryText,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            if (isOwner)
+                              Text(
+                                '群主',
+                                style: TextStyle(
+                                  color: widget.palette.mutedText,
+                                  fontSize: 13,
+                                ),
+                              )
+                            else if (_removingUserID == userID)
+                              const CupertinoActivityIndicator()
+                            else if (canRemove)
+                              CupertinoButton(
+                                padding: const EdgeInsets.all(8),
+                                minimumSize: Size.zero,
+                                onPressed: () => _showMemberActions(member),
+                                child: const Icon(
+                                  CupertinoIcons.ellipsis,
+                                  color: Color(0xFF8C8C8C),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                      return row;
+                    },
+                  ),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -936,6 +1278,7 @@ class _GroupAddMemberButton extends StatelessWidget {
   Widget build(BuildContext context) => SizedBox(
     width: width,
     child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CupertinoButton(
           padding: EdgeInsets.zero,

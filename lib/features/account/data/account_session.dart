@@ -235,6 +235,15 @@ class AccountSession {
     token: await _requireToken(),
   );
 
+  Future<void> removeGroupMember({
+    required String groupID,
+    required String memberAccountID,
+  }) async => _apiClient.removeGroupMember(
+    groupID: groupID,
+    memberAccountID: memberAccountID,
+    token: await _requireToken(),
+  );
+
   Future<ChatGroup> joinGroupByCode(String inviteCode) async => _apiClient
       .joinGroupByCode(inviteCode: inviteCode, token: await _requireToken());
 

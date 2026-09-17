@@ -8,6 +8,27 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
+  test('removes a group member with the active access token', () async {
+    late http.Request request;
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((value) async {
+        request = value;
+        return http.Response('', 204);
+      }),
+    );
+
+    await client.removeGroupMember(
+      groupID: 'group/id',
+      memberAccountID: 'aco_member',
+      token: 'signed-token',
+    );
+
+    expect(request.method, 'POST');
+    expect(request.url.path, '/api/v1/groups/group%2Fid/members/aco_member');
+    expect(request.headers['authorization'], 'Bearer signed-token');
+  });
+
   test('posts a signed wallet login with the server contract', () async {
     late Uri requestUri;
     late Map<String, dynamic> requestBody;

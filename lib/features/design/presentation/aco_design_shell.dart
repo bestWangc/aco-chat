@@ -37,7 +37,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
     show
         InteractiveViewer,
-        Icons,
         ListTile,
         Material,
         MaterialType,

@@ -98,6 +98,9 @@ class AccountApiException implements Exception {
     if (normalized.contains('cannot add group members')) {
       return '添加成员失败，请稍后重试。';
     }
+    if (normalized.contains('cannot remove group members')) {
+      return '移出成员失败，请稍后重试。';
+    }
     if (normalized.contains('invalid friend account')) {
       return '不能添加自己为好友，请检查 UID。';
     }
@@ -368,6 +371,20 @@ class AccountApiClient {
       body: jsonEncode({'member_account_ids': memberAccountIds}),
     );
     _body(response);
+  }
+
+  Future<void> removeGroupMember({
+    required String groupID,
+    required String memberAccountID,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri(
+        'groups/${Uri.encodeComponent(groupID)}/members/${Uri.encodeComponent(memberAccountID)}',
+      ),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode != 204) _body(response);
   }
 
   Future<ChatGroup> joinGroupByCode({
