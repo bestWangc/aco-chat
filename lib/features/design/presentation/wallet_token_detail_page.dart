@@ -1,7 +1,6 @@
 part of 'aco_design_shell.dart';
 
 const _tokenDetailBlue = Color(0xFF2F80ED);
-const _tokenDetailGreen = Color(0xFF52C7A0);
 const _tokenDetailEmptyIcon = Color(0xFFB8BEC7);
 
 class _TokenDetailPage extends StatefulWidget {
@@ -114,6 +113,7 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             ),
           ),
           _TokenDetailActions(
+            palette: widget.palette,
             onSend: _sendToken,
             onReceive: () => widget.onOpen(AcoScreen.receive),
           ),
@@ -309,13 +309,19 @@ class _TokenDetailEmptyState extends StatelessWidget {
 }
 
 class _TokenDetailActions extends StatelessWidget {
-  const _TokenDetailActions({required this.onSend, required this.onReceive});
+  const _TokenDetailActions({
+    required this.palette,
+    required this.onSend,
+    required this.onReceive,
+  });
 
+  final AcoPalette palette;
   final VoidCallback onSend;
   final VoidCallback onReceive;
 
   @override
   Widget build(BuildContext context) {
+    final receiveBackground = palette.surfaceRaised;
     return AcoSafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(16, 10, 16, 14),
@@ -329,8 +335,8 @@ class _TokenDetailActions extends StatelessWidget {
                 child: _TokenActionButton(
                   label: '转账',
                   icon: CupertinoIcons.arrow_up,
-                  background: _tokenDetailGreen,
-                  foreground: _white,
+                  background: palette.accent,
+                  foreground: _walletActionForeground,
                   compact: compact,
                   onPressed: onSend,
                 ),
@@ -341,8 +347,9 @@ class _TokenDetailActions extends StatelessWidget {
                 child: _TokenActionButton(
                   label: '收款',
                   icon: CupertinoIcons.arrow_down,
-                  background: _tokenDetailBlue,
-                  foreground: _white,
+                  background: receiveBackground,
+                  foreground: palette.primaryText,
+                  borderColor: palette.border,
                   compact: compact,
                   onPressed: onReceive,
                 ),
