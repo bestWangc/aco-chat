@@ -466,16 +466,16 @@ class _TokenActionButton extends StatelessWidget {
     excludeSemantics: true,
     label: label,
     child: SizedBox(
-      height: 58,
+      height: 50,
       child: CupertinoButton(
         padding: EdgeInsets.zero,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(16),
         onPressed: onPressed,
         child: Container(
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: background,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
             border: borderColor == null
                 ? null
                 : Border.all(color: borderColor!),
@@ -483,13 +483,13 @@ class _TokenActionButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: foreground, size: compact ? 20 : 24),
-              SizedBox(width: compact ? 4 : 8),
+              Icon(icon, color: foreground, size: compact ? 18 : 20),
+              SizedBox(width: compact ? 4 : 6),
               Text(
                 label,
                 style: TextStyle(
                   color: foreground,
-                  fontSize: compact ? 18 : 21,
+                  fontSize: compact ? 16 : 18,
                   fontWeight: FontWeight.w500,
                 ),
               ),

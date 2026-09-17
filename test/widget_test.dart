@@ -779,6 +779,7 @@ void main() {
     expect(find.bySemanticsLabel('转账'), findsOneWidget);
     expect(find.bySemanticsLabel('收款'), findsOneWidget);
     expect(find.bySemanticsLabel('闪兑'), findsOneWidget);
+    expect(tester.getSize(find.bySemanticsLabel('转账')).height, 50);
 
     final browserLink = find.bySemanticsLabel('查看浏览器');
     await tester.ensureVisible(browserLink);
