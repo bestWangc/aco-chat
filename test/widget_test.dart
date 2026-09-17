@@ -770,6 +770,10 @@ void main() {
     );
 
     expect(find.text('Tether USD'), findsOneWidget);
+    expect(
+      tester.widget<Text>(find.text('Tether USD')).style?.fontSize,
+      AcoTypography.bodyEmphasis,
+    );
     expect(find.text('USDT'), findsOneWidget);
     expect(find.bySemanticsLabel('返回'), findsOneWidget);
     expect(find.bySemanticsLabel('代币信息'), findsNothing);

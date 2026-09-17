@@ -81,7 +81,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             child: AcoPageHeader(
               palette: widget.palette,
               title: _title,
-              titleFontSize: 22,
               onBack: () => Navigator.of(context).maybePop(),
               backButtonOffset: Offset.zero,
             ),
