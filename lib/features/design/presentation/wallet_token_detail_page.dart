@@ -44,13 +44,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
     _ => 'assets/icons/crypto/tokens/${_symbol.toLowerCase()}.svg',
   };
 
-  Future<void> _copyTokenAddress() async {
-    final text = widget.balance.tokenAddress ?? widget.balance.address;
-    if (text.isEmpty) return;
-    await Clipboard.setData(ClipboardData(text: text));
-    if (mounted) showAcoAlertNotice(context, '已复制', '代币地址已复制到剪贴板。');
-  }
-
   void _sendToken() {
     final token = TransferToken(
       symbol: widget.balance.symbol,
@@ -95,10 +88,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
                     balance: _amount,
                     symbol: widget.balance.symbol,
                     iconSymbol: widget.balance.symbol,
-                    copyAvailable:
-                        (widget.balance.tokenAddress ?? widget.balance.address)
-                            .isNotEmpty,
-                    onCopy: _copyTokenAddress,
                   ),
                   const SizedBox(height: 30),
                   Row(
@@ -161,16 +150,12 @@ class _TokenBalanceSummary extends StatelessWidget {
     required this.balance,
     required this.symbol,
     required this.iconSymbol,
-    required this.copyAvailable,
-    required this.onCopy,
   });
 
   final AcoPalette palette;
   final String balance;
   final String symbol;
   final String iconSymbol;
-  final bool copyAvailable;
-  final VoidCallback onCopy;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -181,38 +166,17 @@ class _TokenBalanceSummary extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _WalletAssetIcon(symbol: iconSymbol, size: iconSize),
-          SizedBox(width: compact ? 8 : 12),
+          SizedBox(width: compact ? 16 : 20),
           Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    symbol,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: palette.primaryText,
-                      fontSize: compact ? 22 : 24,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Semantics(
-                  button: copyAvailable,
-                  label: '复制代币地址',
-                  child: CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(30, 30),
-                    onPressed: copyAvailable ? onCopy : null,
-                    child: Icon(
-                      CupertinoIcons.doc_on_doc,
-                      color: palette.mutedText,
-                      size: compact ? 18 : 20,
-                    ),
-                  ),
-                ),
-              ],
+            child: Text(
+              symbol,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: compact ? 22 : 24,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           SizedBox(width: compact ? 6 : 10),

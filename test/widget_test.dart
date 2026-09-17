@@ -775,6 +775,7 @@ void main() {
       AcoTypography.bodyEmphasis,
     );
     expect(find.text('USDT'), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.doc_on_doc), findsNothing);
     expect(find.bySemanticsLabel('返回'), findsOneWidget);
     expect(find.bySemanticsLabel('代币信息'), findsNothing);
     expect(tester.widget<Text>(find.text('全部')).style?.fontSize, 18);
