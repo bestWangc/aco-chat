@@ -267,7 +267,7 @@ class _TokenDetailTab extends StatelessWidget {
           label,
           style: TextStyle(
             color: selected ? palette.primaryText : palette.mutedText,
-            fontSize: 21,
+            fontSize: 18,
             fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
           ),
         ),
