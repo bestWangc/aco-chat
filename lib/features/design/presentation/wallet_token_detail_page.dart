@@ -204,63 +204,72 @@ class _TokenBalanceSummary extends StatelessWidget {
   final VoidCallback onCopy;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.center,
-    children: [
-      _WalletAssetIcon(symbol: iconSymbol, size: 58),
-      const SizedBox(width: 14),
-      Expanded(
-        child: Row(
-          children: [
-            Flexible(
-              child: Text(
-                symbol,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (_, constraints) {
+      final compact = constraints.maxWidth < 360;
+      final iconSize = compact ? 52.0 : 58.0;
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _WalletAssetIcon(symbol: iconSymbol, size: iconSize),
+          SizedBox(width: compact ? 10 : 14),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    symbol,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: compact ? 26 : 28,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 5),
+                Semantics(
+                  button: copyAvailable,
+                  label: '复制代币地址',
+                  child: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(30, 30),
+                    onPressed: copyAvailable ? onCopy : null,
+                    child: Icon(
+                      CupertinoIcons.doc_on_doc,
+                      color: palette.mutedText,
+                      size: compact ? 20 : 22,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: compact ? 8 : 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                balance,
                 style: TextStyle(
                   color: palette.primaryText,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700,
+                  fontSize: compact ? 27 : 30,
+                  fontWeight: FontWeight.w400,
                 ),
               ),
-            ),
-            const SizedBox(width: 5),
-            Semantics(
-              button: copyAvailable,
-              label: '复制代币地址',
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: const Size(30, 30),
-                onPressed: copyAvailable ? onCopy : null,
-                child: Icon(
-                  CupertinoIcons.doc_on_doc,
+              Text(
+                '≈ \$$balance',
+                style: TextStyle(
                   color: palette.mutedText,
-                  size: 22,
+                  fontSize: compact ? 17 : 19,
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(width: 12),
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            balance,
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: 30,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          Text(
-            '≈ \$$balance',
-            style: TextStyle(color: palette.mutedText, fontSize: 19),
+            ],
           ),
         ],
-      ),
-    ],
+      );
+    },
   );
 }
 
@@ -278,61 +287,86 @@ class _TokenMarketCard extends StatelessWidget {
   final String usdPrice;
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: 116,
-    padding: const EdgeInsets.fromLTRB(22, 18, 14, 18),
-    decoration: BoxDecoration(
-      color: cardColor,
-      borderRadius: BorderRadius.circular(22),
-    ),
-    child: Row(
-      children: [
-        Text(
-          '市场价格',
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: 21,
-            fontWeight: FontWeight.w400,
-          ),
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (_, constraints) {
+      final compact = constraints.maxWidth < 360;
+      final badgeWidth = compact ? 82.0 : 112.0;
+      return Container(
+        height: compact ? 104 : 116,
+        padding: EdgeInsets.fromLTRB(
+          compact ? 16 : 22,
+          16,
+          compact ? 8 : 14,
+          16,
         ),
-        const Spacer(),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Row(
           children: [
-            Text(
-              price,
-              style: TextStyle(color: palette.primaryText, fontSize: 25),
+            Expanded(
+              child: Text(
+                '市场价格',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: compact ? 18 : 21,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
             ),
-            Text(
-              usdPrice,
-              style: TextStyle(color: palette.mutedText, fontSize: 20),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  price,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: compact ? 22 : 25,
+                  ),
+                ),
+                Text(
+                  usdPrice,
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: compact ? 17 : 20,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(width: compact ? 8 : 16),
+            Container(
+              width: badgeWidth,
+              height: compact ? 56 : 62,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: palette.dark
+                    ? const Color(0xFF3A3A3A)
+                    : const Color(0xFFBEC2C8),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: Text(
+                '0.00%',
+                style: TextStyle(
+                  color: palette.dark ? palette.primaryText : _white,
+                  fontSize: compact ? 18 : 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            SizedBox(width: compact ? 4 : 10),
+            Icon(
+              CupertinoIcons.chevron_right,
+              color: palette.mutedText,
+              size: compact ? 22 : 25,
             ),
           ],
         ),
-        const SizedBox(width: 20),
-        Container(
-          width: 112,
-          height: 62,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: palette.dark
-                ? const Color(0xFF3A3A3A)
-                : const Color(0xFFBEC2C8),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Text(
-            '0.00%',
-            style: TextStyle(
-              color: palette.dark ? palette.primaryText : _white,
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: 11),
-        Icon(CupertinoIcons.chevron_right, color: palette.mutedText, size: 25),
-      ],
-    ),
+      );
+    },
   );
 }
 
@@ -470,42 +504,50 @@ class _TokenDetailActions extends StatelessWidget {
     return AcoSafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 6,
-            child: _TokenActionButton(
-              label: '转账',
-              icon: CupertinoIcons.arrow_up,
-              background: _tokenDetailGreen,
-              foreground: _white,
-              onPressed: onSend,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 6,
-            child: _TokenActionButton(
-              label: '收款',
-              icon: CupertinoIcons.arrow_down,
-              background: _tokenDetailBlue,
-              foreground: _white,
-              onPressed: onReceive,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            flex: 4,
-            child: _TokenActionButton(
-              label: '闪兑',
-              icon: CupertinoIcons.arrow_right_arrow_left,
-              background: surface,
-              foreground: palette.primaryText,
-              borderColor: palette.border,
-              onPressed: onSwap,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (_, constraints) {
+          final compact = constraints.maxWidth < 360;
+          return Row(
+            children: [
+              Expanded(
+                flex: 6,
+                child: _TokenActionButton(
+                  label: '转账',
+                  icon: CupertinoIcons.arrow_up,
+                  background: _tokenDetailGreen,
+                  foreground: _white,
+                  compact: compact,
+                  onPressed: onSend,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 6,
+                child: _TokenActionButton(
+                  label: '收款',
+                  icon: CupertinoIcons.arrow_down,
+                  background: _tokenDetailBlue,
+                  foreground: _white,
+                  compact: compact,
+                  onPressed: onReceive,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: compact ? 5 : 4,
+                child: _TokenActionButton(
+                  label: '闪兑',
+                  icon: CupertinoIcons.arrow_right_arrow_left,
+                  background: surface,
+                  foreground: palette.primaryText,
+                  borderColor: palette.border,
+                  compact: compact,
+                  onPressed: onSwap,
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -518,6 +560,7 @@ class _TokenActionButton extends StatelessWidget {
     required this.background,
     required this.foreground,
     required this.onPressed,
+    this.compact = false,
     this.borderColor,
   });
 
@@ -527,6 +570,7 @@ class _TokenActionButton extends StatelessWidget {
   final Color foreground;
   final Color? borderColor;
   final VoidCallback onPressed;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -551,13 +595,13 @@ class _TokenActionButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: foreground, size: 24),
-              const SizedBox(width: 8),
+              Icon(icon, color: foreground, size: compact ? 20 : 24),
+              SizedBox(width: compact ? 4 : 8),
               Text(
                 label,
                 style: TextStyle(
                   color: foreground,
-                  fontSize: 21,
+                  fontSize: compact ? 18 : 21,
                   fontWeight: FontWeight.w500,
                 ),
               ),
