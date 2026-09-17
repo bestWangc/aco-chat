@@ -350,26 +350,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
         rpc.close();
       }
       if (result.status == '已广播') {
-        final transactionService = WalletTransactionService();
-        try {
-          await transactionService
-              .recordAppTransfer(
-                network: _networkForToken(widget.token),
-                address: identity.address,
-                symbol: widget.token.symbol,
-                decimals: 18,
-                to: _recipientController.text.trim(),
-                amountRaw: WalletTransferService.decimalToBaseUnits(
-                  _amountController.text.trim(),
-                ),
-                hash: result.hash,
-              )
-              .timeout(const Duration(seconds: 2));
-        } catch (error) {
-          debugPrint('record wallet transaction failed: $error');
-        } finally {
-          transactionService.close();
-        }
+        await _recordBroadcastTransaction(identity: identity, result: result);
       }
       if (mounted) {
         final title = result.status == '已广播' ? '转账成功' : '交易已签名';
@@ -381,6 +362,32 @@ class _SendTransferPageState extends State<_SendTransferPage> {
       if (mounted) _showNotice(context, '转账失败', '交易构造失败：$error');
     } finally {
       if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  Future<void> _recordBroadcastTransaction({
+    required WalletIdentity identity,
+    required WalletTransferResult result,
+  }) async {
+    final transactionService = WalletTransactionService();
+    try {
+      await transactionService
+          .recordAppTransfer(
+            network: _networkForToken(widget.token),
+            address: identity.address,
+            symbol: widget.token.symbol,
+            decimals: 18,
+            to: _recipientController.text.trim(),
+            amountRaw: WalletTransferService.decimalToBaseUnits(
+              _amountController.text.trim(),
+            ),
+            hash: result.hash,
+          )
+          .timeout(const Duration(seconds: 2));
+    } catch (error) {
+      debugPrint('record wallet transaction failed: $error');
+    } finally {
+      transactionService.close();
     }
   }
 
