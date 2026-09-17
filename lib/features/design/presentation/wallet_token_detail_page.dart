@@ -214,11 +214,11 @@ class _TokenDetailTab extends StatelessWidget {
           AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOut,
-            width: 64,
-            height: 4,
+            width: 40,
+            height: 3,
             decoration: BoxDecoration(
               color: selected ? palette.accent : const Color(0x00000000),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(1.5),
             ),
           ),
         ],
