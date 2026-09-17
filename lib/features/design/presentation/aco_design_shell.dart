@@ -29,6 +29,8 @@ import 'package:aco_chat/services/wallet_metadata_store.dart';
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_transfer_service.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
+import 'package:aco_chat/services/wallet_transaction_models.dart';
+import 'package:aco_chat/services/wallet_transaction_service.dart';
 import 'package:aco_chat/services/dapp_directory_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
@@ -245,6 +247,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<String> _avatarUrl = ValueNotifier<String>('');
   final ValueNotifier<int> _identity = ValueNotifier<int>(0);
   final ValueNotifier<int> _staffIdentity = ValueNotifier<int>(0);
+  late final WalletTransactionService _walletTransactionService;
   String _language = '简体中文';
   bool _hasAppUpdate = false;
   String? _presentedIncomingCallID;
@@ -254,6 +257,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     super.initState();
     _ownsThemeNotifier = widget.themeNotifier == null;
     _isDark = widget.themeNotifier ?? ValueNotifier<bool>(true);
+    _walletTransactionService = WalletTransactionService();
     _applyAccountProfile(widget.accountProfile);
     _loadWalletName();
     unawaited(_checkForAppUpdate());
@@ -354,6 +358,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _identity.dispose();
     _staffIdentity.dispose();
     _selectedWalletChain.dispose();
+    _walletTransactionService.close();
     super.dispose();
   }
 
@@ -575,6 +580,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       transferToken: _selectedTransferToken,
       onSendTokenSelected: _sendToken,
       selectedAsset: _selectedAssetBalance,
+      walletTransactionService: _walletTransactionService,
       onAssetSelected: _openAsset,
       accountId: _accountId,
       walletLoginFuture: widget.walletLoginFuture,
@@ -641,6 +647,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       transferToken: _selectedTransferToken,
                       onSendTokenSelected: _sendToken,
                       selectedAsset: _selectedAssetBalance,
+                      walletTransactionService: _walletTransactionService,
                       onAssetSelected: _openAsset,
                       accountId: _accountId,
                       walletLoginFuture: widget.walletLoginFuture,

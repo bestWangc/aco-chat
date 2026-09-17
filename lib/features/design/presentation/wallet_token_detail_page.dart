@@ -9,6 +9,7 @@ class _TokenDetailPage extends StatefulWidget {
     required this.balance,
     required this.selectedChain,
     required this.onOpen,
+    this.transactionService,
     this.onSendTokenSelected,
   });
 
@@ -16,6 +17,7 @@ class _TokenDetailPage extends StatefulWidget {
   final WalletBalance balance;
   final _WalletChain selectedChain;
   final ValueChanged<AcoScreen> onOpen;
+  final WalletTransactionService? transactionService;
   final ValueChanged<TransferToken>? onSendTokenSelected;
 
   @override
@@ -23,7 +25,12 @@ class _TokenDetailPage extends StatefulWidget {
 }
 
 class _TokenDetailPageState extends State<_TokenDetailPage> {
+  static const _transactionPageSize = 20;
+
   int _selectedTab = 0;
+  final _transactionBuckets =
+      <WalletTransactionDirection, _TransactionBucket>{};
+  late final ScrollController _transactionScrollController;
 
   String get _symbol => widget.balance.symbol.toUpperCase();
 
@@ -42,6 +49,177 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
     'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
     _ => 'assets/icons/crypto/tokens/${_symbol.toLowerCase()}.svg',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _transactionScrollController = ScrollController()
+      ..addListener(_loadMoreTransactionsIfNeeded);
+    if (widget.transactionService != null) {
+      unawaited(_loadTransactions(_selectedDirection, reset: true));
+    }
+  }
+
+  @override
+  void dispose() {
+    _transactionScrollController
+      ..removeListener(_loadMoreTransactionsIfNeeded)
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant _TokenDetailPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final assetChanged =
+        oldWidget.balance.address != widget.balance.address ||
+        oldWidget.balance.tokenAddress != widget.balance.tokenAddress ||
+        oldWidget.balance.symbol != widget.balance.symbol ||
+        oldWidget.selectedChain.network != widget.selectedChain.network;
+    if (assetChanged) {
+      _transactionBuckets.clear();
+      if (widget.transactionService != null) {
+        unawaited(_loadTransactions(_selectedDirection, reset: true));
+      }
+    }
+  }
+
+  WalletTransactionDirection get _selectedDirection => switch (_selectedTab) {
+    1 => WalletTransactionDirection.incoming,
+    2 => WalletTransactionDirection.outgoing,
+    _ => WalletTransactionDirection.all,
+  };
+
+  _TransactionBucket _bucketFor(WalletTransactionDirection direction) =>
+      _transactionBuckets.putIfAbsent(direction, _TransactionBucket.new);
+
+  void _selectTransactionTab(int index) {
+    if (_selectedTab == index) return;
+    setState(() => _selectedTab = index);
+    if (widget.transactionService != null) {
+      unawaited(_loadTransactions(_selectedDirection, reset: false));
+    }
+  }
+
+  Future<void> _loadTransactions(
+    WalletTransactionDirection direction, {
+    required bool reset,
+    bool loadMore = false,
+  }) async {
+    final service = widget.transactionService;
+    if (service == null) return;
+    final bucket = _bucketFor(direction);
+    if (bucket.isLoading ||
+        (loadMore && (!bucket.loaded || !bucket.hasMore)) ||
+        (!reset && !loadMore && bucket.loaded)) {
+      return;
+    }
+    if (reset) {
+      bucket
+        ..items = const []
+        ..nextPage = 1
+        ..hasMore = true
+        ..loaded = false
+        ..error = null;
+    }
+    bucket.isLoading = true;
+    if (mounted) setState(() {});
+    try {
+      final page = bucket.nextPage;
+      final result = await service.loadPage(
+        network: widget.selectedChain.network,
+        asset: widget.balance,
+        direction: direction,
+        page: page,
+        limit: _transactionPageSize,
+      );
+      if (!mounted) return;
+      bucket
+        ..items = [...bucket.items, ...result.items]
+        ..nextPage = result.nextPage > page ? result.nextPage : page + 1
+        ..hasMore = result.hasMore
+        ..loaded = true
+        ..error = null;
+    } catch (error) {
+      if (mounted) _bucketFor(direction).error = error;
+    } finally {
+      bucket.isLoading = false;
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _loadMoreTransactionsIfNeeded() {
+    if (!_transactionScrollController.hasClients ||
+        _transactionScrollController.position.extentAfter > 320) {
+      return;
+    }
+    final bucket = _bucketFor(_selectedDirection);
+    if (bucket.loaded && bucket.hasMore && !bucket.isLoading) {
+      unawaited(
+        _loadTransactions(_selectedDirection, reset: false, loadMore: true),
+      );
+    }
+  }
+
+  Widget _buildTransactionSliver() {
+    final service = widget.transactionService;
+    if (service == null) {
+      return SliverToBoxAdapter(
+        child: _TokenDetailEmptyState(
+          palette: widget.palette,
+          onOpenBrowser: () => widget.onOpen(AcoScreen.browserDiscover),
+        ),
+      );
+    }
+    final bucket = _bucketFor(_selectedDirection);
+    if (bucket.items.isEmpty && bucket.isLoading) {
+      return const SliverToBoxAdapter(child: _TokenTransactionLoading());
+    }
+    if (bucket.items.isEmpty && bucket.error != null) {
+      return SliverToBoxAdapter(
+        child: _TokenTransactionError(
+          palette: widget.palette,
+          onRetry: () => _loadTransactions(_selectedDirection, reset: true),
+        ),
+      );
+    }
+    if (bucket.items.isEmpty) {
+      return SliverToBoxAdapter(
+        child: _TokenDetailEmptyState(
+          palette: widget.palette,
+          onOpenBrowser: () => widget.onOpen(AcoScreen.browserDiscover),
+        ),
+      );
+    }
+    final itemCount = bucket.items.length + (bucket.isLoading ? 1 : 0);
+    return SliverList(
+      delegate: SliverChildBuilderDelegate(
+        (context, index) {
+          if (index == bucket.items.length) {
+            return const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: CupertinoActivityIndicator(),
+            );
+          }
+          final transaction = bucket.items[index];
+          return Column(
+            key: ValueKey(transaction.hash),
+            children: [
+              _TokenTransactionTile(
+                palette: widget.palette,
+                transaction: transaction,
+              ),
+              if (index < bucket.items.length - 1)
+                Container(height: 1, color: widget.palette.border),
+            ],
+          );
+        },
+        childCount: itemCount,
+        addAutomaticKeepAlives: false,
+        addRepaintBoundaries: true,
+      ),
+    );
+  }
 
   void _sendToken() {
     final token = TransferToken(
@@ -78,38 +256,51 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             ),
           ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
-              child: Column(
-                children: [
-                  _TokenBalanceSummary(
-                    palette: widget.palette,
-                    balance: _amount,
-                    symbol: widget.balance.symbol,
-                    iconSymbol: widget.balance.symbol,
+            child: CustomScrollView(
+              controller: _transactionScrollController,
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: _TokenBalanceSummary(
+                      palette: widget.palette,
+                      balance: _amount,
+                      symbol: widget.balance.symbol,
+                      iconSymbol: widget.balance.symbol,
+                    ),
                   ),
-                  const SizedBox(height: 30),
-                  Row(
-                    children: [
-                      for (var index = 0; index < 3; index++) ...[
-                        _TokenDetailTab(
-                          label: ['全部', '转入', '转出'][index],
-                          selected: _selectedTab == index,
-                          palette: widget.palette,
-                          onPressed: () => setState(() => _selectedTab = index),
-                        ),
-                        if (index < 2) const SizedBox(width: 12),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  sliver: const SliverToBoxAdapter(child: SizedBox(height: 30)),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      children: [
+                        for (var index = 0; index < 3; index++) ...[
+                          _TokenDetailTab(
+                            label: ['全部', '转入', '转出'][index],
+                            selected: _selectedTab == index,
+                            palette: widget.palette,
+                            onPressed: () => _selectTransactionTab(index),
+                          ),
+                          if (index < 2) const SizedBox(width: 12),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 3),
-                  _TokenDetailEmptyState(
-                    palette: widget.palette,
-                    onOpenBrowser: () =>
-                        widget.onOpen(AcoScreen.browserDiscover),
-                  ),
-                ],
-              ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  sliver: const SliverToBoxAdapter(child: SizedBox(height: 3)),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
+                  sliver: _buildTransactionSliver(),
+                ),
+              ],
             ),
           ),
           _TokenDetailActions(
@@ -121,6 +312,15 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
       ),
     );
   }
+}
+
+class _TransactionBucket {
+  List<WalletTransaction> items = const [];
+  int nextPage = 1;
+  bool hasMore = true;
+  bool isLoading = false;
+  bool loaded = false;
+  Object? error;
 }
 
 class _TokenBalanceSummary extends StatelessWidget {
@@ -313,6 +513,146 @@ class _TokenDetailEmptyState extends StatelessWidget {
       );
     },
   );
+}
+
+class _TokenTransactionLoading extends StatelessWidget {
+  const _TokenTransactionLoading();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    height: 280,
+    child: Center(child: CupertinoActivityIndicator(radius: 12)),
+  );
+}
+
+class _TokenTransactionError extends StatelessWidget {
+  const _TokenTransactionError({required this.palette, required this.onRetry});
+
+  final AcoPalette palette;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 280,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Text(
+          '交易记录加载失败',
+          style: TextStyle(color: palette.mutedText, fontSize: 16),
+        ),
+        CupertinoButton(
+          minimumSize: const Size(44, 44),
+          onPressed: onRetry,
+          child: Text(
+            '重试',
+            style: TextStyle(color: _tokenDetailBlue, fontSize: 16),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _TokenTransactionTile extends StatelessWidget {
+  const _TokenTransactionTile({
+    required this.palette,
+    required this.transaction,
+  });
+
+  final AcoPalette palette;
+  final WalletTransaction transaction;
+
+  @override
+  Widget build(BuildContext context) {
+    final incoming = transaction.isIncoming;
+    final direction = incoming ? '转入' : '转出';
+    final amountColor = incoming ? _tokenDetailBlue : palette.accent;
+    final amountPrefix = incoming ? '+' : '-';
+    final counterparty = _shortWalletAddress(
+      incoming ? transaction.from : transaction.to,
+    );
+    final status = transaction.isSuccessful ? '' : ' · $_statusLabel';
+    return Semantics(
+      label: '$direction ${transaction.displayAmount} ${transaction.symbol}',
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            DecoratedBox(
+              decoration: BoxDecoration(
+                color: amountColor,
+                shape: BoxShape.circle,
+              ),
+              child: SizedBox(
+                width: 36,
+                height: 36,
+                child: Icon(
+                  incoming
+                      ? CupertinoIcons.arrow_down_left
+                      : CupertinoIcons.arrow_up_right,
+                  color: incoming ? _white : _black,
+                  size: 18,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    counterparty,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: palette.primaryText, fontSize: 16),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '$direction$status',
+                    style: TextStyle(color: palette.mutedText, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '$amountPrefix${transaction.displayAmount} ${transaction.symbol}',
+                  style: TextStyle(color: amountColor, fontSize: 16),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _formatTransactionTime(transaction.timestamp),
+                  style: TextStyle(color: palette.mutedText, fontSize: 14),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _statusLabel => switch (transaction.status) {
+    'failed' => '失败',
+    'pending' => '处理中',
+    _ => '未知状态',
+  };
+}
+
+String _shortWalletAddress(String address) {
+  if (address.length <= 12) return address;
+  return '${address.substring(0, 6)}...${address.substring(address.length - 4)}';
+}
+
+String _formatTransactionTime(int timestamp) {
+  if (timestamp <= 0) return '--';
+  final time = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000).toLocal();
+  String pad(int value) => value.toString().padLeft(2, '0');
+  return '${pad(time.month)}-${pad(time.day)} ${pad(time.hour)}:${pad(time.minute)}:${pad(time.second)}';
 }
 
 class _TokenDetailActions extends StatelessWidget {

@@ -56,6 +56,7 @@ class AcoScreenPage extends StatelessWidget {
     this.transferToken,
     this.onSendTokenSelected,
     this.selectedAsset,
+    this.walletTransactionService,
     this.onAssetSelected,
     this.onDisplayNameChanged,
     this.onUsernameChanged,
@@ -98,6 +99,7 @@ class AcoScreenPage extends StatelessWidget {
   final TransferToken? transferToken;
   final ValueChanged<TransferToken>? onSendTokenSelected;
   final WalletBalance? selectedAsset;
+  final WalletTransactionService? walletTransactionService;
   final ValueChanged<WalletBalance>? onAssetSelected;
   final ValueChanged<String>? onDisplayNameChanged;
   final ValueChanged<String>? onUsernameChanged;
@@ -185,6 +187,7 @@ class AcoScreenPage extends StatelessWidget {
                 balance: selectedAsset!,
                 selectedChain: _supportedWalletChains[walletChainIndex],
                 onOpen: onOpen,
+                transactionService: walletTransactionService,
                 onSendTokenSelected: onSendTokenSelected,
               ),
       AcoScreen.backupMnemonic => _BackupMnemonicFlow(

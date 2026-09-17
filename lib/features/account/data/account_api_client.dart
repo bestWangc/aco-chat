@@ -5,6 +5,8 @@ import 'dart:io';
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_portfolio_models.dart';
+import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -518,6 +520,31 @@ class AccountApiClient {
         .cast<Map<String, dynamic>>()
         .map(LiveSession.fromJson)
         .toList(growable: false);
+  }
+
+  Future<WalletTransactionPage> listWalletTransactions({
+    required WalletNetwork network,
+    required String address,
+    String? contractAddress,
+    required WalletTransactionDirection direction,
+    required int page,
+    required int limit,
+    required String token,
+  }) async {
+    final query = <String, String>{
+      'network': network.name,
+      'address': address,
+      'direction': direction.queryValue,
+      'page': page.toString(),
+      'limit': limit.toString(),
+      if (contractAddress != null && contractAddress.isNotEmpty)
+        'contract_address': contractAddress,
+    };
+    final response = await _httpClient.get(
+      _uri('wallets/transactions').replace(queryParameters: query),
+      headers: _authorizedHeaders(token),
+    );
+    return WalletTransactionPage.fromJson(_body(response));
   }
 
   /// Uploads a selected cover before creating the live session. The API
