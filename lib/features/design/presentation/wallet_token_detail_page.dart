@@ -38,12 +38,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
     return formatChainAmount(balance, decimals: widget.balance.decimals);
   }
 
-  bool get _isStablecoin => _symbol == 'USDT' || _symbol == 'USDC';
-
-  String get _marketPrice => _isStablecoin ? '1.000' : '—';
-
-  String get _marketUsd => _isStablecoin ? '\$1.0000' : '—';
-
   String _tokenIconAsset() => switch (_symbol) {
     'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
     'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
@@ -78,9 +72,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
     final background = widget.palette.dark
         ? widget.palette.background
         : const Color(0xFFF5F6FB);
-    final cardColor = widget.palette.dark
-        ? widget.palette.surfaceRaised
-        : widget.palette.background;
     return ColoredBox(
       color: background,
       child: Column(
@@ -111,13 +102,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
                     onCopy: _copyTokenAddress,
                   ),
                   const SizedBox(height: 30),
-                  _TokenMarketCard(
-                    palette: widget.palette,
-                    cardColor: cardColor,
-                    price: _marketPrice,
-                    usdPrice: _marketUsd,
-                  ),
-                  const SizedBox(height: 26),
                   Row(
                     children: [
                       for (var index = 0; index < 3; index++) ...[
@@ -254,103 +238,6 @@ class _TokenBalanceSummary extends StatelessWidget {
             ],
           ),
         ],
-      );
-    },
-  );
-}
-
-class _TokenMarketCard extends StatelessWidget {
-  const _TokenMarketCard({
-    required this.palette,
-    required this.cardColor,
-    required this.price,
-    required this.usdPrice,
-  });
-
-  final AcoPalette palette;
-  final Color cardColor;
-  final String price;
-  final String usdPrice;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (_, constraints) {
-      final compact = constraints.maxWidth < 360;
-      final badgeWidth = compact ? 82.0 : 112.0;
-      return Container(
-        height: compact ? 104 : 116,
-        padding: EdgeInsets.fromLTRB(
-          compact ? 16 : 22,
-          16,
-          compact ? 8 : 14,
-          16,
-        ),
-        decoration: BoxDecoration(
-          color: cardColor,
-          borderRadius: BorderRadius.circular(22),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                '市场价格',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: compact ? 18 : 21,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  price,
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: compact ? 22 : 25,
-                  ),
-                ),
-                Text(
-                  usdPrice,
-                  style: TextStyle(
-                    color: palette.mutedText,
-                    fontSize: compact ? 17 : 20,
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(width: compact ? 8 : 16),
-            Container(
-              width: badgeWidth,
-              height: compact ? 56 : 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: palette.dark
-                    ? const Color(0xFF3A3A3A)
-                    : const Color(0xFFBEC2C8),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Text(
-                '0.00%',
-                style: TextStyle(
-                  color: palette.dark ? palette.primaryText : _white,
-                  fontSize: compact ? 18 : 20,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            SizedBox(width: compact ? 4 : 10),
-            Icon(
-              CupertinoIcons.chevron_right,
-              color: palette.mutedText,
-              size: compact ? 22 : 25,
-            ),
-          ],
-        ),
       );
     },
   );

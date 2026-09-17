@@ -773,7 +773,7 @@ void main() {
     expect(find.text('USDT'), findsOneWidget);
     expect(find.bySemanticsLabel('返回'), findsOneWidget);
     expect(find.bySemanticsLabel('代币信息'), findsNothing);
-    expect(find.text('市场价格'), findsOneWidget);
+    expect(find.text('市场价格'), findsNothing);
     expect(find.text('没有找到您的交易？'), findsOneWidget);
     expect(find.bySemanticsLabel('转账'), findsOneWidget);
     expect(find.bySemanticsLabel('收款'), findsOneWidget);
