@@ -193,12 +193,12 @@ class _TokenBalanceSummary extends StatelessWidget {
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (_, constraints) {
       final compact = constraints.maxWidth < 360;
-      final iconSize = compact ? 52.0 : 58.0;
+      final iconSize = compact ? 44.0 : 50.0;
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _WalletAssetIcon(symbol: iconSymbol, size: iconSize),
-          SizedBox(width: compact ? 10 : 14),
+          SizedBox(width: compact ? 8 : 12),
           Expanded(
             child: Row(
               children: [
@@ -209,7 +209,7 @@ class _TokenBalanceSummary extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: palette.primaryText,
-                      fontSize: compact ? 26 : 28,
+                      fontSize: compact ? 22 : 24,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -225,14 +225,14 @@ class _TokenBalanceSummary extends StatelessWidget {
                     child: Icon(
                       CupertinoIcons.doc_on_doc,
                       color: palette.mutedText,
-                      size: compact ? 20 : 22,
+                      size: compact ? 18 : 20,
                     ),
                   ),
                 ),
               ],
             ),
           ),
-          SizedBox(width: compact ? 8 : 12),
+          SizedBox(width: compact ? 6 : 10),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -240,7 +240,7 @@ class _TokenBalanceSummary extends StatelessWidget {
                 balance,
                 style: TextStyle(
                   color: palette.primaryText,
-                  fontSize: compact ? 27 : 30,
+                  fontSize: compact ? 24 : 27,
                   fontWeight: FontWeight.w400,
                 ),
               ),
@@ -248,7 +248,7 @@ class _TokenBalanceSummary extends StatelessWidget {
                 '≈ \$$balance',
                 style: TextStyle(
                   color: palette.mutedText,
-                  fontSize: compact ? 17 : 19,
+                  fontSize: compact ? 15 : 17,
                 ),
               ),
             ],
