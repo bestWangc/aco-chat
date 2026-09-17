@@ -779,7 +779,13 @@ void main() {
     expect(find.text(r'≈ $0'), findsNothing);
     expect(find.bySemanticsLabel('返回'), findsOneWidget);
     expect(find.bySemanticsLabel('代币信息'), findsNothing);
-    expect(tester.widget<Text>(find.text('全部')).style?.fontSize, 18);
+    final selectedTokenTab = tester.widget<Text>(find.text('全部'));
+    expect(selectedTokenTab.style?.fontSize, AcoTypography.bodyEmphasis);
+    expect(selectedTokenTab.style?.color, const Color(0xFFA6DE00));
+    expect(
+      tester.widget<Text>(find.text('转入')).style?.color,
+      const Color(0xFF939393),
+    );
     expect(find.text('市场价格'), findsNothing);
     expect(find.bySemanticsLabel('筛选交易记录'), findsNothing);
     expect(find.text('没有找到您的交易？'), findsOneWidget);

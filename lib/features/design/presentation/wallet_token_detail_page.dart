@@ -192,30 +192,37 @@ class _TokenDetailTab extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: const EdgeInsets.only(bottom: 8),
-    minimumSize: Size.zero,
-    onPressed: onPressed,
-    child: Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: selected ? palette.primaryText : palette.mutedText,
-            fontSize: 18,
-            fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    selected: selected,
+    label: label,
+    child: CupertinoButton(
+      padding: const EdgeInsets.only(bottom: 8),
+      minimumSize: const Size(64, 44),
+      onPressed: onPressed,
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: selected ? palette.accent : palette.mutedText,
+              fontSize: AcoTypography.bodyEmphasis,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+            ),
           ),
-        ),
-        const SizedBox(height: 7),
-        Container(
-          width: selected ? 64 : 0,
-          height: 4,
-          decoration: BoxDecoration(
-            color: palette.primaryText,
-            borderRadius: BorderRadius.circular(2),
+          const SizedBox(height: 7),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            width: 64,
+            height: 4,
+            decoration: BoxDecoration(
+              color: selected ? palette.accent : const Color(0x00000000),
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }
