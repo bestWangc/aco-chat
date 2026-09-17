@@ -50,14 +50,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
     _ => 'assets/icons/crypto/tokens/${_symbol.toLowerCase()}.svg',
   };
 
-  void _showTokenInfo() {
-    final contract = widget.balance.tokenAddress;
-    final message = contract == null || contract.isEmpty
-        ? '网络：${widget.selectedChain.displayLabel}\n原生资产'
-        : '网络：${widget.selectedChain.displayLabel}\n合约：$contract';
-    showAcoAlertNotice(context, '代币信息', message);
-  }
-
   Future<void> _copyTokenAddress() async {
     final text = widget.balance.tokenAddress ?? widget.balance.address;
     if (text.isEmpty) return;
@@ -99,13 +91,7 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
               palette: widget.palette,
               title: _title,
               titleFontSize: 22,
-              right: AcoIconButton(
-                icon: CupertinoIcons.info,
-                size: 28,
-                palette: widget.palette,
-                label: '代币信息',
-                onPressed: _showTokenInfo,
-              ),
+              onBack: () => Navigator.of(context).maybePop(),
               backButtonOffset: Offset.zero,
             ),
           ),

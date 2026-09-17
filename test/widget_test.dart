@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart' show ListTile;
+import 'package:flutter/material.dart' show ListTile, MaterialApp;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -285,7 +285,7 @@ void main() {
     }
   });
 
-  testWidgets('does not show mock live sessions on the square tab', (
+  testWidgets('does not show static live recommendations on the square tab', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const AcoApp());
@@ -303,7 +303,49 @@ void main() {
 
     await tester.tap(find.text('推荐'));
     await tester.pump();
-    expect(find.text('买买买!!'), findsOneWidget);
+    expect(find.text('买买买!!'), findsNothing);
+  });
+
+  testWidgets('shows active live recommendations above the square post', (
+    WidgetTester tester,
+  ) async {
+    final live = LiveSession(
+      id: 12,
+      title: '今晚聊聊市场走势',
+      coverUrl: '/uploads/live-cover-12.jpg',
+      access: 'open',
+      status: 'live',
+      createdAt: DateTime(2026, 9, 17, 20),
+    );
+
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => MaterialApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.squareFeed,
+            dark: true,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+            initialLives: [live],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('推荐'));
+    await tester.pump();
+
+    expect(find.text(live.title), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('live-recommendation-12')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows an empty live chat state without mock messages', (
@@ -729,6 +771,8 @@ void main() {
 
     expect(find.text('Tether USD'), findsOneWidget);
     expect(find.text('USDT'), findsOneWidget);
+    expect(find.bySemanticsLabel('返回'), findsOneWidget);
+    expect(find.bySemanticsLabel('代币信息'), findsNothing);
     expect(find.text('市场价格'), findsOneWidget);
     expect(find.text('没有找到您的交易？'), findsOneWidget);
     expect(find.bySemanticsLabel('转账'), findsOneWidget);
