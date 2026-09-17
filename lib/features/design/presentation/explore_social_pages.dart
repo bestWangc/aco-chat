@@ -662,7 +662,7 @@ class _ContactsPageState extends State<_ContactsPage> {
           right: 8,
           top: MediaQuery.sizeOf(context).height * .30,
           bottom: 48,
-          child: _ContactsAlphabetIndex(
+          child: _AlphabetIndex(
             letters: letters,
             onLetterTap: _scrollToSection,
           ),
@@ -817,7 +817,7 @@ class _ContactsPageState extends State<_ContactsPage> {
                 right: 8,
                 top: 80,
                 bottom: 0,
-                child: _ContactsAlphabetIndex(
+                child: _AlphabetIndex(
                   letters: letters,
                   onLetterTap: _scrollToSection,
                 ),
@@ -1234,42 +1234,6 @@ class _ContactsSectionLabel extends StatelessWidget {
       fontSize: 16,
       fontWeight: FontWeight.w500,
     ),
-  );
-}
-
-class _ContactsAlphabetIndex extends StatelessWidget {
-  const _ContactsAlphabetIndex({
-    required this.letters,
-    required this.onLetterTap,
-  });
-
-  final List<String> letters;
-  final ValueChanged<String> onLetterTap;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(
-    builder: (context, constraints) {
-      final fittedFontSize = constraints.maxHeight / letters.length;
-      final fontSize = fittedFontSize < 14 ? fittedFontSize : 14.0;
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          for (final letter in letters)
-            GestureDetector(
-              onTap: () => onLetterTap(letter),
-              behavior: HitTestBehavior.opaque,
-              child: Text(
-                letter,
-                style: TextStyle(
-                  color: const Color(0xFF858585),
-                  fontSize: fontSize,
-                  height: 1,
-                ),
-              ),
-            ),
-        ],
-      );
-    },
   );
 }
 

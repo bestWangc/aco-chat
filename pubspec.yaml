@@ -53,6 +53,7 @@ dependencies:
   record: ^6.2.1
   audioplayers: ^6.5.0
   livekit_client: ^2.11.0
+  lpinyin: ^2.0.3
   flutter_openim_sdk:
     path: third_party/flutter_openim_sdk
   web_socket_channel: ^3.0.3

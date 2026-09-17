@@ -37,12 +37,14 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
     show
         InteractiveViewer,
+        Icons,
         ListTile,
         Material,
         MaterialType,
         RefreshIndicator,
         SelectableText,
-        Theme;
+        Theme,
+        showModalBottomSheet;
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -50,6 +52,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:carousel_slider/carousel_slider.dart';
 import 'package:livekit_client/livekit_client.dart' hide ConnectionState;
+import 'package:lpinyin/lpinyin.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';

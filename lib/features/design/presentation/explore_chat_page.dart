@@ -56,11 +56,12 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
   bool _chatAccessGranted = false;
   bool _peerIsBlocked = false;
   bool _mentionVisible = false;
+  bool _mentionPickerOpen = false;
   bool _mentionLoading = false;
   bool _routeIsVisible = false;
   PageRoute<dynamic>? _route;
   int _mentionStart = -1;
-  String _mentionQuery = '';
+  String _previousComposerText = '';
   List<GroupMembersInfo> _mentionMembers = const [];
   final List<_GroupMention> _selectedMentions = <_GroupMention>[];
 
@@ -1085,26 +1086,38 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
 
   void _onComposerChanged() {
     if (!_isGroup) return;
+    final text = _messageController.text;
+    final previousText = _previousComposerText;
+    _previousComposerText = text;
     final selection = _messageController.selection;
     final cursor = selection.extentOffset;
     if (!selection.isValid || cursor < 0) return;
-    final textBeforeCursor = _messageController.text.substring(0, cursor);
+    final textBeforeCursor = text.substring(0, cursor);
     final atIndex = textBeforeCursor.lastIndexOf('@');
     final isMentionStart =
         atIndex >= 0 &&
         (atIndex == 0 || _isMentionBoundary(textBeforeCursor[atIndex - 1]));
     final query = isMentionStart ? textBeforeCursor.substring(atIndex + 1) : '';
     final shouldShow = isMentionStart && !query.contains(RegExp(r'\s'));
+    final shouldOpenPicker =
+        shouldShow && _didInsertAt(previousText, text, cursor);
     if (_mentionVisible != shouldShow ||
-        _mentionStart != (shouldShow ? atIndex : -1) ||
-        _mentionQuery != (shouldShow ? query : '')) {
+        _mentionStart != (shouldShow ? atIndex : -1)) {
       setState(() {
         _mentionVisible = shouldShow;
         _mentionStart = shouldShow ? atIndex : -1;
-        _mentionQuery = shouldShow ? query : '';
       });
     }
-    if (shouldShow) unawaited(_loadMentionMembers());
+    if (shouldOpenPicker) {
+      unawaited(_showMentionPicker());
+    }
+  }
+
+  bool _didInsertAt(String previousText, String text, int cursor) {
+    if (cursor <= 0 || text.length != previousText.length + 1) return false;
+    if (text[cursor - 1] != '@') return false;
+    return '${text.substring(0, cursor - 1)}${text.substring(cursor)}' ==
+        previousText;
   }
 
   bool _isMentionBoundary(String character) =>
@@ -1132,19 +1145,39 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     }
   }
 
-  List<GroupMembersInfo> get _filteredMentionMembers {
-    final query = _mentionQuery.trim().toLowerCase();
-    final currentUserID = OpenIMChatRepository.currentUserID;
-    return _mentionMembers
-        .where((member) {
-          final userID = member.userID;
-          if (userID == null || userID.isEmpty) return false;
-          if (userID == currentUserID) return false;
-          if (query.isEmpty) return true;
-          final name = _mentionName(member).toLowerCase();
-          return name.contains(query) || userID.toLowerCase().contains(query);
-        })
-        .toList(growable: false);
+  Future<void> _showMentionPicker() async {
+    if (_mentionPickerOpen) return;
+    _mentionPickerOpen = true;
+    await _loadMentionMembers();
+    if (!mounted || !_mentionVisible) {
+      _mentionPickerOpen = false;
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0x00000000),
+      barrierColor: const Color(0x99000000),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: _GroupMentionPanel(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          members: _mentionMembers,
+          loading: _mentionLoading,
+          onSelected: (member) {
+            _insertMention(member);
+            Navigator.of(sheetContext).pop();
+          },
+          onDismiss: () => Navigator.of(sheetContext).pop(),
+        ),
+      ),
+    );
+    _mentionPickerOpen = false;
+    if (mounted) {
+      setState(() {
+        _mentionVisible = false;
+      });
+    }
   }
 
   String _mentionName(GroupMembersInfo member) {
@@ -1162,11 +1195,16 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       return;
     }
     final cursor = selection.extentOffset;
-    _insertMentionToken(
-      userID: userID,
-      name: _mentionName(member),
-      start: _mentionStart,
-      end: cursor,
+    final token = '@${_mentionName(member)} ';
+    final text = _messageController.text;
+    _messageController.value = TextEditingValue(
+      text:
+          '${text.substring(0, _mentionStart)}$token${text.substring(cursor)}',
+      selection: TextSelection.collapsed(offset: _mentionStart + token.length),
+    );
+    _selectedMentions.removeWhere((mention) => mention.userID == userID);
+    _selectedMentions.add(
+      _GroupMention(userID: userID, name: _mentionName(member)),
     );
   }
 
@@ -1589,12 +1627,6 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                     ),
                   ),
                 ),
-                if (_mentionVisible)
-                  _GroupMentionPanel(
-                    members: _filteredMentionMembers,
-                    loading: _mentionLoading,
-                    onSelected: _insertMention,
-                  ),
                 DecoratedBox(
                   decoration: const BoxDecoration(
                     color: Color(0xFF1E1D1B),
@@ -3215,71 +3247,362 @@ class _GroupMention {
   String get token => '@$name ';
 }
 
-class _GroupMentionPanel extends StatelessWidget {
+class _GroupMentionPanel extends StatefulWidget {
   const _GroupMentionPanel({
+    required this.height,
     required this.members,
     required this.loading,
     required this.onSelected,
+    required this.onDismiss,
   });
 
+  final double height;
   final List<GroupMembersInfo> members;
   final bool loading;
   final ValueChanged<GroupMembersInfo> onSelected;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_GroupMentionPanel> createState() => _GroupMentionPanelState();
+}
+
+class _GroupMentionPanelState extends State<_GroupMentionPanel> {
+  static const _identityRequestBatchSize = 8;
+  static final _alphabetInitial = RegExp(r'[A-Z]');
+
+  final _searchController = TextEditingController();
+  final Map<String, GlobalKey> _sectionKeys = <String, GlobalKey>{};
+  final Map<String, int> _identityByUserID = <String, int>{};
+  final Map<String, int> _staffIdentityByUserID = <String, int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadMemberIdentities());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMemberIdentities() async {
+    final members = widget.members
+        .where((member) => member.userID?.isNotEmpty == true)
+        .toList(growable: false);
+    if (members.isEmpty) return;
+    final client = AccountApiClient();
+    final session = AccountSession(client);
+    try {
+      for (
+        var start = 0;
+        start < members.length;
+        start += _identityRequestBatchSize
+      ) {
+        final profiles = await Future.wait(
+          members.skip(start).take(_identityRequestBatchSize).map((
+            member,
+          ) async {
+            final userID = member.userID!;
+            try {
+              return MapEntry(userID, await session.profileByAccountId(userID));
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+        if (!mounted) return;
+        setState(() {
+          for (final entry
+              in profiles.whereType<MapEntry<String, AccountProfile>>()) {
+            if (entry.value.identity > 0) {
+              _identityByUserID[entry.key] = entry.value.identity;
+            }
+            if (entry.value.staffIdentity > 0) {
+              _staffIdentityByUserID[entry.key] = entry.value.staffIdentity;
+            }
+          }
+        });
+      }
+    } finally {
+      client.close();
+    }
+  }
 
   String _memberName(GroupMembersInfo member) {
     final name = member.nickname?.trim() ?? '';
     return name.isEmpty ? (member.userID ?? '成员') : name;
   }
 
+  String _sectionFor(GroupMembersInfo member) {
+    final source = _memberName(member).trim();
+    if (source.isEmpty) return '#';
+    final pinyin = PinyinHelper.getShortPinyin(source).trim();
+    if (pinyin.isEmpty) return '#';
+    final first = pinyin[0].toUpperCase();
+    return _alphabetInitial.hasMatch(first) ? first : '#';
+  }
+
+  int _sectionRank(String section) =>
+      section == '#' ? 26 : section.codeUnitAt(0) - 65;
+
+  List<GroupMembersInfo> get _filteredMembers {
+    final query = _searchController.text.trim().toLowerCase();
+    final currentUserID = OpenIMChatRepository.currentUserID;
+    final members = widget.members.where((member) {
+      final userID = member.userID;
+      if (userID == null || userID.isEmpty || userID == currentUserID) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      return _memberName(member).toLowerCase().contains(query) ||
+          userID.toLowerCase().contains(query);
+    }).toList();
+    members.sort((a, b) {
+      final section = _sectionRank(
+        _sectionFor(a),
+      ).compareTo(_sectionRank(_sectionFor(b)));
+      return section != 0 ? section : _memberName(a).compareTo(_memberName(b));
+    });
+    return members;
+  }
+
+  void _jumpToSection(String section) {
+    final context = _sectionKeys[section]?.currentContext;
+    if (context == null) return;
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      alignment: 0,
+    );
+  }
+
   @override
-  Widget build(BuildContext context) => Container(
-    height: 208,
-    decoration: const BoxDecoration(
-      color: Color(0xFF252525),
-      border: Border(top: BorderSide(color: Color(0xFF3A3A3A))),
-    ),
-    child: loading
-        ? const Center(child: CupertinoActivityIndicator())
-        : members.isEmpty
-        ? const Center(
-            child: Text('未找到群成员', style: TextStyle(color: Color(0xFFAAAAAA))),
-          )
-        : ListView.separated(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            itemCount: members.length,
-            separatorBuilder: (_, _) => const Padding(
-              padding: EdgeInsets.only(left: 58),
-              child: ColoredBox(
-                color: Color(0xFF343434),
-                child: SizedBox(height: 1),
-              ),
-            ),
-            itemBuilder: (_, index) {
-              final member = members[index];
-              return CupertinoButton(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+  Widget build(BuildContext context) {
+    final members = _filteredMembers;
+    final grouped = <String, List<GroupMembersInfo>>{};
+    for (final member in members) {
+      grouped
+          .putIfAbsent(_sectionFor(member), () => <GroupMembersInfo>[])
+          .add(member);
+    }
+    final sections = grouped.keys.toList()
+      ..sort((a, b) => _sectionRank(a).compareTo(_sectionRank(b)));
+    final isSearchEmpty = _searchController.text.isEmpty;
+    return Container(
+      height: widget.height,
+      decoration: const BoxDecoration(
+        color: Color(0xFF2B2B2B),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: Color(0xFF3A3A3A))),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 64,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Text(
+                  '选择提醒的人',
+                  style: TextStyle(
+                    color: _white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                onPressed: () => onSelected(member),
-                child: Row(
-                  children: [
-                    AcoAvatar(size: 36, imageUrl: member.faceURL ?? ''),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _memberName(member),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: _white, fontSize: 16),
-                      ),
+                Positioned(
+                  left: 12,
+                  child: CupertinoButton(
+                    minimumSize: const Size(28, 0),
+                    padding: EdgeInsets.zero,
+                    onPressed: widget.onDismiss,
+                    child: Image.asset(
+                      'assets/images/mention_picker_dismiss.png',
+                      width: 28,
+                      fit: BoxFit.contain,
+                      semanticLabel: '收起成员选择',
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                color: Color(0xFF232323),
+                borderRadius: BorderRadius.all(Radius.circular(24)),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CupertinoTextField(
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      placeholder: isSearchEmpty ? '' : '搜索成员',
+                      placeholderStyle: const TextStyle(
+                        color: Color(0xFF777777),
+                        fontSize: 16,
+                      ),
+                      prefix: isSearchEmpty
+                          ? null
+                          : const Padding(
+                              padding: EdgeInsets.only(left: 14),
+                              child: Icon(
+                                CupertinoIcons.search,
+                                color: Color(0xFF858585),
+                                size: 22,
+                              ),
+                            ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      style: const TextStyle(color: _white, fontSize: 16),
+                      decoration: const BoxDecoration(),
+                    ),
+                    if (isSearchEmpty)
+                      const IgnorePointer(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.search,
+                              color: Color(0xFF858585),
+                              size: 22,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              '搜索成员',
+                              style: TextStyle(
+                                color: Color(0xFF777777),
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
-  );
+          Expanded(
+            child: widget.loading
+                ? const Center(child: CupertinoActivityIndicator())
+                : members.isEmpty
+                ? const Center(
+                    child: Text(
+                      '未找到群成员',
+                      style: TextStyle(color: Color(0xFFAAAAAA)),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 12, right: 34),
+                        itemCount: sections.length,
+                        itemBuilder: (_, sectionIndex) {
+                          final section = sections[sectionIndex];
+                          final sectionMembers = grouped[section]!;
+                          return Column(
+                            key: _sectionKeys.putIfAbsent(
+                              section,
+                              () => GlobalKey(),
+                            ),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  24,
+                                  12,
+                                  16,
+                                  6,
+                                ),
+                                child: Text(
+                                  section,
+                                  style: const TextStyle(
+                                    color: Color(0xFFD0D0D0),
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                              for (final member in sectionMembers)
+                                _memberRow(member),
+                            ],
+                          );
+                        },
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 7,
+                        bottom: 6,
+                        child: _AlphabetIndex(
+                          letters: sections,
+                          onLetterTap: _jumpToSection,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memberRow(GroupMembersInfo member) {
+    final identity = _identityByUserID[member.userID] ?? 0;
+    final staffIdentity = _staffIdentityByUserID[member.userID] ?? 0;
+    final identityAsset = _identityBadgeAsset(identity);
+    final staffAsset = _staffLongBadgeAsset(staffIdentity);
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      onPressed: () => widget.onSelected(member),
+      child: Row(
+        children: [
+          AcoAvatar(size: 44, imageUrl: member.faceURL ?? ''),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    _memberName(member),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _white, fontSize: 17),
+                  ),
+                ),
+                if (identityAsset != null || staffAsset != null)
+                  const SizedBox(width: 8),
+                if (identityAsset != null)
+                  Image.asset(
+                    identityAsset,
+                    width: _longBadgeWidth(identity) * 1.15,
+                    fit: BoxFit.contain,
+                  ),
+                if (identityAsset != null && staffAsset != null)
+                  const SizedBox(width: 4),
+                if (staffAsset != null)
+                  Image.asset(
+                    staffAsset,
+                    width: _longBadgeWidth(staffIdentity) * 1.15,
+                    fit: BoxFit.contain,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ImageUnavailable extends StatelessWidget {

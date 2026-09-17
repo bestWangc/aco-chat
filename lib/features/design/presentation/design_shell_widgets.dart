@@ -957,6 +957,45 @@ const _defaultAvatarAsset = 'assets/images/default_avatar.png';
 const _liveRoomHostAvatarAsset = 'assets/design_svg/source/images/img3.jpg';
 const _liveRoomListenerAvatarAsset = 'assets/design_svg/source/images/img5.jpg';
 
+class _AlphabetIndex extends StatelessWidget {
+  const _AlphabetIndex({required this.letters, required this.onLetterTap});
+
+  final List<String> letters;
+  final ValueChanged<String> onLetterTap;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final fittedFontSize = constraints.maxHeight / letters.length;
+      final fontSize = fittedFontSize < 14 ? fittedFontSize : 14.0;
+      final compact = letters.length * 24 <= constraints.maxHeight;
+      return Column(
+        mainAxisAlignment: compact
+            ? MainAxisAlignment.start
+            : MainAxisAlignment.spaceBetween,
+        children: [
+          for (final letter in letters)
+            Padding(
+              padding: EdgeInsets.only(bottom: compact ? 8 : 0),
+              child: GestureDetector(
+                onTap: () => onLetterTap(letter),
+                behavior: HitTestBehavior.opaque,
+                child: Text(
+                  letter,
+                  style: TextStyle(
+                    color: const Color(0xFF858585),
+                    fontSize: fontSize,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+}
+
 class AcoAvatar extends StatelessWidget {
   const AcoAvatar({
     this.large = false,
