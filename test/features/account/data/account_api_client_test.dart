@@ -210,6 +210,113 @@ void main() {
     expect(lives.single.canExportCheckIns, isTrue);
   });
 
+  test('lists recommended square posts with author and image data', () async {
+    late http.Request request;
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((value) async {
+        request = value;
+        return response({
+          'data': [
+            {
+              'id': 12,
+              'content': '来自推荐接口的动态',
+              'author': {
+                'user_id': 7,
+                'nickname': '素素姐',
+                'avatar_url': '/uploads/avatar.jpg',
+                'identity': 2,
+                'staff_identity': 1,
+              },
+              'images': ['/uploads/post-image.jpg'],
+              'reply_count': 63,
+              'like_count': 88,
+              'liked': true,
+              'created_at': '2026-09-17T07:30:00Z',
+            },
+          ],
+        });
+      }),
+    );
+
+    final posts = await client.listRecommendedPosts(token: 'signed-token');
+
+    expect(request.method, 'GET');
+    expect(request.url.path, '/api/v1/posts/recommended');
+    expect(request.headers['authorization'], 'Bearer signed-token');
+    expect(posts.single.content, '来自推荐接口的动态');
+    expect(posts.single.nickname, '素素姐');
+    expect(posts.single.identity, 2);
+    expect(posts.single.staffIdentity, 1);
+    expect(posts.single.imageUrls, ['/uploads/post-image.jpg']);
+    expect(posts.single.replyCount, 63);
+    expect(posts.single.likeCount, 88);
+    expect(posts.single.liked, isTrue);
+  });
+
+  test('likes posts and loads and creates replies', () async {
+    final requests = <http.Request>[];
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((request) async {
+        requests.add(request);
+        if (request.method == 'GET') {
+          return response({
+            'data': [
+              {
+                'id': 3,
+                'content': '回复内容',
+                'author': {'nickname': '作者'},
+                'created_at': '2026-09-17T07:30:00Z',
+              },
+            ],
+          });
+        }
+        if (request.method == 'POST' && request.url.path.endsWith('/like')) {
+          return response({'post_id': 12, 'liked': true, 'like_count': 89});
+        }
+        if (request.method == 'POST' && request.url.path.endsWith('/unlike')) {
+          return response({'post_id': 12, 'liked': false, 'like_count': 88});
+        }
+        return response({
+          'id': 3,
+          'content': '新回复',
+          'author': {'nickname': '作者'},
+          'created_at': '2026-09-17T07:30:00Z',
+        }, statusCode: 201);
+      }),
+    );
+
+    final like = await client.likePost(postID: 12, token: 'signed-token');
+    final replies = await client.listPostReplies(
+      postID: 12,
+      token: 'signed-token',
+    );
+    final reply = await client.createPostReply(
+      postID: 12,
+      content: '新回复',
+      token: 'signed-token',
+    );
+    final unlike = await client.unlikePost(postID: 12, token: 'signed-token');
+
+    expect(like.liked, isTrue);
+    expect(like.likeCount, 89);
+    expect(replies.single.content, '回复内容');
+    expect(reply.content, '新回复');
+    expect(unlike.liked, isFalse);
+    expect(requests.map((request) => request.method), [
+      'POST',
+      'GET',
+      'POST',
+      'POST',
+    ]);
+    expect(requests[0].url.path, '/api/v1/posts/12/like');
+    expect(requests[1].url.path, '/api/v1/posts/12/replies');
+    expect(requests[2].url.path, '/api/v1/posts/12/replies');
+    expect(requests[3].url.path, '/api/v1/posts/12/unlike');
+    expect(jsonDecode(requests[2].body), {'content': '新回复'});
+  });
+
   test('updates a scheduled live session', () async {
     late http.Request request;
     final client = AccountApiClient(

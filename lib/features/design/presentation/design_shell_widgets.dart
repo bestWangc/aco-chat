@@ -243,6 +243,8 @@ class AcoScreenPage extends StatelessWidget {
         palette: palette,
         onOpen: onOpen,
         avatarUrl: avatarUrl,
+        identity: identity,
+        staffIdentity: staffIdentity,
         walletLoginFuture: walletLoginFuture,
         initialLives: initialLives,
       ),

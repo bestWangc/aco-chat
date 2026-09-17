@@ -352,270 +352,405 @@ class _GreenBadge extends StatelessWidget {
   );
 }
 
-class _TopicChip extends StatelessWidget {
-  const _TopicChip({
+class _LiveRecommendationCard extends StatefulWidget {
+  const _LiveRecommendationCard({
     required this.palette,
-    required this.label,
-    required this.width,
+    required this.live,
+    required this.onTap,
+    super.key,
   });
+
   final AcoPalette palette;
-  final String label;
-  final double width;
+  final LiveSession live;
+  final VoidCallback onTap;
+
   @override
-  Widget build(BuildContext context) {
-    final isAldTopic = label == 'ALD! V587!';
-    return Container(
-      width: width,
-      height: 44,
+  State<_LiveRecommendationCard> createState() =>
+      _LiveRecommendationCardState();
+}
+
+class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _barsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _barsController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _barsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: widget.onTap,
+    child: Container(
+      height: 60,
       decoration: BoxDecoration(
-        color: palette.surface,
+        color: widget.palette.surface,
         border: Border.all(
-          color: palette.dark ? const Color(0xFF4A4A4A) : palette.border,
+          color: widget.palette.dark
+              ? const Color(0xFF4A4A4A)
+              : widget.palette.border,
         ),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
         children: [
-          if (isAldTopic)
-            ClipOval(
-              child: Image.asset(
-                'assets/design_svg/source/images/img5.jpg',
-                width: 42,
-                height: 42,
-                fit: BoxFit.cover,
-              ),
-            )
-          else
-            Container(
-              width: 44,
-              height: 44,
+          Padding(
+            padding: const EdgeInsets.only(left: 2),
+            child: Container(
+              width: 56,
+              height: 56,
+              padding: const EdgeInsets.all(1),
               decoration: BoxDecoration(
                 border: Border.all(color: const Color(0xFF4A4A4A)),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                CupertinoIcons.play_rectangle,
-                color: _lime,
-                size: 22,
-              ),
+              child: AcoAvatar(size: 52, imageUrl: widget.live.hostAvatarUrl),
             ),
-          const SizedBox(width: 8),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
-              label,
+              widget.live.title,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(
+              style: const TextStyle(
                 color: _lime,
-                fontSize: AcoTypography.body,
+                fontSize: AcoTypography.bodyEmphasis,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.only(left: 4, right: 10),
-            child: _SignalGlyph(),
+          Padding(
+            padding: const EdgeInsets.only(left: 8, right: 14),
+            child: _AnimatedSignalBars(animation: _barsController),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
 }
 
-class _SignalGlyph extends StatelessWidget {
-  const _SignalGlyph();
+class _AnimatedSignalBars extends StatelessWidget {
+  const _AnimatedSignalBars({required this.animation});
+
+  final Animation<double> animation;
 
   @override
-  Widget build(BuildContext context) => Row(
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      for (final height in [10.0, 16.0, 12.0])
-        Container(
-          width: 6,
-          height: height,
-          margin: const EdgeInsets.only(right: 3),
-          decoration: BoxDecoration(
-            color: _lime,
-            borderRadius: BorderRadius.circular(1),
-          ),
+  Widget build(BuildContext context) => AnimatedBuilder(
+    animation: animation,
+    builder: (_, _) {
+      final phase = animation.value * math.pi * 2;
+      return SizedBox(
+        width: 34,
+        height: 22,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            for (var index = 0; index < 3; index++)
+              Container(
+                width: 7,
+                height:
+                    8 + 10 * ((math.sin(phase + index * math.pi / 2) + 1) / 2),
+                margin: const EdgeInsets.only(left: 3),
+                decoration: BoxDecoration(
+                  color: _lime,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+          ],
         ),
-    ],
+      );
+    },
   );
 }
 
 class _PostCard extends StatelessWidget {
-  const _PostCard({required this.palette});
+  const _PostCard({
+    required this.palette,
+    required this.post,
+    required this.onLike,
+    required this.onOpen,
+    required this.onReply,
+    this.likePending = false,
+  });
+
   final AcoPalette palette;
+  final SquarePost post;
+  final VoidCallback onLike;
+  final VoidCallback onOpen;
+  final VoidCallback onReply;
+  final bool likePending;
+
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 8),
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onOpen,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ClipOval(
-            child: Image.asset(
-              'assets/design_svg/source/images/img3.jpg',
-              width: 48,
-              height: 48,
-              fit: BoxFit.cover,
-            ),
-          ),
+          AcoAvatar(size: 52, imageUrl: post.avatarUrl),
           const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              post.nickname.isEmpty ? '未命名用户' : post.nickname,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: AcoTypography.bodyEmphasis,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 7),
+                          _PostIdentityBadges(
+                            identity: post.identity,
+                            staffIdentity: post.staffIdentity,
+                          ),
+                          const SizedBox(width: 10),
+                          Flexible(
+                            child: Text(
+                              _formatPostDateTime(post.createdAt),
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: palette.mutedText,
+                                fontSize: AcoTypography.bodySmall,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12),
+                      child: Image.asset(
+                        'assets/icons/post_more_indicator.png',
+                        width: 20,
+                        filterQuality: FilterQuality.high,
+                        semanticLabel: '更多操作',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                if (post.content.isNotEmpty)
                   Text(
-                    '素素姐',
-                    style: TextStyle(
-                      color: palette.primaryText,
-                      fontSize: AcoTypography.bodyEmphasis,
-                      fontWeight: FontWeight.w700,
+                    post.content,
+                    style: const TextStyle(
+                      color: Color(0xFFF3F3F3),
+                      height: 1.5,
+                      fontSize: AcoTypography.body,
                     ),
                   ),
-                  const SizedBox(width: 7),
-                  const Icon(
-                    CupertinoIcons.check_mark_circled_solid,
-                    color: _lime,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    '7小时前',
-                    style: TextStyle(
-                      color: palette.mutedText,
-                      fontSize: AcoTypography.bodySmall,
-                    ),
+                if (post.imageUrls.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  _PostImageGallery(
+                    palette: palette,
+                    imageUrls: post.imageUrls,
                   ),
                 ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '365天盈利榜第1名',
-                style: TextStyle(
-                  color: palette.mutedText,
-                  fontSize: AcoTypography.bodySmall,
+                const SizedBox(height: 24),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _PostAction(
+                        iconAsset: 'assets/icons/post_reply.png',
+                        label: '${post.replyCount}',
+                        palette: palette,
+                        onTap: onReply,
+                      ),
+                      const SizedBox(width: 28),
+                      _PostAction(
+                        icon: post.liked
+                            ? CupertinoIcons.heart_fill
+                            : CupertinoIcons.heart,
+                        label: '${post.likeCount}',
+                        palette: palette,
+                        active: post.liked,
+                        onTap: likePending ? null : onLike,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _PostOptionDot(color: palette.primaryText),
-                const SizedBox(width: 6),
-                _PostOptionDot(color: palette.primaryText),
-                const SizedBox(width: 8),
-                const _PostOptionStar(),
               ],
             ),
           ),
         ],
       ),
-      const SizedBox(height: 18),
-      Text(
-        '是非成败转头空，青山依旧在，惯看秋月春风。\n'
-        '一壶浊酒喜相逢，古今多少事，滚滚长江东逝\n'
-        '水，浪花淘尽英雄。几度夕阳红。白发渔樵江渚\n'
-        '上，都付笑谈中。\n'
-        '滚滚长江东逝水，浪花淘尽英雄。是非成败转头\n'
-        '空，青山依旧在，几度夕阳红。白发渔樵江渚\n'
-        '上，惯看秋月春风。一壶浊酒喜相逢，古今多少\n'
-        '事，都付笑谈中。',
-        style: TextStyle(
-          color: palette.primaryText,
-          height: 1.5,
-          fontSize: AcoTypography.bodySmall,
-        ),
-      ),
-      const SizedBox(height: 24),
-      Container(
-        height: 273,
-        decoration: BoxDecoration(
-          color: palette.surface,
-          borderRadius: BorderRadius.circular(32),
-        ),
-      ),
-      const SizedBox(height: 24),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _PostAction(
-            icon: CupertinoIcons.chat_bubble,
-            label: '63',
-            palette: palette,
-          ),
-          _PostAction(
-            icon: CupertinoIcons.arrow_2_squarepath,
-            label: '1',
-            palette: palette,
-          ),
-          _PostAction(
-            icon: CupertinoIcons.heart,
-            label: '88',
-            palette: palette,
-          ),
-          _PostAction(
-            icon: CupertinoIcons.chart_bar,
-            label: '12.64k',
-            palette: palette,
-          ),
-          _PostAction(icon: CupertinoIcons.share, label: '', palette: palette),
-        ],
-      ),
-    ],
+    ),
   );
+}
+
+class _PostImageGallery extends StatelessWidget {
+  const _PostImageGallery({required this.palette, required this.imageUrls});
+
+  final AcoPalette palette;
+  final List<String> imageUrls;
+
+  @override
+  Widget build(BuildContext context) {
+    const height = 220.0;
+    if (imageUrls.length == 1) {
+      return _imageTile(imageUrls.first, height: height);
+    }
+
+    final columns = imageUrls.length == 2 ? 2 : 3;
+    final rows = (imageUrls.length + columns - 1) ~/ columns;
+    final itemHeight = (height - (rows - 1) * 4) / rows;
+    return SizedBox(
+      height: height,
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: imageUrls.length,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: columns,
+          crossAxisSpacing: 4,
+          mainAxisSpacing: 4,
+          mainAxisExtent: itemHeight,
+        ),
+        itemBuilder: (_, index) => _imageTile(imageUrls[index]),
+      ),
+    );
+  }
+
+  Widget _imageTile(String imageUrl, {double? height}) => ClipRRect(
+    borderRadius: BorderRadius.circular(18),
+    child: Image.network(
+      _liveCoverUrl(imageUrl),
+      width: double.infinity,
+      height: height,
+      fit: BoxFit.cover,
+      semanticLabel: '动态图片',
+      errorBuilder: (_, _, _) => ColoredBox(
+        color: palette.surface,
+        child: Center(
+          child: Icon(CupertinoIcons.photo, color: palette.mutedText, size: 30),
+        ),
+      ),
+    ),
+  );
+}
+
+String _formatPostDateTime(DateTime value) {
+  String pad(int number) => number.toString().padLeft(2, '0');
+
+  return '${value.year.toString().padLeft(4, '0')}-'
+      '${pad(value.month)}-${pad(value.day)} '
+      '${pad(value.hour)}:${pad(value.minute)}';
+}
+
+class _PostIdentityBadges extends StatelessWidget {
+  const _PostIdentityBadges({
+    required this.identity,
+    required this.staffIdentity,
+  });
+
+  final int identity;
+  final int staffIdentity;
+
+  @override
+  Widget build(BuildContext context) {
+    final identityAsset = _identityBadgeAsset(identity);
+    final staffAsset = _staffBadgeAsset(staffIdentity);
+    if (identityAsset == null && staffAsset == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (identityAsset != null)
+          Image.asset(
+            identityAsset,
+            width: _longBadgeWidth(identity),
+            fit: BoxFit.contain,
+          ),
+        if (identityAsset != null && staffAsset != null)
+          const SizedBox(width: 3),
+        if (staffAsset != null)
+          Image.asset(staffAsset, width: 18, fit: BoxFit.contain),
+      ],
+    );
+  }
 }
 
 class _PostAction extends StatelessWidget {
   const _PostAction({
-    required this.icon,
+    this.icon,
+    this.iconAsset,
     required this.label,
     required this.palette,
-  });
-  final IconData icon;
+    this.onTap,
+    this.active = false,
+  }) : assert(icon != null || iconAsset != null);
+  final IconData? icon;
+  final String? iconAsset;
   final String label;
   final AcoPalette palette;
+  final VoidCallback? onTap;
+  final bool active;
 
   @override
-  Widget build(BuildContext context) => Row(
-    children: [
-      Icon(icon, color: palette.primaryText, size: 22),
-      if (label.isNotEmpty) ...[
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: AcoTypography.bodyEmphasis,
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: Size.zero,
+    onPressed: onTap,
+    child: Row(
+      children: [
+        if (iconAsset != null)
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: Image.asset(
+              iconAsset!,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
+              semanticLabel: '回复',
+            ),
+          )
+        else
+          Icon(
+            icon!,
+            color: active ? palette.accent : palette.primaryText,
+            size: 18,
           ),
-        ),
+        if (label.isNotEmpty) ...[
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: active ? palette.accent : palette.primaryText,
+              fontSize: AcoTypography.body,
+            ),
+          ),
+        ],
       ],
-    ],
+    ),
   );
-}
-
-class _PostOptionDot extends StatelessWidget {
-  const _PostOptionDot({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: 5,
-    height: 5,
-    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-  );
-}
-
-class _PostOptionStar extends StatelessWidget {
-  const _PostOptionStar();
-
-  @override
-  Widget build(BuildContext context) =>
-      const Icon(CupertinoIcons.sparkles, color: _lime, size: 10);
 }
 
 const _chatBubbleTailWidth = 5.0;

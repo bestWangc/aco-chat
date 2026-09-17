@@ -211,11 +211,118 @@ class OpenIMToken {
   );
 }
 
+class SquarePost {
+  const SquarePost({
+    required this.id,
+    required this.content,
+    required this.nickname,
+    required this.avatarUrl,
+    required this.identity,
+    required this.staffIdentity,
+    required this.imageUrls,
+    required this.replyCount,
+    required this.likeCount,
+    required this.liked,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String content;
+  final String nickname;
+  final String avatarUrl;
+  final int identity;
+  final int staffIdentity;
+  final List<String> imageUrls;
+  final int replyCount;
+  final int likeCount;
+  final bool liked;
+  final DateTime createdAt;
+
+  SquarePost copyWith({int? replyCount, int? likeCount, bool? liked}) =>
+      SquarePost(
+        id: id,
+        content: content,
+        nickname: nickname,
+        avatarUrl: avatarUrl,
+        identity: identity,
+        staffIdentity: staffIdentity,
+        imageUrls: imageUrls,
+        replyCount: replyCount ?? this.replyCount,
+        likeCount: likeCount ?? this.likeCount,
+        liked: liked ?? this.liked,
+        createdAt: createdAt,
+      );
+
+  factory SquarePost.fromJson(Map<String, dynamic> json) {
+    final author = json['author'] as Map<String, dynamic>? ?? const {};
+    final images = json['images'] as List<dynamic>? ?? const [];
+    return SquarePost(
+      id: (json['id'] as num).toInt(),
+      content: json['content'] as String? ?? '',
+      nickname: author['nickname'] as String? ?? '',
+      avatarUrl: author['avatar_url'] as String? ?? '',
+      identity: (author['identity'] as num?)?.toInt() ?? 0,
+      staffIdentity: (author['staff_identity'] as num?)?.toInt() ?? 0,
+      imageUrls: images.whereType<String>().toList(growable: false),
+      replyCount: (json['reply_count'] as num?)?.toInt() ?? 0,
+      likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
+      liked: json['liked'] as bool? ?? false,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+class PostLikeResult {
+  const PostLikeResult({required this.liked, required this.likeCount});
+
+  final bool liked;
+  final int likeCount;
+
+  factory PostLikeResult.fromJson(Map<String, dynamic> json) => PostLikeResult(
+    liked: json['liked'] as bool? ?? false,
+    likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
+  );
+}
+
+class PostReply {
+  const PostReply({
+    required this.id,
+    required this.content,
+    required this.nickname,
+    required this.avatarUrl,
+    required this.identity,
+    required this.staffIdentity,
+    required this.createdAt,
+  });
+
+  final int id;
+  final String content;
+  final String nickname;
+  final String avatarUrl;
+  final int identity;
+  final int staffIdentity;
+  final DateTime createdAt;
+
+  factory PostReply.fromJson(Map<String, dynamic> json) {
+    final author = json['author'] as Map<String, dynamic>? ?? const {};
+    return PostReply(
+      id: (json['id'] as num).toInt(),
+      content: json['content'] as String? ?? '',
+      nickname: author['nickname'] as String? ?? '',
+      avatarUrl: author['avatar_url'] as String? ?? '',
+      identity: (author['identity'] as num?)?.toInt() ?? 0,
+      staffIdentity: (author['staff_identity'] as num?)?.toInt() ?? 0,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
 class LiveSession {
   const LiveSession({
     required this.id,
     required this.title,
     required this.coverUrl,
+    this.hostAvatarUrl = '',
     required this.access,
     required this.status,
     required this.createdAt,
@@ -227,6 +334,7 @@ class LiveSession {
   final int id;
   final String title;
   final String coverUrl;
+  final String hostAvatarUrl;
   final String access;
   final String status;
   final DateTime createdAt;
@@ -238,6 +346,7 @@ class LiveSession {
     id: json['id'] as int,
     title: json['title'] as String,
     coverUrl: json['cover_url'] as String,
+    hostAvatarUrl: json['host_avatar_url'] as String? ?? '',
     access: json['access'] as String,
     status: json['status'] as String,
     canEdit: json['can_edit'] as bool? ?? false,

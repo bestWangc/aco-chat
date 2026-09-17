@@ -206,6 +206,39 @@ class AccountSession {
     return _apiClient.listLives(token: tokens.accessToken);
   }
 
+  Future<List<SquarePost>> listRecommendedPosts() async {
+    final tokens = await _tokenStore.read();
+    if (tokens == null) return const <SquarePost>[];
+    return _apiClient.listRecommendedPosts(token: tokens.accessToken);
+  }
+
+  Future<SquarePost> createPost({
+    required String content,
+    required List<Uint8List> images,
+  }) async => _apiClient.createPost(
+    content: content,
+    images: images,
+    token: await _requireToken(),
+  );
+
+  Future<PostLikeResult> likePost(int postID) async =>
+      _apiClient.likePost(postID: postID, token: await _requireToken());
+
+  Future<PostLikeResult> unlikePost(int postID) async =>
+      _apiClient.unlikePost(postID: postID, token: await _requireToken());
+
+  Future<List<PostReply>> listPostReplies(int postID) async =>
+      _apiClient.listPostReplies(postID: postID, token: await _requireToken());
+
+  Future<PostReply> createPostReply({
+    required int postID,
+    required String content,
+  }) async => _apiClient.createPostReply(
+    postID: postID,
+    content: content,
+    token: await _requireToken(),
+  );
+
   Future<List<FriendContact>> listFriends() async {
     return _apiClient.listFriends(token: await _requireToken());
   }

@@ -1291,6 +1291,23 @@ void main() {
     expect(find.text('上传封面'), findsOneWidget);
   });
 
+  testWidgets('opens the post composer from the recommended square tab', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+
+    await _openSquareTab(tester);
+    await tester.tap(find.text('推荐'));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('create-live-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('发布动态'), findsOneWidget);
+    expect(find.text('照片'), findsOneWidget);
+    expect(find.text('0/9'), findsOneWidget);
+    expect(find.text('添加照片'), findsOneWidget);
+  });
+
   testWidgets('refreshes the live list after a newly created room closes', (
     WidgetTester tester,
   ) async {

@@ -70,6 +70,24 @@ class AccountApiException implements Exception {
     if (normalized.contains('cannot save avatar image')) {
       return '头像保存失败，请稍后重试。';
     }
+    if (normalized.contains('at most 9 images')) {
+      return '一条动态最多选择 9 张照片。';
+    }
+    if (normalized.contains('post image')) {
+      return '动态图片处理失败，请重新选择照片。';
+    }
+    if (normalized.contains('post content or images are required')) {
+      return '请输入内容或选择照片。';
+    }
+    if (normalized.contains('reply content is required')) {
+      return '请输入回复内容。';
+    }
+    if (normalized.contains('reply content must be')) {
+      return '回复内容不能超过 280 字。';
+    }
+    if (normalized.contains('post content must be')) {
+      return '动态内容不能超过 500 字。';
+    }
     if (normalized.contains('avatar uploads are not configured')) {
       return '头像上传服务未配置，请联系管理员。';
     }
@@ -545,6 +563,90 @@ class AccountApiClient {
       headers: _authorizedHeaders(token),
     );
     return WalletTransactionPage.fromJson(_body(response));
+  }
+
+  Future<List<SquarePost>> listRecommendedPosts({required String token}) async {
+    final response = await _httpClient.get(
+      _uri('posts/recommended'),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return (body['data'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(SquarePost.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<SquarePost> createPost({
+    required String content,
+    required List<Uint8List> images,
+    required String token,
+  }) async {
+    final request = http.MultipartRequest('POST', _uri('posts'))
+      ..headers['x-app-version'] = AppConfig.appVersion
+      ..headers['authorization'] = 'Bearer $token'
+      ..fields['content'] = content;
+    for (var index = 0; index < images.length; index++) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'images',
+          images[index],
+          filename: 'post-$index.jpg',
+        ),
+      );
+    }
+    final response = await _httpClient.send(request);
+    return SquarePost.fromJson(_body(await _readResponse(response)));
+  }
+
+  Future<PostLikeResult> likePost({
+    required int postID,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('posts/$postID/like'),
+      headers: _authorizedHeaders(token),
+    );
+    return PostLikeResult.fromJson(_body(response));
+  }
+
+  Future<PostLikeResult> unlikePost({
+    required int postID,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('posts/$postID/unlike'),
+      headers: _authorizedHeaders(token),
+    );
+    return PostLikeResult.fromJson(_body(response));
+  }
+
+  Future<List<PostReply>> listPostReplies({
+    required int postID,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('posts/$postID/replies'),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return (body['data'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(PostReply.fromJson)
+        .toList(growable: false);
+  }
+
+  Future<PostReply> createPostReply({
+    required int postID,
+    required String content,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('posts/$postID/replies'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'content': content}),
+    );
+    return PostReply.fromJson(_body(response));
   }
 
   /// Uploads a selected cover before creating the live session. The API

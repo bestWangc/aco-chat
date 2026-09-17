@@ -6,12 +6,16 @@ class _SquareFeedPage extends StatefulWidget {
     required this.palette,
     required this.onOpen,
     this.avatarUrl,
+    this.identity = 0,
+    this.staffIdentity = 0,
     this.walletLoginFuture,
     this.initialLives,
   });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
   final String? avatarUrl;
+  final int identity;
+  final int staffIdentity;
   final Future<AccountProfile?>? walletLoginFuture;
   final List<LiveSession>? initialLives;
 
@@ -29,11 +33,17 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   Object? _livesError;
   var _livesLoading = true;
   var _livesRequestID = 0;
+  List<SquarePost>? _loadedPosts;
+  Object? _postsError;
+  var _postsLoading = true;
+  var _postsRequestID = 0;
+  final Set<int> _pendingLikePostIDs = <int>{};
 
   @override
   void initState() {
     super.initState();
     unawaited(_beginLivesLoad());
+    unawaited(_beginPostsLoad());
   }
 
   Future<List<LiveSession>> _loadLives({bool useInitialLives = true}) async {
@@ -74,8 +84,108 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
     await _beginLivesLoad(useInitialLives: false);
   }
 
+  Future<List<SquarePost>> _loadPosts() async {
+    await widget.walletLoginFuture;
+    return AccountSession(_apiClient).listRecommendedPosts();
+  }
+
+  Future<void> _beginPostsLoad() async {
+    final requestID = ++_postsRequestID;
+    _postsLoading = true;
+    _postsError = null;
+    if (mounted) setState(() {});
+    try {
+      final posts = await _loadPosts();
+      if (!mounted || requestID != _postsRequestID) return;
+      setState(() {
+        _loadedPosts = posts;
+        _postsLoading = false;
+      });
+    } catch (error) {
+      if (!mounted || requestID != _postsRequestID) return;
+      setState(() {
+        _postsError = error;
+        _postsLoading = false;
+      });
+    }
+  }
+
+  void _retryLoadingPosts() {
+    unawaited(_beginPostsLoad());
+  }
+
+  Future<void> _refreshPosts() async {
+    await _beginPostsLoad();
+  }
+
+  void _replacePost(SquarePost updatedPost) {
+    final posts = _loadedPosts;
+    if (!mounted || posts == null) return;
+    final index = posts.indexWhere((post) => post.id == updatedPost.id);
+    if (index < 0) return;
+    final updated = List<SquarePost>.of(posts);
+    updated[index] = updatedPost;
+    setState(() => _loadedPosts = updated);
+  }
+
+  Future<void> _togglePostLike(SquarePost post) async {
+    if (!_pendingLikePostIDs.add(post.id)) return;
+    if (mounted) setState(() {});
+    try {
+      await widget.walletLoginFuture;
+      final session = AccountSession(_apiClient);
+      final result = await _requestPostLikeChange(
+        session: session,
+        postID: post.id,
+        liked: post.liked,
+      );
+      if (!mounted) return;
+      _replacePost(
+        post.copyWith(likeCount: result.likeCount, liked: result.liked),
+      );
+    } catch (error) {
+      if (mounted) _showPostLikeError(context, error);
+    } finally {
+      _pendingLikePostIDs.remove(post.id);
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _openPostDetail(SquarePost post) async {
+    final updatedPost = await Navigator.of(context).push<SquarePost>(
+      _AcoPageRoute<SquarePost>(
+        builder: (_) => _PostDetailPage(
+          palette: widget.palette,
+          post: post,
+          walletLoginFuture: widget.walletLoginFuture,
+        ),
+      ),
+    );
+    if (!mounted || updatedPost == null) return;
+    _replacePost(updatedPost);
+  }
+
   void _selectTab(_SquareFeedTab tab) {
     if (_selectedTab != tab) setState(() => _selectedTab = tab);
+  }
+
+  void _handleFloatingAction() {
+    if (_selectedTab != _SquareFeedTab.recommended) {
+      widget.onOpen(AcoScreen.createLive);
+      return;
+    }
+    Navigator.of(context)
+        .push<bool>(
+          _AcoPageRoute<bool>(
+            builder: (_) => _PublishPostPage(
+              palette: widget.palette,
+              walletLoginFuture: widget.walletLoginFuture,
+            ),
+          ),
+        )
+        .then((published) {
+          if (published == true && mounted) unawaited(_refreshPosts());
+        });
   }
 
   @override
@@ -406,8 +516,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
+                        width: double.infinity,
                         height: 1,
-                        child: ColoredBox(color: palette.border),
+                        child: const ColoredBox(color: Color(0xFF1C1C1C)),
                       ),
                     ],
                   ),
@@ -422,12 +533,12 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           bottom: 0,
           child: Semantics(
             button: true,
-            label: '创建会议',
+            label: _selectedTab == _SquareFeedTab.recommended ? '发布动态' : '创建会议',
             child: CupertinoButton(
               key: const Key('create-live-button'),
               padding: EdgeInsets.zero,
               minimumSize: const Size(54, 54),
-              onPressed: () => onOpen(AcoScreen.createLive),
+              onPressed: _handleFloatingAction,
               child: Container(
                 width: 54,
                 height: 54,
@@ -464,40 +575,827 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         ),
       );
     }
+    final recommendedLives = (_loadedLives ?? const <LiveSession>[])
+        .where((live) => live.status == 'live')
+        .toList(growable: false);
     return SliverPadding(
       padding: const EdgeInsets.only(bottom: 96),
       sliver: SliverList(
         delegate: SliverChildListDelegate([
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: _contentHorizontalInset,
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 32),
+          Column(
+            children: [
+              if (recommendedLives.isEmpty)
+                const SizedBox(height: 32)
+              else ...[
+                const SizedBox(height: 24),
                 SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _TopicChip(palette: palette, label: '买买买!!', width: 164),
-                      const SizedBox(width: 10),
-                      _TopicChip(
-                        palette: palette,
-                        label: 'ALD! V587!',
-                        width: 184,
-                      ),
+                      for (
+                        var index = 0;
+                        index < recommendedLives.length;
+                        index++
+                      ) ...[
+                        SizedBox(
+                          width: MediaQuery.sizeOf(context).width - 44,
+                          child: _LiveRecommendationCard(
+                            key: ValueKey(
+                              'live-recommendation-${recommendedLives[index].id}',
+                            ),
+                            palette: palette,
+                            live: recommendedLives[index],
+                            onTap: () => _openLiveRoom(recommendedLives[index]),
+                          ),
+                        ),
+                        if (index < recommendedLives.length - 1)
+                          const SizedBox(width: 12),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(height: 32),
-                _PostCard(palette: palette),
               ],
-            ),
+              _buildRecommendedPosts(palette),
+            ],
           ),
         ]),
       ),
     );
   }
+
+  Widget _buildRecommendedPosts(AcoPalette palette) {
+    if (_postsLoading && _loadedPosts == null) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 24),
+        child: Center(child: CupertinoActivityIndicator()),
+      );
+    }
+    if (_postsError != null) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 24),
+        child: _LiveListMessage(
+          palette: palette,
+          message: '推荐动态加载失败，请检查网络后重试。',
+          actionLabel: '重试',
+          onPressed: _retryLoadingPosts,
+        ),
+      );
+    }
+    final posts = _loadedPosts ?? const <SquarePost>[];
+    if (posts.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 24),
+        child: _LiveListMessage(palette: palette, message: '暂无推荐动态，发布一条吧。'),
+      );
+    }
+    return Column(
+      children: [
+        for (final post in posts)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 28),
+            child: _PostCard(
+              palette: palette,
+              post: post,
+              likePending: _pendingLikePostIDs.contains(post.id),
+              onLike: () => _togglePostLike(post),
+              onOpen: () => _openPostDetail(post),
+              onReply: () => _openPostDetail(post),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+Future<PostLikeResult> _requestPostLikeChange({
+  required AccountSession session,
+  required int postID,
+  required bool liked,
+}) {
+  if (liked) return session.unlikePost(postID);
+  return session.likePost(postID);
+}
+
+void _showPostLikeError(BuildContext context, Object error) {
+  final message = error is AccountApiException
+      ? error.localizedMessage
+      : '请检查网络后重试。';
+  _showNotice(context, '操作失败', message);
+}
+
+class _PostDetailPage extends StatefulWidget {
+  const _PostDetailPage({
+    required this.palette,
+    required this.post,
+    this.walletLoginFuture,
+  });
+
+  final AcoPalette palette;
+  final SquarePost post;
+  final Future<AccountProfile?>? walletLoginFuture;
+
+  @override
+  State<_PostDetailPage> createState() => _PostDetailPageState();
+}
+
+class _PostDetailPageState extends State<_PostDetailPage> {
+  final AccountApiClient _apiClient = AccountApiClient();
+  late final AccountSession _session = AccountSession(_apiClient);
+  final TextEditingController _textController = TextEditingController();
+  List<PostReply>? _replies;
+  Object? _error;
+  var _loading = true;
+  var _sending = false;
+  var _likePending = false;
+  late var _liked = widget.post.liked;
+  late var _likeCount = widget.post.likeCount;
+  late var _replyCount = widget.post.replyCount;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadReplies());
+  }
+
+  Future<void> _loadReplies() async {
+    try {
+      await widget.walletLoginFuture;
+      final replies = await _session.listPostReplies(widget.post.id);
+      if (!mounted) return;
+      setState(() {
+        _replies = replies;
+        _loading = false;
+        _error = null;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _error = error;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _sendReply() async {
+    final content = _textController.text.trim();
+    if (content.isEmpty || _sending) return;
+    setState(() => _sending = true);
+    try {
+      await widget.walletLoginFuture;
+      final reply = await _session.createPostReply(
+        postID: widget.post.id,
+        content: content,
+      );
+      if (!mounted) return;
+      setState(() {
+        final replies = _replies ?? const <PostReply>[];
+        _replies = [...replies, reply];
+        _replyCount++;
+        _textController.clear();
+      });
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '回复失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '回复失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _toggleLike() async {
+    if (_likePending) return;
+    setState(() => _likePending = true);
+    try {
+      await widget.walletLoginFuture;
+      final result = await _requestPostLikeChange(
+        session: _session,
+        postID: widget.post.id,
+        liked: _liked,
+      );
+      if (!mounted) return;
+      setState(() {
+        _liked = result.liked;
+        _likeCount = result.likeCount;
+      });
+    } catch (error) {
+      if (mounted) _showPostLikeError(context, error);
+    } finally {
+      if (mounted) setState(() => _likePending = false);
+    }
+  }
+
+  void _close() {
+    Navigator.of(context).pop(
+      widget.post.copyWith(
+        replyCount: _replyCount,
+        likeCount: _likeCount,
+        liked: _liked,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _apiClient.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    navigationBar: CupertinoNavigationBar(
+      backgroundColor: widget.palette.background,
+      border: null,
+      leading: CupertinoNavigationBarBackButton(
+        color: widget.palette.primaryText,
+        onPressed: _close,
+      ),
+      middle: Text('动态详情', style: TextStyle(color: widget.palette.primaryText)),
+    ),
+    child: Column(
+      children: [
+        Expanded(
+          child: SafeArea(top: false, bottom: false, child: _buildReplies()),
+        ),
+        _buildComposer(),
+      ],
+    ),
+  );
+
+  Widget _buildReplies() {
+    if (_loading) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+    if (_error != null) {
+      return Center(
+        child: CupertinoButton(
+          onPressed: () {
+            setState(() => _loading = true);
+            unawaited(_loadReplies());
+          },
+          child: Text(
+            '回复加载失败，点击重试',
+            style: TextStyle(color: widget.palette.mutedText),
+          ),
+        ),
+      );
+    }
+    final replies = _replies ?? const <PostReply>[];
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+      children: [
+        _buildPostSummary(),
+        const SizedBox(height: 28),
+        if (replies.isEmpty)
+          Center(
+            child: Text(
+              '还没有回复',
+              style: TextStyle(color: widget.palette.mutedText),
+            ),
+          )
+        else
+          for (final reply in replies) ...[
+            _buildReply(reply),
+            const SizedBox(height: 20),
+          ],
+      ],
+    );
+  }
+
+  Widget _buildPostSummary() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AcoAvatar(size: 52, imageUrl: widget.post.avatarUrl),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        widget.post.nickname.isEmpty
+                            ? '未命名用户'
+                            : widget.post.nickname,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.palette.primaryText,
+                          fontSize: AcoTypography.bodyEmphasis,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    _PostIdentityBadges(
+                      identity: widget.post.identity,
+                      staffIdentity: widget.post.staffIdentity,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatPostDateTime(widget.post.createdAt),
+                  style: TextStyle(
+                    color: widget.palette.mutedText,
+                    fontSize: AcoTypography.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      if (widget.post.content.isNotEmpty) ...[
+        const SizedBox(height: 18),
+        Text(
+          widget.post.content,
+          style: TextStyle(
+            color: widget.palette.primaryText,
+            height: 1.5,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+      ],
+      if (widget.post.imageUrls.isNotEmpty) ...[
+        const SizedBox(height: 18),
+        _PostImageGallery(
+          palette: widget.palette,
+          imageUrls: widget.post.imageUrls,
+        ),
+      ],
+      const SizedBox(height: 20),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Image.asset(
+            'assets/icons/post_reply.png',
+            width: 18,
+            height: 18,
+            filterQuality: FilterQuality.high,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$_replyCount',
+            style: TextStyle(
+              color: widget.palette.mutedText,
+              fontSize: AcoTypography.bodySmall,
+            ),
+          ),
+          const SizedBox(width: 24),
+          _PostAction(
+            icon: _liked ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
+            label: '$_likeCount',
+            palette: widget.palette,
+            active: _liked,
+            onTap: _likePending ? null : _toggleLike,
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      Container(height: 1, color: widget.palette.border),
+    ],
+  );
+
+  Widget _buildReply(PostReply reply) => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      AcoAvatar(size: 38, imageUrl: reply.avatarUrl),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    reply.nickname.isEmpty ? '未命名用户' : reply.nickname,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: widget.palette.primaryText,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                _PostIdentityBadges(
+                  identity: reply.identity,
+                  staffIdentity: reply.staffIdentity,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _formatPostDateTime(reply.createdAt),
+                  style: TextStyle(
+                    color: widget.palette.mutedText,
+                    fontSize: AcoTypography.bodySmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              reply.content,
+              style: TextStyle(
+                color: widget.palette.primaryText,
+                height: 1.45,
+                fontSize: AcoTypography.body,
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildComposer() => SafeArea(
+    top: false,
+    child: Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: widget.palette.background,
+        border: Border(top: BorderSide(color: widget.palette.border)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: CupertinoTextField(
+              controller: _textController,
+              maxLines: 1,
+              maxLength: 280,
+              placeholder: '写下你的回复…',
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: widget.palette.inputSurface,
+                borderRadius: BorderRadius.circular(22),
+              ),
+            ),
+          ),
+          CupertinoButton(
+            padding: const EdgeInsets.only(left: 10),
+            minimumSize: const Size(42, 42),
+            onPressed: _sending ? null : _sendReply,
+            child: _sending
+                ? const CupertinoActivityIndicator()
+                : Text('发送', style: TextStyle(color: widget.palette.accent)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _PublishPostPage extends StatefulWidget {
+  const _PublishPostPage({required this.palette, this.walletLoginFuture});
+
+  final AcoPalette palette;
+  final Future<AccountProfile?>? walletLoginFuture;
+
+  @override
+  State<_PublishPostPage> createState() => _PublishPostPageState();
+}
+
+class _PublishPostPageState extends State<_PublishPostPage> {
+  static const _maxPhotoCount = 9;
+  static const _maxPostContentRunes = 500;
+  static const _photoMaxDimension = 1600.0;
+  static const _photoQuality = 72;
+
+  final _textController = TextEditingController();
+  final _imagePicker = ImagePicker();
+  final List<_PublishPhoto> _photos = [];
+  var _pickingPhotos = false;
+  var _submitting = false;
+
+  AcoPalette get palette => widget.palette;
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickPhotos() async {
+    final remaining = _maxPhotoCount - _photos.length;
+    if (remaining <= 0 || _pickingPhotos) return;
+
+    setState(() => _pickingPhotos = true);
+    try {
+      // image_picker performs the resize and JPEG compression before the
+      // files are returned, so the in-memory previews are already smaller.
+      final picked = remaining == 1
+          ? await _pickSinglePhoto()
+          : await _imagePicker.pickMultiImage(
+              maxWidth: _photoMaxDimension,
+              maxHeight: _photoMaxDimension,
+              imageQuality: _photoQuality,
+              limit: remaining,
+              requestFullMetadata: false,
+            );
+      final selected = picked.take(remaining).toList(growable: false);
+      final photos = await Future.wait(
+        selected.map((photo) async {
+          final bytes = await photo.readAsBytes();
+          return _PublishPhoto(file: photo, bytes: bytes);
+        }),
+      );
+      if (!mounted) return;
+      setState(() => _photos.addAll(photos));
+    } catch (_) {
+      if (mounted) {
+        _showNotice(context, '选择照片失败', '请检查照片权限后重试。');
+      }
+    } finally {
+      if (mounted) setState(() => _pickingPhotos = false);
+    }
+  }
+
+  Future<List<XFile>> _pickSinglePhoto() async {
+    final photo = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: _photoMaxDimension,
+      maxHeight: _photoMaxDimension,
+      imageQuality: _photoQuality,
+      requestFullMetadata: false,
+    );
+    return [?photo];
+  }
+
+  void _removePhoto(int index) {
+    setState(() => _photos.removeAt(index));
+  }
+
+  Future<void> _publish() async {
+    if (_submitting) return;
+    if (_textController.text.trim().isEmpty && _photos.isEmpty) {
+      _showNotice(context, '无法发布', '请输入内容或选择照片。');
+      return;
+    }
+    final apiClient = AccountApiClient();
+    setState(() => _submitting = true);
+    try {
+      await widget.walletLoginFuture;
+      await AccountSession(apiClient).createPost(
+        content: _textController.text.trim(),
+        images: _photos.map((photo) => photo.bytes).toList(growable: false),
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '发布失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '发布失败', '请检查网络后重试。');
+    } finally {
+      apiClient.close();
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: widget.palette.background,
+    navigationBar: CupertinoNavigationBar(
+      backgroundColor: widget.palette.background,
+      border: null,
+      leading: CupertinoNavigationBarBackButton(
+        color: widget.palette.primaryText,
+        onPressed: () => Navigator.of(context).maybePop(),
+      ),
+      middle: Text(
+        '发布动态',
+        style: TextStyle(
+          color: widget.palette.primaryText,
+          fontSize: AcoTypography.bodyEmphasis,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      trailing: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: _submitting ? null : _publish,
+        child: Text(
+          _submitting ? '发布中' : '发布',
+          style: TextStyle(
+            color: widget.palette.accent,
+            fontSize: AcoTypography.body,
+          ),
+        ),
+      ),
+    ),
+    child: AcoSafeArea(
+      bottom: false,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          CupertinoTextField(
+            controller: _textController,
+            autofocus: true,
+            maxLength: _maxPostContentRunes,
+            minLines: 8,
+            maxLines: null,
+            onChanged: (_) => setState(() {}),
+            placeholder: '分享此刻想说的话…',
+            placeholderStyle: TextStyle(color: widget.palette.mutedText),
+            style: TextStyle(
+              color: widget.palette.primaryText,
+              fontSize: AcoTypography.body,
+            ),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: widget.palette.inputSurface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              '${_textController.text.runes.length}/$_maxPostContentRunes',
+              style: TextStyle(
+                color: widget.palette.mutedText,
+                fontSize: AcoTypography.bodySmall,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '照片',
+                style: TextStyle(
+                  color: widget.palette.primaryText,
+                  fontSize: AcoTypography.body,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                '${_photos.length}/$_maxPhotoCount',
+                style: TextStyle(
+                  color: widget.palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _PublishPhotoGrid(
+            palette: widget.palette,
+            photos: _photos,
+            isPicking: _pickingPhotos,
+            onAdd: _pickPhotos,
+            onRemove: _removePhoto,
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _PublishPhoto {
+  const _PublishPhoto({required this.file, required this.bytes});
+
+  final XFile file;
+  final Uint8List bytes;
+}
+
+class _PublishPhotoGrid extends StatelessWidget {
+  const _PublishPhotoGrid({
+    required this.palette,
+    required this.photos,
+    required this.isPicking,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final AcoPalette palette;
+  final List<_PublishPhoto> photos;
+  final bool isPicking;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount = photos.length + (photos.length < 9 ? 1 : 0);
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: itemCount,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+      ),
+      itemBuilder: (context, index) {
+        if (index == photos.length) {
+          return _AddPhotoTile(
+            palette: palette,
+            isPicking: isPicking,
+            onTap: onAdd,
+          );
+        }
+        return _PublishPhotoTile(
+          photo: photos[index],
+          palette: palette,
+          onRemove: () => onRemove(index),
+        );
+      },
+    );
+  }
+}
+
+class _PublishPhotoTile extends StatelessWidget {
+  const _PublishPhotoTile({
+    required this.photo,
+    required this.palette,
+    required this.onRemove,
+  });
+
+  final _PublishPhoto photo;
+  final AcoPalette palette;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+    borderRadius: BorderRadius.circular(12),
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.memory(photo.bytes, fit: BoxFit.cover),
+        Positioned(
+          top: 6,
+          right: 6,
+          child: GestureDetector(
+            onTap: onRemove,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0x99000000),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(
+                  CupertinoIcons.xmark,
+                  color: Color(0xFFF3F3F3),
+                  size: 12,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _AddPhotoTile extends StatelessWidget {
+  const _AddPhotoTile({
+    required this.palette,
+    required this.isPicking,
+    required this.onTap,
+  });
+
+  final AcoPalette palette;
+  final bool isPicking;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: isPicking ? null : onTap,
+    child: DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.inputSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: palette.border),
+      ),
+      child: Center(
+        child: isPicking
+            ? CupertinoActivityIndicator(color: palette.mutedText)
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    CupertinoIcons.photo,
+                    color: palette.mutedText,
+                    size: 26,
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    '添加照片',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+      ),
+    ),
+  );
 }
 
 class _SquareComposer extends StatelessWidget {
@@ -614,7 +1512,7 @@ class _SquareTabButton extends StatelessWidget {
       label,
       style: TextStyle(
         color: selected ? palette.primaryText : palette.mutedText,
-        fontSize: AcoTypography.body,
+        fontSize: AcoTypography.bodyEmphasis,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
       ),
     ),
