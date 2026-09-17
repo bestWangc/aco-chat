@@ -23,6 +23,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   static const _contentHorizontalInset = 35.0;
   static const _liveListHorizontalInset = 25.0;
 
+  var _selectedTab = _SquareFeedTab.live;
   final AccountApiClient _apiClient = AccountApiClient();
   List<LiveSession>? _loadedLives;
   Object? _livesError;
@@ -71,6 +72,10 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
   Future<void> _refreshLives() async {
     await _beginLivesLoad(useInitialLives: false);
+  }
+
+  void _selectTab(_SquareFeedTab tab) {
+    if (_selectedTab != tab) setState(() => _selectedTab = tab);
   }
 
   @override
@@ -394,7 +399,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                         imageUrl: widget.avatarUrl,
                       ),
                       const SizedBox(height: 18),
-                      _SquareTabs(palette: palette),
+                      _SquareTabs(
+                        palette: palette,
+                        selectedTab: _selectedTab,
+                        onSelected: _selectTab,
+                      ),
                       const SizedBox(height: 16),
                       SizedBox(
                         height: 1,
@@ -404,15 +413,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
                   ),
                 ),
               ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
-                  _liveListHorizontalInset,
-                  0,
-                  _liveListHorizontalInset,
-                  96,
-                ),
-                sliver: _buildLiveSliver(palette),
-              ),
+              _buildTabContent(palette),
             ],
           ),
         ),
@@ -440,6 +441,61 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTabContent(AcoPalette palette) {
+    if (_selectedTab == _SquareFeedTab.live) {
+      return SliverPadding(
+        padding: const EdgeInsets.fromLTRB(
+          _liveListHorizontalInset,
+          0,
+          _liveListHorizontalInset,
+          96,
+        ),
+        sliver: _buildLiveSliver(palette),
+      );
+    }
+    if (_selectedTab == _SquareFeedTab.friends) {
+      return SliverFillRemaining(
+        hasScrollBody: false,
+        child: Center(
+          child: _LiveListMessage(palette: palette, message: '暂无好友动态'),
+        ),
+      );
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.only(bottom: 96),
+      sliver: SliverList(
+        delegate: SliverChildListDelegate([
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _contentHorizontalInset,
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 32),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _TopicChip(palette: palette, label: '买买买!!', width: 164),
+                      const SizedBox(width: 10),
+                      _TopicChip(
+                        palette: palette,
+                        label: 'ALD! V587!',
+                        width: 184,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 32),
+                _PostCard(palette: palette),
+              ],
+            ),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -491,10 +547,18 @@ class _SquareComposer extends StatelessWidget {
   );
 }
 
+enum _SquareFeedTab { recommended, friends, live }
+
 class _SquareTabs extends StatelessWidget {
-  const _SquareTabs({required this.palette});
+  const _SquareTabs({
+    required this.palette,
+    required this.selectedTab,
+    required this.onSelected,
+  });
 
   final AcoPalette palette;
+  final _SquareFeedTab selectedTab;
+  final ValueChanged<_SquareFeedTab> onSelected;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -504,15 +568,55 @@ class _SquareTabs extends StatelessWidget {
     child: Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          '会议',
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: AcoTypography.body,
-            fontWeight: FontWeight.w700,
-          ),
+        _SquareTabButton(
+          label: '推荐',
+          selected: selectedTab == _SquareFeedTab.recommended,
+          palette: palette,
+          onPressed: () => onSelected(_SquareFeedTab.recommended),
+        ),
+        const SizedBox(width: 54),
+        _SquareTabButton(
+          label: '好友',
+          selected: selectedTab == _SquareFeedTab.friends,
+          palette: palette,
+          onPressed: () => onSelected(_SquareFeedTab.friends),
+        ),
+        const SizedBox(width: 54),
+        _SquareTabButton(
+          label: '会议',
+          selected: selectedTab == _SquareFeedTab.live,
+          palette: palette,
+          onPressed: () => onSelected(_SquareFeedTab.live),
         ),
       ],
+    ),
+  );
+}
+
+class _SquareTabButton extends StatelessWidget {
+  const _SquareTabButton({
+    required this.label,
+    required this.selected,
+    required this.palette,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final AcoPalette palette;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onPressed,
+    child: Text(
+      label,
+      style: TextStyle(
+        color: selected ? palette.primaryText : palette.mutedText,
+        fontSize: AcoTypography.body,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+      ),
     ),
   );
 }

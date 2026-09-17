@@ -233,6 +233,7 @@ class AcoApp extends StatefulWidget {
 }
 
 class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
+  static const _backgroundGuideConfirmedKey = 'chat.backgroundGuideConfirmed';
   final _navigatorKey = GlobalKey<NavigatorState>();
   late final ValueNotifier<bool> _isDark = ValueNotifier<bool>(
     widget.initialIsDark,
@@ -241,6 +242,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
   late WalletIdentity? _walletIdentity = widget.initialWalletIdentity;
   AccountProfile? _accountProfile;
   Future<AccountProfile?>? _walletLoginFuture;
+  bool _backgroundGuideShown = false;
 
   @override
   void initState() {
@@ -271,6 +273,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       final profile = await profileFuture;
       if (profile != null && mounted) {
         setState(() => _accountProfile = profile);
+        unawaited(_showBackgroundNotificationGuide());
         return;
       }
       if (mounted) _showProfileLoadError('钱包尚未注册，请完成钱包验证后再注册账号。');
@@ -279,6 +282,53 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
     } catch (_) {
       if (mounted) _showProfileLoadError('个人资料加载失败，请检查网络后重试。');
     }
+  }
+
+  Future<void> _showBackgroundNotificationGuide() async {
+    if (!Platform.isAndroid || _backgroundGuideShown) return;
+    final preferences = await SharedPreferences.getInstance();
+    if (preferences.getBool(_backgroundGuideConfirmedKey) ?? false) return;
+    _backgroundGuideShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final dialogContext = _navigatorKey.currentContext;
+      if (dialogContext == null) return;
+      showCupertinoDialog<void>(
+        context: dialogContext,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('开启后台消息提醒'),
+          content: const Padding(
+            padding: EdgeInsets.only(top: 12),
+            child: Text('请在系统设置中允许 ACO 后台运行，并开启自启动。否则手机会暂停应用，无法收到新消息提醒。'),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('稍后'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () {
+                Navigator.of(dialogContext).pop();
+                unawaited(
+                  AndroidChatBackgroundService.openBackgroundSettings(),
+                );
+              },
+              child: const Text('去设置'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () async {
+                await preferences.setBool(_backgroundGuideConfirmedKey, true);
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+              },
+              child: const Text('我已开启'),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   void _showProfileLoadError(String message) {

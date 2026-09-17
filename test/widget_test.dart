@@ -290,11 +290,19 @@ void main() {
     await tester.pumpWidget(const AcoApp());
     await _openSquareTab(tester);
 
+    expect(find.text('推荐'), findsOneWidget);
+    expect(find.text('好友'), findsOneWidget);
     expect(find.text('会议'), findsOneWidget);
-    expect(find.text('推荐'), findsNothing);
-    expect(find.text('好友'), findsNothing);
     expect(find.text('正在直播'), findsNothing);
     expect(find.textContaining('美股凭什么依然能打'), findsNothing);
+
+    await tester.tap(find.text('好友'));
+    await tester.pump();
+    expect(find.text('暂无好友动态'), findsOneWidget);
+
+    await tester.tap(find.text('推荐'));
+    await tester.pump();
+    expect(find.text('买买买!!'), findsOneWidget);
   });
 
   testWidgets('shows an empty live chat state without mock messages', (
