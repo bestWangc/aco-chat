@@ -114,10 +114,8 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             ),
           ),
           _TokenDetailActions(
-            palette: widget.palette,
             onSend: _sendToken,
             onReceive: () => widget.onOpen(AcoScreen.receive),
-            onSwap: () => showAcoAlertNotice(context, '提示', '闪兑功能即将开放。'),
           ),
         ],
       ),
@@ -311,21 +309,13 @@ class _TokenDetailEmptyState extends StatelessWidget {
 }
 
 class _TokenDetailActions extends StatelessWidget {
-  const _TokenDetailActions({
-    required this.palette,
-    required this.onSend,
-    required this.onReceive,
-    required this.onSwap,
-  });
+  const _TokenDetailActions({required this.onSend, required this.onReceive});
 
-  final AcoPalette palette;
   final VoidCallback onSend;
   final VoidCallback onReceive;
-  final VoidCallback onSwap;
 
   @override
   Widget build(BuildContext context) {
-    final surface = palette.dark ? palette.surfaceRaised : palette.background;
     return AcoSafeArea(
       top: false,
       minimum: const EdgeInsets.fromLTRB(16, 10, 16, 14),
@@ -355,19 +345,6 @@ class _TokenDetailActions extends StatelessWidget {
                   foreground: _white,
                   compact: compact,
                   onPressed: onReceive,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: compact ? 5 : 4,
-                child: _TokenActionButton(
-                  label: '闪兑',
-                  icon: CupertinoIcons.arrow_right_arrow_left,
-                  background: surface,
-                  foreground: palette.primaryText,
-                  borderColor: palette.border,
-                  compact: compact,
-                  onPressed: onSwap,
                 ),
               ),
             ],
