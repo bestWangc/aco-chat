@@ -191,13 +191,6 @@ class _TokenBalanceSummary extends StatelessWidget {
                   fontWeight: FontWeight.w400,
                 ),
               ),
-              Text(
-                '≈ \$$balance',
-                style: TextStyle(
-                  color: palette.mutedText,
-                  fontSize: compact ? 15 : 17,
-                ),
-              ),
             ],
           ),
         ],
