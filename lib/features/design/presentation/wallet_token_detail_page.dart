@@ -295,66 +295,81 @@ class _TokenDetailEmptyState extends StatelessWidget {
   final VoidCallback onOpenBrowser;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 330,
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        SizedBox(
-          width: 112,
-          height: 112,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                CupertinoIcons.doc_text,
-                color: _tokenDetailEmptyIcon,
-                size: 92,
-              ),
-              Positioned(
-                right: 0,
-                bottom: 4,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: palette.dark
-                        ? palette.background
-                        : const Color(0xFFF5F6FB),
-                    shape: BoxShape.circle,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (_, constraints) {
+      final compact = constraints.maxWidth < 400;
+      final illustrationSize = compact ? 88.0 : 104.0;
+      final documentSize = compact ? 72.0 : 86.0;
+      final refreshSize = compact ? 28.0 : 32.0;
+      final textSize = compact ? 16.0 : 17.0;
+      return SizedBox(
+        height: compact ? 280 : 310,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: illustrationSize,
+              height: illustrationSize,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Icon(
+                    CupertinoIcons.doc_text,
+                    color: _tokenDetailEmptyIcon,
+                    size: documentSize,
                   ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      CupertinoIcons.refresh,
-                      color: _tokenDetailEmptyIcon,
-                      size: 35,
+                  Positioned(
+                    right: 0,
+                    bottom: 2,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: palette.dark
+                            ? palette.background
+                            : const Color(0xFFF5F6FB),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(3),
+                        child: Icon(
+                          CupertinoIcons.refresh,
+                          color: _tokenDetailEmptyIcon,
+                          size: refreshSize,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '没有找到您的交易？',
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: textSize,
+                  ),
+                ),
+                CupertinoButton(
+                  padding: const EdgeInsets.only(left: 5),
+                  minimumSize: const Size(44, 44),
+                  onPressed: onOpenBrowser,
+                  child: Text(
+                    '查看浏览器',
+                    style: TextStyle(
+                      color: _tokenDetailBlue,
+                      fontSize: textSize,
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 22),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              '没有找到您的交易？',
-              style: TextStyle(color: palette.mutedText, fontSize: 18),
-            ),
-            CupertinoButton(
-              padding: const EdgeInsets.only(left: 5),
-              minimumSize: Size.zero,
-              onPressed: onOpenBrowser,
-              child: const Text(
-                '查看浏览器',
-                style: TextStyle(color: _tokenDetailBlue, fontSize: 18),
-              ),
+              ],
             ),
           ],
         ),
-      ],
-    ),
+      );
+    },
   );
 }
 
