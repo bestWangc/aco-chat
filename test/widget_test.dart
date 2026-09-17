@@ -781,6 +781,7 @@ void main() {
     expect(find.bySemanticsLabel('代币信息'), findsNothing);
     expect(tester.widget<Text>(find.text('全部')).style?.fontSize, 18);
     expect(find.text('市场价格'), findsNothing);
+    expect(find.bySemanticsLabel('筛选交易记录'), findsNothing);
     expect(find.text('没有找到您的交易？'), findsOneWidget);
     expect(find.bySemanticsLabel('转账'), findsOneWidget);
     expect(find.bySemanticsLabel('收款'), findsOneWidget);

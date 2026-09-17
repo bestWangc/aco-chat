@@ -101,25 +101,6 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
                         ),
                         if (index < 2) const SizedBox(width: 28),
                       ],
-                      const Spacer(),
-                      Semantics(
-                        button: true,
-                        label: '筛选交易记录',
-                        child: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(40, 40),
-                          onPressed: () => showAcoAlertNotice(
-                            context,
-                            '筛选交易记录',
-                            '交易筛选功能即将开放。',
-                          ),
-                          child: Icon(
-                            CupertinoIcons.line_horizontal_3_decrease,
-                            color: widget.palette.primaryText,
-                            size: 24,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 3),
