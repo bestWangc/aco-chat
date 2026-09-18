@@ -59,4 +59,37 @@ void main() {
 
     expect(OpenIMChatRepository.messageUnreadNotifier.value, isFalse);
   });
+
+  test('initial sync does not create a global badge', () {
+    expect(
+      OpenIMChatRepository.shouldMarkIncomingMessageUnread(
+        isVisible: false,
+        conversationsReady: false,
+        shouldNotify: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('visible messages do not create a global badge', () {
+    expect(
+      OpenIMChatRepository.shouldMarkIncomingMessageUnread(
+        isVisible: true,
+        conversationsReady: true,
+        shouldNotify: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('new background messages create a global badge', () {
+    expect(
+      OpenIMChatRepository.shouldMarkIncomingMessageUnread(
+        isVisible: false,
+        conversationsReady: true,
+        shouldNotify: true,
+      ),
+      isTrue,
+    );
+  });
 }

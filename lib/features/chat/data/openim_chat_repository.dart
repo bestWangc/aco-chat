@@ -150,6 +150,14 @@ final class OpenIMChatRepository implements ChatRepository {
     _visibleIncomingMessage = message;
   }
 
+  /// Initial synchronization is reconciled from the conversation list, rather
+  /// than briefly showing a badge for every SDK callback.
+  static bool shouldMarkIncomingMessageUnread({
+    required bool isVisible,
+    required bool conversationsReady,
+    required bool shouldNotify,
+  }) => !isVisible && conversationsReady && shouldNotify;
+
   /// Suppress the local echo generated when the user deliberately exits a
   /// group. The same SDK callback represents removal by an administrator.
   static void beginLeavingGroup(String groupID) {
@@ -270,6 +278,8 @@ final class OpenIMChatRepository implements ChatRepository {
     // Native SDK may finish initSDK before its database worker is ready.
     // Waiting briefly avoids the transient 10004 resource-initialization error
     // seen on iOS/Android during cold start.
+    conversationReady.value = false;
+    messageUnreadNotifier.value = false;
     await Future<void>.delayed(const Duration(milliseconds: 300));
     try {
       await _sdk.login(userID: userId, token: userSig);
@@ -420,7 +430,11 @@ final class OpenIMChatRepository implements ChatRepository {
     messageNotifier.value = message;
     final isVisible = identical(_visibleIncomingMessage, message);
     _visibleIncomingMessage = null;
-    if (!isVisible && shouldNotifyForMessage(message)) {
+    if (shouldMarkIncomingMessageUnread(
+      isVisible: isVisible,
+      conversationsReady: conversationReady.value,
+      shouldNotify: shouldNotifyForMessage(message),
+    )) {
       _unreadStatusRevision++;
       messageUnreadNotifier.value = true;
       unawaited(

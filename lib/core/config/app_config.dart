@@ -1,7 +1,7 @@
 class AppConfig {
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
-    defaultValue: '1.0.44',
+    defaultValue: '1.0.45',
   );
 
   static const cloudflareApiBaseUrl = String.fromEnvironment(
