@@ -1244,7 +1244,14 @@ class _MemberRoleBadge extends StatelessWidget {
   );
 }
 
-enum _LiveMemberAction { toggleMute, removeSpeaker, transferHost, kick }
+enum _LiveMemberAction {
+  toggleMute,
+  removeSpeaker,
+  transferHost,
+  setCohost,
+  removeCohost,
+  kick,
+}
 
 bool _checkInIsActive(LiveCheckIn? checkIn) =>
     checkIn != null && checkIn.deadline.isAfter(DateTime.now());
@@ -1369,6 +1376,8 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     final badges = <Widget>[];
     if (member.role == 'host') {
       badges.add(const _MemberRoleBadge(label: '主持人', isHost: true));
+    } else if (member.role == 'cohost') {
+      badges.add(const _MemberRoleBadge(label: '联席主持人', isHost: true));
     }
     if (member.userId == widget.currentUserId) {
       badges.add(const _MemberRoleBadge(label: '我'));
@@ -1548,7 +1557,10 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
   );
 
   Widget _buildMemberAudioIcon(LiveParticipant member) {
-    final isSpeaker = member.role == 'host' || member.role == 'speaker';
+    final isSpeaker =
+        member.role == 'host' ||
+        member.role == 'cohost' ||
+        member.role == 'speaker';
     if (member.role == 'listener') {
       return Image.asset(
         'assets/icons/live_muted_red.png',

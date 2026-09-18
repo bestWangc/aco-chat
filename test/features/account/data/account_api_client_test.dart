@@ -474,6 +474,27 @@ void main() {
       isTrue,
     );
   });
+
+  test('updates a live cohost with the active access token', () async {
+    final paths = <String>[];
+    final client = AccountApiClient(
+      baseUri: Uri.parse('https://api.aco.test/api/v1'),
+      httpClient: MockClient((request) async {
+        paths.add(request.url.path);
+        expect(request.method, 'POST');
+        expect(request.headers['authorization'], 'Bearer signed-token');
+        return http.Response('', 204);
+      }),
+    );
+
+    await client.setLiveCohost(liveId: 7, userId: 18, token: 'signed-token');
+    await client.removeLiveCohost(liveId: 7, userId: 18, token: 'signed-token');
+
+    expect(paths, [
+      '/api/v1/lives/7/cohosts/18/add',
+      '/api/v1/lives/7/cohosts/18/remove',
+    ]);
+  });
 }
 
 http.Response response(Map<String, dynamic> body, {int statusCode = 200}) =>

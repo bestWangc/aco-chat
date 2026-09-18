@@ -1052,6 +1052,18 @@ class AccountApiClient {
     required String token,
   }) => _postWithoutBody('lives/$liveId/host/$userId/transfer', token);
 
+  Future<void> setLiveCohost({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/cohosts/$userId/add', token);
+
+  Future<void> removeLiveCohost({
+    required int liveId,
+    required int userId,
+    required String token,
+  }) => _postWithoutBody('lives/$liveId/cohosts/$userId/remove', token);
+
   Future<void> endLive({required int liveId, required String token}) =>
       _postWithoutBody('lives/$liveId/end', token);
 

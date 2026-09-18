@@ -478,6 +478,20 @@ class AccountSession {
         token: await _requireToken(),
       );
 
+  Future<void> setLiveCohost(int liveId, int userId) async =>
+      _apiClient.setLiveCohost(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
+  Future<void> removeLiveCohost(int liveId, int userId) async =>
+      _apiClient.removeLiveCohost(
+        liveId: liveId,
+        userId: userId,
+        token: await _requireToken(),
+      );
+
   Future<void> endLive(int liveId) async =>
       _apiClient.endLive(liveId: liveId, token: await _requireToken());
 

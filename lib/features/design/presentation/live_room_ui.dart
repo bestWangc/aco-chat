@@ -45,7 +45,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     final live = widget.live;
     final room = _room;
     final serverViewerRole = room?.viewerRole;
-    final isHost = serverViewerRole == 'host';
+    final isHost = _isLiveModeratorRole(serverViewerRole);
     // The room snapshot is only an authorization update. A listener becomes
     // a connected speaker in the UI only after the fresh LiveKit token has
     // connected and its local track has been initialized successfully.

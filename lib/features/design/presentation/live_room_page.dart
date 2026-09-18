@@ -17,6 +17,9 @@ class _LiveStreamPage extends StatelessWidget {
 
 enum LiveRoomExitReason { kicked }
 
+/// 联席主持人拥有与主持人相同的会议管理权限。
+bool _isLiveModeratorRole(String? role) => role == 'host' || role == 'cohost';
+
 int _parseLiveMessageIdentity(Object? payloadIdentity, String? metadata) {
   if (payloadIdentity is num) return payloadIdentity.toInt();
   final parsedPayloadIdentity = int.tryParse('$payloadIdentity');
@@ -256,7 +259,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   void _ensureHostHeartbeat(LiveRoom room) {
-    if (room.viewerRole != 'host') {
+    if (!_isLiveModeratorRole(room.viewerRole)) {
       _hostHeartbeatTimer?.cancel();
       _hostHeartbeatTimer = null;
       return;
@@ -292,7 +295,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (state != AppLifecycleState.resumed) return;
 
     final room = _room;
-    if (room?.viewerRole != 'host') return;
+    if (!_isLiveModeratorRole(room?.viewerRole)) return;
     _ensureHostHeartbeat(room!);
     unawaited(_sendHostHeartbeat());
     _scheduleRoomSnapshotCalibration();
@@ -435,10 +438,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     var viewerRole = room.viewerRole;
     LiveParticipant? viewerParticipant;
     if (viewerIsSpeaker) {
-      viewerRole = 'speaker';
       viewerParticipant = speakers.firstWhere(
         (participant) => participant.userId == viewerId,
       );
+      viewerRole = viewerParticipant.role;
     } else if (viewerIsListener) {
       viewerRole = 'listener';
       viewerParticipant = listeners.firstWhere(
@@ -819,7 +822,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       // Keep the user's latest local choice until the server echoes it back.
       _muted = localMuteOverride ?? displayedRoom.viewerMuted || keepLocalMute;
       if (displayedRoom.viewerRole != 'listener') _handRaised = false;
-      if (displayedRoom.chatMuted && displayedRoom.viewerRole != 'host') {
+      if (displayedRoom.chatMuted &&
+          !_isLiveModeratorRole(displayedRoom.viewerRole)) {
         _emojiPickerVisible = false;
       }
     });
@@ -981,20 +985,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       builder: (_) => _LiveRoomMembersSheet(
         palette: widget.palette,
         initialTotal: room.participantCount,
-        isModerator: room.viewerRole == 'host',
+        isModerator: _isLiveModeratorRole(room.viewerRole),
         currentUserId: room.viewerUserId,
         loadPage: (page, keyword) =>
             _accountSession.liveMembers(live.id, page: page, keyword: keyword),
-        onMemberTap: room.viewerRole == 'host' ? _showMemberActions : null,
+        onMemberTap: _isLiveModeratorRole(room.viewerRole)
+            ? _showMemberActions
+            : null,
         audioMuted: room.audioMuted,
-        onToggleAudioMute: room.viewerRole == 'host'
+        onToggleAudioMute: _isLiveModeratorRole(room.viewerRole)
             ? (muted) async {
                 await _setAudioMute(muted);
                 await _loadRoom(silent: true);
               }
             : null,
         chatMuted: room.chatMuted,
-        onToggleChatMute: room.viewerRole == 'host'
+        onToggleChatMute: _isLiveModeratorRole(room.viewerRole)
             ? (muted) async {
                 await _setChatMute(muted);
                 await _loadRoom(silent: true);
@@ -1007,6 +1013,13 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _showMemberActions(LiveParticipant member) async {
     final live = widget.live;
     if (live == null || member.role == 'host') return;
+    final isHost = _room?.viewerRole == 'host';
+    final hasCohost =
+        _room?.speakers.any((participant) => participant.role == 'cohost') ==
+            true ||
+        _room?.listeners.any((participant) => participant.role == 'cohost') ==
+            true;
+    final canSetCohost = isHost && (member.role == 'cohost' || !hasCohost);
     final action = await showCupertinoModalPopup<_LiveMemberAction>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
@@ -1055,6 +1068,25 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               ),
             ),
           ],
+          if (isHost && member.role == 'cohost')
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.removeCohost),
+              child: const Text(
+                '取消联席主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            )
+          else if (canSetCohost)
+            CupertinoActionSheetAction(
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(_LiveMemberAction.setCohost),
+              child: const Text(
+                '设为联席主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
           CupertinoActionSheetAction(
             isDestructiveAction: true,
             onPressed: () =>
@@ -1091,6 +1123,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           await _accountSession.removeLiveSpeaker(live.id, member.userId);
         case _LiveMemberAction.transferHost:
           await _transferHost(member);
+        case _LiveMemberAction.setCohost:
+          await _accountSession.setLiveCohost(live.id, member.userId);
+        case _LiveMemberAction.removeCohost:
+          await _accountSession.removeLiveCohost(live.id, member.userId);
         case _LiveMemberAction.kick:
           await _accountSession.kickLiveMember(live.id, member.userId);
       }
@@ -1284,7 +1320,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _showRaisedHandRequests() async {
     final room = _room;
     final live = widget.live;
-    if (room?.viewerRole != 'host' || live == null) return;
+    if (!_isLiveModeratorRole(room?.viewerRole) || live == null) return;
     try {
       final users = await _accountSession.raisedLiveHands(live.id);
       if (!mounted) return;
@@ -1384,7 +1420,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _handleBack() async {
     if (_room?.live.status == 'live' &&
-        _room?.viewerRole == 'host' &&
+        _isLiveModeratorRole(_room?.viewerRole) &&
         !_hostTransferred) {
       await _confirmEndLive();
       return;
@@ -1534,7 +1570,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     final text = _messageController.text.trim();
     final isViewerChatMuted =
-        _room?.chatMuted == true && _room?.viewerRole != 'host';
+        _room?.chatMuted == true && !_isLiveModeratorRole(_room?.viewerRole);
     if (live == null ||
         text.isEmpty ||
         _sending ||
