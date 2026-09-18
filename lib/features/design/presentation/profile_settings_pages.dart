@@ -1,5 +1,7 @@
 part of 'aco_design_shell.dart';
 
+const _profileIconSize = 24.0;
+
 class _ProfileHeaderButton extends StatelessWidget {
   const _ProfileHeaderButton({
     required this.palette,
@@ -20,7 +22,7 @@ class _ProfileHeaderButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const buttonSize = 44.0;
-    const assetIconSize = 20.0;
+    const assetIconSize = _profileIconSize;
     final visualSize = filled ? 40.0 : buttonSize;
     final child = iconAsset == null
         ? Icon(icon, color: palette.primaryText, size: filled ? 24 : 28)
@@ -60,16 +62,29 @@ class _ProfileHeaderButton extends StatelessWidget {
   }
 }
 
-// ignore: unused_element
-class _ProfileOverviewSection extends StatelessWidget {
+class _ProfileOverviewSection extends StatefulWidget {
   const _ProfileOverviewSection({required this.palette});
 
   final AcoPalette palette;
 
   @override
+  State<_ProfileOverviewSection> createState() =>
+      _ProfileOverviewSectionState();
+}
+
+class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
+  late final Future<ProfileStats> _statsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _statsFuture = AccountSession(AccountApiClient()).profileStats();
+  }
+
+  @override
   Widget build(BuildContext context) => AcoSurface(
-    palette: palette,
-    backgroundColor: palette.dark ? const Color(0xFF1D1D1D) : null,
+    palette: widget.palette,
+    backgroundColor: widget.palette.dark ? const Color(0xFF1D1D1D) : null,
     minHeight: 194,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
@@ -79,45 +94,56 @@ class _ProfileOverviewSection extends StatelessWidget {
         Text(
           '个人主页',
           style: TextStyle(
-            color: palette.primaryText,
-            fontSize: AcoTypography.title,
+            color: widget.palette.primaryText,
+            fontSize: AcoTypography.body,
             fontWeight: FontWeight.w700,
           ),
         ),
         const SizedBox(height: 26),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            _ProfileMetric(
-              palette: palette,
-              iconAsset: 'assets/icons/profile/like.svg',
-              value: '3.2k',
-              label: '我的点赞',
-            ),
-            _ProfileMetric(
-              palette: palette,
-              iconAsset: 'assets/icons/profile/followers.svg',
-              value: '128',
-              label: '粉丝',
-            ),
-            _ProfileMetric(
-              palette: palette,
-              iconAsset: 'assets/icons/profile/received-likes.svg',
-              value: '15m',
-              label: '获赞',
-            ),
-            _ProfileMetric(
-              palette: palette,
-              iconAsset: 'assets/icons/profile/subscriptions.svg',
-              value: '78',
-              label: '我的订阅',
-            ),
-          ],
+        FutureBuilder<ProfileStats>(
+          future: _statsFuture,
+          builder: (context, snapshot) {
+            final stats = snapshot.data;
+            return Row(
+              children: [
+                _profileGridCell(
+                  _ProfileMetric(
+                    palette: widget.palette,
+                    iconAsset: 'assets/icons/profile/my_likes.png',
+                    value: _profileStatValue(stats?.likedPosts),
+                    label: '我的点赞',
+                  ),
+                ),
+                _profileGridCell(
+                  _ProfileMetric(
+                    palette: widget.palette,
+                    iconAsset: 'assets/icons/profile/followers.png',
+                    value: _profileStatValue(stats?.followerCount),
+                    label: '粉丝',
+                  ),
+                ),
+                _profileGridCell(
+                  _ProfileMetric(
+                    palette: widget.palette,
+                    iconAsset: 'assets/icons/profile/received_likes.png',
+                    value: _profileStatValue(stats?.receivedLikes),
+                    label: '获赞',
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ],
     ),
   );
 }
+
+String _profileStatValue(int? value) => value?.toString() ?? '--';
+
+Widget _profileGridCell(Widget child) => Expanded(
+  child: Align(alignment: Alignment.centerLeft, child: child),
+);
 
 class _ProfileMetric extends StatelessWidget {
   const _ProfileMetric({
@@ -134,16 +160,16 @@ class _ProfileMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: 58,
+    width: 68,
     child: Column(
       children: [
-        SvgPicture.asset(iconAsset, width: 30, height: 30, fit: BoxFit.contain),
+        _ProfileIcon(asset: iconAsset),
         const SizedBox(height: 12),
         Text(
           value,
           style: TextStyle(
             color: palette.primaryText,
-            fontSize: AcoTypography.bodyEmphasis,
+            fontSize: AcoTypography.bodySmall,
           ),
         ),
         const SizedBox(height: 2),
@@ -192,15 +218,13 @@ class _ProfileSection extends StatelessWidget {
         ),
         const SizedBox(height: 26),
         Row(
-          mainAxisAlignment: actions.length <= 2
-              ? MainAxisAlignment.start
-              : MainAxisAlignment.spaceBetween,
           children: [
-            for (final action in actions) ...[
-              action,
-              if (actions.length == 2 && action != actions.last)
-                const SizedBox(width: 64),
-            ],
+            for (var index = 0; index < 3; index++)
+              _profileGridCell(
+                index < actions.length
+                    ? actions[index]
+                    : const SizedBox.shrink(),
+              ),
           ],
         ),
       ],
@@ -229,12 +253,7 @@ class _ProfileAction extends StatelessWidget {
       width: 68,
       child: Column(
         children: [
-          SvgPicture.asset(
-            iconAsset,
-            width: 24,
-            height: 24,
-            fit: BoxFit.contain,
-          ),
+          _ProfileIcon(asset: iconAsset),
           const SizedBox(height: 12),
           Text(
             label,
@@ -249,6 +268,17 @@ class _ProfileAction extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _ProfileIcon extends StatelessWidget {
+  const _ProfileIcon({required this.asset, this.size = _profileIconSize});
+
+  final String asset;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) =>
+      Image.asset(asset, width: size, height: size, fit: BoxFit.contain);
 }
 
 class _ThemeSettingsPage extends StatelessWidget {

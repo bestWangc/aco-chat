@@ -52,6 +52,24 @@ class AccountProfile {
   };
 }
 
+class ProfileStats {
+  const ProfileStats({
+    required this.likedPosts,
+    required this.followerCount,
+    required this.receivedLikes,
+  });
+
+  final int likedPosts;
+  final int followerCount;
+  final int receivedLikes;
+
+  factory ProfileStats.fromJson(Map<String, dynamic> json) => ProfileStats(
+    likedPosts: (json['liked_posts'] as num).toInt(),
+    followerCount: (json['follower_count'] as num).toInt(),
+    receivedLikes: (json['received_likes'] as num).toInt(),
+  );
+}
+
 class FriendContact {
   const FriendContact({
     required this.accountId,

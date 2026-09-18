@@ -162,6 +162,9 @@ class AccountSession {
     return AccountProfile.fromJson(jsonDecode(value) as Map<String, dynamic>);
   }
 
+  Future<ProfileStats> profileStats() async =>
+      _apiClient.profileStats(token: await _requireToken());
+
   Future<AccountProfile> profileByAccountId(String accountId) async {
     final token = await _requireToken();
     return _apiClient.profileByAccountId(accountId: accountId, token: token);

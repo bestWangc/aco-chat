@@ -56,7 +56,7 @@ class _ProfilePage extends StatelessWidget {
   final VoidCallback? onBack;
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(24, 4, 24, 28),
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
     children: [
       AcoPageHeader(
         palette: palette,
@@ -164,19 +164,21 @@ class _ProfilePage extends StatelessWidget {
         child: _profileBadges(identity, staffIdentity),
       ),
       const SizedBox(height: 42),
+      _ProfileOverviewSection(palette: palette),
+      const SizedBox(height: 28),
       _ProfileSection(
         palette: palette,
         title: '设置',
         actions: [
           _ProfileAction(
             palette: palette,
-            iconAsset: 'assets/icons/profile/theme.svg',
+            iconAsset: 'assets/icons/profile/theme_mode.png',
             label: '主题模式',
             onPressed: () => onOpen(AcoScreen.profileTheme),
           ),
           _ProfileAction(
             palette: palette,
-            iconAsset: 'assets/icons/profile/language.svg',
+            iconAsset: 'assets/icons/profile/language_mode.png',
             label: '语言',
             onPressed: () => onOpen(AcoScreen.profileLanguage),
           ),
@@ -184,7 +186,8 @@ class _ProfilePage extends StatelessWidget {
       ),
       const SizedBox(height: 28),
       Center(
-        child: Column(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             GestureDetector(
               onTap: hasAppUpdate ? onOpenAppUpdate : null,
@@ -212,7 +215,7 @@ class _ProfilePage extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(width: 16),
             CupertinoButton(
               padding: EdgeInsets.zero,
               onPressed: () => _showConnectionDiagnostics(context, palette),

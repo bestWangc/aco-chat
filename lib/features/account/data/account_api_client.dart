@@ -336,6 +336,15 @@ class AccountApiClient {
     return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
   }
 
+  Future<ProfileStats> profileStats({required String token}) async {
+    final response = await _httpClient.get(
+      _uri('profile/stats'),
+      headers: _authorizedHeaders(token),
+    );
+    final body = _body(response);
+    return ProfileStats.fromJson(body['stats'] as Map<String, dynamic>);
+  }
+
   Future<List<FriendContact>> listFriends({required String token}) async {
     final response = await _httpClient.get(
       _uri('friends'),
