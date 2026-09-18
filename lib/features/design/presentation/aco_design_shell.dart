@@ -1,6 +1,7 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -32,6 +33,7 @@ import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:aco_chat/services/wallet_transaction_service.dart';
 import 'package:aco_chat/services/dapp_directory_service.dart';
+import 'package:aco_chat/services/solana_signing_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -42,6 +44,7 @@ import 'package:flutter/material.dart'
         ListTile,
         Material,
         MaterialType,
+        Colors,
         RefreshIndicator,
         SelectableText,
         Theme,
@@ -66,6 +69,8 @@ import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart' as video_thumbnail;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 part 'aco_design_models.dart';
 part 'live_room_widgets.dart';
@@ -79,6 +84,7 @@ part 'mining_page.dart';
 part 'profile_settings_pages.dart';
 part 'wallet_common_widgets.dart';
 part 'explore_pages.dart';
+part 'dapp_browser.dart';
 part 'explore_chat_settings.dart';
 part 'explore_message_search.dart';
 part 'explore_chat_composer.dart';

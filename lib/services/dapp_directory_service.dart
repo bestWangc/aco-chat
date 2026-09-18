@@ -12,6 +12,7 @@ class DappEntry {
     this.description,
     required this.url,
     required this.iconUrl,
+    this.networks = const [],
   });
 
   final String id;
@@ -21,6 +22,7 @@ class DappEntry {
   final String? description;
   final String url;
   final String iconUrl;
+  final List<String> networks;
 
   factory DappEntry.fromJson(Map<String, dynamic> json) => DappEntry(
     id: json['id'] as String? ?? '',
@@ -30,7 +32,16 @@ class DappEntry {
     description: json['description'] as String?,
     url: json['url'] as String? ?? '',
     iconUrl: json['icon_url'] as String? ?? '',
+    networks: _networksFromJson(json['networks']),
   );
+
+  static List<String> _networksFromJson(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<String>()
+        .map((network) => network.toLowerCase())
+        .toList(growable: false);
+  }
 }
 
 class DappDirectoryService {

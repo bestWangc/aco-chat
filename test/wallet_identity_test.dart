@@ -20,6 +20,15 @@ void main() {
     );
   });
 
+  test('creates wallet-compatible personal-message signatures', () {
+    final signature = WalletIdentity.signPersonalMessage(
+      mnemonic: mnemonic,
+      message: 'Aco DApp'.codeUnits,
+    );
+
+    expect(signature, matches(RegExp(r'^0x[0-9a-f]{130}$')));
+  });
+
   test('reads the previous Ethereum-only identity format', () {
     expect(WalletIdentity.fromJson({'evm': '0xabc'}).address, '0xabc');
   });

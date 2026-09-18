@@ -235,7 +235,9 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.browserDiscover => _BrowserDiscoverPage(
         palette: palette,
         onOpen: onOpen,
-        chain: _supportedWalletChains[walletChainIndex].network.name,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+        walletIdentity: walletIdentity,
+        onChainSelected: onWalletChainSelected ?? (_) {},
       ),
       AcoScreen.marketOverview => _MarketOverviewPage(palette: palette),
       AcoScreen.squareFeed => _SquareFeedPage(

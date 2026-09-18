@@ -46,6 +46,30 @@ class WalletIdentity {
     );
   }
 
+  /// Signs an EIP-191 personal message and returns a wallet-compatible hex
+  /// signature. The mnemonic is supplied by the native approval flow only.
+  static String signPersonalMessage({
+    required String mnemonic,
+    required List<int> message,
+  }) {
+    final signature = ETHSigner.fromKeyBytes(
+      _ethereumAccountFromMnemonic(mnemonic).privateKey.raw,
+    ).signProsonalMessage(message);
+    return '0x${signature.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  /// Signs an already prepared EVM digest/message without the EIP-191 prefix.
+  /// This is only used after the user has approved the exact request natively.
+  static String signRawMessage({
+    required String mnemonic,
+    required List<int> message,
+  }) {
+    final signature = ETHSigner.fromKeyBytes(
+      _ethereumAccountFromMnemonic(mnemonic).privateKey.raw,
+    ).sign(message).toHex(false);
+    return '0x$signature';
+  }
+
   static Bip44 _ethereumAccountFromMnemonic(String mnemonic) => Bip44.fromSeed(
     Bip39Service.mnemonicToSeed(mnemonic),
     Bip44Coins.ethereum,

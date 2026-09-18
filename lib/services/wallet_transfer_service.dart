@@ -23,6 +23,8 @@ class WalletTransferService {
     required WalletNetwork network,
     required String accessToken,
     required WalletRpcClient rpc,
+    List<int> data = const [],
+    int gasLimit = 21000,
   }) async {
     final endpoints = await rpc.loadEndpoints(
       network: network.name,
@@ -53,6 +55,8 @@ class WalletTransferService {
       chainId: chainId,
       nonce: nonce,
       gasPriceWei: gasPrice,
+      data: data,
+      gasLimit: gasLimit,
       broadcast: (raw) async =>
           (await call('eth_sendRawTransaction', [raw]))['result'] as String,
     );
@@ -67,6 +71,7 @@ class WalletTransferService {
     int nonce = 0,
     int gasPriceWei = 1,
     int gasLimit = 21000,
+    List<int> data = const [],
     Future<String> Function(String rawTransaction)? broadcast,
   }) async {
     final value = int.parse(decimalToBaseUnits(amount));
@@ -77,7 +82,7 @@ class WalletTransferService {
       _intBytes(gasLimit),
       _addressBytes(to),
       _intBytes(value),
-      <int>[],
+      data,
       _intBytes(chainId),
       <int>[],
       <int>[],
@@ -91,7 +96,7 @@ class WalletTransferService {
       _intBytes(gasLimit),
       _addressBytes(to),
       _intBytes(value),
-      <int>[],
+      data,
       _intBytes(signature.v + 8 + chainId * 2),
       _bigIntBytes(signature.r),
       _bigIntBytes(signature.s),
