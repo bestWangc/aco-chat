@@ -75,6 +75,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _iosAudioUnitRecoveryDelay = Duration(milliseconds: 1200);
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
+  static const _chatImageType = 'image';
+  static const _maxChatImageBytes = 10 * 1024 * 1024;
+  static const _maxChatImageUrlLength = 400;
+  static const _maxChatImageNameLength = 120;
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
   static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
     echoCancellation: true,
@@ -98,6 +102,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _handRaised = false;
   bool _emojiPickerVisible = false;
   bool _sending = false;
+  bool _sendingImage = false;
   bool _transferringHost = false;
   bool _hostTransferred = false;
   bool _roomLoading = false;
@@ -1544,8 +1549,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     try {
       final payload = jsonDecode(utf8.decode(event.data));
       if (payload is! Map<String, dynamic>) return;
-      final text = payload['text'];
-      if (text is! String || text.trim().isEmpty || text.length > 300) return;
       final identity = _parseLiveMessageIdentity(
         payload['identity'],
         event.participant?.metadata,
@@ -1555,8 +1558,31 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         event.participant?.metadata,
       );
       final nickname = event.participant?.name.trim();
+      final senderName = nickname == null || nickname.isEmpty ? '成员' : nickname;
+      if (payload['type'] == _chatImageType) {
+        final imageUrl = payload['url'];
+        final imageName = payload['name'];
+        if (imageUrl is! String ||
+            imageUrl.trim().isEmpty ||
+            imageUrl.length > _maxChatImageUrlLength ||
+            (imageName is String &&
+                imageName.length > _maxChatImageNameLength)) {
+          return;
+        }
+        _appendChatMessage(
+          nickname: senderName,
+          text: '',
+          imageUrl: imageUrl,
+          imageName: imageName is String ? imageName : null,
+          identity: identity,
+          staffIdentity: staffIdentity,
+        );
+        return;
+      }
+      final text = payload['text'];
+      if (text is! String || text.trim().isEmpty || text.length > 300) return;
       _appendChatMessage(
-        nickname: nickname == null || nickname.isEmpty ? '成员' : nickname,
+        nickname: senderName,
         text: text,
         identity: identity,
         staffIdentity: staffIdentity,
@@ -1623,6 +1649,71 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
+  Future<void> _pickAndSendImage() async {
+    final live = widget.live;
+    final isViewerChatMuted =
+        _room?.chatMuted == true && !_isLiveModeratorRole(_room?.viewerRole);
+    if (live == null ||
+        _sendingImage ||
+        _networkReconnecting ||
+        isViewerChatMuted) {
+      return;
+    }
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.length > _maxChatImageBytes) {
+        if (mounted) _showNotice(context, '图片过大', '请选择 10 MB 以内的图片。');
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _sendingImage = true);
+      final uploaded = await _accountSession.uploadChatFile(
+        bytes: bytes,
+        filename: image.name,
+      );
+      final payload = utf8.encode(
+        jsonEncode({
+          'type': _chatImageType,
+          'url': uploaded.url,
+          'name': uploaded.name,
+          'identity': _liveKitIdentity,
+          'staff_identity': _liveKitStaffIdentity,
+        }),
+      );
+      if (!_checkMessageSendLimits(payload.length)) return;
+      final room = _liveKitRoom;
+      if (room == null) throw StateError('LiveKit room is not connected');
+      final publishFuture = room.localParticipant?.publishData(
+        payload,
+        reliable: true,
+        topic: 'chat',
+      );
+      _appendChatMessage(
+        nickname: _localChatNickname,
+        text: '',
+        imageUrl: uploaded.url,
+        imageName: uploaded.name,
+        identity: _liveKitIdentity,
+        staffIdentity: _liveKitStaffIdentity,
+      );
+      if (mounted) setState(() => _scrollToLatestSignal++);
+      await publishFuture;
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '图片发送失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '图片发送失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _sendingImage = false);
+    }
+  }
+
   bool _checkMessageSendLimits(int payloadBytes) {
     switch (_chatRateLimiter.check(payloadBytes)) {
       case LiveChatSendLimit.allowed:
@@ -1662,6 +1753,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _appendChatMessage({
     required String nickname,
     required String text,
+    String? imageUrl,
+    String? imageName,
     int identity = 0,
     int staffIdentity = 0,
   }) {
@@ -1674,6 +1767,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         createdAt: now,
         identity: identity,
         staffIdentity: staffIdentity,
+        imageUrl: imageUrl,
+        imageName: imageName,
       ),
     );
   }

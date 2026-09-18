@@ -131,6 +131,8 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
           palette: widget.palette,
           name: message.nickname,
           text: message.text,
+          imageUrl: message.imageUrl,
+          imageName: message.imageName,
           identity: message.identity,
           staffIdentity: message.staffIdentity,
         );
@@ -254,6 +256,8 @@ class _RoomComposer extends StatelessWidget {
     required this.controller,
     required this.chatMuted,
     required this.onEmojiPressed,
+    required this.onImagePressed,
+    required this.sendingImage,
     required this.onSubmitted,
   });
 
@@ -261,6 +265,8 @@ class _RoomComposer extends StatelessWidget {
   final TextEditingController controller;
   final bool chatMuted;
   final VoidCallback onEmojiPressed;
+  final VoidCallback onImagePressed;
+  final bool sendingImage;
   final VoidCallback onSubmitted;
 
   @override
@@ -277,6 +283,17 @@ class _RoomComposer extends StatelessWidget {
         ),
         child: Row(
           children: [
+            SizedBox(
+              width: 42,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: chatMuted || sendingImage ? null : onImagePressed,
+                child: sendingImage
+                    ? CupertinoActivityIndicator(color: textColor)
+                    : Icon(CupertinoIcons.photo, color: textColor, size: 20),
+              ),
+            ),
             SizedBox(
               width: 42,
               child: CupertinoButton(
@@ -339,6 +356,8 @@ class _RoomBottomBar extends StatelessWidget {
     required this.onHand,
     required this.controller,
     required this.onEmojiPressed,
+    required this.onImagePressed,
+    required this.sendingImage,
     required this.onSubmitted,
   });
 
@@ -353,6 +372,8 @@ class _RoomBottomBar extends StatelessWidget {
   final VoidCallback? onHand;
   final TextEditingController controller;
   final VoidCallback onEmojiPressed;
+  final VoidCallback onImagePressed;
+  final bool sendingImage;
   final VoidCallback onSubmitted;
 
   // Supplied livestream microphone glyph for the active speaking state.
@@ -402,6 +423,8 @@ class _RoomBottomBar extends StatelessWidget {
                   controller: controller,
                   chatMuted: chatMuted,
                   onEmojiPressed: onEmojiPressed,
+                  onImagePressed: onImagePressed,
+                  sendingImage: sendingImage,
                   onSubmitted: onSubmitted,
                 ),
               ),
@@ -549,6 +572,8 @@ class _RoomMessage extends StatelessWidget {
     required this.palette,
     required this.name,
     required this.text,
+    this.imageUrl,
+    this.imageName,
     required this.identity,
     required this.staffIdentity,
   });
@@ -556,6 +581,8 @@ class _RoomMessage extends StatelessWidget {
   final AcoPalette palette;
   final String name;
   final String text;
+  final String? imageUrl;
+  final String? imageName;
   final int identity;
   final int staffIdentity;
 
@@ -589,6 +616,7 @@ class _RoomMessage extends StatelessWidget {
       320.0,
       MediaQuery.sizeOf(context).width - 32,
     );
+    final hasImage = imageUrl?.trim().isNotEmpty == true;
     const textHeightBehavior = TextHeightBehavior(
       applyHeightToFirstAscent: false,
       applyHeightToLastDescent: false,
@@ -597,7 +625,7 @@ class _RoomMessage extends StatelessWidget {
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        padding: EdgeInsets.fromLTRB(14, 6, 14, hasImage ? 10 : 6),
         decoration: decoration,
         child: isSystemMessage
             ? Text(
@@ -606,44 +634,104 @@ class _RoomMessage extends StatelessWidget {
                 textHeightBehavior: textHeightBehavior,
                 style: messageStyle,
               )
-            : RichText(
-                textAlign: TextAlign.start,
-                textHeightBehavior: textHeightBehavior,
-                text: TextSpan(
-                  style: messageStyle,
-                  children: [
-                    if (badgeAsset != null)
-                      WidgetSpan(
-                        alignment: PlaceholderAlignment.bottom,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 2),
-                          child: _identityBadge(
-                            context,
-                            identity,
-                            widthFactor: .16,
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RichText(
+                    textAlign: TextAlign.start,
+                    textHeightBehavior: textHeightBehavior,
+                    text: TextSpan(
+                      style: messageStyle,
+                      children: [
+                        if (badgeAsset != null)
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.bottom,
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 2),
+                              child: _identityBadge(
+                                context,
+                                identity,
+                                widthFactor: .16,
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
-                    if (staffBadgeAsset != null)
-                      WidgetSpan(
-                        alignment: PlaceholderAlignment.bottom,
-                        child: Padding(
-                          padding: const EdgeInsets.only(left: 1, right: 5),
-                          child: Image.asset(
-                            staffBadgeAsset,
-                            width: MediaQuery.sizeOf(context).width * .16,
-                            fit: BoxFit.contain,
+                        if (staffBadgeAsset != null)
+                          WidgetSpan(
+                            alignment: PlaceholderAlignment.bottom,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 1, right: 5),
+                              child: Image.asset(
+                                staffBadgeAsset,
+                                width: MediaQuery.sizeOf(context).width * .16,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                           ),
+                        TextSpan(
+                          text: '$name:  ',
+                          style: TextStyle(color: nameColor),
                         ),
-                      ),
-                    TextSpan(
-                      text: '$name:  ',
-                      style: TextStyle(color: nameColor),
+                        if (!hasImage) TextSpan(text: text),
+                      ],
                     ),
-                    TextSpan(text: text),
+                  ),
+                  if (hasImage) ...[
+                    const SizedBox(height: 7),
+                    _LiveChatImage(
+                      url: imageUrl!,
+                      name: imageName,
+                      maxWidth: math.min(240, maxBubbleWidth - 28),
+                    ),
                   ],
-                ),
+                ],
               ),
+      ),
+    );
+  }
+}
+
+class _LiveChatImage extends StatelessWidget {
+  const _LiveChatImage({
+    required this.url,
+    required this.name,
+    required this.maxWidth,
+  });
+
+  final String url;
+  final String? name;
+  final double maxWidth;
+
+  @override
+  Widget build(BuildContext context) {
+    final uri = Uri.tryParse(url);
+    final imageUrl = uri?.hasScheme == true
+        ? url
+        : Uri.parse(const AppConfig().apiBaseUrl).replace(path: url).toString();
+    return Semantics(
+      label: name == null || name!.isEmpty ? '聊天图片' : '聊天图片：$name',
+      image: true,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: 240),
+          child: Image.network(
+            imageUrl,
+            fit: BoxFit.cover,
+            loadingBuilder: (context, child, progress) => progress == null
+                ? child
+                : SizedBox(
+                    width: maxWidth,
+                    height: 120,
+                    child: const Center(child: CupertinoActivityIndicator()),
+                  ),
+            errorBuilder: (_, _, _) => SizedBox(
+              width: maxWidth,
+              height: 120,
+              child: const Center(child: Text('图片加载失败')),
+            ),
+          ),
+        ),
       ),
     );
   }

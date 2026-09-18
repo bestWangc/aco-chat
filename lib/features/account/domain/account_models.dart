@@ -450,6 +450,8 @@ class LiveMessage {
     required this.createdAt,
     this.identity = 0,
     this.staffIdentity = 0,
+    this.imageUrl,
+    this.imageName,
   });
 
   final int id;
@@ -458,14 +460,18 @@ class LiveMessage {
   final DateTime createdAt;
   final int identity;
   final int staffIdentity;
+  final String? imageUrl;
+  final String? imageName;
 
   factory LiveMessage.fromJson(Map<String, dynamic> json) => LiveMessage(
     id: _messageId(json['id']),
     nickname: json['nickname'] as String,
-    text: json['text'] as String,
+    text: json['text'] as String? ?? '',
     createdAt: DateTime.parse(json['created_at'] as String),
     identity: (json['identity'] as num?)?.toInt() ?? 0,
     staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
+    imageUrl: json['image_url'] as String?,
+    imageName: json['image_name'] as String?,
   );
 }
 

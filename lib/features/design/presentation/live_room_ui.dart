@@ -187,6 +187,8 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 onHand: room?.canRaiseHand == true ? _raiseHand : null,
                 controller: _messageController,
                 onEmojiPressed: _toggleEmojiPicker,
+                onImagePressed: _pickAndSendImage,
+                sendingImage: _sendingImage,
                 onSubmitted: _sendMessage,
               ),
             ),

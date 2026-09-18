@@ -49,4 +49,18 @@ void main() {
       LiveChatSendLimit.allowed,
     );
   });
+
+  test('live message parses optional image metadata', () {
+    final message = LiveMessage.fromJson({
+      'id': 1,
+      'nickname': 'member',
+      'created_at': '2026-09-18T00:00:00Z',
+      'image_url': '/uploads/chat-files/image.jpg',
+      'image_name': 'image.jpg',
+    });
+
+    expect(message.text, isEmpty);
+    expect(message.imageUrl, '/uploads/chat-files/image.jpg');
+    expect(message.imageName, 'image.jpg');
+  });
 }
