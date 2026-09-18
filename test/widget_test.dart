@@ -346,6 +346,58 @@ void main() {
       find.byKey(const ValueKey('live-recommendation-12')),
       findsOneWidget,
     );
+    expect(
+      tester.getSize(
+        find.byKey(const ValueKey('live-recommendation-avatar-frame')),
+      ),
+      const Size(48, 48),
+    );
+    expect(
+      tester
+          .getTopLeft(find.byKey(const ValueKey('live-recommendation-12')))
+          .dx,
+      22,
+    );
+  });
+
+  testWidgets('scrolls long live recommendation titles without overflow', (
+    WidgetTester tester,
+  ) async {
+    const title = '今晚一起聊聊加密市场、全球宏观和接下来值得关注的机会';
+    final live = LiveSession(
+      id: 13,
+      title: title,
+      coverUrl: '/uploads/live-cover-13.jpg',
+      access: 'open',
+      status: 'live',
+      createdAt: DateTime(2026, 9, 17, 20),
+    );
+
+    await tester.pumpWidget(
+      shad.ShadApp.custom(
+        theme: shad.ShadThemeData(
+          brightness: Brightness.dark,
+          colorScheme: shad.ShadSlateColorScheme.dark(),
+        ),
+        appBuilder: (_) => MaterialApp(
+          home: AcoScreenPage(
+            screen: AcoScreen.squareFeed,
+            dark: true,
+            isRoot: false,
+            onOpen: (_) {},
+            onThemeToggle: () {},
+            initialLives: [live],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('推荐'));
+    await tester.pump();
+
+    expect(find.text(title), findsNWidgets(2));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('shows an empty live chat state without mock messages', (

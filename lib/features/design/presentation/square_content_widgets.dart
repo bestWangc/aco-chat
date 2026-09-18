@@ -369,9 +369,13 @@ class _LiveRecommendationCard extends StatefulWidget {
       _LiveRecommendationCardState();
 }
 
+const _liveRecommendationBackground = Color(0xFF1C1C1C);
+const _liveRecommendationBorder = Color(0xFF3D3D3D);
+
 class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _barsController;
+  AnimationController? _titleController;
 
   @override
   void initState() {
@@ -380,71 +384,144 @@ class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
       vsync: this,
       duration: const Duration(milliseconds: 1100),
     )..repeat();
+    _titleController = _createTitleController();
   }
+
+  AnimationController _createTitleController() =>
+      AnimationController(vsync: this, duration: const Duration(seconds: 8))
+        ..repeat();
 
   @override
   void dispose() {
     _barsController.dispose();
+    _titleController?.dispose();
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-    behavior: HitTestBehavior.opaque,
-    onTap: widget.onTap,
-    child: Container(
-      height: 60,
-      decoration: BoxDecoration(
-        color: widget.palette.surface,
-        border: Border.all(
-          color: widget.palette.dark
-              ? const Color(0xFF4A4A4A)
-              : widget.palette.border,
+  Widget build(BuildContext context) {
+    final titleController = _titleController ??= _createTitleController();
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: widget.onTap,
+      child: SizedBox(
+        height: 48,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: _liveRecommendationBackground,
+                  border: Border.all(color: _liveRecommendationBorder),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 54),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _ScrollingLiveTitle(
+                          title: widget.live.title,
+                          color: widget.palette.accent,
+                          animation: titleController,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 5, right: 12),
+                        child: _AnimatedSignalBars(
+                          animation: _barsController,
+                          color: widget.palette.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: -1,
+              top: 0,
+              child: Container(
+                key: const ValueKey('live-recommendation-avatar-frame'),
+                width: 48,
+                height: 48,
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  border: Border.all(color: _liveRecommendationBorder),
+                  shape: BoxShape.circle,
+                ),
+                child: AcoAvatar(size: 42, imageUrl: widget.live.hostAvatarUrl),
+              ),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(30),
       ),
-      child: Row(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 2),
-            child: Container(
-              width: 56,
-              height: 56,
-              padding: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF4A4A4A)),
-                shape: BoxShape.circle,
+    );
+  }
+}
+
+class _ScrollingLiveTitle extends StatelessWidget {
+  const _ScrollingLiveTitle({
+    required this.title,
+    required this.color,
+    required this.animation,
+  });
+
+  final String title;
+  final Color color;
+  final Animation<double> animation;
+
+  static const _gap = 24.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(
+      color: color,
+      fontSize: AcoTypography.bodyEmphasis,
+      fontWeight: FontWeight.w500,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textPainter = TextPainter(
+          text: TextSpan(text: title, style: style),
+          textDirection: Directionality.of(context),
+          maxLines: 1,
+        )..layout();
+        if (textPainter.width <= constraints.maxWidth) {
+          return Text(title, maxLines: 1, style: style);
+        }
+        final offsetDistance = textPainter.width + _gap;
+        return ClipRect(
+          child: OverflowBox(
+            maxWidth: double.infinity,
+            alignment: Alignment.centerLeft,
+            child: AnimatedBuilder(
+              animation: animation,
+              builder: (_, _) => Transform.translate(
+                offset: Offset(-offsetDistance * animation.value, 0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(title, maxLines: 1, style: style),
+                    const SizedBox(width: _gap),
+                    Text(title, maxLines: 1, style: style),
+                  ],
+                ),
               ),
-              child: AcoAvatar(size: 52, imageUrl: widget.live.hostAvatarUrl),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              widget.live.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: _lime,
-                fontSize: AcoTypography.bodyEmphasis,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 8, right: 14),
-            child: _AnimatedSignalBars(animation: _barsController),
-          ),
-        ],
-      ),
-    ),
-  );
+        );
+      },
+    );
+  }
 }
 
 class _AnimatedSignalBars extends StatelessWidget {
-  const _AnimatedSignalBars({required this.animation});
+  const _AnimatedSignalBars({required this.animation, required this.color});
 
   final Animation<double> animation;
+  final Color color;
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
@@ -452,20 +529,20 @@ class _AnimatedSignalBars extends StatelessWidget {
     builder: (_, _) {
       final phase = animation.value * math.pi * 2;
       return SizedBox(
-        width: 34,
-        height: 22,
+        width: 28,
+        height: 18,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             for (var index = 0; index < 3; index++)
               Container(
-                width: 7,
+                width: 5,
                 height:
-                    8 + 10 * ((math.sin(phase + index * math.pi / 2) + 1) / 2),
-                margin: const EdgeInsets.only(left: 3),
+                    6 + 8 * ((math.sin(phase + index * math.pi / 2) + 1) / 2),
+                margin: const EdgeInsets.only(left: 2),
                 decoration: BoxDecoration(
-                  color: _lime,
+                  color: color,
                   borderRadius: BorderRadius.circular(1),
                 ),
               ),

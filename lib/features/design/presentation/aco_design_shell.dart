@@ -475,6 +475,17 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       return;
     }
 
+    // 浏览器是底部导航中的根页面。从资产详情等二级页面进入时，
+    // 切回根壳层，确保底部导航仍然可见并选中“探索”。
+    if (screen == AcoScreen.browserDiscover) {
+      setState(() {
+        _selectedNav = 1;
+        _rootScreen = AcoScreen.browserDiscover;
+      });
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
     // 聊天详情是社交列表的直接下级页面，保留具体版本，避免被通用兜底路由到 Coming Soon。
     if (screen == AcoScreen.chatV1 || screen == AcoScreen.chatV2) {
       Navigator.of(context).push<Object?>(

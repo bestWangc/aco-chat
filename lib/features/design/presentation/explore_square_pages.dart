@@ -23,16 +23,24 @@ class _SquareFeedPage extends StatefulWidget {
   State<_SquareFeedPage> createState() => _SquareFeedPageState();
 }
 
-class _SquareFeedPageState extends State<_SquareFeedPage> {
+class _SquareFeedPageState extends State<_SquareFeedPage>
+    with WidgetsBindingObserver {
   static const _contentHorizontalInset = 35.0;
   static const _liveListHorizontalInset = 25.0;
+  static const _liveRecommendationGap = 12.0;
+  static const _liveRecommendationScrollInterval = Duration(milliseconds: 20);
+  static const _liveRecommendationScrollPixelsPerTick = 1.0;
 
   var _selectedTab = _SquareFeedTab.recommended;
   final AccountApiClient _apiClient = AccountApiClient();
   List<LiveSession>? _loadedLives;
+  final Set<int> _endedLiveIDs = <int>{};
   Object? _livesError;
   var _livesLoading = true;
   var _livesRequestID = 0;
+  final ScrollController _liveRecommendationScrollController =
+      ScrollController();
+  Timer? _liveRecommendationScrollTimer;
   List<SquarePost>? _loadedPosts;
   _SquareFeedTab? _loadedPostsTab;
   Object? _postsError;
@@ -44,8 +52,65 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_beginLivesLoad());
     unawaited(_beginPostsLoad(_SquareFeedTab.recommended));
+    _startLiveRecommendationScrolling();
+  }
+
+  void _startLiveRecommendationScrolling() {
+    _liveRecommendationScrollTimer?.cancel();
+    _liveRecommendationScrollTimer = Timer.periodic(
+      _liveRecommendationScrollInterval,
+      (_) => _scrollLiveRecommendations(),
+    );
+  }
+
+  bool _isRecommendedLive(LiveSession live) =>
+      live.status == 'live' && !_endedLiveIDs.contains(live.id);
+
+  int get _recommendedLiveCount {
+    var count = 0;
+    for (final live in _loadedLives ?? const <LiveSession>[]) {
+      if (_isRecommendedLive(live) && ++count == 2) return count;
+    }
+    return count;
+  }
+
+  void _scrollLiveRecommendations() {
+    final controller = _liveRecommendationScrollController;
+    final liveCount = _recommendedLiveCount;
+    if (!mounted ||
+        _selectedTab != _SquareFeedTab.recommended ||
+        liveCount < 2 ||
+        !controller.hasClients ||
+        controller.position.maxScrollExtent <= 0) {
+      return;
+    }
+    final loopDistance =
+        (controller.position.viewportDimension * .5 + _liveRecommendationGap) *
+        liveCount;
+    final nextOffset =
+        controller.offset + _liveRecommendationScrollPixelsPerTick;
+    controller.jumpTo(
+      nextOffset >= loopDistance ? nextOffset - loopDistance : nextOffset,
+    );
+  }
+
+  // Kept for states preserved by hot reload while the scrolling behavior was
+  // changed from a periodic card advance to continuous movement.
+  // ignore: unused_element
+  void _advanceLiveRecommendations() => _startLiveRecommendationScrolling();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed ||
+        _selectedTab != _SquareFeedTab.recommended ||
+        _livesLoading ||
+        !(_loadedLives?.any((live) => live.status == 'live') ?? false)) {
+      return;
+    }
+    unawaited(_refreshLives());
   }
 
   Future<List<LiveSession>> _loadLives({bool useInitialLives = true}) async {
@@ -210,6 +275,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
   void _selectTab(_SquareFeedTab tab) {
     if (_selectedTab == tab) return;
     setState(() => _selectedTab = tab);
+    if (tab == _SquareFeedTab.recommended) {
+      unawaited(_refreshLives());
+    }
     if (tab != _SquareFeedTab.live && _loadedPostsTab != tab) {
       unawaited(_beginPostsLoad(tab));
     }
@@ -236,6 +304,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _liveRecommendationScrollTimer?.cancel();
+    _liveRecommendationScrollController.dispose();
     _apiClient.close();
     super.dispose();
   }
@@ -294,6 +365,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
         )
         .then((ended) async {
           if (!mounted) return;
+          if (ended == true) {
+            setState(() => _endedLiveIDs.add(session.id));
+          }
           await _refreshLives();
           if (!mounted) return;
           if (ended == LiveRoomExitReason.kicked) {
@@ -622,8 +696,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
       );
     }
     final recommendedLives = (_loadedLives ?? const <LiveSession>[])
-        .where((live) => live.status == 'live')
+        .where(_isRecommendedLive)
         .toList(growable: false);
+    final scrollingLives = recommendedLives.length > 1
+        ? [...recommendedLives, ...recommendedLives]
+        : recommendedLives;
     return SliverPadding(
       padding: const EdgeInsets.only(bottom: 96),
       sliver: SliverList(
@@ -633,32 +710,38 @@ class _SquareFeedPageState extends State<_SquareFeedPage> {
               if (recommendedLives.isEmpty)
                 const SizedBox(height: 32)
               else ...[
-                const SizedBox(height: 24),
-                SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      for (
-                        var index = 0;
-                        index < recommendedLives.length;
-                        index++
-                      ) ...[
-                        SizedBox(
-                          width: MediaQuery.sizeOf(context).width - 44,
-                          child: _LiveRecommendationCard(
-                            key: ValueKey(
-                              'live-recommendation-${recommendedLives[index].id}',
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: SingleChildScrollView(
+                    controller: _liveRecommendationScrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (
+                          var index = 0;
+                          index < scrollingLives.length;
+                          index++
+                        ) ...[
+                          SizedBox(
+                            width: MediaQuery.sizeOf(context).width * .5,
+                            child: _LiveRecommendationCard(
+                              key: ValueKey(
+                                index < recommendedLives.length
+                                    ? 'live-recommendation-${scrollingLives[index].id}'
+                                    : 'live-recommendation-duplicate-$index-${scrollingLives[index].id}',
+                              ),
+                              palette: palette,
+                              live: scrollingLives[index],
+                              onTap: () => _openLiveRoom(scrollingLives[index]),
                             ),
-                            palette: palette,
-                            live: recommendedLives[index],
-                            onTap: () => _openLiveRoom(recommendedLives[index]),
                           ),
-                        ),
-                        if (index < recommendedLives.length - 1)
-                          const SizedBox(width: 12),
+                          if (index < scrollingLives.length - 1)
+                            const SizedBox(width: _liveRecommendationGap),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 32),
