@@ -612,28 +612,26 @@ class AccountApiClient {
     _body(response);
   }
 
-  Future<List<SquarePost>> listRecommendedPosts({required String token}) async {
+  Future<SquarePostPage> listRecommendedPostsPage({
+    required String token,
+    String? cursor,
+  }) async {
     final response = await _httpClient.get(
-      _uri('posts/recommended'),
+      _uri('posts/recommended', cursor == null ? null : {'cursor': cursor}),
       headers: _authorizedHeaders(token),
     );
-    final body = _body(response);
-    return (body['data'] as List<dynamic>? ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(SquarePost.fromJson)
-        .toList(growable: false);
+    return SquarePostPage.fromJson(_body(response));
   }
 
-  Future<List<SquarePost>> listFriendsPosts({required String token}) async {
+  Future<SquarePostPage> listFriendsPostsPage({
+    required String token,
+    String? cursor,
+  }) async {
     final response = await _httpClient.get(
-      _uri('posts/friends'),
+      _uri('posts/friends', cursor == null ? null : {'cursor': cursor}),
       headers: _authorizedHeaders(token),
     );
-    final body = _body(response);
-    return (body['data'] as List<dynamic>? ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(SquarePost.fromJson)
-        .toList(growable: false);
+    return SquarePostPage.fromJson(_body(response));
   }
 
   Future<SquarePost> createPost({
@@ -1187,11 +1185,14 @@ class AccountApiClient {
 
   void close() => _httpClient.close();
 
-  Uri _uri(String path) {
+  Uri _uri(String path, [Map<String, String>? queryParameters]) {
     final basePath = _baseUri.path.endsWith('/')
         ? _baseUri.path.substring(0, _baseUri.path.length - 1)
         : _baseUri.path;
-    return _baseUri.replace(path: '$basePath/$path');
+    return _baseUri.replace(
+      path: '$basePath/$path',
+      queryParameters: queryParameters,
+    );
   }
 
   Map<String, String> _authorizedHeaders(String token) => {

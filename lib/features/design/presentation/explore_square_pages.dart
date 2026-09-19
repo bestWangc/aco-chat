@@ -40,11 +40,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   var _livesRequestID = 0;
   final ScrollController _liveRecommendationScrollController =
       ScrollController();
+  final ScrollController _postsScrollController = ScrollController();
   Timer? _liveRecommendationScrollTimer;
   List<SquarePost>? _loadedPosts;
   _SquareFeedTab? _loadedPostsTab;
   Object? _postsError;
   var _postsLoading = true;
+  var _postsLoadingMore = false;
+  String? _postsNextCursor;
   var _postsRequestID = 0;
   final Set<int> _pendingLikePostIDs = <int>{};
   final Set<int> _pendingFollowUserIDs = <int>{};
@@ -53,6 +56,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _postsScrollController.addListener(_maybeLoadMorePosts);
     unawaited(_beginLivesLoad());
     unawaited(_beginPostsLoad(_SquareFeedTab.recommended));
     _startLiveRecommendationScrolling();
@@ -151,24 +155,32 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     await _beginLivesLoad(useInitialLives: false);
   }
 
-  Future<List<SquarePost>> _loadPosts(_SquareFeedTab tab) async {
+  Future<SquarePostPage> _loadPosts(
+    _SquareFeedTab tab, {
+    String? cursor,
+  }) async {
     await widget.walletLoginFuture;
     final session = AccountSession(_apiClient);
-    if (tab == _SquareFeedTab.friends) return session.listFriendsPosts();
-    return session.listRecommendedPosts();
+    if (tab == _SquareFeedTab.friends) {
+      return session.listFriendsPostsPage(cursor: cursor);
+    }
+    return session.listRecommendedPostsPage(cursor: cursor);
   }
 
   Future<void> _beginPostsLoad(_SquareFeedTab tab) async {
     final requestID = ++_postsRequestID;
+    _postsNextCursor = null;
+    _postsLoadingMore = false;
     _postsLoading = true;
     _postsError = null;
     if (mounted) setState(() {});
     try {
-      final posts = await _loadPosts(tab);
+      final page = await _loadPosts(tab);
       if (!mounted || requestID != _postsRequestID) return;
       setState(() {
-        _loadedPosts = posts;
+        _loadedPosts = page.posts;
         _loadedPostsTab = tab;
+        _postsNextCursor = page.nextCursor;
         _postsLoading = false;
       });
     } catch (error) {
@@ -177,6 +189,37 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
         _postsError = error;
         _postsLoading = false;
       });
+    }
+  }
+
+  void _maybeLoadMorePosts() {
+    final controller = _postsScrollController;
+    if (!controller.hasClients ||
+        controller.position.extentAfter > 600 ||
+        _postsLoading ||
+        _postsLoadingMore ||
+        _postsNextCursor == null ||
+        _loadedPostsTab == null) {
+      return;
+    }
+    unawaited(_loadMorePosts(_loadedPostsTab!));
+  }
+
+  Future<void> _loadMorePosts(_SquareFeedTab tab) async {
+    final cursor = _postsNextCursor;
+    if (cursor == null || _postsLoadingMore) return;
+    setState(() => _postsLoadingMore = true);
+    try {
+      final page = await _loadPosts(tab, cursor: cursor);
+      if (!mounted || _loadedPostsTab != tab) return;
+      setState(() {
+        _loadedPosts = [...?_loadedPosts, ...page.posts];
+        _postsNextCursor = page.nextCursor;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _postsError = error);
+    } finally {
+      if (mounted) setState(() => _postsLoadingMore = false);
     }
   }
 
@@ -307,6 +350,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     WidgetsBinding.instance.removeObserver(this);
     _liveRecommendationScrollTimer?.cancel();
     _liveRecommendationScrollController.dispose();
+    _postsScrollController.dispose();
     _apiClient.close();
     super.dispose();
   }
@@ -596,6 +640,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
         RefreshIndicator(
           onRefresh: _refreshLives,
           child: CustomScrollView(
+            controller: _postsScrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               SliverPersistentHeader(
@@ -801,6 +846,11 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
               onReply: () => _openPostDetail(post),
               onFollow: () => _togglePostFollow(post),
             ),
+          ),
+        if (_postsLoadingMore)
+          const Padding(
+            padding: EdgeInsets.only(bottom: 24),
+            child: Center(child: CupertinoActivityIndicator()),
           ),
       ],
     );

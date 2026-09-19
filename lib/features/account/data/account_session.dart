@@ -209,10 +209,15 @@ class AccountSession {
     return _apiClient.listLives(token: tokens.accessToken);
   }
 
-  Future<List<SquarePost>> listRecommendedPosts() async {
+  Future<SquarePostPage> listRecommendedPostsPage({String? cursor}) async {
     final tokens = await _tokenStore.read();
-    if (tokens == null) return const <SquarePost>[];
-    return _apiClient.listRecommendedPosts(token: tokens.accessToken);
+    if (tokens == null) {
+      return const SquarePostPage(posts: [], nextCursor: null);
+    }
+    return _apiClient.listRecommendedPostsPage(
+      token: tokens.accessToken,
+      cursor: cursor,
+    );
   }
 
   Future<SquarePost> createPost({
@@ -256,9 +261,11 @@ class AccountSession {
     return _apiClient.listFriendRequests(token: await _requireToken());
   }
 
-  Future<List<SquarePost>> listFriendsPosts() async {
-    return _apiClient.listFriendsPosts(token: await _requireToken());
-  }
+  Future<SquarePostPage> listFriendsPostsPage({String? cursor}) async =>
+      _apiClient.listFriendsPostsPage(
+        token: await _requireToken(),
+        cursor: cursor,
+      );
 
   Future<ChatGroup> createGroup({
     required String name,

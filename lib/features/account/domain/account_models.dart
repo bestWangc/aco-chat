@@ -302,6 +302,23 @@ class SquarePost {
   }
 }
 
+class SquarePostPage {
+  const SquarePostPage({required this.posts, required this.nextCursor});
+
+  final List<SquarePost> posts;
+  final String? nextCursor;
+
+  factory SquarePostPage.fromJson(Map<String, dynamic> json) => SquarePostPage(
+    posts: (json['data'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map(SquarePost.fromJson)
+        .toList(growable: false),
+    nextCursor: (json['next_cursor'] as String?)?.trim().isEmpty == true
+        ? null
+        : json['next_cursor'] as String?,
+  );
+}
+
 class PostLikeResult {
   const PostLikeResult({required this.liked, required this.likeCount});
 
