@@ -142,6 +142,11 @@ class MainActivity : FlutterFragmentActivity() {
                 if (call.method != "routeInfo") {
                     if (call.method == "forceSpeaker") {
                         val audioManager = getSystemService(AudioManager::class.java)
+                        if (hasBluetoothOutput(audioManager)) {
+                            // Let Android/LiveKit keep the connected headset route.
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             val speaker = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
                                 .firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
@@ -177,6 +182,17 @@ class MainActivity : FlutterFragmentActivity() {
                 )
             }
     }
+
+    private fun hasBluetoothOutput(audioManager: AudioManager): Boolean =
+        audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { device ->
+            when (device.type) {
+                AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> true
+                AudioDeviceInfo.TYPE_BLE_HEADSET ->
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                else -> false
+            }
+        }
 
 
     private fun authenticateWithBiometrics(result: MethodChannel.Result) {

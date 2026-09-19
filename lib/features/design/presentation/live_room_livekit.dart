@@ -797,7 +797,13 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
       return;
     }
     try {
-      await AudioManager.instance.setSpeakerOutputPreferred(true, force: true);
+      // Android keeps connected Bluetooth headsets as the preferred route;
+      // the native fallback below only forces the speaker when no Bluetooth
+      // output is available. iOS keeps its existing forced-speaker behavior.
+      await AudioManager.instance.setSpeakerOutputPreferred(
+        true,
+        force: defaultTargetPlatform == TargetPlatform.iOS,
+      );
       if (defaultTargetPlatform == TargetPlatform.android) {
         await _VoiceRoomPageState._liveAudioRouteChannel.invokeMethod<bool>(
           'forceSpeaker',
