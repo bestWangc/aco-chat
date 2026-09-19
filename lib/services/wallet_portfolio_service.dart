@@ -98,10 +98,28 @@ class WalletPortfolioService {
     required List<WalletAsset> assets,
   }) async* {
     final chain = WalletChainRegistry.chains[network]!;
-    final endpoints = await _rpcClient.loadEndpoints(
-      network: network.name,
-      accessToken: accessToken,
-    );
+    late final List<Uri> endpoints;
+    try {
+      endpoints = await _rpcClient.loadEndpoints(
+        network: network.name,
+        accessToken: accessToken,
+      );
+    } catch (error) {
+      for (final asset in assets) {
+        yield WalletBalance(
+          chain: chain.name,
+          symbol: asset.symbol,
+          assetName: asset.name,
+          isNative: asset.isNative,
+          address: identity.address,
+          decimals: asset.decimals,
+          tokenAddress: asset.tokenAddress,
+          balance: BigInt.zero,
+          error: error,
+        );
+      }
+      return;
+    }
     final address = chain.isEvm
         ? identity.address
         : (await WalletPreferences.derivedAddresses(

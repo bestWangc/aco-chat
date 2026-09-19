@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:aco_chat/services/wallet_identity.dart';
@@ -200,6 +201,35 @@ void main() {
     expect(serviceClient.directoryHosts, everyElement('localhost'));
     expect(serviceClient.rpcHosts, everyElement('ethereum.rpc.test'));
   });
+
+  test('returns unavailable assets when the RPC directory times out', () async {
+    final service = _service(_DirectoryTimeoutClient());
+    const identity = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000001',
+    );
+    const assets = [
+      WalletAsset(
+        network: WalletNetwork.ethereum,
+        symbol: 'ETH',
+        name: 'Ethereum',
+        decimals: 18,
+        isNative: true,
+      ),
+    ];
+
+    final balances = await service
+        .loadAssetBalances(
+          network: WalletNetwork.ethereum,
+          identity: identity,
+          accessToken: 'test-access-token',
+          assets: assets,
+        )
+        .toList();
+
+    expect(balances, hasLength(1));
+    expect(balances.single.balance, BigInt.zero);
+    expect(balances.single.error, isA<TimeoutException>());
+  });
 }
 
 String? _erc20ContractAddress(Map body) {
@@ -302,6 +332,13 @@ class _UnavailableRpcClient extends http.BaseClient {
     }
     rpcHosts.add(request.url.host);
     return http.StreamedResponse(Stream.value(const []), 503);
+  }
+}
+
+class _DirectoryTimeoutClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    throw TimeoutException('directory timeout');
   }
 }
 
