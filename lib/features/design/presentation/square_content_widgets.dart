@@ -555,6 +555,7 @@ class _AnimatedSignalBars extends StatelessWidget {
 
 class _PostCard extends StatelessWidget {
   const _PostCard({
+    super.key,
     required this.palette,
     required this.post,
     required this.onLike,

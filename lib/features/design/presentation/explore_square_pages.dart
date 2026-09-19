@@ -208,10 +208,16 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   Future<void> _loadMorePosts(_SquareFeedTab tab) async {
     final cursor = _postsNextCursor;
     if (cursor == null || _postsLoadingMore) return;
+    final requestID = _postsRequestID;
     setState(() => _postsLoadingMore = true);
     try {
       final page = await _loadPosts(tab, cursor: cursor);
-      if (!mounted || _loadedPostsTab != tab) return;
+      if (!mounted ||
+          requestID != _postsRequestID ||
+          _loadedPostsTab != tab ||
+          cursor != _postsNextCursor) {
+        return;
+      }
       setState(() {
         _loadedPosts = [...?_loadedPosts, ...page.posts];
         _postsNextCursor = page.nextCursor;
@@ -228,7 +234,18 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   }
 
   Future<void> _refreshPosts() async {
-    await _beginPostsLoad(_SquareFeedTab.recommended);
+    final tab = _selectedTab == _SquareFeedTab.friends
+        ? _SquareFeedTab.friends
+        : _SquareFeedTab.recommended;
+    await _beginPostsLoad(tab);
+  }
+
+  Future<void> _refreshCurrentTab() async {
+    if (_selectedTab == _SquareFeedTab.live) {
+      await _refreshLives();
+      return;
+    }
+    await _refreshPosts();
   }
 
   void _replacePost(SquarePost updatedPost) {
@@ -638,7 +655,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     return Stack(
       children: [
         RefreshIndicator(
-          onRefresh: _refreshLives,
+          onRefresh: _refreshCurrentTab,
           child: CustomScrollView(
             controller: _postsScrollController,
             physics: const AlwaysScrollableScrollPhysics(),
@@ -837,6 +854,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
           Padding(
             padding: const EdgeInsets.only(bottom: 28),
             child: _PostCard(
+              key: ValueKey(post.id),
               palette: palette,
               post: post,
               likePending: _pendingLikePostIDs.contains(post.id),
