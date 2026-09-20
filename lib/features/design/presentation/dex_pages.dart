@@ -469,19 +469,29 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       } finally {
         rpc.close();
       }
-    } on LifiException catch (error) {
+    } on LifiException catch (error, stackTrace) {
       client.close();
+      debugPrint('[LI.FI] quote failed: ${error.message}');
+      debugPrintStack(stackTrace: stackTrace, label: 'LI.FI quote');
       if (!context.mounted) return;
       if (showNotice) _showNotice(context, 'LI.FI 报价失败', error.message);
-    } catch (_) {
+    } catch (error, stackTrace) {
       client.close();
+      debugPrint('[LI.FI] quote request failed: $error');
+      debugPrintStack(stackTrace: stackTrace, label: 'LI.FI quote');
       if (!context.mounted) return;
       if (showNotice) {
-        _showNotice(context, 'LI.FI 报价失败', '网络请求失败，请稍后重试。');
+        _showNotice(context, 'LI.FI 报价失败', _lifiFailureMessage(error));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  String _lifiFailureMessage(Object error) {
+    final message = error.toString().trim();
+    if (message.isEmpty || message == 'null') return '网络请求失败，请稍后重试。';
+    return message.replaceFirst(RegExp(r'^Exception:\s*'), '');
   }
 
   Future<void> _trackLifiStatus(String txHash) async {
@@ -801,6 +811,36 @@ class DexSwapRecord {
   final DateTime createdAt;
 }
 
+final _mockDexSwapRecords = <DexSwapRecord>[
+  DexSwapRecord(
+    source: 'app',
+    fromAmount: '0.25',
+    fromSymbol: 'ETH',
+    toAmount: '824.36',
+    toSymbol: 'USDC',
+    status: '已完成',
+    createdAt: DateTime(2026, 9, 20, 14, 32),
+  ),
+  DexSwapRecord(
+    source: 'app',
+    fromAmount: '120',
+    fromSymbol: 'USDT',
+    toAmount: '0.036',
+    toSymbol: 'ETH',
+    status: '已完成',
+    createdAt: DateTime(2026, 9, 19, 18, 8),
+  ),
+  DexSwapRecord(
+    source: 'app',
+    fromAmount: '500',
+    fromSymbol: 'USDC',
+    toAmount: '499.42',
+    toSymbol: 'USDT',
+    status: '处理中',
+    createdAt: DateTime(2026, 9, 18, 9, 16),
+  ),
+];
+
 class _DexRecentSwapRecord extends StatelessWidget {
   const _DexRecentSwapRecord({required this.palette, this.future});
   final AcoPalette palette;
@@ -833,7 +873,7 @@ class _DexRecentSwapRecord extends StatelessWidget {
       ),
       const SizedBox(height: 14),
       if (future == null)
-        _emptyState()
+        _recordList(_mockDexSwapRecords)
       else
         FutureBuilder<DexSwapRecord?>(
           future: future,
@@ -843,7 +883,7 @@ class _DexRecentSwapRecord extends StatelessWidget {
               return const SizedBox(height: 56);
             }
             if (record == null || record.source != 'app') return _emptyState();
-            return _recordCard(record);
+            return _recordList([record, ..._mockDexSwapRecords.skip(1)]);
           },
         ),
     ],
@@ -899,6 +939,19 @@ class _DexRecentSwapRecord extends StatelessWidget {
         ),
       ],
     ),
+  );
+
+  Widget _recordList(List<DexSwapRecord> records) => Column(
+    children: [
+      _recordCard(records.first),
+      if (records.length > 1) ...[
+        const SizedBox(height: 22),
+        for (final record in records.skip(1)) ...[
+          _recordCard(record),
+          if (record != records.last) const SizedBox(height: 10),
+        ],
+      ],
+    ],
   );
 }
 
