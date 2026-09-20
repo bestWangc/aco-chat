@@ -839,6 +839,33 @@ final _mockDexSwapRecords = <DexSwapRecord>[
     status: '处理中',
     createdAt: DateTime(2026, 9, 18, 9, 16),
   ),
+  DexSwapRecord(
+    source: 'app',
+    fromAmount: '1.2',
+    fromSymbol: 'ETH',
+    toAmount: '3,958.80',
+    toSymbol: 'USDT',
+    status: '已完成',
+    createdAt: DateTime(2026, 9, 17, 21, 44),
+  ),
+  DexSwapRecord(
+    source: 'app',
+    fromAmount: '860',
+    fromSymbol: 'USDT',
+    toAmount: '859.12',
+    toSymbol: 'USDC',
+    status: '已完成',
+    createdAt: DateTime(2026, 9, 16, 11, 5),
+  ),
+  DexSwapRecord(
+    source: 'app',
+    fromAmount: '0.08',
+    fromSymbol: 'ETH',
+    toAmount: '264.18',
+    toSymbol: 'USDC',
+    status: '失败',
+    createdAt: DateTime(2026, 9, 15, 16, 27),
+  ),
 ];
 
 class _DexRecentSwapRecord extends StatelessWidget {
