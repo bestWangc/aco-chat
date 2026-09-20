@@ -921,6 +921,8 @@ class _DexSwapPanel extends StatefulWidget {
 class _DexSwapPanelState extends State<_DexSwapPanel> {
   late String _fromSymbol;
   late String _toSymbol;
+  String _fromLogoUri = '';
+  String _toLogoUri = '';
   late final TextEditingController _amountController;
 
   @override
@@ -940,6 +942,8 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
     final native = widget.selectedChain.nativeToken.symbol;
     _fromSymbol = ethFirst ? native : 'USDC';
     _toSymbol = ethFirst ? 'USDC' : native;
+    _fromLogoUri = '';
+    _toLogoUri = '';
   }
 
   @override
@@ -956,7 +960,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
   }
 
   void _pickToken(BuildContext context, String current, bool source) {
-    showCupertinoModalPopup<String>(
+    showCupertinoModalPopup<(String, String)>(
       context: context,
       builder: (context) => _DexTokenPicker(
         palette: widget.palette,
@@ -964,23 +968,28 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
         selectedSymbol: current,
         excludedSymbol: source ? _toSymbol : _fromSymbol,
       ),
-    ).then((symbol) {
-      if (symbol == null) return;
+    ).then((selection) {
+      if (selection == null) return;
+      final (symbol, logoUri) = selection;
       setState(() {
         if (source) {
           _fromSymbol = symbol;
+          _fromLogoUri = logoUri;
           if (_toSymbol == symbol)
             _toSymbol = current == symbol
                 ? _toSymbol
                 : (symbol == widget.selectedChain.nativeToken.symbol
                       ? 'USDC'
                       : widget.selectedChain.nativeToken.symbol);
+          if (_toSymbol != symbol) _toLogoUri = '';
         } else {
           _toSymbol = symbol;
+          _toLogoUri = logoUri;
           if (_fromSymbol == symbol)
             _fromSymbol = symbol == widget.selectedChain.nativeToken.symbol
                 ? 'USDC'
                 : widget.selectedChain.nativeToken.symbol;
+          if (_fromSymbol != symbol) _fromLogoUri = '';
         }
       });
       widget.onSwapChanged(_fromSymbol, _toSymbol, _amountController.text);
@@ -1001,6 +1010,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           palette: widget.palette,
           label: '兑换货币',
           symbol: _fromSymbol,
+          logoUri: _fromLogoUri,
           value: _amountController.text,
           showMax: true,
           editable: true,
@@ -1023,6 +1033,9 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
                   final symbol = _fromSymbol;
                   _fromSymbol = _toSymbol;
                   _toSymbol = symbol;
+                  final logoUri = _fromLogoUri;
+                  _fromLogoUri = _toLogoUri;
+                  _toLogoUri = logoUri;
                 });
                 widget.onSwapChanged(
                   _fromSymbol,
@@ -1048,6 +1061,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           palette: widget.palette,
           label: '至',
           symbol: _toSymbol,
+          logoUri: _toLogoUri,
           value: '-',
           onTokenTap: (symbol) => _pickToken(context, symbol, false),
         ),
@@ -1291,7 +1305,8 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                             child: _DexCommonToken(
                               symbol: symbol,
                               palette: palette,
-                              onTap: () => Navigator.of(context).pop(symbol),
+                              onTap: () =>
+                                  Navigator.of(context).pop((symbol, '')),
                             ),
                           ),
                         ),
@@ -1333,8 +1348,9 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                                   logoUri: token.$5,
                                   palette: palette,
                                   selected: widget.selectedSymbol == token.$1,
-                                  onTap: () =>
-                                      Navigator.of(context).pop(token.$1),
+                                  onTap: () => Navigator.of(
+                                    context,
+                                  ).pop((token.$1, token.$5)),
                                 ),
                                 if (index < visibleTokens.length - 1)
                                   Container(height: 1, color: palette.border),
@@ -1456,13 +1472,14 @@ class _DexSwapTokenRow extends StatefulWidget {
     required this.label,
     required this.symbol,
     required this.value,
+    this.logoUri = '',
     this.showMax = false,
     this.editable = false,
     this.onTokenTap,
     this.onValueChanged,
   });
   final AcoPalette palette;
-  final String label, symbol, value;
+  final String label, symbol, value, logoUri;
   final bool showMax, editable;
   final ValueChanged<String>? onTokenTap;
   final ValueChanged<String>? onValueChanged;
@@ -1553,7 +1570,11 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
           children: [
             Row(
               children: [
-                _WalletAssetIcon(symbol: widget.symbol, size: 24),
+                _WalletAssetIcon(
+                  symbol: widget.symbol,
+                  logoUri: widget.logoUri.isEmpty ? null : widget.logoUri,
+                  size: 24,
+                ),
                 const SizedBox(width: 12),
                 Text(
                   widget.symbol,
