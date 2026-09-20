@@ -937,7 +937,7 @@ class _DexRecentSwapRecord extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              '最近一条记录',
+              '最近10条记录',
               style: TextStyle(
                 color: palette.primaryText,
                 fontSize: AcoTypography.bodyEmphasis,
@@ -945,18 +945,21 @@ class _DexRecentSwapRecord extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            '更多记录',
-            style: TextStyle(
-              color: palette.mutedText,
-              fontSize: AcoTypography.bodyEmphasis,
+          GestureDetector(
+            onTap: () => _openAllRecords(context),
+            child: Text(
+              '更多记录',
+              style: TextStyle(
+                color: palette.mutedText,
+                fontSize: AcoTypography.bodyEmphasis,
+              ),
             ),
           ),
         ],
       ),
       const SizedBox(height: 14),
       if (future == null)
-        _recordList(_mockDexSwapRecords)
+        _recordList(_records)
       else
         FutureBuilder<DexSwapRecord?>(
           future: future,
@@ -966,11 +969,33 @@ class _DexRecentSwapRecord extends StatelessWidget {
               return const SizedBox(height: 56);
             }
             if (record == null || record.source != 'app') return _emptyState();
-            return _recordList([record, ..._mockDexSwapRecords.skip(1)]);
+            return _recordList(_recordsWithLatest(record));
           },
         ),
     ],
   );
+
+  List<DexSwapRecord> get _records => _mockDexSwapRecords.take(10).toList();
+
+  Future<void> _openAllRecords(BuildContext context) async {
+    final latest = await future;
+    if (!context.mounted) return;
+    await Navigator.of(context).push<void>(
+      CupertinoPageRoute<void>(
+        builder: (_) => _DexSwapRecordListPage(
+          palette: palette,
+          records: latest == null || latest.source != 'app'
+              ? _records
+              : _recordsWithLatest(latest),
+        ),
+      ),
+    );
+  }
+
+  List<DexSwapRecord> _recordsWithLatest(DexSwapRecord record) => [
+    record,
+    ..._mockDexSwapRecords.where((item) => item.createdAt != record.createdAt),
+  ].take(10).toList();
 
   Widget _emptyState() => Container(
     margin: const EdgeInsets.only(top: 2),
@@ -993,7 +1018,56 @@ class _DexRecentSwapRecord extends StatelessWidget {
     ),
   );
 
-  Widget _recordCard(DexSwapRecord record) => Container(
+  Widget _recordCard(DexSwapRecord record) =>
+      _DexSwapRecordCard(palette: palette, record: record);
+
+  Widget _recordList(List<DexSwapRecord> records) => Column(
+    children: [
+      _recordCard(records.first),
+      if (records.length > 1) ...[
+        const SizedBox(height: 22),
+        for (final record in records.skip(1)) ...[
+          _recordCard(record),
+          if (record != records.last) const SizedBox(height: 10),
+        ],
+      ],
+    ],
+  );
+}
+
+class _DexSwapRecordListPage extends StatelessWidget {
+  const _DexSwapRecordListPage({required this.palette, required this.records});
+
+  final AcoPalette palette;
+  final List<DexSwapRecord> records;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    navigationBar: const CupertinoNavigationBar(middle: Text('兑换记录')),
+    child: SafeArea(
+      child: records.isEmpty
+          ? Center(
+              child: Text('暂无闪兑记录', style: TextStyle(color: palette.mutedText)),
+            )
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+              itemCount: records.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 10),
+              itemBuilder: (_, index) =>
+                  _DexSwapRecordCard(palette: palette, record: records[index]),
+            ),
+    ),
+  );
+}
+
+class _DexSwapRecordCard extends StatelessWidget {
+  const _DexSwapRecordCard({required this.palette, required this.record});
+
+  final AcoPalette palette;
+  final DexSwapRecord record;
+
+  @override
+  Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     decoration: BoxDecoration(
       color: palette.inputSurface,
@@ -1022,19 +1096,6 @@ class _DexRecentSwapRecord extends StatelessWidget {
         ),
       ],
     ),
-  );
-
-  Widget _recordList(List<DexSwapRecord> records) => Column(
-    children: [
-      _recordCard(records.first),
-      if (records.length > 1) ...[
-        const SizedBox(height: 22),
-        for (final record in records.skip(1)) ...[
-          _recordCard(record),
-          if (record != records.last) const SizedBox(height: 10),
-        ],
-      ],
-    ],
   );
 }
 
@@ -1699,6 +1760,7 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
+                    textInputAction: TextInputAction.done,
                     inputFormatters: [
                       TextInputFormatter.withFunction((oldValue, newValue) {
                         final valid = RegExp(
@@ -1710,6 +1772,8 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
                     padding: EdgeInsets.zero,
                     decoration: const BoxDecoration(),
                     onTap: _focusNode.requestFocus,
+                    onTapOutside: (_) => _focusNode.unfocus(),
+                    onSubmitted: (_) => _focusNode.unfocus(),
                     onChanged: widget.onValueChanged,
                     style: TextStyle(
                       color: widget.palette.primaryText,
@@ -1734,7 +1798,10 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
         behavior: HitTestBehavior.opaque,
         onTap: widget.onTokenTap == null
             ? null
-            : () => widget.onTokenTap!(widget.symbol),
+            : () {
+                _focusNode.unfocus();
+                widget.onTokenTap!(widget.symbol);
+              },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
