@@ -15,6 +15,117 @@ class WalletTransferService {
   const WalletTransferService({this.broadcast});
   final Future<String> Function(String rawTransaction)? broadcast;
 
+  /// Signs and broadcasts the EVM transaction returned by a LI.FI quote.
+  /// The caller must have shown the exact transaction request to the user.
+  Future<WalletTransferResult> executeTransactionRequestWithRpc({
+    required String mnemonic,
+    required String from,
+    required WalletNetwork network,
+    required String accessToken,
+    required WalletRpcClient rpc,
+    required Map<String, dynamic> transactionRequest,
+  }) async {
+    final to = transactionRequest['to'] as String?;
+    if (to == null || !to.startsWith('0x')) {
+      throw const FormatException('LI.FI 交易目标地址无效');
+    }
+    final endpoints = await rpc.loadEndpoints(
+      network: network.name,
+      accessToken: accessToken,
+    );
+    Future<Map<String, dynamic>> call(String method, List<Object> params) {
+      return rpc.postJson(endpoints, {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': method,
+        'params': params,
+      });
+    }
+
+    final nonceHex =
+        (await call('eth_getTransactionCount', [from, 'pending']))['result']
+            as String;
+    final gasPriceHex =
+        transactionRequest['gasPrice'] as String? ??
+        (await call('eth_gasPrice', const []))['result'] as String;
+    final chainHex = (await call('eth_chainId', const []))['result'] as String;
+    final valueHex = transactionRequest['value'] as String? ?? '0x0';
+    final dataHex = transactionRequest['data'] as String? ?? '0x';
+    final gasLimitHex =
+        transactionRequest['gasLimit'] as String? ??
+        transactionRequest['gas'] as String? ??
+        '0x186a0';
+    final result = await execute(
+      mnemonic: mnemonic,
+      from: from,
+      to: to,
+      amount: _weiToDecimal(_hexToBigInt(valueHex)),
+      chainId: _hexToBigInt(chainHex).toInt(),
+      nonce: _hexToBigInt(nonceHex).toInt(),
+      gasPriceWei: _hexToBigInt(gasPriceHex).toInt(),
+      gasLimit: _hexToBigInt(gasLimitHex).toInt(),
+      data: _hexToBytes(dataHex),
+      broadcast: (raw) async =>
+          (await call('eth_sendRawTransaction', [raw]))['result'] as String,
+    );
+    return result;
+  }
+
+  /// Ensures an ERC-20 allowance for a LI.FI spender. Returns null when the
+  /// existing allowance is already sufficient.
+  Future<WalletTransferResult?> ensureErc20AllowanceWithRpc({
+    required String mnemonic,
+    required String from,
+    required WalletNetwork network,
+    required String accessToken,
+    required WalletRpcClient rpc,
+    required String tokenAddress,
+    required String spender,
+    required String requiredAmount,
+  }) async {
+    final endpoints = await rpc.loadEndpoints(
+      network: network.name,
+      accessToken: accessToken,
+    );
+    Future<Map<String, dynamic>> call(String method, List<Object> params) =>
+        rpc.postJson(endpoints, {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': method,
+          'params': params,
+        });
+    final owner = _encodeAddress(from);
+    final spenderEncoded = _encodeAddress(spender);
+    final allowanceResult = await call('eth_call', [
+      {'to': tokenAddress, 'data': '0xdd62ed3e$owner$spenderEncoded'},
+      'latest',
+    ]);
+    final current = _hexToBigInt(allowanceResult['result'] as String? ?? '0x0');
+    final required = BigInt.parse(requiredAmount);
+    if (current >= required) return null;
+
+    final approvalData = '0x095ea7b3$spenderEncoded${_encodeUint(required)}';
+    final nonceHex =
+        (await call('eth_getTransactionCount', [from, 'pending']))['result']
+            as String;
+    final gasPriceHex =
+        (await call('eth_gasPrice', const []))['result'] as String;
+    final chainHex = (await call('eth_chainId', const []))['result'] as String;
+    return execute(
+      mnemonic: mnemonic,
+      from: from,
+      to: tokenAddress,
+      amount: '0',
+      chainId: _hexToBigInt(chainHex).toInt(),
+      nonce: _hexToBigInt(nonceHex).toInt(),
+      gasPriceWei: _hexToBigInt(gasPriceHex).toInt(),
+      gasLimit: 100000,
+      data: _hexToBytes(approvalData),
+      broadcast: (raw) async =>
+          (await call('eth_sendRawTransaction', [raw]))['result'] as String,
+    );
+  }
+
   Future<WalletTransferResult> executeWithRpc({
     required String mnemonic,
     required String from,
@@ -130,6 +241,46 @@ class WalletTransferService {
       paddedFraction.isEmpty ? '0' : paddedFraction,
     );
     return (whole * BigInt.from(10).pow(decimals) + fraction).toString();
+  }
+
+  static BigInt _hexToBigInt(String value) {
+    final normalized = value.startsWith('0x') ? value.substring(2) : value;
+    return normalized.isEmpty
+        ? BigInt.zero
+        : BigInt.parse(normalized, radix: 16);
+  }
+
+  static List<int> _hexToBytes(String value) {
+    final normalized = value.startsWith('0x') ? value.substring(2) : value;
+    if (normalized.isEmpty) return const [];
+    final padded = normalized.length.isOdd ? '0$normalized' : normalized;
+    return List<int>.generate(
+      padded.length ~/ 2,
+      (index) =>
+          int.parse(padded.substring(index * 2, index * 2 + 2), radix: 16),
+    );
+  }
+
+  static String _encodeAddress(String value) {
+    final normalized = value.toLowerCase().replaceFirst('0x', '');
+    if (normalized.length != 40 ||
+        !RegExp(r'^[0-9a-f]+$').hasMatch(normalized)) {
+      throw const FormatException('EVM 地址无效');
+    }
+    return normalized.padLeft(64, '0');
+  }
+
+  static String _encodeUint(BigInt value) =>
+      value.toRadixString(16).padLeft(64, '0');
+
+  static String _weiToDecimal(BigInt value) {
+    final whole = value ~/ BigInt.from(10).pow(18);
+    final fraction = value
+        .remainder(BigInt.from(10).pow(18))
+        .toString()
+        .padLeft(18, '0')
+        .replaceFirst(RegExp(r'0+$'), '');
+    return fraction.isEmpty ? whole.toString() : '$whole.$fraction';
   }
 
   static List<int> _addressBytes(String value) => _hexBytes(value.substring(2));

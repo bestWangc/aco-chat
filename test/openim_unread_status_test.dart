@@ -3,6 +3,22 @@ import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('unread conversations stay hidden until authorization is ready', () {
+    final conversation = ConversationInfo(
+      conversationID: 'si_not_ready',
+      unreadCount: 1,
+      latestMsg: Message(
+        sendID: 'member',
+        textElem: TextElem(content: '你好'),
+      ),
+    );
+
+    expect(
+      OpenIMChatRepository.hasUnreadMessagesFromOthers([conversation]),
+      isFalse,
+    );
+  });
+
   test('cleared conversations do not keep the global unread badge', () {
     final clearedConversation = ConversationInfo(
       conversationID: 'sg_cleared',

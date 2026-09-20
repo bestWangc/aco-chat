@@ -81,6 +81,29 @@ class SolanaSigningService {
     );
   }
 
+  /// Signs a serialized legacy Solana transaction returned by a trusted
+  /// router such as LI.FI. The wallet must be the fee payer and the only
+  /// required signer; arbitrary additional signers are refused.
+  String signSerializedTransaction({
+    required String mnemonic,
+    required String serializedTransaction,
+  }) {
+    final transaction = SolanaTransaction.deserialize(
+      base64Decode(serializedTransaction),
+    );
+    final signer = addressForMnemonic(mnemonic);
+    if (transaction.message.version != TransactionType.legacy ||
+        transaction.message.header.numRequiredSignatures != 1 ||
+        transaction.message.accountKeys.first.address != signer) {
+      throw const FormatException('仅支持当前钱包单签名的 Solana 交易');
+    }
+    final privateKey = SolanaPrivateKey.fromSeed(
+      _account(mnemonic).privateKey.raw,
+    );
+    transaction.sign([privateKey]);
+    return base64Encode(transaction.serialize(verifySignatures: true));
+  }
+
   SolanaNativeTransfer inspectSerializedNativeTransfer({
     required String serializedTransaction,
     required String signerAddress,

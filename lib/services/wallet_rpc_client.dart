@@ -76,6 +76,11 @@ class WalletRpcClient {
     return result.future.timeout(requestTimeout);
   }
 
+  Future<Map<String, dynamic>> postJsonTo(
+    Uri endpoint,
+    Map<String, Object> request,
+  ) => _postJsonToUri(endpoint, request);
+
   Future<Map<String, dynamic>> _postJsonToUri(
     Uri uri,
     Map<String, Object> request,

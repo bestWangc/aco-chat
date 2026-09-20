@@ -127,9 +127,10 @@ final class OpenIMChatRepository implements ChatRepository {
 
   static bool _isAuthorizedConversation(String? conversationID) {
     final authorizedConversationIDs = _authorizedConversationIDs;
-    return authorizedConversationIDs == null ||
-        (conversationID != null &&
-            authorizedConversationIDs.contains(conversationID));
+    if (authorizedConversationIDs == null || conversationID == null) {
+      return false;
+    }
+    return authorizedConversationIDs.contains(conversationID);
   }
 
   static void updateAuthorizedConversations(
@@ -280,6 +281,7 @@ final class OpenIMChatRepository implements ChatRepository {
     // seen on iOS/Android during cold start.
     conversationReady.value = false;
     messageUnreadNotifier.value = false;
+    _authorizedConversationIDs = null;
     await Future<void>.delayed(const Duration(milliseconds: 300));
     try {
       await _sdk.login(userID: userId, token: userSig);

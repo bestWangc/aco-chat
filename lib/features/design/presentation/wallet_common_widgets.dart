@@ -311,12 +311,57 @@ class _SectionTabs extends StatelessWidget {
     required this.selected,
     this.onChanged,
     this.itemSpacing = 32,
+    this.fontSize = 18,
+    this.horizontalPadding = 10,
+    this.showSelectedIndicator = false,
   });
   final AcoPalette palette;
   final List<String> labels;
   final int selected;
   final ValueChanged<int>? onChanged;
   final double itemSpacing;
+  final double fontSize;
+  final double horizontalPadding;
+  final bool showSelectedIndicator;
+
+  Widget _tabLabel(String label, bool isSelected) {
+    final content = Container(
+      height: 28.42,
+      padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? (showSelectedIndicator
+                  ? const Color(0xFF252525)
+                  : const Color(0xFF212121))
+            : _transparent,
+        borderRadius: BorderRadius.circular(14.21),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? _white : _walletHeaderMuted,
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400,
+          fontSize: fontSize,
+          height: 1.15,
+        ),
+      ),
+    );
+    if (!showSelectedIndicator || !isSelected) return content;
+    return Transform.translate(
+      offset: const Offset(0, -4),
+      child: Container(
+        height: 37,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF151515),
+          borderRadius: BorderRadius.circular(19),
+        ),
+        child: content,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) => Row(
     children: [
@@ -330,30 +375,25 @@ class _SectionTabs extends StatelessWidget {
             minimumSize: const Size(30, 42),
             onPressed: onChanged == null ? null : () => onChanged!(i),
             child: SizedBox(
-              height: 42,
+              height: showSelectedIndicator ? 46 : 42,
               child: Align(
                 alignment: Alignment.topCenter,
-                child: Container(
-                  height: 28.42,
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  decoration: BoxDecoration(
-                    color: i == selected
-                        ? const Color(0xFF212121)
-                        : _transparent,
-                    borderRadius: BorderRadius.circular(12.11),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    labels[i],
-                    style: TextStyle(
-                      color: i == selected ? _white : _walletHeaderMuted,
-                      fontWeight: i == selected
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                      fontSize: 18,
-                      height: 1,
-                    ),
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _tabLabel(labels[i], i == selected),
+                    if (showSelectedIndicator && i == selected) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        width: 14,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: palette.accent,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -398,8 +438,9 @@ class _TimeRangeSelector extends StatelessWidget {
 }
 
 class _WalletAssetIcon extends StatelessWidget {
-  const _WalletAssetIcon({required this.symbol, this.size = 24});
+  const _WalletAssetIcon({required this.symbol, this.logoUri, this.size = 24});
   final String symbol;
+  final String? logoUri;
   final double size;
 
   @override
@@ -411,6 +452,23 @@ class _WalletAssetIcon extends StatelessWidget {
       'IOST' => null,
       _ => 'assets/icons/crypto/tokens/${normalized.toLowerCase()}.svg',
     };
+    final remoteLogo = logoUri;
+    if (remoteLogo != null &&
+        (remoteLogo.startsWith('https://') ||
+            remoteLogo.startsWith('http://'))) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: ClipOval(
+          child: Image.network(
+            remoteLogo,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) =>
+                _WalletAssetIcon(symbol: symbol, size: size),
+          ),
+        ),
+      );
+    }
     return SizedBox(
       width: size,
       height: size,

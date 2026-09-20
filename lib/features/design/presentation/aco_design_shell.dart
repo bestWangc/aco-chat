@@ -29,11 +29,13 @@ import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:aco_chat/services/wallet_metadata_store.dart';
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_transfer_service.dart';
+import 'package:aco_chat/services/lifi_api_client.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:aco_chat/services/wallet_transaction_service.dart';
 import 'package:aco_chat/services/dapp_directory_service.dart';
 import 'package:aco_chat/services/solana_signing_service.dart';
+import 'package:aco_chat/services/tron_signing_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -520,6 +522,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.profileTheme => AcoScreen.profileTheme,
       AcoScreen.profileLanguage => AcoScreen.profileLanguage,
       AcoScreen.addTokenV2 => AcoScreen.addTokenV2,
+      AcoScreen.dexToken => AcoScreen.dexToken,
+      AcoScreen.dexSwap => AcoScreen.dexSwap,
       AcoScreen.voiceRoom => AcoScreen.voiceRoom,
       AcoScreen.chatV1 => AcoScreen.chatV1,
       AcoScreen.chatV2 => AcoScreen.chatV2,
@@ -708,7 +712,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                             const destinations = [
                               AcoScreen.walletHome,
                               AcoScreen.browserDiscover,
-                              AcoScreen.comingSoon,
+                              AcoScreen.dexToken,
                               AcoScreen.squareFeed,
                               AcoScreen.socialMessages,
                             ];
