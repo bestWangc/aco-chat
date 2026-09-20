@@ -31,6 +31,7 @@ class LifiApiClient {
     String? fromTokenAddress,
     String? toTokenAddress,
     double slippage = .02,
+    double fee = .005,
   }) async {
     final fromChain = chainId(fromNetwork);
     final toChain = chainId(toNetwork);
@@ -44,6 +45,8 @@ class LifiApiClient {
         'fromAmount': toBaseUnits(fromAmount, fromDecimals),
         'fromAddress': fromAddress,
         'slippage': slippage.toString(),
+        'fee': fee.toString(),
+        'integrator': 'aco',
       },
     );
     final response = await _client
