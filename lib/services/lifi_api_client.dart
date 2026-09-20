@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_portfolio_models.dart';
@@ -49,9 +50,12 @@ class LifiApiClient {
         .get(uri)
         .timeout(const Duration(seconds: 15));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw LifiException(
-        'LI.FI 报价失败（${response.statusCode}）：${_errorMessage(response)}',
+      final message = _errorMessage(response);
+      developer.log(
+        'quote failed status=${response.statusCode} uri=$uri reason=$message',
+        name: 'LI.FI',
       );
+      throw LifiException('LI.FI 报价失败（${response.statusCode}）：$message');
     }
     final body = jsonDecode(response.body);
     if (body is! Map<String, dynamic>) {
@@ -187,16 +191,43 @@ class LifiApiClient {
   static String _errorMessage(http.Response response) {
     try {
       final body = jsonDecode(response.body);
-      if (body is Map) {
-        for (final key in ['message', 'error', 'description']) {
-          final value = body[key];
-          if (value is String && value.trim().isNotEmpty) return value.trim();
-        }
-      }
+      final message = _findErrorMessage(body);
+      if (message != null) return message;
     } catch (_) {
       // Fall back to the status code when the response is not JSON.
     }
-    return '请稍后重试';
+    final text = response.body.trim();
+    return text.isEmpty
+        ? '请稍后重试'
+        : text.substring(0, text.length > 240 ? 240 : text.length);
+  }
+
+  static String? _findErrorMessage(Object? value) {
+    if (value is String && value.trim().isNotEmpty) return value.trim();
+    if (value is Map) {
+      for (final key in [
+        'message',
+        'error',
+        'description',
+        'errorMessage',
+        'statusMessage',
+        'reason',
+      ]) {
+        final message = _findErrorMessage(value[key]);
+        if (message != null) return message;
+      }
+      for (final item in value.values) {
+        final message = _findErrorMessage(item);
+        if (message != null) return message;
+      }
+    }
+    if (value is Iterable) {
+      for (final item in value) {
+        final message = _findErrorMessage(item);
+        if (message != null) return message;
+      }
+    }
+    return null;
   }
 }
 
@@ -207,6 +238,8 @@ class LifiQuote {
     required this.toAmountMin,
     required this.tool,
     required this.transactionRequest,
+    this.priceImpact,
+    this.fee,
   });
 
   final String fromAmount;
@@ -214,19 +247,54 @@ class LifiQuote {
   final String toAmountMin;
   final String tool;
   final Map<String, dynamic>? transactionRequest;
+  final String? priceImpact;
+  final String? fee;
 
   factory LifiQuote.fromJson(Map<String, dynamic> json) {
     final estimate = json['estimate'] as Map<String, dynamic>? ?? const {};
+    final action = json['action'];
+    final actionMap = action is Map ? action : const <String, dynamic>{};
+    final tool = json['tool'];
+    final toolName = tool is Map ? tool['name'] : tool;
     return LifiQuote(
-      fromAmount:
-          '${estimate['fromAmount'] ?? json['action']?['fromAmount'] ?? ''}',
+      fromAmount: '${estimate['fromAmount'] ?? actionMap['fromAmount'] ?? ''}',
       toAmount: '${estimate['toAmount'] ?? ''}',
       toAmountMin: '${estimate['toAmountMin'] ?? ''}',
-      tool: '${json['tool']?['name'] ?? json['tool'] ?? 'LI.FI'}',
+      tool: '${toolName ?? 'LI.FI'}',
       transactionRequest: json['transactionRequest'] is Map<String, dynamic>
           ? json['transactionRequest'] as Map<String, dynamic>
           : null,
+      priceImpact: _optionalString(estimate['priceImpact']),
+      fee: _feeSummary(estimate),
     );
+  }
+
+  static String? _optionalString(Object? value) {
+    if (value == null) return null;
+    final text = '$value'.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  static String? _feeSummary(Map<String, dynamic> estimate) {
+    final feeCosts = estimate['feeCosts'];
+    if (feeCosts is! List || feeCosts.isEmpty) return null;
+    final values = feeCosts
+        .whereType<Map>()
+        .map((fee) {
+          final usd = _optionalString(fee['amountUSD']);
+          if (usd != null) return '\$$usd';
+          final amount = _optionalString(fee['amount']);
+          final token = _optionalString(
+            fee['token'] is Map
+                ? (fee['token'] as Map)['symbol']
+                : fee['token'],
+          );
+          if (amount == null) return null;
+          return token == null ? amount : '$amount $token';
+        })
+        .whereType<String>()
+        .toList();
+    return values.isEmpty ? null : values.join(' + ');
   }
 }
 

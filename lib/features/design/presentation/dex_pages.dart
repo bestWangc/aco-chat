@@ -270,6 +270,14 @@ class _DexSwapContentState extends State<_DexSwapContent> {
 
   String get _nativeSymbol => selectedChain.nativeToken.symbol;
 
+  int _decimalsFor(String symbol) {
+    if (symbol == _nativeSymbol) {
+      return selectedChain.network == WalletNetwork.solana ? 9 : 18;
+    }
+    return WalletChainRegistry.chains[selectedChain.network]?.usdc?.decimals ??
+        6;
+  }
+
   String get _normalizedFromAmount => _fromAmount.replaceAll(',', '').trim();
 
   Future<void> _loadWalletIdentity() async {
@@ -733,7 +741,14 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         ),
       ),
       const SizedBox(height: 16),
-      _DexSwapQuoteCard(palette: palette, quote: _quote),
+      _DexSwapQuoteCard(
+        palette: palette,
+        quote: _quote,
+        fromSymbol: _fromSymbol,
+        toSymbol: _toSymbol,
+        fromDecimals: _decimalsFor(_fromSymbol),
+        toDecimals: _decimalsFor(_toSymbol),
+      ),
       const SizedBox(height: 28),
       _DexRecentSwapRecord(palette: palette, future: widget.recentRecord),
     ],
@@ -741,9 +756,20 @@ class _DexSwapContentState extends State<_DexSwapContent> {
 }
 
 class _DexSwapQuoteCard extends StatelessWidget {
-  const _DexSwapQuoteCard({required this.palette, this.quote});
+  const _DexSwapQuoteCard({
+    required this.palette,
+    required this.fromSymbol,
+    required this.toSymbol,
+    required this.fromDecimals,
+    required this.toDecimals,
+    this.quote,
+  });
   final AcoPalette palette;
   final LifiQuote? quote;
+  final String fromSymbol;
+  final String toSymbol;
+  final int fromDecimals;
+  final int toDecimals;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -757,10 +783,20 @@ class _DexSwapQuoteCard extends StatelessWidget {
       children: [
         _row(
           '兑换价格',
-          quote == null ? '-' : '${quote!.fromAmount} → ${quote!.toAmount}',
+          quote == null
+              ? '-'
+              : '${_formatUnits(quote!.fromAmount, fromDecimals)} $fromSymbol → '
+                    '${_formatUnits(quote!.toAmount, toDecimals)} $toSymbol',
         ),
         _row('滑点', '2%'),
-        _row('最少接收数量', quote?.toAmountMin ?? '-'),
+        _row('价格影响', quote?.priceImpact ?? '-'),
+        _row(
+          '最少接收数量',
+          quote == null
+              ? '-'
+              : '${_formatUnits(quote!.toAmountMin, toDecimals)} $toSymbol',
+        ),
+        _row('服务费', quote?.fee ?? '-'),
         _row('兑换路径', quote?.tool ?? 'LI.FI'),
       ],
     ),
@@ -789,6 +825,25 @@ class _DexSwapQuoteCard extends StatelessWidget {
       ],
     ),
   );
+
+  String _formatUnits(String raw, int decimals) {
+    if (raw.isEmpty) return '-';
+    try {
+      final value = BigInt.parse(raw);
+      if (decimals == 0) return value.toString();
+      final negative = value.isNegative;
+      final digits = (negative ? -value : value).toString().padLeft(
+        decimals + 1,
+        '0',
+      );
+      final split = digits.length - decimals;
+      final fraction = digits.substring(split).replaceFirst(RegExp(r'0+$'), '');
+      return '${negative ? '-' : ''}${digits.substring(0, split)}'
+          '${fraction.isEmpty ? '' : '.$fraction'}';
+    } catch (_) {
+      return raw;
+    }
+  }
 }
 
 class DexSwapRecord {
