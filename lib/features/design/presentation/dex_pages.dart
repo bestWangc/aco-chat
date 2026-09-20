@@ -472,11 +472,13 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     } on LifiException catch (error) {
       client.close();
       if (!context.mounted) return;
-      _showNotice(context, 'LI.FI 报价失败', error.message);
+      if (showNotice) _showNotice(context, 'LI.FI 报价失败', error.message);
     } catch (_) {
       client.close();
       if (!context.mounted) return;
-      _showNotice(context, 'LI.FI 报价失败', '网络请求失败，请稍后重试。');
+      if (showNotice) {
+        _showNotice(context, 'LI.FI 报价失败', '网络请求失败，请稍后重试。');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

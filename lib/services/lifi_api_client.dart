@@ -49,7 +49,9 @@ class LifiApiClient {
         .get(uri)
         .timeout(const Duration(seconds: 15));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw LifiException('LI.FI 报价失败（${response.statusCode}）');
+      throw LifiException(
+        'LI.FI 报价失败（${response.statusCode}）：${_errorMessage(response)}',
+      );
     }
     final body = jsonDecode(response.body);
     if (body is! Map<String, dynamic>) {
@@ -180,6 +182,21 @@ class LifiApiClient {
 
   void close() {
     if (_ownsClient) _client.close();
+  }
+
+  static String _errorMessage(http.Response response) {
+    try {
+      final body = jsonDecode(response.body);
+      if (body is Map) {
+        for (final key in ['message', 'error', 'description']) {
+          final value = body[key];
+          if (value is String && value.trim().isNotEmpty) return value.trim();
+        }
+      }
+    } catch (_) {
+      // Fall back to the status code when the response is not JSON.
+    }
+    return '请稍后重试';
   }
 }
 
