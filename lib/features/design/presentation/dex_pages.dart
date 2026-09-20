@@ -718,6 +718,9 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         ethFirst: ethFirst,
         onEthFirstChanged: widget.onEthFirstChanged,
         onSwapChanged: _setSwap,
+        outputAmount: _quote == null
+            ? '-'
+            : _formatTokenUnits(_quote!.toAmount, _decimalsFor(_toSymbol)),
       ),
       const SizedBox(height: 28),
       Container(
@@ -785,18 +788,16 @@ class _DexSwapQuoteCard extends StatelessWidget {
           '兑换价格',
           quote == null
               ? '-'
-              : '${_formatUnits(quote!.fromAmount, fromDecimals)} $fromSymbol → '
-                    '${_formatUnits(quote!.toAmount, toDecimals)} $toSymbol',
+              : '${_formatTokenUnits(quote!.fromAmount, fromDecimals)} $fromSymbol → '
+                    '${_formatTokenUnits(quote!.toAmount, toDecimals)} $toSymbol',
         ),
         _row('滑点', '2%'),
-        _row('价格影响', quote?.priceImpact ?? '-'),
         _row(
           '最少接收数量',
           quote == null
               ? '-'
-              : '${_formatUnits(quote!.toAmountMin, toDecimals)} $toSymbol',
+              : '${_formatTokenUnits(quote!.toAmountMin, toDecimals)} $toSymbol',
         ),
-        _row('服务费', quote?.fee ?? '-'),
         _row('兑换路径', quote?.tool ?? 'LI.FI'),
       ],
     ),
@@ -825,24 +826,24 @@ class _DexSwapQuoteCard extends StatelessWidget {
       ],
     ),
   );
+}
 
-  String _formatUnits(String raw, int decimals) {
-    if (raw.isEmpty) return '-';
-    try {
-      final value = BigInt.parse(raw);
-      if (decimals == 0) return value.toString();
-      final negative = value.isNegative;
-      final digits = (negative ? -value : value).toString().padLeft(
-        decimals + 1,
-        '0',
-      );
-      final split = digits.length - decimals;
-      final fraction = digits.substring(split).replaceFirst(RegExp(r'0+$'), '');
-      return '${negative ? '-' : ''}${digits.substring(0, split)}'
-          '${fraction.isEmpty ? '' : '.$fraction'}';
-    } catch (_) {
-      return raw;
-    }
+String _formatTokenUnits(String raw, int decimals) {
+  if (raw.isEmpty) return '-';
+  try {
+    final value = BigInt.parse(raw);
+    if (decimals == 0) return value.toString();
+    final negative = value.isNegative;
+    final digits = (negative ? -value : value).toString().padLeft(
+      decimals + 1,
+      '0',
+    );
+    final split = digits.length - decimals;
+    final fraction = digits.substring(split).replaceFirst(RegExp(r'0+$'), '');
+    return '${negative ? '-' : ''}${digits.substring(0, split)}'
+        '${fraction.isEmpty ? '' : '.$fraction'}';
+  } catch (_) {
+    return raw;
   }
 }
 
@@ -1044,12 +1045,14 @@ class _DexSwapPanel extends StatefulWidget {
     required this.ethFirst,
     required this.onEthFirstChanged,
     required this.onSwapChanged,
+    required this.outputAmount,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
   final bool ethFirst;
   final ValueChanged<bool> onEthFirstChanged;
   final void Function(String from, String to, String amount) onSwapChanged;
+  final String outputAmount;
 
   @override
   State<_DexSwapPanel> createState() => _DexSwapPanelState();
@@ -1199,7 +1202,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           label: '至',
           symbol: _toSymbol,
           logoUri: _toLogoUri,
-          value: '-',
+          value: widget.outputAmount,
           onTokenTap: (symbol) => _pickToken(context, symbol, false),
         ),
       ],
