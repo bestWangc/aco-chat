@@ -1206,9 +1206,14 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
     for (final token in _remoteTokens) {
       final symbol = token.symbol.trim();
       if (symbol.isNotEmpty && token.address.isNotEmpty) {
-        values.putIfAbsent(
-          symbol.toUpperCase(),
-          () => (symbol, symbol, token.address, '0', token.logoUri ?? ''),
+        // LI.FI is the source of truth for token metadata and logos. This
+        // also replaces the local USDT/USDC fallback when LI.FI has a logo.
+        values[symbol.toUpperCase()] = (
+          symbol,
+          symbol,
+          token.address,
+          '0',
+          token.logoUri ?? '',
         );
       }
     }
@@ -1397,7 +1402,6 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                               children: [
                                 _TokenPickerRow(
                                   symbol: token.$1,
-                                  iconSymbol: token.$2,
                                   address: token.$3,
                                   balance: token.$4,
                                   logoUri: token.$5,
@@ -1460,7 +1464,6 @@ class _DexCommonToken extends StatelessWidget {
 class _TokenPickerRow extends StatelessWidget {
   const _TokenPickerRow({
     required this.symbol,
-    required this.iconSymbol,
     required this.address,
     required this.balance,
     required this.logoUri,
@@ -1468,7 +1471,7 @@ class _TokenPickerRow extends StatelessWidget {
     required this.selected,
     required this.onTap,
   });
-  final String symbol, iconSymbol, address, balance, logoUri;
+  final String symbol, address, balance, logoUri;
   final AcoPalette palette;
   final bool selected;
   final VoidCallback onTap;
@@ -1480,11 +1483,7 @@ class _TokenPickerRow extends StatelessWidget {
     onPressed: onTap,
     child: Row(
       children: [
-        _WalletAssetIcon(
-          symbol: iconSymbol,
-          logoUri: logoUri.isEmpty ? null : logoUri,
-          size: 38,
-        ),
+        _DexTokenLogo(logoUri: logoUri, size: 38),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -1519,6 +1518,37 @@ class _TokenPickerRow extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _DexTokenLogo extends StatelessWidget {
+  const _DexTokenLogo({required this.logoUri, required this.size});
+
+  final String logoUri;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final isRemote =
+        logoUri.startsWith('https://') || logoUri.startsWith('http://');
+    if (!isRemote) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: const _MissingTokenIcon(),
+      );
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: ClipOval(
+        child: Image.network(
+          logoUri,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const _MissingTokenIcon(),
+        ),
+      ),
+    );
+  }
 }
 
 class _DexSwapTokenRow extends StatefulWidget {
