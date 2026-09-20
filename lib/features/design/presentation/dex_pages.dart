@@ -1178,8 +1178,20 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                   token.$3.toLowerCase().contains(query)),
         )
         .toList();
-    final visibleTokens = filtered.take(_displayLimit).toList();
-    final hasMore = visibleTokens.length < filtered.length;
+    // The common-token cards already provide the primary quick choices. Keep
+    // those tokens out of the initial list so they are not repeated directly
+    // underneath the cards; once the user searches, matching common tokens
+    // should still be discoverable in the normal results.
+    final commonSymbols = _commonSymbols
+        .map((symbol) => symbol.toLowerCase())
+        .toSet();
+    final listTokens = query.isEmpty
+        ? filtered
+              .where((token) => !commonSymbols.contains(token.$1.toLowerCase()))
+              .toList()
+        : filtered;
+    final visibleTokens = listTokens.take(_displayLimit).toList();
+    final hasMore = visibleTokens.length < listTokens.length;
 
     return SafeArea(
       top: false,
@@ -1288,9 +1300,11 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                 ),
                 const SizedBox(height: 18),
                 Expanded(
-                  child: _loadingTokens && filtered.isEmpty
+                  child: _loadingTokens && listTokens.isEmpty
                       ? const Center(child: CupertinoActivityIndicator())
-                      : filtered.isEmpty
+                      : listTokens.isEmpty && query.isEmpty
+                      ? const SizedBox.shrink()
+                      : listTokens.isEmpty
                       ? Center(
                           child: Text(
                             '未找到代币',
