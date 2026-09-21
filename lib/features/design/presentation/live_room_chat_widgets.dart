@@ -717,6 +717,9 @@ class _LiveChatImage extends StatelessWidget {
           constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: 240),
           child: Image.network(
             imageUrl,
+            cacheWidth: (maxWidth * MediaQuery.devicePixelRatioOf(context))
+                .round(),
+            cacheHeight: (240 * MediaQuery.devicePixelRatioOf(context)).round(),
             fit: BoxFit.cover,
             loadingBuilder: (context, child, progress) => progress == null
                 ? child

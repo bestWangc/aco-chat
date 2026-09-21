@@ -728,6 +728,7 @@ class _PostCard extends StatelessWidget {
                   _PostImageGallery(
                     palette: palette,
                     imageUrls: post.imageUrls,
+                    thumbnailUrls: post.thumbnailUrls,
                   ),
                 ],
                 const SizedBox(height: 24),
@@ -765,10 +766,15 @@ class _PostCard extends StatelessWidget {
 }
 
 class _PostImageGallery extends StatelessWidget {
-  const _PostImageGallery({required this.palette, required this.imageUrls});
+  const _PostImageGallery({
+    required this.palette,
+    required this.imageUrls,
+    required this.thumbnailUrls,
+  });
 
   final AcoPalette palette;
   final List<String> imageUrls;
+  final List<String> thumbnailUrls;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -779,7 +785,12 @@ class _PostImageGallery extends StatelessWidget {
             maxWidth: math.min(208.0, constraints.maxWidth),
             maxHeight: 208,
           ),
-          child: _imageTile(context, imageUrls.first, fit: BoxFit.contain),
+          child: _imageTile(
+            context,
+            imageUrls.first,
+            thumbnailUrl: thumbnailUrls.first,
+            fit: BoxFit.contain,
+          ),
         );
       }
 
@@ -801,8 +812,12 @@ class _PostImageGallery extends StatelessWidget {
             mainAxisSpacing: spacing,
             mainAxisExtent: itemSize,
           ),
-          itemBuilder: (_, index) =>
-              _imageTile(context, imageUrls[index], width: double.infinity),
+          itemBuilder: (_, index) => _imageTile(
+            context,
+            imageUrls[index],
+            thumbnailUrl: thumbnailUrls[index],
+            width: double.infinity,
+          ),
         ),
       );
     },
@@ -811,6 +826,7 @@ class _PostImageGallery extends StatelessWidget {
   Widget _imageTile(
     BuildContext context,
     String imageUrl, {
+    required String thumbnailUrl,
     double? width,
     double? height,
     BoxFit fit = BoxFit.cover,
@@ -824,9 +840,13 @@ class _PostImageGallery extends StatelessWidget {
         child: ColoredBox(
           color: palette.surface,
           child: Image.network(
-            _liveCoverUrl(imageUrl),
+            _liveCoverUrl(thumbnailUrl),
             width: width,
             height: height,
+            // Feed cards are at most 260 logical pixels wide. Decode a bounded
+            // bitmap here; tapping the card still opens the full resource.
+            cacheWidth: (260 * MediaQuery.devicePixelRatioOf(context)).round(),
+            cacheHeight: (260 * MediaQuery.devicePixelRatioOf(context)).round(),
             fit: fit,
             semanticLabel: '动态图片缩略图',
             errorBuilder: (_, _, _) => Center(
@@ -1290,6 +1310,12 @@ class _LiveCard extends StatelessWidget {
               _liveCoverUrl(session.coverUrl),
               width: double.infinity,
               height: 160,
+              cacheWidth:
+                  (MediaQuery.sizeOf(context).width *
+                          MediaQuery.devicePixelRatioOf(context))
+                      .round(),
+              cacheHeight: (160 * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) =>
                   _LiveCoverPlaceholder(palette: palette),

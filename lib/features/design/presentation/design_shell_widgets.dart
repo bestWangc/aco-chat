@@ -233,10 +233,12 @@ class AcoScreenPage extends StatelessWidget {
       AcoScreen.dexToken => _DexTokenPage(
         palette: palette,
         selectedChain: _supportedWalletChains[walletChainIndex],
+        onOpen: onOpen,
       ),
       AcoScreen.dexSwap => _DexSwapPage(
         palette: palette,
         selectedChain: _supportedWalletChains[walletChainIndex],
+        onOpen: onOpen,
         walletIdentity: walletIdentity,
         secretStore: walletSecretStore ?? SecureWalletSecretStore(),
       ),
@@ -1066,6 +1068,12 @@ class AcoAvatar extends StatelessWidget {
               url,
               width: resolvedSize,
               height: resolvedSize,
+              cacheWidth:
+                  (resolvedSize * MediaQuery.devicePixelRatioOf(context))
+                      .round(),
+              cacheHeight:
+                  (resolvedSize * MediaQuery.devicePixelRatioOf(context))
+                      .round(),
               fit: BoxFit.cover,
               semanticLabel: '用户头像',
               errorBuilder: (_, _, _) => fallback,

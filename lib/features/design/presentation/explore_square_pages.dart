@@ -1147,6 +1147,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         _PostImageGallery(
           palette: widget.palette,
           imageUrls: widget.post.imageUrls,
+          thumbnailUrls: widget.post.thumbnailUrls,
         ),
       ],
       const SizedBox(height: 20),

@@ -239,6 +239,7 @@ class SquarePost {
     required this.identity,
     required this.staffIdentity,
     required this.imageUrls,
+    required this.thumbnailUrls,
     required this.replyCount,
     required this.likeCount,
     required this.liked,
@@ -254,6 +255,7 @@ class SquarePost {
   final int identity;
   final int staffIdentity;
   final List<String> imageUrls;
+  final List<String> thumbnailUrls;
   final int replyCount;
   final int likeCount;
   final bool liked;
@@ -274,6 +276,7 @@ class SquarePost {
     identity: identity,
     staffIdentity: staffIdentity,
     imageUrls: imageUrls,
+    thumbnailUrls: thumbnailUrls,
     replyCount: replyCount ?? this.replyCount,
     likeCount: likeCount ?? this.likeCount,
     liked: liked ?? this.liked,
@@ -293,6 +296,9 @@ class SquarePost {
       identity: (author['identity'] as num?)?.toInt() ?? 0,
       staffIdentity: (author['staff_identity'] as num?)?.toInt() ?? 0,
       imageUrls: images.whereType<String>().toList(growable: false),
+      thumbnailUrls: (json['image_thumbnails'] as List<dynamic>? ?? images)
+          .whereType<String>()
+          .toList(growable: false),
       replyCount: (json['reply_count'] as num?)?.toInt() ?? 0,
       likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
       liked: json['liked'] as bool? ?? false,

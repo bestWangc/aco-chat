@@ -1,9 +1,14 @@
 part of 'aco_design_shell.dart';
 
 class _DexTokenPage extends StatefulWidget {
-  const _DexTokenPage({required this.palette, required this.selectedChain});
+  const _DexTokenPage({
+    required this.palette,
+    required this.selectedChain,
+    required this.onOpen,
+  });
   final AcoPalette palette;
   final _WalletChain selectedChain;
+  final ValueChanged<AcoScreen> onOpen;
   @override
   State<_DexTokenPage> createState() => _DexTokenPageState();
 }
@@ -162,6 +167,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
           _DexSwapContent(
             palette: palette,
             selectedChain: widget.selectedChain,
+            onOpen: widget.onOpen,
             ethFirst: ethFirst,
             onEthFirstChanged: (value) => setState(() => ethFirst = value),
             recentRecord: null,
@@ -176,11 +182,13 @@ class _DexSwapPage extends StatefulWidget {
   const _DexSwapPage({
     required this.palette,
     required this.selectedChain,
+    required this.onOpen,
     this.walletIdentity,
     this.secretStore,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
+  final ValueChanged<AcoScreen> onOpen;
   final WalletIdentity? walletIdentity;
   final WalletSecretStore? secretStore;
   @override
@@ -211,6 +219,7 @@ class _DexSwapPageState extends State<_DexSwapPage> {
         _DexSwapContent(
           palette: palette,
           selectedChain: widget.selectedChain,
+          onOpen: widget.onOpen,
           walletIdentity: widget.walletIdentity,
           secretStore: widget.secretStore,
           ethFirst: ethFirst,
@@ -226,6 +235,7 @@ class _DexSwapContent extends StatefulWidget {
   const _DexSwapContent({
     required this.palette,
     required this.selectedChain,
+    required this.onOpen,
     this.walletIdentity,
     this.secretStore,
     required this.ethFirst,
@@ -234,6 +244,7 @@ class _DexSwapContent extends StatefulWidget {
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
+  final ValueChanged<AcoScreen> onOpen;
   final WalletIdentity? walletIdentity;
   final WalletSecretStore? secretStore;
   final bool ethFirst;
@@ -245,6 +256,8 @@ class _DexSwapContent extends StatefulWidget {
 }
 
 class _DexSwapContentState extends State<_DexSwapContent> {
+  _WalletChain _fromChain = _supportedWalletChains.first;
+  _WalletChain _toChain = _supportedWalletChains.first;
   late String _fromSymbol;
   late String _toSymbol;
   String _fromAmount = '0';
@@ -254,7 +267,8 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   WalletIdentity? _resolvedIdentity;
 
   AcoPalette get palette => widget.palette;
-  _WalletChain get selectedChain => widget.selectedChain;
+  _WalletChain get fromChain => _fromChain;
+  _WalletChain get toChain => _toChain;
   WalletIdentity? get walletIdentity =>
       widget.walletIdentity ?? _resolvedIdentity;
   WalletSecretStore? get secretStore => widget.secretStore;
@@ -263,19 +277,20 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   @override
   void initState() {
     super.initState();
+    _fromChain = widget.selectedChain;
+    _toChain = widget.selectedChain;
     _fromSymbol = _nativeSymbol;
     _toSymbol = 'USDC';
     if (widget.walletIdentity == null) unawaited(_loadWalletIdentity());
   }
 
-  String get _nativeSymbol => selectedChain.nativeToken.symbol;
+  String get _nativeSymbol => fromChain.nativeToken.symbol;
 
-  int _decimalsFor(String symbol) {
-    if (symbol == _nativeSymbol) {
-      return selectedChain.network == WalletNetwork.solana ? 9 : 18;
+  int _decimalsFor(_WalletChain chain, String symbol) {
+    if (symbol == chain.nativeToken.symbol) {
+      return chain.network == WalletNetwork.solana ? 9 : 18;
     }
-    return WalletChainRegistry.chains[selectedChain.network]?.usdc?.decimals ??
-        6;
+    return WalletChainRegistry.chains[chain.network]?.usdc?.decimals ?? 6;
   }
 
   String get _normalizedFromAmount => _fromAmount.replaceAll(',', '').trim();
@@ -300,8 +315,16 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     });
   }
 
-  void _setSwap(String from, String to, String amount) {
+  void _setSwap(
+    _WalletChain nextFromChain,
+    String from,
+    _WalletChain nextToChain,
+    String to,
+    String amount,
+  ) {
     setState(() {
+      _fromChain = nextFromChain;
+      _toChain = nextToChain;
       _fromSymbol = from;
       _toSymbol = to;
       _fromAmount = amount;
@@ -327,12 +350,17 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       if (showNotice) _showNotice(context, '兑换', '请先连接钱包继续兑换。');
       return;
     }
-    final address = await _addressForChain(identity, selectedChain);
+    final fromAddress = await _addressForChain(identity, fromChain);
+    final toAddress = await _addressForChain(identity, toChain);
     if (!context.mounted) return;
-    if (address == null || address.isEmpty) {
+    if (fromAddress == null || fromAddress.isEmpty) {
       if (showNotice) {
-        _showNotice(context, '兑换', '当前公链钱包地址尚未准备完成。');
+        await _showMissingChainWallet(context, fromChain);
       }
+      return;
+    }
+    if (toAddress == null || toAddress.isEmpty) {
+      if (showNotice) await _showMissingChainWallet(context, toChain);
       return;
     }
     final amount = _normalizedFromAmount;
@@ -341,13 +369,14 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       if (showNotice) _showNotice(context, '兑换', '请输入有效的兑换金额。');
       return;
     }
-    if (execute && !await _hasSufficientBalance(context, identity, amount)) {
+    if (execute &&
+        !await _hasSufficientBalance(context, identity, amount, fromChain)) {
       return;
     }
     setState(() => _loading = true);
     final client = LifiApiClient();
     try {
-      final nativeSymbol = switch (selectedChain.network) {
+      final nativeSymbol = switch (fromChain.network) {
         WalletNetwork.ethereum ||
         WalletNetwork.base ||
         WalletNetwork.arbitrum ||
@@ -359,37 +388,36 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       };
       final sourceSymbol = _fromSymbol;
       final targetSymbol = _toSymbol;
-      final sourceDecimals = sourceSymbol == nativeSymbol
-          ? (selectedChain.network == WalletNetwork.solana ? 9 : 18)
-          : (WalletChainRegistry
-                    .chains[selectedChain.network]
-                    ?.usdc
-                    ?.decimals ??
-                6);
-      List<LifiToken> availableTokens = const [];
+      final sourceDecimals = _decimalsFor(fromChain, sourceSymbol);
+      List<LifiToken> sourceTokens = const [];
+      List<LifiToken> targetTokens = const [];
       try {
-        availableTokens = await client.tokens(selectedChain.network);
+        sourceTokens = await client.tokens(fromChain.network);
+        targetTokens = fromChain.network == toChain.network
+            ? sourceTokens
+            : await client.tokens(toChain.network);
       } catch (_) {
         // The local registry remains a valid offline fallback.
       }
-      final sourceToken = availableTokens.cast<LifiToken?>().firstWhere(
+      final sourceToken = sourceTokens.cast<LifiToken?>().firstWhere(
         (token) => token?.symbol.toUpperCase() == sourceSymbol.toUpperCase(),
         orElse: () => null,
       );
-      final targetToken = availableTokens.cast<LifiToken?>().firstWhere(
+      final targetToken = targetTokens.cast<LifiToken?>().firstWhere(
         (token) => token?.symbol.toUpperCase() == targetSymbol.toUpperCase(),
         orElse: () => null,
       );
       final sourceTokenAddress = sourceToken?.address;
       final resolvedSourceDecimals = sourceToken?.decimals ?? sourceDecimals;
       final quote = await client.quote(
-        fromNetwork: selectedChain.network,
+        fromNetwork: fromChain.network,
         fromToken: sourceSymbol,
-        toNetwork: selectedChain.network,
+        toNetwork: toChain.network,
         toToken: targetSymbol,
         fromAmount: amount,
         fromDecimals: resolvedSourceDecimals,
-        fromAddress: address,
+        fromAddress: fromAddress,
+        toAddress: toAddress,
         fromTokenAddress: sourceToken?.address,
         toTokenAddress: targetToken?.address,
       );
@@ -404,16 +432,16 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         }
         return;
       }
-      if (selectedChain.network == WalletNetwork.solana) {
+      if (fromChain.network == WalletNetwork.solana) {
         await _executeSolanaQuote(
           context,
           identity: identity,
-          address: address,
+          address: fromAddress,
           request: request,
         );
         return;
       }
-      if (selectedChain.network == WalletNetwork.tron) {
+      if (fromChain.network == WalletNetwork.tron) {
         await _executeTronQuote(context, identity: identity, request: request);
         return;
       }
@@ -436,7 +464,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         if (sourceSymbol != nativeSymbol) {
           final tokenAddress =
               sourceTokenAddress ??
-              LifiApiClient.tokenAddress(selectedChain.network, sourceSymbol);
+              LifiApiClient.tokenAddress(fromChain.network, sourceSymbol);
           final spender = request['to'] as String?;
           if (spender == null || !spender.startsWith('0x')) {
             _showNotice(context, '兑换失败', 'LI.FI 返回的授权地址无效。');
@@ -453,8 +481,8 @@ class _DexSwapContentState extends State<_DexSwapContent> {
           final approval = await const WalletTransferService()
               .ensureErc20AllowanceWithRpc(
                 mnemonic: mnemonic,
-                from: address,
-                network: selectedChain.network,
+                from: fromAddress,
+                network: fromChain.network,
                 accessToken: tokens.accessToken,
                 rpc: rpc,
                 tokenAddress: tokenAddress,
@@ -468,8 +496,8 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         final result = await const WalletTransferService()
             .executeTransactionRequestWithRpc(
               mnemonic: mnemonic,
-              from: address,
-              network: selectedChain.network,
+              from: fromAddress,
+              network: fromChain.network,
               accessToken: tokens.accessToken,
               rpc: rpc,
               transactionRequest: request,
@@ -503,6 +531,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     BuildContext context,
     WalletIdentity identity,
     String amount,
+    _WalletChain chain,
   ) async {
     final tokenStore = await SecureAccountTokenStore().read();
     if (!context.mounted) return false;
@@ -517,7 +546,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       );
       if (!context.mounted) return false;
       final balances = await portfolio.loadBalances(
-        network: selectedChain.network,
+        network: chain.network,
         identity: identity,
         derivedAddresses: derivedAddresses,
         accessToken: tokenStore.accessToken,
@@ -533,7 +562,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       if (balance == null || balance.balance == null) return true;
       final required = LifiApiClient.toBaseUnits(
         amount,
-        _decimalsFor(_fromSymbol),
+        _decimalsFor(chain, _fromSymbol),
       );
       if (balance.balance! < BigInt.parse(required)) {
         _showNotice(context, '余额不足', '当前 $_fromSymbol 余额不足，无法提交本次兑换。');
@@ -550,6 +579,36 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     }
   }
 
+  Future<void> _showMissingChainWallet(
+    BuildContext context,
+    _WalletChain chain,
+  ) async {
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text('${chain.label}钱包未准备好'),
+        content: Text('当前钱包还没有${chain.label}地址，请先导入或创建该公链钱包后再进行跨链兑换。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              widget.onOpen(AcoScreen.walletSetupImport);
+            },
+            child: const Text('去导入钱包'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              widget.onOpen(AcoScreen.walletSetupCreate);
+            },
+            child: const Text('去创建钱包'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _lifiFailureMessage(Object error) {
     final message = error.toString().trim();
     if (message.isEmpty || message == 'null') return '网络请求失败，请稍后重试。';
@@ -563,8 +622,8 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         await Future<void>.delayed(const Duration(seconds: 2));
         final status = await client.status(
           txHash: txHash,
-          fromNetwork: selectedChain.network,
-          toNetwork: selectedChain.network,
+          fromNetwork: fromChain.network,
+          toNetwork: toChain.network,
         );
         if (status.status.toUpperCase() == 'DONE' ||
             status.status.toUpperCase() == 'FAILED') {
@@ -768,13 +827,17 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     children: [
       _DexSwapPanel(
         palette: palette,
-        selectedChain: selectedChain,
         ethFirst: ethFirst,
+        fromChain: fromChain,
+        toChain: toChain,
         onEthFirstChanged: widget.onEthFirstChanged,
         onSwapChanged: _setSwap,
         outputAmount: _quote == null
             ? '-'
-            : _formatTokenUnits(_quote!.toAmount, _decimalsFor(_toSymbol)),
+            : _formatTokenUnits(
+                _quote!.toAmount,
+                _decimalsFor(toChain, _toSymbol),
+              ),
       ),
       const SizedBox(height: 28),
       Container(
@@ -803,8 +866,10 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         quote: _quote,
         fromSymbol: _fromSymbol,
         toSymbol: _toSymbol,
-        fromDecimals: _decimalsFor(_fromSymbol),
-        toDecimals: _decimalsFor(_toSymbol),
+        fromChain: fromChain.displayLabel,
+        toChain: toChain.displayLabel,
+        fromDecimals: _decimalsFor(fromChain, _fromSymbol),
+        toDecimals: _decimalsFor(toChain, _toSymbol),
       ),
       const SizedBox(height: 28),
       _DexRecentSwapRecord(palette: palette, future: widget.recentRecord),
@@ -817,6 +882,8 @@ class _DexSwapQuoteCard extends StatelessWidget {
     required this.palette,
     required this.fromSymbol,
     required this.toSymbol,
+    required this.fromChain,
+    required this.toChain,
     required this.fromDecimals,
     required this.toDecimals,
     this.quote,
@@ -825,6 +892,8 @@ class _DexSwapQuoteCard extends StatelessWidget {
   final LifiQuote? quote;
   final String fromSymbol;
   final String toSymbol;
+  final String fromChain;
+  final String toChain;
   final int fromDecimals;
   final int toDecimals;
 
@@ -846,6 +915,7 @@ class _DexSwapQuoteCard extends StatelessWidget {
                     '${_formatTokenUnits(quote!.toAmount, toDecimals)} $toSymbol',
         ),
         _row('滑点', '2%'),
+        if (fromChain != toChain) _row('网络', '$fromChain → $toChain'),
         _row(
           '最少接收数量',
           quote == null
@@ -921,63 +991,6 @@ class DexSwapRecord {
   final DateTime createdAt;
 }
 
-final _mockDexSwapRecords = <DexSwapRecord>[
-  DexSwapRecord(
-    source: 'app',
-    fromAmount: '0.25',
-    fromSymbol: 'ETH',
-    toAmount: '824.36',
-    toSymbol: 'USDC',
-    status: '已完成',
-    createdAt: DateTime(2026, 9, 20, 14, 32),
-  ),
-  DexSwapRecord(
-    source: 'app',
-    fromAmount: '120',
-    fromSymbol: 'USDT',
-    toAmount: '0.036',
-    toSymbol: 'ETH',
-    status: '已完成',
-    createdAt: DateTime(2026, 9, 19, 18, 8),
-  ),
-  DexSwapRecord(
-    source: 'app',
-    fromAmount: '500',
-    fromSymbol: 'USDC',
-    toAmount: '499.42',
-    toSymbol: 'USDT',
-    status: '处理中',
-    createdAt: DateTime(2026, 9, 18, 9, 16),
-  ),
-  DexSwapRecord(
-    source: 'app',
-    fromAmount: '1.2',
-    fromSymbol: 'ETH',
-    toAmount: '3,958.80',
-    toSymbol: 'USDT',
-    status: '已完成',
-    createdAt: DateTime(2026, 9, 17, 21, 44),
-  ),
-  DexSwapRecord(
-    source: 'app',
-    fromAmount: '860',
-    fromSymbol: 'USDT',
-    toAmount: '859.12',
-    toSymbol: 'USDC',
-    status: '已完成',
-    createdAt: DateTime(2026, 9, 16, 11, 5),
-  ),
-  DexSwapRecord(
-    source: 'app',
-    fromAmount: '0.08',
-    fromSymbol: 'ETH',
-    toAmount: '264.18',
-    toSymbol: 'USDC',
-    status: '失败',
-    createdAt: DateTime(2026, 9, 15, 16, 27),
-  ),
-];
-
 class _DexRecentSwapRecord extends StatelessWidget {
   const _DexRecentSwapRecord({required this.palette, this.future});
   final AcoPalette palette;
@@ -1013,7 +1026,7 @@ class _DexRecentSwapRecord extends StatelessWidget {
       ),
       const SizedBox(height: 14),
       if (future == null)
-        _recordList(_records)
+        _buildRecords(_records)
       else
         FutureBuilder<DexSwapRecord?>(
           future: future,
@@ -1023,13 +1036,13 @@ class _DexRecentSwapRecord extends StatelessWidget {
               return const SizedBox(height: 56);
             }
             if (record == null || record.source != 'app') return _emptyState();
-            return _recordList(_recordsWithLatest(record));
+            return _buildRecords(_recordsWithLatest(record));
           },
         ),
     ],
   );
 
-  List<DexSwapRecord> get _records => _mockDexSwapRecords.take(10).toList();
+  List<DexSwapRecord> get _records => const [];
 
   Future<void> _openAllRecords(BuildContext context) async {
     final latest = await future;
@@ -1046,10 +1059,12 @@ class _DexRecentSwapRecord extends StatelessWidget {
     );
   }
 
-  List<DexSwapRecord> _recordsWithLatest(DexSwapRecord record) => [
-    record,
-    ..._mockDexSwapRecords.where((item) => item.createdAt != record.createdAt),
-  ].take(10).toList();
+  List<DexSwapRecord> _recordsWithLatest(DexSwapRecord record) => [record];
+
+  Widget _buildRecords(List<DexSwapRecord> records) {
+    if (records.isEmpty) return _emptyState();
+    return _recordList(records);
+  }
 
   Widget _emptyState() => Container(
     margin: const EdgeInsets.only(top: 2),
@@ -1156,17 +1171,26 @@ class _DexSwapRecordCard extends StatelessWidget {
 class _DexSwapPanel extends StatefulWidget {
   const _DexSwapPanel({
     required this.palette,
-    required this.selectedChain,
+    required this.fromChain,
+    required this.toChain,
     required this.ethFirst,
     required this.onEthFirstChanged,
     required this.onSwapChanged,
     required this.outputAmount,
   });
   final AcoPalette palette;
-  final _WalletChain selectedChain;
+  final _WalletChain fromChain;
+  final _WalletChain toChain;
   final bool ethFirst;
   final ValueChanged<bool> onEthFirstChanged;
-  final void Function(String from, String to, String amount) onSwapChanged;
+  final void Function(
+    _WalletChain fromChain,
+    String from,
+    _WalletChain toChain,
+    String to,
+    String amount,
+  )
+  onSwapChanged;
   final String outputAmount;
 
   @override
@@ -1176,6 +1200,8 @@ class _DexSwapPanel extends StatefulWidget {
 class _DexSwapPanelState extends State<_DexSwapPanel> {
   late String _fromSymbol;
   late String _toSymbol;
+  _WalletChain _fromChain = _supportedWalletChains.first;
+  _WalletChain _toChain = _supportedWalletChains.first;
   String _fromLogoUri = '';
   String _toLogoUri = '';
   late final TextEditingController _amountController;
@@ -1183,6 +1209,8 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
   @override
   void initState() {
     super.initState();
+    _fromChain = widget.fromChain;
+    _toChain = widget.toChain;
     _syncSymbols(widget.ethFirst);
     _amountController = TextEditingController(text: '0');
   }
@@ -1194,7 +1222,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
   }
 
   void _syncSymbols(bool ethFirst) {
-    final native = widget.selectedChain.nativeToken.symbol;
+    final native = _fromChain.nativeToken.symbol;
     _fromSymbol = ethFirst ? native : 'USDC';
     _toSymbol = ethFirst ? 'USDC' : native;
     _fromLogoUri = '';
@@ -1204,50 +1232,42 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
   @override
   void didUpdateWidget(covariant _DexSwapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldNative = oldWidget.selectedChain.nativeToken.symbol;
-    final isNativePair =
-        (_fromSymbol == oldNative && _toSymbol == 'USDC') ||
-        (_fromSymbol == 'USDC' && _toSymbol == oldNative);
-    if (oldWidget.selectedChain.network != widget.selectedChain.network ||
-        (oldWidget.ethFirst != widget.ethFirst && isNativePair)) {
-      _syncSymbols(widget.ethFirst);
-    }
   }
 
   void _pickToken(BuildContext context, String current, bool source) {
-    showCupertinoModalPopup<(String, String)>(
+    final chain = source ? _fromChain : _toChain;
+    showCupertinoModalPopup<_DexTokenChoice>(
       context: context,
       builder: (context) => _DexTokenPicker(
         palette: widget.palette,
-        selectedChain: widget.selectedChain,
+        selectedChain: chain,
         selectedSymbol: current,
-        excludedSymbol: source ? _toSymbol : _fromSymbol,
+        excludedSymbol: source && _fromChain.network == _toChain.network
+            ? _toSymbol
+            : !source && _fromChain.network == _toChain.network
+            ? _fromSymbol
+            : null,
       ),
     ).then((selection) {
       if (selection == null) return;
-      final (symbol, logoUri) = selection;
       setState(() {
         if (source) {
-          _fromSymbol = symbol;
-          _fromLogoUri = logoUri;
-          if (_toSymbol == symbol)
-            _toSymbol = current == symbol
-                ? _toSymbol
-                : (symbol == widget.selectedChain.nativeToken.symbol
-                      ? 'USDC'
-                      : widget.selectedChain.nativeToken.symbol);
-          if (_toSymbol != symbol) _toLogoUri = '';
+          _fromChain = selection.chain;
+          _fromSymbol = selection.symbol;
+          _fromLogoUri = selection.logoUri;
         } else {
-          _toSymbol = symbol;
-          _toLogoUri = logoUri;
-          if (_fromSymbol == symbol)
-            _fromSymbol = symbol == widget.selectedChain.nativeToken.symbol
-                ? 'USDC'
-                : widget.selectedChain.nativeToken.symbol;
-          if (_fromSymbol != symbol) _fromLogoUri = '';
+          _toChain = selection.chain;
+          _toSymbol = selection.symbol;
+          _toLogoUri = selection.logoUri;
         }
       });
-      widget.onSwapChanged(_fromSymbol, _toSymbol, _amountController.text);
+      widget.onSwapChanged(
+        _fromChain,
+        _fromSymbol,
+        _toChain,
+        _toSymbol,
+        _amountController.text,
+      );
       widget.onEthFirstChanged(_fromSymbol == 'ETH');
     });
   }
@@ -1263,7 +1283,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
       children: [
         _DexSwapTokenRow(
           palette: widget.palette,
-          label: '兑换货币',
+          label: '兑换货币 · ${_fromChain.displayLabel}',
           symbol: _fromSymbol,
           logoUri: _fromLogoUri,
           value: _amountController.text,
@@ -1271,7 +1291,13 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           editable: true,
           onValueChanged: (value) {
             _amountController.text = value;
-            widget.onSwapChanged(_fromSymbol, _toSymbol, value);
+            widget.onSwapChanged(
+              _fromChain,
+              _fromSymbol,
+              _toChain,
+              _toSymbol,
+              value,
+            );
           },
           onTokenTap: (symbol) => _pickToken(context, symbol, true),
         ),
@@ -1288,12 +1314,17 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
                   final symbol = _fromSymbol;
                   _fromSymbol = _toSymbol;
                   _toSymbol = symbol;
+                  final chain = _fromChain;
+                  _fromChain = _toChain;
+                  _toChain = chain;
                   final logoUri = _fromLogoUri;
                   _fromLogoUri = _toLogoUri;
                   _toLogoUri = logoUri;
                 });
                 widget.onSwapChanged(
+                  _fromChain,
                   _fromSymbol,
+                  _toChain,
                   _toSymbol,
                   _amountController.text,
                 );
@@ -1314,7 +1345,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
         const SizedBox(height: 22),
         _DexSwapTokenRow(
           palette: widget.palette,
-          label: '至',
+          label: '至 · ${_toChain.displayLabel}',
           symbol: _toSymbol,
           logoUri: _toLogoUri,
           value: widget.outputAmount,
@@ -1323,6 +1354,18 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
       ],
     ),
   );
+}
+
+class _DexTokenChoice {
+  const _DexTokenChoice({
+    required this.chain,
+    required this.symbol,
+    required this.logoUri,
+  });
+
+  final _WalletChain chain;
+  final String symbol;
+  final String logoUri;
 }
 
 class _DexTokenPicker extends StatefulWidget {
@@ -1343,6 +1386,7 @@ class _DexTokenPicker extends StatefulWidget {
 }
 
 class _DexTokenPickerState extends State<_DexTokenPicker> {
+  late _WalletChain _activeChain;
   final _searchController = TextEditingController();
   final _scrollController = ScrollController();
   String _query = '';
@@ -1353,6 +1397,7 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
   @override
   void initState() {
     super.initState();
+    _activeChain = widget.selectedChain;
     _scrollController.addListener(_loadMoreWhenNeeded);
     _loadTokens();
   }
@@ -1369,7 +1414,7 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
   Future<void> _loadTokens() async {
     final client = LifiApiClient();
     try {
-      final tokens = await client.tokens(widget.selectedChain.network);
+      final tokens = await client.tokens(_activeChain.network);
       if (mounted) setState(() => _remoteTokens = tokens);
     } catch (_) {
       // Keep the local native/USDT/USDC fallback when LI.FI is unavailable.
@@ -1381,9 +1426,9 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
 
   List<(String, String, String, String, String)> get _tokens {
     final values = <String, (String, String, String, String, String)>{
-      widget.selectedChain.nativeToken.symbol: (
-        widget.selectedChain.nativeToken.symbol,
-        widget.selectedChain.nativeToken.symbol,
+      _activeChain.nativeToken.symbol: (
+        _activeChain.nativeToken.symbol,
+        _activeChain.nativeToken.symbol,
         '',
         '0',
         '',
@@ -1391,14 +1436,14 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
       'USDT': (
         'USDT',
         'USDT',
-        LifiApiClient.tokenAddress(widget.selectedChain.network, 'USDT'),
+        LifiApiClient.tokenAddress(_activeChain.network, 'USDT'),
         '0',
         '',
       ),
       'USDC': (
         'USDC',
         'USDC',
-        LifiApiClient.tokenAddress(widget.selectedChain.network, 'USDC'),
+        LifiApiClient.tokenAddress(_activeChain.network, 'USDC'),
         '0',
         '',
       ),
@@ -1421,10 +1466,21 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
   }
 
   List<String> get _commonSymbols => [
-    widget.selectedChain.nativeToken.symbol,
+    _activeChain.nativeToken.symbol,
     'USDT',
     'USDC',
   ].where((symbol) => symbol != widget.excludedSymbol).toList();
+
+  void _selectChain(_WalletChain chain) {
+    if (chain.network == _activeChain.network) return;
+    setState(() {
+      _activeChain = chain;
+      _remoteTokens = const [];
+      _loadingTokens = true;
+      _displayLimit = 80;
+    });
+    _loadTokens();
+  }
 
   @override
   void dispose() {
@@ -1541,6 +1597,40 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                     fontSize: 16,
                   ),
                 ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 34,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _supportedWalletChains.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 6),
+                    itemBuilder: (context, index) {
+                      final chain = _supportedWalletChains[index];
+                      final selected = chain.network == _activeChain.network;
+                      return CupertinoButton(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        minSize: 0,
+                        color: selected
+                            ? palette.accent
+                            : const Color(0xFF303030),
+                        borderRadius: BorderRadius.circular(17),
+                        onPressed: () => _selectChain(chain),
+                        child: Text(
+                          chain.displayLabel,
+                          style: TextStyle(
+                            color: selected
+                                ? Colors.black
+                                : palette.primaryText,
+                            fontSize: 13,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
                 const SizedBox(height: 28),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -1565,8 +1655,13 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                             child: _DexCommonToken(
                               symbol: symbol,
                               palette: palette,
-                              onTap: () =>
-                                  Navigator.of(context).pop((symbol, '')),
+                              onTap: () => Navigator.of(context).pop(
+                                _DexTokenChoice(
+                                  chain: _activeChain,
+                                  symbol: symbol,
+                                  logoUri: '',
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -1607,9 +1702,13 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                                   logoUri: token.$5,
                                   palette: palette,
                                   selected: widget.selectedSymbol == token.$1,
-                                  onTap: () => Navigator.of(
-                                    context,
-                                  ).pop((token.$1, token.$5)),
+                                  onTap: () => Navigator.of(context).pop(
+                                    _DexTokenChoice(
+                                      chain: _activeChain,
+                                      symbol: token.$1,
+                                      logoUri: token.$5,
+                                    ),
+                                  ),
                                 ),
                                 if (index < visibleTokens.length - 1)
                                   Container(height: 1, color: palette.border),
