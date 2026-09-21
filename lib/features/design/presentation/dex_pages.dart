@@ -523,22 +523,27 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         accessToken: tokenStore.accessToken,
       );
       if (!context.mounted) return false;
-      final balance = balances.cast<WalletBalance?>().firstWhere(
-        (item) => item?.symbol.toUpperCase() == _fromSymbol.toUpperCase(),
-        orElse: () => null,
-      );
+      WalletBalance? balance;
+      for (final item in balances) {
+        if (item.symbol.toUpperCase() == _fromSymbol.toUpperCase()) {
+          balance = item;
+          break;
+        }
+      }
       if (balance == null || balance.balance == null) return true;
       final required = LifiApiClient.toBaseUnits(
         amount,
         _decimalsFor(_fromSymbol),
       );
       if (balance.balance! < BigInt.parse(required)) {
-        _showNotice(context, '余额不足', '当前 ${_fromSymbol} 余额不足，无法提交本次兑换。');
+        _showNotice(context, '余额不足', '当前 $_fromSymbol 余额不足，无法提交本次兑换。');
         return false;
       }
       return true;
     } catch (_) {
-      _showNotice(context, '余额查询失败', '暂时无法获取余额，请稍后重试。');
+      if (context.mounted) {
+        _showNotice(context, '余额查询失败', '暂时无法获取余额，请稍后重试。');
+      }
       return false;
     } finally {
       portfolio.close();
