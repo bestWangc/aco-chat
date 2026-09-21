@@ -414,7 +414,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         await _executeTronQuote(context, identity: identity, request: request);
         return;
       }
-      if (!context.mounted || !await _confirmSwap(context, quote.tool)) return;
+      if (!context.mounted || !await _confirmSwap(context)) return;
       final mnemonic = await _unlockMnemonic(identity);
       if (!context.mounted) return;
       if (mnemonic == null) return;
@@ -547,7 +547,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       _showNotice(context, '兑换失败', 'LI.FI 未返回可签名的 Solana 交易。');
       return;
     }
-    if (!await _confirmSwap(context, 'LI.FI / Solana')) return;
+    if (!await _confirmSwap(context)) return;
     final mnemonic = await _unlockMnemonic(identity);
     if (mnemonic == null || !context.mounted) return;
     try {
@@ -607,7 +607,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       _showNotice(context, '兑换失败', 'LI.FI 未返回可签名的 TRON 交易。');
       return;
     }
-    if (!await _confirmSwap(context, 'LI.FI / TRON')) return;
+    if (!await _confirmSwap(context)) return;
     final mnemonic = await _unlockMnemonic(identity);
     if (mnemonic == null || !context.mounted) return;
     try {
@@ -664,12 +664,12 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     }
   }
 
-  Future<bool> _confirmSwap(BuildContext context, String tool) async {
+  Future<bool> _confirmSwap(BuildContext context) async {
     final result = await showCupertinoDialog<bool>(
       context: context,
       builder: (context) => CupertinoAlertDialog(
         title: const Text('确认兑换'),
-        content: Text('将通过 $tool 路由提交交易，是否继续？'),
+        content: const Text('确认提交本次兑换？'),
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(context).pop(false),
