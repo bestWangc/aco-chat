@@ -341,6 +341,9 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       if (showNotice) _showNotice(context, '兑换', '请输入有效的兑换金额。');
       return;
     }
+    if (execute && !await _hasSufficientBalance(context, identity, amount)) {
+      return;
+    }
     setState(() => _loading = true);
     final client = LifiApiClient();
     try {
@@ -493,6 +496,52 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<bool> _hasSufficientBalance(
+    BuildContext context,
+    WalletIdentity identity,
+    String amount,
+  ) async {
+    final tokenStore = await SecureAccountTokenStore().read();
+    if (!context.mounted) return false;
+    if (tokenStore == null) {
+      _showNotice(context, '兑换', '钱包服务尚未连接，请稍后重试。');
+      return false;
+    }
+    final portfolio = WalletPortfolioService();
+    try {
+      final derivedAddresses = await WalletPreferences.derivedAddresses(
+        identity,
+      );
+      if (!context.mounted) return false;
+      final balances = await portfolio.loadBalances(
+        network: selectedChain.network,
+        identity: identity,
+        derivedAddresses: derivedAddresses,
+        accessToken: tokenStore.accessToken,
+      );
+      if (!context.mounted) return false;
+      final balance = balances.cast<WalletBalance?>().firstWhere(
+        (item) => item?.symbol.toUpperCase() == _fromSymbol.toUpperCase(),
+        orElse: () => null,
+      );
+      if (balance == null || balance.balance == null) return true;
+      final required = LifiApiClient.toBaseUnits(
+        amount,
+        _decimalsFor(_fromSymbol),
+      );
+      if (balance.balance! < BigInt.parse(required)) {
+        _showNotice(context, '余额不足', '当前 ${_fromSymbol} 余额不足，无法提交本次兑换。');
+        return false;
+      }
+      return true;
+    } catch (_) {
+      _showNotice(context, '余额查询失败', '暂时无法获取余额，请稍后重试。');
+      return false;
+    } finally {
+      portfolio.close();
     }
   }
 
