@@ -554,7 +554,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                           'ACO',
                           style: TextStyle(
                             color: palette.mutedText.withValues(alpha: .12),
-                            fontSize: 84,
+                            fontSize: 140,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 4,
                           ),
