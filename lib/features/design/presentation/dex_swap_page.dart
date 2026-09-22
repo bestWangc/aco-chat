@@ -29,7 +29,7 @@ class _DexSwapPageState extends State<_DexSwapPage> {
           offset: const Offset(-27, 0),
           child: _SectionTabs(
             palette: palette,
-            labels: const ['闪兑', '代币', '合约'],
+            labels: const ['闪兑', '代币', '合约', '股票'],
             selected: 0,
             itemSpacing: 12,
             fontSize: 18,
