@@ -523,7 +523,6 @@ DexRankingToken _mergeDexScreenerPair(
   Map<String, dynamic> pair,
 ) {
   final base = DexRankingToken._asMap(pair['baseToken']);
-  final info = DexRankingToken._asMap(pair['info']);
   final liquidity = DexRankingToken._asMap(pair['liquidity']);
   final priceChange = DexRankingToken._asMap(pair['priceChange']);
   final volume = DexRankingToken._asMap(pair['volume']);
@@ -534,7 +533,9 @@ DexRankingToken _mergeDexScreenerPair(
     address: _nonEmptyString(base['address'], fallback.address),
     dex: _nonEmptyString(pair['dexId'], fallback.dex),
     pool: _nonEmptyString(pair['pairAddress'], fallback.pool),
-    logoUri: _nonEmptyString(info['imageUrl'], fallback.logoUri),
+    // The list already resolved the logo URL. Keep it stable on detail refresh
+    // so the header does not switch image requests after navigation.
+    logoUri: fallback.logoUri,
     price: _nonEmptyString(pair['priceUsd'], fallback.price),
     change: _formatDexScreenerChange(
       priceChange['m5'] ?? priceChange['h24'],

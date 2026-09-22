@@ -457,10 +457,9 @@ packages:
   flutter_chen_kchart:
     dependency: "direct main"
     description:
-      name: flutter_chen_kchart
-      sha256: "39f6328aecec94210c0118c92fdf430a8a8346524b085728eb796673dc3fc328"
-      url: "https://pub.dev"
-    source: hosted
+      path: "third_party/flutter_chen_kchart"
+      relative: true
+    source: path
     version: "3.0.1"
   flutter_inappwebview:
     dependency: "direct main"

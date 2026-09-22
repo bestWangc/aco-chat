@@ -1,0 +1,18 @@
+name: flutter_chen_kchart
+description: The first commercial-grade kchart in the flutter ecosystem.
+version: 3.0.1
+homepage: https://github.com/Er-Dong-Chen/flutter_chen_kchart
+
+topics:
+  - kchart
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

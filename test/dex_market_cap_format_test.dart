@@ -19,4 +19,10 @@ void main() {
     expect(formatDexPrice('0.39827'), '\$0.39827');
     expect(formatDexPrice(''), '--');
   });
+
+  test('formats kline prices with the same compact precision', () {
+    expect(formatDexChartPrice(0.00004928), '0.0₃4928');
+    expect(formatDexChartPrice(0.000004928), '0.0₄4928');
+    expect(formatDexChartPrice(9.1600), '9.16');
+  });
 }

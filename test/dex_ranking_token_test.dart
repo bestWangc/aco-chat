@@ -60,7 +60,8 @@ void main() {
     expect(request['chain'], 'sol');
   });
 
-  test('loads fresh token data from DexScreener', () async {
+  test('loads fresh token data while keeping the list logo', () async {
+    const listLogoUri = 'https://list.test/old-logo.png';
     final client = _DexScreenerClient();
     final api = DexRankingApiClient(
       httpClient: client,
@@ -74,6 +75,7 @@ void main() {
           'addr': 'old-address',
           'sym': 'OLD',
           'pool': 'pool-address',
+          'icon': listLogoUri,
         },
       }),
     );
@@ -89,6 +91,7 @@ void main() {
     expect(token?.volume, '45678');
     expect(token?.liquidity, '987654');
     expect(token?.change, '0.25%');
+    expect(token?.logoUri, listLogoUri);
 
     final bscToken = await api.dexScreenerTokenInfo(
       DexRankingToken.fromJson({
@@ -172,6 +175,7 @@ class _DexScreenerClient extends http.BaseClient {
         '"dexId":"orca",'
         '"pairAddress":"pool-address",'
         '"baseToken":{"address":"new-address","name":"New","symbol":"NEW"},'
+        '"info":{"imageUrl":"https://detail.test/new-logo.png"},'
         '"priceUsd":"1.23",'
         '"priceChange":{"m5":0.25},'
         '"volume":{"h24":45678},'

@@ -527,6 +527,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                       secondaryState: SecondaryState.NONE,
                       volHidden: true,
                       showInfoDialog: false,
+                      numberFormatter: formatDexChartPrice,
                       hideGrid: false,
                       enableTheme: false,
                       enablePerformanceMode: true,
@@ -1470,6 +1471,11 @@ String formatDexPrice(String value) {
   final decimals = absolute >= 1 ? 2 : 5;
   final number = _trimTrailingZeros(absolute.toStringAsFixed(decimals));
   return '\$$sign$number';
+}
+
+String formatDexChartPrice(double value) {
+  final formatted = formatDexPrice(value.toString());
+  return formatted.startsWith('\$') ? formatted.substring(1) : formatted;
 }
 
 String _priceDecimalDigits(String value, double absolute) {

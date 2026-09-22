@@ -64,7 +64,8 @@ dependencies:
   url_launcher: ^6.3.2
   flutter_inappwebview: ^6.1.5
   on_chain: ^8.1.0
-  flutter_chen_kchart: ^3.0.0
+  flutter_chen_kchart:
+    path: third_party/flutter_chen_kchart
 
 dev_dependencies:
   flutter_test:
