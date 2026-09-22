@@ -1064,19 +1064,19 @@ class AcoAvatar extends StatelessWidget {
     return ClipOval(
       child: url == null
           ? fallback
-          : Image.network(
-              url,
+          : AcoNetworkImage(
+              url: url,
               width: resolvedSize,
               height: resolvedSize,
-              cacheWidth:
+              memCacheWidth:
                   (resolvedSize * MediaQuery.devicePixelRatioOf(context))
                       .round(),
-              cacheHeight:
+              memCacheHeight:
                   (resolvedSize * MediaQuery.devicePixelRatioOf(context))
                       .round(),
               fit: BoxFit.cover,
               semanticLabel: '用户头像',
-              errorBuilder: (_, _, _) => fallback,
+              errorWidget: (context, url, error) => fallback,
             ),
     );
   }

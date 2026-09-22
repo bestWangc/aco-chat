@@ -115,12 +115,13 @@ class _DiscoverShortcut extends StatelessWidget {
     if (dapp.iconUrl.isEmpty) {
       return Icon(icon, color: palette.primaryText);
     }
-    return Image.network(
-      dapp.iconUrl,
+    return AcoNetworkImage(
+      url: dapp.iconUrl,
       width: 52,
       height: 52,
       fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => Icon(icon, color: palette.primaryText),
+      errorWidget: (context, url, error) =>
+          Icon(icon, color: palette.primaryText),
     );
   }
 
@@ -839,17 +840,19 @@ class _PostImageGallery extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         child: ColoredBox(
           color: palette.surface,
-          child: Image.network(
-            _liveCoverUrl(thumbnailUrl),
+          child: AcoNetworkImage(
+            url: _liveCoverUrl(thumbnailUrl),
             width: width,
             height: height,
             // Feed cards are at most 260 logical pixels wide. Decode a bounded
             // bitmap here; tapping the card still opens the full resource.
-            cacheWidth: (260 * MediaQuery.devicePixelRatioOf(context)).round(),
-            cacheHeight: (260 * MediaQuery.devicePixelRatioOf(context)).round(),
+            memCacheWidth: (260 * MediaQuery.devicePixelRatioOf(context))
+                .round(),
+            memCacheHeight: (260 * MediaQuery.devicePixelRatioOf(context))
+                .round(),
             fit: fit,
             semanticLabel: '动态图片缩略图',
-            errorBuilder: (_, _, _) => Center(
+            errorWidget: (context, url, error) => Center(
               child: Icon(
                 CupertinoIcons.photo,
                 color: palette.mutedText,
@@ -883,8 +886,8 @@ class _PostImagePreview extends StatelessWidget {
       child: Stack(
         children: [
           Center(
-            child: Image.network(
-              imageUrl,
+            child: AcoNetworkImage(
+              url: imageUrl,
               fit: BoxFit.contain,
               semanticLabel: '动态大图',
             ),
@@ -1306,18 +1309,18 @@ class _LiveCard extends StatelessWidget {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(22),
-            child: Image.network(
-              _liveCoverUrl(session.coverUrl),
+            child: AcoNetworkImage(
+              url: _liveCoverUrl(session.coverUrl),
               width: double.infinity,
               height: 160,
-              cacheWidth:
+              memCacheWidth:
                   (MediaQuery.sizeOf(context).width *
                           MediaQuery.devicePixelRatioOf(context))
                       .round(),
-              cacheHeight: (160 * MediaQuery.devicePixelRatioOf(context))
+              memCacheHeight: (160 * MediaQuery.devicePixelRatioOf(context))
                   .round(),
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
+              errorWidget: (context, url, error) =>
                   _LiveCoverPlaceholder(palette: palette),
             ),
           ),

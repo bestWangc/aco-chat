@@ -2235,10 +2235,10 @@ class _VoiceCallAvatar extends StatelessWidget {
     height: 104,
     child: ClipOval(
       child: avatarUrl?.isNotEmpty == true
-          ? Image.network(
-              avatarUrl!,
+          ? AcoNetworkImage(
+              url: avatarUrl!,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => _defaultAvatar(),
+              errorWidget: (context, url, error) => _defaultAvatar(),
             )
           : _defaultAvatar(),
     ),
@@ -2623,14 +2623,13 @@ class _ChatMessage extends StatelessWidget {
         context,
         shouldCacheThumbnail
             ? _CachedChatThumbnail(url: imageUrl!)
-            : Image.network(
-                imageUrl!,
+            : AcoNetworkImage(
+                url: imageUrl!,
                 fit: BoxFit.contain,
-                errorBuilder: (_, error, stackTrace) =>
-                    const _ImageUnavailable(),
+                errorWidget: (context, url, error) => const _ImageUnavailable(),
               ),
         maxWidth: maxWidth,
-        previewImage: NetworkImage(previewUrl),
+        previewImage: CachedNetworkImageProvider(previewUrl),
       );
     }
 

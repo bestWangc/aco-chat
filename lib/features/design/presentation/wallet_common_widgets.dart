@@ -404,35 +404,48 @@ class _SectionTabs extends StatelessWidget {
 }
 
 class _TimeRangeSelector extends StatelessWidget {
-  const _TimeRangeSelector({required this.palette});
+  const _TimeRangeSelector({
+    required this.palette,
+    this.ranges = const ['1H', '1D', '1W', '1M', '1Y', 'ALL'],
+    this.selectedRange = '1D',
+    this.onChanged,
+  });
+
   final AcoPalette palette;
+  final List<String> ranges;
+  final String selectedRange;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      for (final range in const ['1H', '1D', '1W', '1M', '1Y', 'ALL'])
-        Container(
-          constraints: const BoxConstraints(minWidth: 36),
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: range == '1D' ? palette.surfaceRaised : _transparent,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Text(
-            range,
-            style: TextStyle(
-              color: range == '1D' ? palette.primaryText : palette.mutedText,
-              fontSize: AcoTypography.caption,
+      for (final range in ranges)
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(36, 32),
+          onPressed: onChanged == null ? null : () => onChanged!(range),
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 36),
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: range == selectedRange
+                  ? palette.surfaceRaised
+                  : _transparent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              range,
+              style: TextStyle(
+                color: range == selectedRange
+                    ? palette.primaryText
+                    : palette.mutedText,
+                fontSize: AcoTypography.caption,
+              ),
             ),
           ),
         ),
-      Icon(
-        CupertinoIcons.slider_horizontal_3,
-        color: palette.mutedText,
-        size: 21,
-      ),
     ],
   );
 }
@@ -460,10 +473,10 @@ class _WalletAssetIcon extends StatelessWidget {
         width: size,
         height: size,
         child: ClipOval(
-          child: Image.network(
-            remoteLogo,
+          child: AcoNetworkImage(
+            url: remoteLogo,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) =>
+            errorWidget: (context, url, error) =>
                 _WalletAssetIcon(symbol: symbol, size: size),
           ),
         ),

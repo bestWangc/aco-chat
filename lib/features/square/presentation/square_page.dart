@@ -3,6 +3,7 @@ import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
+import 'package:aco_chat/shared/widgets/aco_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;

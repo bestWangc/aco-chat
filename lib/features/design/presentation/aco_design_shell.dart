@@ -18,6 +18,7 @@ import 'package:aco_chat/features/live/domain/live_chat_state.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_event.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_client.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
+import 'package:aco_chat/shared/widgets/aco_network_image.dart';
 import 'package:aco_chat/services/app_update_service.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/sensitive_screen_protection.dart';
@@ -30,6 +31,7 @@ import 'package:aco_chat/services/wallet_metadata_store.dart';
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_transfer_service.dart';
 import 'package:aco_chat/services/lifi_api_client.dart';
+import 'package:aco_chat/services/dex_ranking_api_client.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:aco_chat/services/wallet_transaction_service.dart';
@@ -39,6 +41,7 @@ import 'package:aco_chat/services/tron_signing_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_chen_kchart/k_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
     show
@@ -55,6 +58,7 @@ import 'package:flutter/material.dart'
 import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:crop_your_image/crop_your_image.dart';
 import 'package:carousel_slider/carousel_slider.dart';
@@ -109,7 +113,8 @@ part 'wallet_token_detail_page.dart';
 part 'wallet_chain_widgets.dart';
 part 'wallet_backup_pages.dart';
 part 'wallet_receive_pages.dart';
-part 'dex_pages.dart';
+part 'dex_token_page.dart';
+part 'dex_swap_page.dart';
 part 'create_live_page.dart';
 part 'design_shell_widgets.dart';
 

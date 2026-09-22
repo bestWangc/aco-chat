@@ -715,20 +715,19 @@ class _LiveChatImage extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: 240),
-          child: Image.network(
-            imageUrl,
-            cacheWidth: (maxWidth * MediaQuery.devicePixelRatioOf(context))
+          child: AcoNetworkImage(
+            url: imageUrl,
+            memCacheWidth: (maxWidth * MediaQuery.devicePixelRatioOf(context))
                 .round(),
-            cacheHeight: (240 * MediaQuery.devicePixelRatioOf(context)).round(),
+            memCacheHeight: (240 * MediaQuery.devicePixelRatioOf(context))
+                .round(),
             fit: BoxFit.cover,
-            loadingBuilder: (context, child, progress) => progress == null
-                ? child
-                : SizedBox(
-                    width: maxWidth,
-                    height: 120,
-                    child: const Center(child: CupertinoActivityIndicator()),
-                  ),
-            errorBuilder: (_, _, _) => SizedBox(
+            placeholder: (context, url) => SizedBox(
+              width: maxWidth,
+              height: 120,
+              child: const Center(child: CupertinoActivityIndicator()),
+            ),
+            errorWidget: (context, url, error) => SizedBox(
               width: maxWidth,
               height: 120,
               child: const Center(child: Text('图片加载失败')),

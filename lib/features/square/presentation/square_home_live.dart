@@ -288,12 +288,12 @@ class _LiveItem extends StatelessWidget {
       if (session.coverUrl.isNotEmpty)
         ClipRRect(
           borderRadius: BorderRadius.circular(22),
-          child: Image.network(
-            _liveCoverUrl(session.coverUrl),
+          child: AcoNetworkImage(
+            url: _liveCoverUrl(session.coverUrl),
             height: 155,
             width: double.infinity,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => Container(
+            errorWidget: (context, url, error) => Container(
               height: 155,
               decoration: BoxDecoration(
                 color: _surface,

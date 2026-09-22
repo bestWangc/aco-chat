@@ -462,10 +462,10 @@ class _GroupAvatarCell extends StatelessWidget {
     final fallback = Image.asset(_defaultAvatarAsset, fit: BoxFit.cover);
     final image = url == null
         ? fallback
-        : Image.network(
-            url,
+        : AcoNetworkImage(
+            url: url,
             fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => fallback,
+            errorWidget: (context, url, error) => fallback,
           );
     return ClipOval(child: image);
   }

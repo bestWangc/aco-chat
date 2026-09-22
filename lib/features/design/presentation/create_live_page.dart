@@ -423,12 +423,12 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                         else if (widget.live?.coverUrl case final coverUrl?)
                           ClipRRect(
                             borderRadius: BorderRadius.circular(10),
-                            child: Image.network(
-                              _liveCoverUrl(coverUrl),
+                            child: AcoNetworkImage(
+                              url: _liveCoverUrl(coverUrl),
                               width: 54,
                               height: 52,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) =>
+                              errorWidget: (context, url, error) =>
                                   _LiveCoverThumbnailFallback(palette: palette),
                             ),
                           )
