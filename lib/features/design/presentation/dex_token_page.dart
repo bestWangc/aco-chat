@@ -218,17 +218,31 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
 
     final client = DexKlineRealtimeClient();
     _realtimeClient = client;
-    _realtimeSubscription = client
-        .subscribe(widget.token, interval: _klineInterval(range))
-        .listen(
-          _applyRealtimePrice,
-          onError: (Object error) {
-            debugPrint(
-              '[DexKlineWS] update failed symbol=${widget.token.symbol} '
-              'error=$error',
-            );
-          },
-        );
+    try {
+      final updates = await client.subscribe(
+        widget.token,
+        interval: _klineInterval(range),
+      );
+      if (!mounted || _realtimeClient != client) {
+        await client.close();
+        return;
+      }
+      _realtimeSubscription = updates.listen(
+        _applyRealtimePrice,
+        onError: (Object error) {
+          debugPrint(
+            '[DexKlineWS] update failed symbol=${widget.token.symbol} '
+            'error=$error',
+          );
+        },
+      );
+    } catch (error) {
+      debugPrint(
+        '[DexKlineWS] connect failed symbol=${widget.token.symbol} '
+        'error=$error',
+      );
+      await client.close();
+    }
   }
 
   Future<void> _loadCandlesThenConnect(String range) async {

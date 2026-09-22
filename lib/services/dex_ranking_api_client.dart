@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:aco_chat/core/config/app_config.dart';
+import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -168,17 +169,24 @@ class DexPriceUpdate {
 }
 
 class DexKlineRealtimeClient {
-  DexKlineRealtimeClient({Uri? baseUri})
-    : _baseUri = baseUri ?? Uri.parse(const AppConfig().apiBaseUrl);
+  DexKlineRealtimeClient({Uri? baseUri, AccountTokenStore? tokenStore})
+    : _baseUri = baseUri ?? Uri.parse(const AppConfig().apiBaseUrl),
+      _tokenStore = tokenStore ?? SecureAccountTokenStore();
 
   final Uri _baseUri;
+  final AccountTokenStore _tokenStore;
   WebSocketChannel? _channel;
   StreamController<DexPriceUpdate>? _updates;
 
-  Stream<DexPriceUpdate> subscribe(
+  Future<Stream<DexPriceUpdate>> subscribe(
     DexRankingToken token, {
     required String interval,
-  }) {
+  }) async {
+    final tokens = await _tokenStore.read();
+    if (tokens == null || tokens.accessToken.isEmpty) {
+      throw StateError('No access token is available for DEX WebSocket');
+    }
+
     final updates = StreamController<DexPriceUpdate>();
     _updates = updates;
     final channel = WebSocketChannel.connect(_webSocketUri());
@@ -212,6 +220,7 @@ class DexKlineRealtimeClient {
     channel.sink.add(
       jsonEncode({
         'action': 'subscribe',
+        'access_token': tokens.accessToken,
         'chain': token.chain,
         'pool': token.pool,
         'token': token.address,
