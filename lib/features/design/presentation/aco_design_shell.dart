@@ -33,6 +33,7 @@ import 'package:aco_chat/services/wallet_transfer_service.dart';
 import 'package:aco_chat/services/lifi_api_client.dart';
 import 'package:aco_chat/services/dex_ranking_api_client.dart';
 import 'package:aco_chat/services/dex_trade_service.dart';
+import 'package:aco_chat/services/hyperliquid_api_client.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:aco_chat/services/wallet_transaction_service.dart';

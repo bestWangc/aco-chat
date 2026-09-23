@@ -7,10 +7,12 @@ class _DexTokenPage extends StatefulWidget {
   const _DexTokenPage({
     required this.palette,
     required this.selectedChain,
+    this.walletIdentity,
     required this.onOpen,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
+  final WalletIdentity? walletIdentity;
   final ValueChanged<AcoScreen> onOpen;
   @override
   State<_DexTokenPage> createState() => _DexTokenPageState();
@@ -76,6 +78,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
           palette: widget.palette,
           token: token,
           selectedChain: widget.selectedChain,
+          walletIdentity: widget.walletIdentity,
           onOpen: widget.onOpen,
         ),
       ),
@@ -98,7 +101,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
   }
 
   void _selectSection(int section) {
-    if (section == 2 || _selectedSection == section) return;
+    if (_selectedSection == section) return;
 
     final isStock = section == 3;
     final type = isStock ? 'xstock' : 'binance_alpha';
@@ -180,7 +183,12 @@ class _DexTokenPageState extends State<_DexTokenPage> {
     return Column(
       children: [
         Expanded(
-          child: _selectedSection == 0
+          child: _selectedSection == 2
+              ? _HyperliquidContractPage(
+                  palette: palette,
+                  onSectionChanged: _selectSection,
+                )
+              : _selectedSection == 0
               ? ListView(
                   padding: const EdgeInsets.fromLTRB(10, 20, 10, 24),
                   children: [
@@ -208,17 +216,169 @@ class _DexTokenPageState extends State<_DexTokenPage> {
   }
 }
 
+class _HyperliquidContractPage extends StatefulWidget {
+  const _HyperliquidContractPage({
+    required this.palette,
+    required this.onSectionChanged,
+  });
+
+  final AcoPalette palette;
+  final ValueChanged<int> onSectionChanged;
+
+  @override
+  State<_HyperliquidContractPage> createState() =>
+      _HyperliquidContractPageState();
+}
+
+class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
+  List<HyperliquidMarket> _markets = const [];
+  bool _loading = true;
+  String? _error;
+  HyperliquidApiClient? _client;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMarkets();
+  }
+
+  @override
+  void dispose() {
+    _client?.close();
+    super.dispose();
+  }
+
+  Future<void> _loadMarkets() async {
+    _client?.close();
+    final client = HyperliquidApiClient();
+    _client = client;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final markets = await client.loadMarkets();
+      if (!mounted || _client != client) return;
+      markets.sort((left, right) => left.name.compareTo(right.name));
+      setState(() => _markets = markets);
+    } catch (error) {
+      if (mounted && _client == client) {
+        setState(() => _error = 'Hyperliquid 合约行情暂时不可用');
+      }
+    } finally {
+      if (mounted && _client == client) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+    return RefreshIndicator(
+      onRefresh: _loadMarkets,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(15, 20, 15, 24),
+        children: [
+          _DexSectionTabs(
+            palette: palette,
+            selectedSection: 2,
+            onChanged: widget.onSectionChanged,
+          ),
+          const SizedBox(height: 22),
+          Text(
+            'Hyperliquid 永续合约',
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '行情来自 Hyperliquid；下单需要单独的 EIP-712 签名确认。',
+            style: TextStyle(color: palette.mutedText, fontSize: 13),
+          ),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Center(child: CupertinoActivityIndicator())
+          else if (_error != null)
+            _buildMessage(palette, _error!, true)
+          else if (_markets.isEmpty)
+            _buildMessage(palette, '暂无可用合约', false)
+          else
+            ..._markets.map((market) => _buildMarketRow(palette, market)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessage(AcoPalette palette, String text, bool retry) {
+    return Column(
+      children: [
+        const SizedBox(height: 48),
+        Text(text, style: TextStyle(color: palette.mutedText)),
+        if (retry) ...[
+          const SizedBox(height: 12),
+          CupertinoButton(onPressed: _loadMarkets, child: const Text('重试')),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMarketRow(AcoPalette palette, HyperliquidMarket market) {
+    final price = market.markPrice == null
+        ? '-'
+        : market.markPrice!.toStringAsFixed(market.markPrice! < 1 ? 6 : 2);
+    final funding = market.funding == null
+        ? '-'
+        : '${(market.funding! * 100).toStringAsFixed(4)}%';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${market.name}-PERP',
+              style: TextStyle(
+                color: palette.primaryText,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(price, style: TextStyle(color: palette.primaryText)),
+              const SizedBox(height: 3),
+              Text(
+                '资金费率 $funding',
+                style: TextStyle(color: palette.mutedText, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DexTokenDetailPage extends StatefulWidget {
   const _DexTokenDetailPage({
     required this.palette,
     required this.token,
     required this.selectedChain,
+    this.walletIdentity,
     required this.onOpen,
   });
 
   final AcoPalette palette;
   final DexRankingToken token;
   final _WalletChain selectedChain;
+  final WalletIdentity? walletIdentity;
   final ValueChanged<AcoScreen> onOpen;
 
   @override
@@ -412,6 +572,20 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     unawaited(_loadCandlesThenConnect(range));
   }
 
+  void _showTradeSheet(bool buying) {
+    showCupertinoModalPopup<void>(
+      context: context,
+      barrierColor: CupertinoColors.black.withValues(alpha: .58),
+      builder: (_) => _DexTradeSheet(
+        palette: widget.palette,
+        token: _displayToken,
+        buying: buying,
+        selectedChain: widget.selectedChain,
+        walletIdentity: widget.walletIdentity,
+      ),
+    );
+  }
+
   String _klineInterval(String range) => switch (range) {
     '5分' => '5m',
     '15分' => '15m',
@@ -495,7 +669,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 8),
                         FittedBox(
                           alignment: Alignment.centerLeft,
                           fit: BoxFit.scaleDown,
@@ -542,7 +716,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
             );
           },
         ),
-        const SizedBox(height: 32),
+        const SizedBox(height: 20),
         _TimeRangeSelector(
           palette: palette,
           ranges: const ['5分', '15分', '1小时', '4小时', '12小时', '1天'],
@@ -645,7 +819,10 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                 children: [_buildTokenDetails(palette)],
               ),
             ),
-            const _DexTradeActions(),
+            _DexTradeActions(
+              onBuy: () => _showTradeSheet(true),
+              onSell: () => _showTradeSheet(false),
+            ),
           ],
         ),
       ),
@@ -1277,6 +1454,10 @@ class _DexHotTokenRow extends StatelessWidget {
                       const SizedBox(width: 4),
                       const _VerifiedTokenBadge(),
                     ],
+                    if (!isStock && token.chain.trim().isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      _DexChainBadge(chain: token.chain),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -1322,6 +1503,78 @@ class _DexHotTokenRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _DexChainBadge extends StatelessWidget {
+  const _DexChainBadge({required this.chain});
+
+  final String chain;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = _dexChainIconAsset(chain);
+    if (asset == null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        decoration: BoxDecoration(
+          color: const Color(0xFF303030),
+          borderRadius: BorderRadius.circular(7),
+        ),
+        child: Text(
+          _dexChainShortName(chain),
+          style: const TextStyle(
+            color: Color(0xFFB8B8B8),
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            height: 1,
+          ),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: _dexChainName(chain),
+      image: true,
+      child: ClipOval(
+        child: Image.asset(asset, width: 18, height: 18, fit: BoxFit.cover),
+      ),
+    );
+  }
+}
+
+String? _dexChainIconAsset(String chain) => switch (chain
+    .trim()
+    .toLowerCase()) {
+  'sol' || 'solana' => 'assets/icons/crypto/domi/chains/network-solana.png',
+  'eth' || 'ethereum' => 'assets/icons/crypto/domi/chains/network-ethereum.png',
+  'bsc' ||
+  'bnb' ||
+  'binance' ||
+  'binance smart chain' => 'assets/icons/crypto/domi/chains/network-bsc.png',
+  'polygon' || 'matic' => 'assets/icons/crypto/domi/chains/network-polygon.png',
+  'arbitrum' || 'arb' => 'assets/icons/crypto/domi/chains/network-arbitrum.png',
+  'optimism' || 'op' => 'assets/icons/crypto/domi/chains/network-optimism.png',
+  'base' => 'assets/icons/crypto/domi/chains/network-base.png',
+  _ => null,
+};
+
+String _dexChainName(String chain) => switch (chain.trim().toLowerCase()) {
+  'sol' || 'solana' => 'Solana',
+  'eth' || 'ethereum' => 'Ethereum',
+  'bsc' || 'bnb' || 'binance' || 'binance smart chain' => 'BSC',
+  'polygon' || 'matic' => 'Polygon',
+  'arbitrum' || 'arb' => 'Arbitrum',
+  'optimism' || 'op' => 'Optimism',
+  'base' => 'Base',
+  _ => chain.trim(),
+};
+
+String _dexChainShortName(String chain) {
+  final normalized = chain.trim();
+  if (normalized.isEmpty) return '?';
+  return normalized.length <= 5
+      ? normalized.toUpperCase()
+      : normalized.substring(0, 5).toUpperCase();
 }
 
 class _VerifiedTokenBadge extends StatelessWidget {
@@ -1576,7 +1829,10 @@ String _trimTrailingZeros(String value) {
 String _displayValue(String value) => value.isEmpty ? '--' : value;
 
 class _DexTradeActions extends StatelessWidget {
-  const _DexTradeActions();
+  const _DexTradeActions({required this.onBuy, required this.onSell});
+
+  final VoidCallback onBuy;
+  final VoidCallback onSell;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1592,17 +1848,19 @@ class _DexTradeActions extends StatelessWidget {
           children: [
             SizedBox(
               width: buttonWidth,
-              child: const _DexTradeButton(
+              child: _DexTradeButton(
                 label: '买入',
                 color: Color(0xFF25A957),
+                onPressed: onBuy,
               ),
             ),
             const SizedBox(width: 32),
             SizedBox(
               width: buttonWidth,
-              child: const _DexTradeButton(
+              child: _DexTradeButton(
                 label: '卖出',
                 color: Color(0xFFEB456C),
+                onPressed: onSell,
               ),
             ),
           ],
@@ -1613,10 +1871,15 @@ class _DexTradeActions extends StatelessWidget {
 }
 
 class _DexTradeButton extends StatelessWidget {
-  const _DexTradeButton({required this.label, required this.color});
+  const _DexTradeButton({
+    required this.label,
+    required this.color,
+    required this.onPressed,
+  });
 
   final String label;
   final Color color;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -1625,13 +1888,488 @@ class _DexTradeButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       color: color,
       borderRadius: BorderRadius.circular(10),
-      onPressed: () {},
+      onPressed: onPressed,
       child: Text(
         label,
         style: const TextStyle(
           color: CupertinoColors.white,
           fontSize: 18,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
+class _DexTradeSheet extends StatefulWidget {
+  const _DexTradeSheet({
+    required this.palette,
+    required this.token,
+    required this.buying,
+    required this.selectedChain,
+    this.walletIdentity,
+  });
+
+  final AcoPalette palette;
+  final DexRankingToken token;
+  final bool buying;
+  final _WalletChain selectedChain;
+  final WalletIdentity? walletIdentity;
+
+  @override
+  State<_DexTradeSheet> createState() => _DexTradeSheetState();
+}
+
+class _DexTradeSheetState extends State<_DexTradeSheet> {
+  late bool _buying = widget.buying;
+  final _amountController = TextEditingController();
+  late final List<_DexQuoteAsset> _availableQuotes = _buildAvailableQuotes();
+  late _DexQuoteAsset _quoteAsset = _availableQuotes.first;
+  Map<String, String> _balances = const {};
+  bool _loadingBalance = true;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadBalances());
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadBalances() async {
+    final identity = widget.walletIdentity;
+    final tokenStore = await SecureAccountTokenStore().read();
+    if (identity == null || tokenStore == null) {
+      if (mounted) setState(() => _loadingBalance = false);
+      return;
+    }
+    final portfolio = WalletPortfolioService();
+    try {
+      final balances = await portfolio.loadBalances(
+        network: widget.selectedChain.network,
+        identity: identity,
+        derivedAddresses: await WalletPreferences.derivedAddresses(identity),
+        accessToken: tokenStore.accessToken,
+      );
+      if (!mounted) return;
+      setState(() {
+        _balances = {
+          for (final balance in balances)
+            balance.symbol.toUpperCase(): balance.balance == null
+                ? '0'
+                : formatChainAmount(
+                    balance.balance!,
+                    decimals: balance.decimals,
+                  ),
+        };
+        _loadingBalance = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loadingBalance = false);
+    } finally {
+      portfolio.close();
+    }
+  }
+
+  List<_DexQuoteAsset> _buildAvailableQuotes() {
+    final chain = widget.token.chain.trim().toLowerCase();
+    if (chain == 'sol' || chain == 'solana') {
+      return [
+        _DexQuoteAsset('USDT', WalletChainRegistry.solanaUsdt.address),
+        _DexQuoteAsset('USDC', WalletChainRegistry.solanaUsdc.address),
+        const _DexQuoteAsset('SOL', ''),
+      ];
+    }
+    if (chain == 'tron' || chain == 'trx') {
+      return [
+        _DexQuoteAsset('USDT', WalletChainRegistry.tronUsdt.address),
+        _DexQuoteAsset('USDC', WalletChainRegistry.tronUsdc.address),
+        const _DexQuoteAsset('TRX', ''),
+      ];
+    }
+    final network = switch (chain) {
+      'bsc' || 'bnb' || 'bnb chain' => WalletNetwork.bsc,
+      'polygon' || 'matic' => WalletNetwork.polygon,
+      'base' => WalletNetwork.base,
+      'arbitrum' => WalletNetwork.arbitrum,
+      'optimism' => WalletNetwork.optimism,
+      _ => WalletNetwork.ethereum,
+    };
+    final definition = WalletChainRegistry.chains[network]!;
+    return [
+      _DexQuoteAsset('USDT', definition.usdt!.address),
+      _DexQuoteAsset('USDC', definition.usdc!.address),
+      _DexQuoteAsset(definition.symbol, ''),
+    ];
+  }
+
+  String get _quoteSymbol => _quoteAsset.symbol;
+  String get _paySymbol => _buying ? _quoteSymbol : widget.token.symbol;
+  String get _receiveSymbol => _buying ? widget.token.symbol : _quoteSymbol;
+  double get _tokenPrice {
+    final price = widget.token.price.replaceFirst(RegExp(r'^\$'), '');
+    return double.tryParse(price) ?? 0;
+  }
+
+  String get _estimatedReceive {
+    final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+    if (amount <= 0 || _tokenPrice <= 0) return '0';
+    final estimated = _buying ? amount / _tokenPrice : amount * _tokenPrice;
+    return _formatTradeAmount(estimated);
+  }
+
+  String get _availableBalance => _loadingBalance
+      ? '读取中…'
+      : '${_balances[_paySymbol.toUpperCase()] ?? '0'} $_paySymbol';
+
+  void _setAmountFraction(double fraction) {
+    final balance =
+        double.tryParse(_balances[_paySymbol.toUpperCase()] ?? '') ?? 0;
+    final amount = _formatTradeAmount(balance * fraction);
+    _amountController
+      ..text = amount
+      ..selection = TextSelection.collapsed(offset: amount.length);
+    setState(() {});
+  }
+
+  void _pickQuote() {
+    if (_availableQuotes.length < 2) return;
+    showCupertinoModalPopup<_DexQuoteAsset>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        title: Text(
+          '选择交易代币',
+          style: TextStyle(
+            color: widget.palette.mutedText,
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        actions: [
+          for (final asset in _availableQuotes)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(context).pop(asset),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    asset.symbol,
+                    style: TextStyle(
+                      color: widget.palette.accent,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (asset.symbol == _quoteAsset.symbol) ...[
+                    const SizedBox(width: 8),
+                    Icon(
+                      CupertinoIcons.check_mark,
+                      color: widget.palette.accent,
+                      size: 17,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(
+            '取消',
+            style: TextStyle(
+              color: widget.palette.accent,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    ).then((asset) {
+      if (asset != null && mounted) setState(() => _quoteAsset = asset);
+    });
+  }
+
+  void _setBuying(bool buying) {
+    if (_buying == buying) return;
+    setState(() {
+      _buying = buying;
+      _amountController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+    final mutedSurface = palette.primaryText.withValues(alpha: .07);
+    final inputSurface = palette.primaryText.withValues(alpha: .05);
+    final inputBorder = palette.primaryText.withValues(alpha: .12);
+    return CupertinoPopupSurface(
+      isSurfacePainted: false,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+          decoration: BoxDecoration(
+            color: palette.background,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: palette.mutedText.withValues(alpha: .42),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 40,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: mutedSurface,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        children: [
+                          _DexTradeModeTab(
+                            label: '买入',
+                            selected: _buying,
+                            color: const Color(0xFF25C66A),
+                            onPressed: () => _setBuying(true),
+                          ),
+                          _DexTradeModeTab(
+                            label: '卖出',
+                            selected: !_buying,
+                            color: const Color(0xFFEB456C),
+                            onPressed: () => _setBuying(false),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 18, 16, 15),
+                decoration: BoxDecoration(
+                  color: inputSurface,
+                  border: Border.all(color: inputBorder),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: CupertinoTextField(
+                            controller: _amountController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            placeholder: '0',
+                            placeholderStyle: TextStyle(
+                              color: palette.mutedText.withValues(alpha: .7),
+                              fontSize: 44,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            style: TextStyle(
+                              color: palette.primaryText,
+                              fontSize: 44,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            padding: EdgeInsets.zero,
+                            decoration: const BoxDecoration(),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        Text(
+                          _paySymbol,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: _availableQuotes.length > 1
+                            ? _pickQuote
+                            : null,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                style: TextStyle(
+                                  color: palette.mutedText,
+                                  fontSize: 14,
+                                ),
+                                children: [
+                                  const TextSpan(text: '可用 '),
+                                  TextSpan(
+                                    text: _availableBalance,
+                                    style: TextStyle(
+                                      color: palette.primaryText,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (_availableQuotes.length > 1) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                CupertinoIcons.chevron_down,
+                                color: palette.primaryText,
+                                size: 13,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Text(
+                    '预计获得数量',
+                    style: TextStyle(color: palette.mutedText, fontSize: 16),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$_estimatedReceive $_receiveSymbol',
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  for (final option in const [
+                    ('10%', .1),
+                    ('25%', .25),
+                    ('50%', .5),
+                    ('MAX', 1.0),
+                  ])
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          right: option.$1 == 'MAX' ? 0 : 10,
+                        ),
+                        child: CupertinoButton(
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size.fromHeight(42),
+                          color: mutedSurface,
+                          borderRadius: BorderRadius.circular(10),
+                          onPressed: _loadingBalance
+                              ? null
+                              : () => _setAmountFraction(option.$2),
+                          child: Text(
+                            option.$1,
+                            style: TextStyle(
+                              color: palette.primaryText,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  color: mutedSurface,
+                  borderRadius: BorderRadius.circular(26),
+                  onPressed: null,
+                  child: Text(
+                    _buying ? '买入' : '卖出',
+                    style: TextStyle(
+                      color: palette.mutedText.withValues(alpha: .7),
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DexQuoteAsset {
+  const _DexQuoteAsset(this.symbol, this.address);
+
+  final String symbol;
+  final String address;
+}
+
+String _formatTradeAmount(double value) {
+  if (!value.isFinite || value <= 0) return '0';
+  final digits = value >= 1 ? 4 : 8;
+  return value
+      .toStringAsFixed(digits)
+      .replaceFirst(RegExp(r'0+$'), '')
+      .replaceFirst(RegExp(r'\.$'), '');
+}
+
+class _DexTradeModeTab extends StatelessWidget {
+  const _DexTradeModeTab({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      borderRadius: BorderRadius.circular(20),
+      color: selected ? color : _transparent,
+      onPressed: onPressed,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected ? CupertinoColors.white : CupertinoColors.systemGrey,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
         ),
       ),
     ),
