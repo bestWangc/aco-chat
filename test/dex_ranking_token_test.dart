@@ -33,6 +33,24 @@ void main() {
     expect(token.dex, 'orca');
   });
 
+  test('parses the Chinese stock name', () {
+    final token = DexRankingToken.fromJson({
+      'base': {
+        'sym': 'CRCLx',
+        'name': 'Circle xStock',
+        'stock': {
+          'ticker': 'CRCL',
+          'name_en': 'Circle Internet Group',
+          'name_zh': 'Circle',
+        },
+      },
+    });
+
+    expect(token.symbol, 'CRCLx');
+    expect(token.name, 'Circle xStock');
+    expect(token.stockNameZh, 'Circle');
+  });
+
   test('filters tokens from the Antfun launchpad', () async {
     final api = DexRankingApiClient(
       httpClient: _RankingClient(),
@@ -58,6 +76,20 @@ void main() {
     final request = jsonDecode(client.lastRequestBody!) as Map<String, dynamic>;
     expect(request['type'], 'picks');
     expect(request['chain'], 'sol');
+  });
+
+  test('loads stocks with the stock ranking interval', () async {
+    final client = _RankingClient();
+    final api = DexRankingApiClient(
+      httpClient: client,
+      baseUri: Uri.parse('https://api.test'),
+    );
+
+    await api.hotTokens(type: 'xstock', slug: 'ai', interval: '24h');
+    api.close();
+
+    final request = jsonDecode(client.lastRequestBody!) as Map<String, dynamic>;
+    expect(request, {'type': 'xstock', 'slug': 'ai', 'interval': '24h'});
   });
 
   test('loads fresh token data while keeping the list logo', () async {

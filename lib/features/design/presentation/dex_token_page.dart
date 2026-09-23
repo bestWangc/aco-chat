@@ -17,12 +17,13 @@ class _DexTokenPage extends StatefulWidget {
 }
 
 class _DexTokenPageState extends State<_DexTokenPage> {
-  bool showSwap = false;
   bool ethFirst = true;
   List<DexRankingToken> _hotTokens = const [];
   bool _loadingTokens = true;
   String _rankingType = 'binance_alpha';
   String _rankingChain = 'all';
+  int _selectedSection = 1;
+  int _tokenRequestId = 0;
 
   @override
   void initState() {
@@ -31,19 +32,40 @@ class _DexTokenPageState extends State<_DexTokenPage> {
   }
 
   Future<void> _loadHotTokens() async {
+    final requestId = ++_tokenRequestId;
+    final type = _rankingType;
+    final filter = _rankingChain;
+    final isStock = type == 'xstock';
+    final filterName = isStock ? 'slug' : 'chain';
+    final interval = isStock ? '24h' : '5m';
+    debugPrint(
+      '[HotTokensPage] start requestId=$requestId type=$type '
+      '$filterName=$filter interval=$interval',
+    );
     final client = DexRankingApiClient();
     try {
       final tokens = await client.hotTokens(
-        type: _rankingType,
-        chain: _rankingChain,
-        interval: '5m',
+        type: type,
+        chain: isStock ? 'all' : filter,
+        slug: isStock ? filter : null,
+        interval: interval,
       );
-      if (mounted && tokens.isNotEmpty) setState(() => _hotTokens = tokens);
+      final stale = requestId != _tokenRequestId;
+      debugPrint(
+        '[HotTokensPage] finish requestId=$requestId stale=$stale '
+        'tokens=${tokens.length} '
+        'symbols=${tokens.take(5).map((token) => token.symbol).join(',')}',
+      );
+      if (mounted && requestId == _tokenRequestId) {
+        setState(() => _hotTokens = tokens);
+      }
     } catch (_) {
       // The page remains usable while a network request is unavailable.
     } finally {
       client.close();
-      if (mounted) setState(() => _loadingTokens = false);
+      if (mounted && requestId == _tokenRequestId) {
+        setState(() => _loadingTokens = false);
+      }
     }
   }
 
@@ -62,12 +84,36 @@ class _DexTokenPageState extends State<_DexTokenPage> {
 
   void _selectRankingChain(String chain) {
     if (_rankingChain == chain) return;
+    final filterName = _rankingType == 'xstock' ? 'slug' : 'chain';
+    debugPrint(
+      '[HotTokensPage] filter changed type=$_rankingType '
+      '$filterName=$_rankingChain->$chain',
+    );
     setState(() {
       _rankingChain = chain;
       _loadingTokens = true;
       _hotTokens = const [];
     });
     _loadHotTokens();
+  }
+
+  void _selectSection(int section) {
+    if (section == 2 || _selectedSection == section) return;
+
+    final isStock = section == 3;
+    final type = isStock ? 'xstock' : 'binance_alpha';
+    final typeChanged = _rankingType != type;
+    setState(() {
+      _selectedSection = section;
+      if (typeChanged) {
+        _rankingType = type;
+        _rankingChain = 'all';
+        _loadingTokens = true;
+        _hotTokens = const [];
+      }
+      if (isStock) _rankingChain = 'all';
+    });
+    if (typeChanged || isStock) _loadHotTokens();
   }
 
   void _selectRankingType(String type) {
@@ -86,7 +132,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
   }
 
   Widget _buildHotTokenList(AcoPalette palette) {
-    final horizontalPadding = showSwap ? 10.0 : 15.0;
+    final horizontalPadding = _selectedSection == 0 ? 10.0 : 15.0;
     return CustomScrollView(
       slivers: [
         SliverPadding(
@@ -99,8 +145,8 @@ class _DexTokenPageState extends State<_DexTokenPage> {
           sliver: SliverToBoxAdapter(
             child: _DexSectionTabs(
               palette: palette,
-              showSwap: false,
-              onChanged: (index) => setState(() => showSwap = index == 0),
+              selectedSection: _selectedSection,
+              onChanged: _selectSection,
             ),
           ),
         ),
@@ -116,6 +162,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
             tokens: _hotTokens,
             loading: _loadingTokens,
             selectedType: _rankingType,
+            isStock: _selectedSection == 3,
             onRefresh: _loadHotTokens,
             onTypeSelected: _selectRankingType,
             selectedChain: _rankingChain,
@@ -133,15 +180,14 @@ class _DexTokenPageState extends State<_DexTokenPage> {
     return Column(
       children: [
         Expanded(
-          child: showSwap
+          child: _selectedSection == 0
               ? ListView(
                   padding: const EdgeInsets.fromLTRB(10, 20, 10, 24),
                   children: [
                     _DexSectionTabs(
                       palette: palette,
-                      showSwap: true,
-                      onChanged: (index) =>
-                          setState(() => showSwap = index == 0),
+                      selectedSection: _selectedSection,
+                      onChanged: _selectSection,
                     ),
                     const SizedBox(height: 24),
                     _DexSwapContent(
@@ -995,21 +1041,21 @@ class _DexTradeActivityCard extends StatelessWidget {
 class _DexSectionTabs extends StatelessWidget {
   const _DexSectionTabs({
     required this.palette,
-    required this.showSwap,
+    required this.selectedSection,
     required this.onChanged,
   });
 
   final AcoPalette palette;
-  final bool showSwap;
+  final int selectedSection;
   final ValueChanged<int> onChanged;
 
   @override
   Widget build(BuildContext context) => Transform.translate(
-    offset: Offset(showSwap ? 16 : 0, 0),
+    offset: Offset(selectedSection == 0 ? 16 : 0, 0),
     child: _SectionTabs(
       palette: palette,
       labels: const ['闪兑', '代币', '合约', '股票'],
-      selected: showSwap ? 0 : 1,
+      selected: selectedSection,
       itemSpacing: 12,
       fontSize: 18,
       horizontalPadding: 8,
@@ -1025,6 +1071,7 @@ class _DexHotTokenList extends StatelessWidget {
     required this.tokens,
     required this.loading,
     required this.selectedType,
+    required this.isStock,
     required this.selectedChain,
     required this.onRefresh,
     required this.onTypeSelected,
@@ -1036,6 +1083,7 @@ class _DexHotTokenList extends StatelessWidget {
   final List<DexRankingToken> tokens;
   final bool loading;
   final String selectedType;
+  final bool isStock;
   final String selectedChain;
   final Future<void> Function() onRefresh;
   final ValueChanged<String> onTypeSelected;
@@ -1057,7 +1105,7 @@ class _DexHotTokenList extends StatelessWidget {
     ('bsc', 'BSC'),
   ];
 
-  List<(String, String)> get _availableChains =>
+  List<(String, String)> get _availableFilters =>
       selectedType == 'picks' ? _memeChains : _chains;
 
   @override
@@ -1069,6 +1117,7 @@ class _DexHotTokenList extends StatelessWidget {
       return _DexHotTokenRow(
         token: token,
         palette: palette,
+        isStock: isStock,
         onTap: () => onSelected(token),
       );
     },
@@ -1077,66 +1126,68 @@ class _DexHotTokenList extends StatelessWidget {
   Widget _buildHeader() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      SizedBox(
-        height: 38,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: _categories.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 20),
-          itemBuilder: (context, index) {
-            final category = _categories[index];
-            final type = category.$2;
-            final selected = type == selectedType;
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: type == null ? null : () => onTypeSelected(type),
-              child: Align(
-                child: Text(
-                  category.$1,
-                  style: TextStyle(
-                    color: selected ? palette.primaryText : palette.mutedText,
-                    fontSize: 18,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+      if (!isStock) ...[
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _categories.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 20),
+            itemBuilder: (context, index) {
+              final category = _categories[index];
+              final type = category.$2;
+              final selected = type == selectedType;
+              return GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: type == null ? null : () => onTypeSelected(type),
+                child: Align(
+                  child: Text(
+                    category.$1,
+                    style: TextStyle(
+                      color: selected ? palette.primaryText : palette.mutedText,
+                      fontSize: 18,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-      const SizedBox(height: 14),
-      SizedBox(
-        height: 38,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          itemCount: _availableChains.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 10),
-          itemBuilder: (context, index) {
-            final chain = _availableChains[index];
-            final selected = chain.$1 == selectedChain;
-            return CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              minimumSize: Size.zero,
-              color: selected ? palette.surfaceRaised : Colors.transparent,
-              borderRadius: BorderRadius.circular(18),
-              onPressed: () => onChainSelected(chain.$1),
-              child: Text(
-                chain.$2,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: 17,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _availableFilters.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final chain = _availableFilters[index];
+              final selected = chain.$1 == selectedChain;
+              return CupertinoButton(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                minimumSize: Size.zero,
+                color: selected ? palette.surfaceRaised : Colors.transparent,
+                borderRadius: BorderRadius.circular(18),
+                onPressed: () => onChainSelected(chain.$1),
+                child: Text(
+                  chain.$2,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: 17,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
-      ),
-      const SizedBox(height: 22),
+        const SizedBox(height: 22),
+      ],
       Row(
         children: [
           Text(
-            '市值｜成交额',
+            isStock ? '公司｜币种' : '市值｜成交额',
             style: TextStyle(color: palette.mutedText, fontSize: 14),
           ),
           const Spacer(),
@@ -1177,88 +1228,100 @@ class _DexHotTokenRow extends StatelessWidget {
   const _DexHotTokenRow({
     required this.token,
     required this.palette,
+    required this.isStock,
     required this.onTap,
   });
 
   final DexRankingToken token;
   final AcoPalette palette;
+  final bool isStock;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    minimumSize: Size.zero,
-    onPressed: onTap,
-    child: Row(
-      children: [
-        _DexTokenDisplayIcon(token: token, size: 44),
-        const SizedBox(width: 11),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      token.symbol,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final title = isStock && token.stockNameZh.isNotEmpty
+        ? token.stockNameZh
+        : token.symbol;
+    final subtitle = isStock
+        ? token.symbol
+        : '${formatDexCompactCurrency(token.marketCap)}  |  '
+              '${formatDexCompactCurrency(token.volume)}';
+
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: Row(
+        children: [
+          _DexTokenDisplayIcon(token: token, size: 44),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
-                  if (token.verified) ...[
-                    const SizedBox(width: 4),
-                    const _VerifiedTokenBadge(),
+                    if (token.verified) ...[
+                      const SizedBox(width: 4),
+                      const _VerifiedTokenBadge(),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${formatDexCompactCurrency(token.marketCap)}  |  ${formatDexCompactCurrency(token.volume)}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: palette.mutedText, fontSize: 14),
-              ),
-            ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: palette.mutedText, fontSize: 14),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(width: 10),
-        SizedBox(
-          width: 110,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              FittedBox(
-                alignment: Alignment.centerRight,
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  formatDexPrice(token.price),
-                  style: TextStyle(
-                    color: palette.primaryText,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 110,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FittedBox(
+                  alignment: Alignment.centerRight,
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    formatDexPrice(token.price),
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                _displayValue(token.change),
-                style: TextStyle(
-                  color: _dexChangeColor(token.change),
-                  fontSize: 14,
+                const SizedBox(height: 3),
+                Text(
+                  _displayValue(token.change),
+                  style: TextStyle(
+                    color: _dexChangeColor(token.change),
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class _VerifiedTokenBadge extends StatelessWidget {

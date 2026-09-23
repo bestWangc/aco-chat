@@ -1,16 +1,51 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:aco_chat/core/config/app_config.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
+Future<void> _dexLogQueue = Future<void>.value();
+Future<File>? _dexLogFile;
+bool _dexLogPathPrinted = false;
+
+void _writeDexLog(String message) {
+  if (!Platform.isAndroid && !Platform.isIOS) return;
+  _dexLogQueue = _dexLogQueue.then((_) async {
+    try {
+      final file = await (_dexLogFile ??= _createDexLogFile());
+      await file.writeAsString(
+        '[${DateTime.now().toIso8601String()}] $message\n',
+        mode: FileMode.append,
+        flush: true,
+      );
+      if (!_dexLogPathPrinted) {
+        _dexLogPathPrinted = true;
+        debugPrint('[DexLogFile] path=${file.path}');
+      }
+    } catch (error) {
+      _dexLogFile = null;
+      debugPrint('[DexLogFile] write failed error=$error');
+    }
+  });
+}
+
+Future<File> _createDexLogFile() async {
+  final directory = await getApplicationDocumentsDirectory();
+  return File('${directory.path}/dex_ranking_http.log');
+}
+
+int _dexHttpRequestId = 0;
 
 class DexRankingToken {
   const DexRankingToken({
     required this.symbol,
     required this.name,
+    required this.stockNameZh,
     required this.chain,
     required this.address,
     required this.dex,
@@ -27,6 +62,7 @@ class DexRankingToken {
 
   final String symbol;
   final String name;
+  final String stockNameZh;
   final String chain;
   final String address;
   final String dex;
@@ -43,6 +79,7 @@ class DexRankingToken {
   DexRankingToken copyWith({
     String? symbol,
     String? name,
+    String? stockNameZh,
     String? chain,
     String? address,
     String? dex,
@@ -58,6 +95,7 @@ class DexRankingToken {
   }) => DexRankingToken(
     symbol: symbol ?? this.symbol,
     name: name ?? this.name,
+    stockNameZh: stockNameZh ?? this.stockNameZh,
     chain: chain ?? this.chain,
     address: address ?? this.address,
     dex: dex ?? this.dex,
@@ -74,6 +112,7 @@ class DexRankingToken {
 
   factory DexRankingToken.fromJson(Map<String, dynamic> json) {
     final base = _asMap(json['base']);
+    final stock = _asMap(base['stock']);
     return DexRankingToken(
       symbol: _value(
         base,
@@ -82,6 +121,7 @@ class DexRankingToken {
         _value(base, json, 'sym', _value(base, json, 'token_symbol', '未知代币')),
       ),
       name: _value(base, json, 'name'),
+      stockNameZh: _firstNonEmpty([stock['name_zh']]),
       chain: _value(base, json, 'chain'),
       address: _value(base, json, 'addr', _value(base, json, 'address')),
       dex: _value(base, json, 'dex'),
@@ -323,20 +363,39 @@ class DexRankingApiClient {
   Future<List<DexRankingToken>> hotTokens({
     String type = 'binance_alpha',
     String chain = 'all',
+    String? slug,
     String interval = '5m',
   }) async {
     Object? lastError;
     for (final uri in await _resolveRankingUris()) {
+      final requestId = ++_dexHttpRequestId;
       try {
-        final request = {'type': type, 'chain': chain, 'interval': interval};
-        debugPrint('[HotTokens] POST $uri params=$request');
+        final request = <String, String>{'type': type, 'interval': interval};
+        if (type == 'xstock') {
+          request['slug'] = slug ?? chain;
+        } else {
+          request['chain'] = chain;
+        }
+        final requestBody = jsonEncode(request);
+        debugPrint(
+          '[HotTokens] requestId=$requestId POST $uri params=$request',
+        );
+        _writeDexLog(
+          'requestId=$requestId list request method=POST url=$uri '
+          'body=$requestBody',
+        );
         final response = await _client.post(
           uri,
           headers: const {'content-type': 'application/json'},
-          body: jsonEncode(request),
+          body: requestBody,
+        );
+        _writeDexLog(
+          'requestId=$requestId list response status=${response.statusCode} '
+          'url=$uri body=${response.body}',
         );
         debugPrint(
-          '[HotTokens] response status=${response.statusCode} body=${response.body}',
+          '[HotTokens] requestId=$requestId response status=${response.statusCode} '
+          'body=${response.body}',
         );
         if (response.statusCode < 200 || response.statusCode >= 300) {
           throw http.ClientException('热门代币请求失败：${response.statusCode}');
@@ -362,6 +421,13 @@ class DexRankingApiClient {
           debugPrint(
             '[HotTokens] first parsed token symbol=${tokens.first.symbol} '
             'chain=${tokens.first.chain} pool=${tokens.first.pool}',
+          );
+        }
+        if (data is Map<String, dynamic>) {
+          debugPrint(
+            '[HotTokens] response meta chain=${data['chain']} '
+            'slug=${data['slug']} interval=${data['interval']} '
+            'list=${tokens.take(5).map((token) => token.symbol).join(',')}',
           );
         }
         return tokens;
