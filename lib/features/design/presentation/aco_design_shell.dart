@@ -48,6 +48,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
     show
         InteractiveViewer,
+        Icons,
         ListTile,
         Material,
         MaterialType,
@@ -116,6 +117,7 @@ part 'wallet_chain_widgets.dart';
 part 'wallet_backup_pages.dart';
 part 'wallet_receive_pages.dart';
 part 'dex_token_page.dart';
+part 'hyperliquid_contract_trade_page.dart';
 part 'dex_swap_page.dart';
 part 'create_live_page.dart';
 part 'design_shell_widgets.dart';

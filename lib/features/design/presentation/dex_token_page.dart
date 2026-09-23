@@ -186,6 +186,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
           child: _selectedSection == 2
               ? _HyperliquidContractPage(
                   palette: palette,
+                  walletIdentity: widget.walletIdentity,
                   onSectionChanged: _selectSection,
                 )
               : _selectedSection == 0
@@ -219,10 +220,12 @@ class _DexTokenPageState extends State<_DexTokenPage> {
 class _HyperliquidContractPage extends StatefulWidget {
   const _HyperliquidContractPage({
     required this.palette,
+    required this.walletIdentity,
     required this.onSectionChanged,
   });
 
   final AcoPalette palette;
+  final WalletIdentity? walletIdentity;
   final ValueChanged<int> onSectionChanged;
 
   @override
@@ -248,18 +251,21 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
     super.dispose();
   }
 
-  Future<void> _loadMarkets() async {
+  Future<void> _loadMarkets({bool showLoading = true}) async {
     _client?.close();
     final client = HyperliquidApiClient();
     _client = client;
     setState(() {
-      _loading = true;
+      if (showLoading) _loading = true;
       _error = null;
     });
     try {
       final markets = await client.loadMarkets();
       if (!mounted || _client != client) return;
-      markets.sort((left, right) => left.name.compareTo(right.name));
+      markets.removeWhere((market) => market.isDelisted);
+      markets.sort(
+        (left, right) => (right.volume24h ?? 0).compareTo(left.volume24h ?? 0),
+      );
       setState(() => _markets = markets);
     } catch (error) {
       if (mounted && _client == client) {
@@ -274,30 +280,20 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
   Widget build(BuildContext context) {
     final palette = widget.palette;
     return RefreshIndicator(
-      onRefresh: _loadMarkets,
+      onRefresh: () => _loadMarkets(showLoading: false),
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(15, 20, 15, 24),
+        padding: const EdgeInsets.fromLTRB(15, 4, 15, 24),
         children: [
           _DexSectionTabs(
             palette: palette,
             selectedSection: 2,
             onChanged: widget.onSectionChanged,
           ),
-          const SizedBox(height: 22),
-          Text(
-            'Hyperliquid 永续合约',
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '行情来自 Hyperliquid；下单需要单独的 EIP-712 签名确认。',
-            style: TextStyle(color: palette.mutedText, fontSize: 13),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
+          if (!_loading && _error == null && _markets.isNotEmpty) ...[
+            _HyperliquidMarketHeader(palette: palette),
+            const SizedBox(height: 4),
+          ],
           if (_loading)
             const Center(child: CupertinoActivityIndicator())
           else if (_error != null)
@@ -325,45 +321,290 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
   }
 
   Widget _buildMarketRow(AcoPalette palette, HyperliquidMarket market) {
-    final price = market.markPrice == null
-        ? '-'
-        : market.markPrice!.toStringAsFixed(market.markPrice! < 1 ? 6 : 2);
-    final funding = market.funding == null
-        ? '-'
-        : '${(market.funding! * 100).toStringAsFixed(4)}%';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-      decoration: BoxDecoration(
-        color: palette.surfaceRaised,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              '${market.name}-PERP',
-              style: TextStyle(
-                color: palette.primaryText,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+    return _HyperliquidMarketRow(
+      palette: palette,
+      market: market,
+      onPressed: () => Navigator.of(context).push<void>(
+        _AcoPageRoute<void>(
+          builder: (_) => _HyperliquidContractTradePage(
+            palette: palette,
+            market: market,
+            walletIdentity: widget.walletIdentity,
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(price, style: TextStyle(color: palette.primaryText)),
-              const SizedBox(height: 3),
-              Text(
-                '资金费率 $funding',
-                style: TextStyle(color: palette.mutedText, fontSize: 12),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+class _HyperliquidMarketRow extends StatelessWidget {
+  const _HyperliquidMarketRow({
+    required this.palette,
+    required this.market,
+    required this.onPressed,
+  });
+
+  final AcoPalette palette;
+  final HyperliquidMarket market;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final change = market.changePercent;
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: palette.border)),
+      ),
+      child: CupertinoButton(
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        minimumSize: Size.zero,
+        onPressed: onPressed,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 12,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: market.name,
+                          style: TextStyle(color: palette.primaryText),
+                        ),
+                        TextSpan(
+                          text: '-USDC',
+                          style: TextStyle(color: palette.mutedText),
+                        ),
+                      ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  if (market.maxLeverage > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.surfaceRaised,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${market.maxLeverage}x',
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 9,
+              child: _HyperliquidMarketMetric(
+                palette: palette,
+                primary: _formatHyperliquidCurrency(market.volume24h),
+                secondary: _formatHyperliquidCurrency(
+                  market.openInterestNotional,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 8,
+              child: _HyperliquidMarketMetric(
+                palette: palette,
+                primary: _formatHyperliquidPrice(market.markPrice),
+                secondary: _formatHyperliquidChange(change),
+                secondaryColor: _hyperliquidChangeColor(change, palette),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color _hyperliquidChangeColor(double? change, AcoPalette palette) {
+  if (change == null) return palette.mutedText;
+  return change >= 0 ? _lime : _danger;
+}
+
+class _HyperliquidMarketHeader extends StatelessWidget {
+  const _HyperliquidMarketHeader({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Expanded(flex: 12, child: _label('市场', TextAlign.left)),
+      Expanded(flex: 9, child: _label('成交量\n合约持仓量', TextAlign.right)),
+      Expanded(flex: 8, child: _label('最后价格\n24小时变化', TextAlign.right)),
+    ],
+  );
+
+  Widget _label(String text, TextAlign align) => Text(
+    text,
+    textAlign: align,
+    style: TextStyle(color: palette.mutedText, fontSize: 14, height: 1.3),
+  );
+}
+
+class _HyperliquidMarketMetric extends StatelessWidget {
+  const _HyperliquidMarketMetric({
+    required this.palette,
+    required this.primary,
+    required this.secondary,
+    this.secondaryColor,
+  });
+
+  final AcoPalette palette;
+  final String primary;
+  final String secondary;
+  final Color? secondaryColor;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Text(
+        primary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: 17,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      const SizedBox(height: 4),
+      Text(
+        secondary,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: secondaryColor ?? palette.mutedText,
+          fontSize: 14,
+        ),
+      ),
+    ],
+  );
+}
+
+String _formatHyperliquidPrice(double? value) {
+  if (value == null) return '--';
+  final int decimals;
+  if (value >= 1000) {
+    decimals = 1;
+  } else if (value >= 1) {
+    decimals = 2;
+  } else {
+    decimals = 6;
+  }
+  return _trimTrailingZeros(value.toStringAsFixed(decimals));
+}
+
+String _formatHyperliquidCurrency(double? value) =>
+    value == null ? '--' : formatDexCompactCurrency('$value');
+
+String _formatHyperliquidChange(double? value) => value == null
+    ? '--'
+    : '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%';
+
+class _HyperliquidTokenIcon extends StatelessWidget {
+  const _HyperliquidTokenIcon({
+    required this.symbol,
+    required this.palette,
+    required this.size,
+  });
+
+  final String symbol;
+  final AcoPalette palette;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = symbol.toLowerCase();
+    const localSymbols = {
+      'atom',
+      'avax',
+      'bnb',
+      'btc',
+      'doge',
+      'dot',
+      'eth',
+      'ltc',
+      'matic',
+      'sol',
+      'trx',
+      'xrp',
+    };
+    final fallback = _HyperliquidTokenFallback(
+      symbol: symbol,
+      palette: palette,
+      size: size,
+    );
+    if (localSymbols.contains(normalized)) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: SvgPicture.asset('assets/icons/crypto/tokens/$normalized.svg'),
+      );
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: SvgPicture.network(
+        'https://app.hyperliquid.xyz/coins/${Uri.encodeComponent(symbol)}.svg',
+        fit: BoxFit.contain,
+        placeholderBuilder: (_) => fallback,
+        errorBuilder: (_, _, _) => fallback,
+      ),
+    );
+  }
+}
+
+class _HyperliquidTokenFallback extends StatelessWidget {
+  const _HyperliquidTokenFallback({
+    required this.symbol,
+    required this.palette,
+    required this.size,
+  });
+
+  final String symbol;
+  final AcoPalette palette;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: palette.surfaceRaised,
+      shape: BoxShape.circle,
+    ),
+    child: Text(
+      symbol.isEmpty ? '?' : symbol.characters.first.toUpperCase(),
+      style: TextStyle(
+        color: palette.primaryText,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
 }
 
 class _DexTokenDetailPage extends StatefulWidget {
@@ -662,7 +903,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _displayValue(token.change),
+                          _formatDexChange(token.change),
                           style: TextStyle(
                             color: _dexChangeColor(token.change),
                             fontSize: AcoTypography.body,
@@ -1490,7 +1731,7 @@ class _DexHotTokenRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  _displayValue(token.change),
+                  _formatDexChange(token.change),
                   style: TextStyle(
                     color: _dexChangeColor(token.change),
                     fontSize: 14,
@@ -1826,7 +2067,16 @@ String _trimTrailingZeros(String value) {
       .replaceFirst(RegExp(r'\.$'), '');
 }
 
-String _displayValue(String value) => value.isEmpty ? '--' : value;
+String _formatDexChange(String value) {
+  final normalized = value.trim();
+  if (normalized.isEmpty) return '--';
+  if (normalized.startsWith('-') || normalized.startsWith('+')) {
+    return normalized;
+  }
+  final numeric = double.tryParse(normalized.replaceAll('%', ''));
+  if (numeric == null || numeric <= 0) return normalized;
+  return '+$normalized';
+}
 
 class _DexTradeActions extends StatelessWidget {
   const _DexTradeActions({required this.onBuy, required this.onSell});
