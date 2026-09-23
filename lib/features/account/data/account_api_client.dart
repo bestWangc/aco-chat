@@ -612,6 +612,56 @@ class AccountApiClient {
     _body(response);
   }
 
+  Future<Map<String, dynamic>> recordDexTrade({
+    required String network,
+    required String wallet,
+    required String dex,
+    required String pool,
+    required String txHash,
+    required String clientId,
+    String? baseToken,
+    String? quoteToken,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('dex/trades'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({
+        'network': network,
+        'wallet': wallet,
+        'dex': dex,
+        'pool': pool,
+        'tx_hash': txHash,
+        'client_id': clientId,
+        if (baseToken != null && baseToken.isNotEmpty) 'base_token': baseToken,
+        if (quoteToken != null && quoteToken.isNotEmpty)
+          'quote_token': quoteToken,
+      }),
+    );
+    return _body(response);
+  }
+
+  Future<List<Map<String, dynamic>>> listDexTrades({
+    required String wallet,
+    String? dex,
+    String? pool,
+    required String token,
+  }) async {
+    final query = <String, String>{
+      'wallet': wallet,
+      if (dex != null && dex.isNotEmpty) 'dex': dex,
+      if (pool != null && pool.isNotEmpty) 'pool': pool,
+    };
+    final response = await _httpClient.get(
+      _uri('dex/trades').replace(queryParameters: query),
+      headers: _authorizedHeaders(token),
+    );
+    final data = _body(response)['data'];
+    return data is List
+        ? data.whereType<Map<String, dynamic>>().toList(growable: false)
+        : const [];
+  }
+
   Future<SquarePostPage> listRecommendedPostsPage({
     required String token,
     String? cursor,

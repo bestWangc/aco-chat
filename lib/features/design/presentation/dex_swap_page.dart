@@ -63,6 +63,8 @@ class _DexSwapContent extends StatefulWidget {
     required this.ethFirst,
     required this.onEthFirstChanged,
     this.recentRecord,
+    this.pool,
+    this.dex,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
@@ -72,6 +74,8 @@ class _DexSwapContent extends StatefulWidget {
   final bool ethFirst;
   final ValueChanged<bool> onEthFirstChanged;
   final Future<DexSwapRecord?>? recentRecord;
+  final String? pool;
+  final String? dex;
 
   @override
   State<_DexSwapContent> createState() => _DexSwapContentState();
@@ -99,6 +103,8 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   @override
   void initState() {
     super.initState();
+    final pendingTrades = DexTradeService();
+    unawaited(pendingTrades.flushPending().whenComplete(pendingTrades.close));
     _fromChain = widget.selectedChain;
     _toChain = widget.selectedChain;
     _fromSymbol = _nativeSymbol;
@@ -325,8 +331,16 @@ class _DexSwapContentState extends State<_DexSwapContent> {
               transactionRequest: request,
             );
         if (!context.mounted) return;
-        _showNotice(context, '兑换已提交', '交易哈希：${result.hash}');
-        await _trackLifiStatus(result.hash);
+        _showNotice(context, '交易已发起', '交易哈希：${result.hash}');
+        unawaited(
+          _recordDexTrade(
+            result.hash,
+            fromAddress,
+            request,
+            widget.dex ?? quote.tool,
+          ),
+        );
+        await _waitForChainConfirmation(result.hash);
       } finally {
         rpc.close();
       }
@@ -437,35 +451,71 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     return message.replaceFirst(RegExp(r'^Exception:\s*'), '');
   }
 
-  Future<void> _trackLifiStatus(String txHash) async {
-    final client = LifiApiClient();
+  Future<void> _waitForChainConfirmation(String txHash) async {
+    if (fromChain.network == WalletNetwork.tron) return;
+    final tokens = await SecureAccountTokenStore().read();
+    if (tokens == null || txHash.isEmpty) return;
+    final rpc = WalletRpcClient(
+      client: http.Client(),
+      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+      ownsClient: true,
+    );
     try {
-      for (var attempt = 0; attempt < 4; attempt++) {
+      final endpoints = await rpc.loadEndpoints(network: fromChain.network.name, accessToken: tokens.accessToken);
+      for (var attempt = 0; attempt < 15; attempt++) {
         await Future<void>.delayed(const Duration(seconds: 2));
-        final status = await client.status(
-          txHash: txHash,
-          fromNetwork: fromChain.network,
-          toNetwork: toChain.network,
-        );
-        if (status.status.toUpperCase() == 'DONE' ||
-            status.status.toUpperCase() == 'FAILED') {
+        final solana = fromChain.network == WalletNetwork.solana;
+        final response = await rpc.postJson(endpoints, {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': solana
+              ? 'getSignatureStatuses'
+              : 'eth_getTransactionReceipt',
+          'params': solana
+              ? [
+                  [txHash],
+                  {'searchTransactionHistory': true},
+                ]
+              : [txHash],
+        });
+        final result = response['result'];
+        final receipt = _confirmationReceipt(result, solana: solana);
+        if (receipt != null) {
+          final failed = solana
+              ? receipt['err'] != null
+              : receipt['status'] == '0x0';
           if (mounted) {
             _showNotice(
               context,
-              status.status.toUpperCase() == 'DONE' ? '兑换完成' : '兑换失败',
-              status.receivingTxHash == null
-                  ? status.status
-                  : '目标交易：${status.receivingTxHash}',
+              failed ? '兑换失败' : '兑换成功',
+              failed ? '链上交易执行失败' : '交易已确认',
             );
           }
           return;
         }
       }
     } catch (_) {
-      // The transaction is already broadcast; status polling is best effort.
+      if (mounted) _showNotice(context, '等待确认超时', '可在交易动态中继续查看状态');
     } finally {
-      client.close();
+      rpc.close();
     }
+  }
+
+  Map<String, dynamic>? _confirmationReceipt(
+    Object? result, {
+    required bool solana,
+  }) {
+    if (!solana) {
+      if (result is Map && result['status'] != null) {
+        return result.cast<String, dynamic>();
+      }
+      return null;
+    }
+    if (result is! Map || result['value'] is! List) return null;
+    final values = result['value'] as List;
+    if (values.isEmpty || values.first is! Map) return null;
+    final receipt = (values.first as Map).cast<String, dynamic>();
+    return receipt['confirmationStatus'] == null ? null : receipt;
   }
 
   Future<void> _executeSolanaQuote(
@@ -512,7 +562,12 @@ class _DexSwapContentState extends State<_DexSwapContent> {
           ],
         });
         if (context.mounted) {
-          _showNotice(context, '兑换已提交', '交易哈希：${response['result'] ?? '-'}');
+          final hash = '${response['result'] ?? ''}';
+          _showNotice(context, '交易已发起', '交易哈希：${hash.isEmpty ? '-' : hash}');
+          if (hash.isNotEmpty) {
+            unawaited(_recordDexTrade(hash, address, request, widget.dex ?? 'LI.FI'));
+            await _waitForChainConfirmation(hash);
+          }
         }
       } finally {
         rpc.close();
@@ -575,7 +630,12 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         }
         if (response == null) throw const FormatException('TRON 广播失败');
         if (context.mounted) {
-          _showNotice(context, '兑换已提交', '交易 ID：${response['txid'] ?? '-'}');
+          final hash = '${response['txid'] ?? ''}';
+          _showNotice(context, '交易已发起', '交易 ID：${hash.isEmpty ? '-' : hash}');
+          if (hash.isNotEmpty) {
+            unawaited(_recordDexTrade(hash, await _addressForChain(identity, fromChain) ?? '', request, widget.dex ?? 'LI.FI'));
+            await _waitForChainConfirmation(hash);
+          }
         }
       } finally {
         rpc.close();
@@ -584,6 +644,30 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       if (context.mounted) _showNotice(context, '兑换失败', error.message);
     } catch (_) {
       if (context.mounted) _showNotice(context, '兑换失败', 'TRON 交易签名或广播失败。');
+    }
+  }
+
+  Future<void> _recordDexTrade(
+    String txHash,
+    String wallet,
+    Map<String, dynamic> request,
+    String dex,
+  ) async {
+    final pool = '${widget.pool ?? request['pool'] ?? request['pairAddress'] ?? request['poolAddress'] ?? ''}'.trim();
+    if (txHash.isEmpty || wallet.isEmpty || pool.isEmpty) return;
+    final service = DexTradeService();
+    try {
+      await service.record(
+        network: fromChain.network.name,
+        wallet: wallet,
+        dex: dex,
+        pool: pool,
+        txHash: txHash,
+      );
+    } catch (error) {
+      debugPrint('[DexTrade] record failed: $error');
+    } finally {
+      service.close();
     }
   }
 
