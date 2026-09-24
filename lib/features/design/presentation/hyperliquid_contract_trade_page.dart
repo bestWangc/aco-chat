@@ -5,11 +5,13 @@ class _HyperliquidContractTradePage extends StatefulWidget {
     required this.palette,
     required this.market,
     required this.walletIdentity,
+    required this.defaultNetwork,
   });
 
   final AcoPalette palette;
   final HyperliquidMarket market;
   final WalletIdentity? walletIdentity;
+  final WalletNetwork defaultNetwork;
 
   @override
   State<_HyperliquidContractTradePage> createState() =>
@@ -25,11 +27,14 @@ class _HyperliquidContractTradePageState
   final _stopLossPriceController = TextEditingController();
   final _stopLossRateController = TextEditingController();
   final _client = HyperliquidApiClient();
+  final _realtimeClient = HyperliquidRealtimeClient();
 
   HyperliquidOrderBook? _orderBook;
+  HyperliquidMarket? _liveMarket;
   HyperliquidAccountState? _account;
   List<HyperliquidOpenOrder> _openOrders = const [];
-  Timer? _refreshTimer;
+  StreamSubscription<HyperliquidRealtimeUpdate>? _realtimeSubscription;
+  Timer? _fallbackTimer;
   bool _loadingMarket = true;
   bool _loadingAccount = true;
   bool _isMarketOrder = true;
@@ -40,12 +45,12 @@ class _HyperliquidContractTradePageState
   double _amountRatio = 0;
 
   AcoPalette get _palette => widget.palette;
-  HyperliquidMarket get _market => widget.market;
+  HyperliquidMarket get _market => _liveMarket ?? widget.market;
   double get _available => _account?.withdrawable ?? 0;
   double get _referencePrice =>
+      _market.markPrice ??
       _orderBook?.asks.firstOrNull?.price ??
       _orderBook?.bids.firstOrNull?.price ??
-      _market.markPrice ??
       0;
 
   @override
@@ -55,15 +60,51 @@ class _HyperliquidContractTradePageState
     _limitPriceController.text = _formatPlainPrice(_market.markPrice);
     unawaited(_loadMarket());
     unawaited(_loadAccount());
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 3),
-      (_) => unawaited(_loadMarket(showLoading: false)),
-    );
+    _realtimeSubscription = _realtimeClient
+        .subscribe(coin: _market.name, user: widget.walletIdentity?.address)
+        .listen(_applyRealtimeUpdate, onError: (_) => _startHttpFallback());
+  }
+
+  void _applyRealtimeUpdate(HyperliquidRealtimeUpdate update) {
+    final connected = update.connected;
+    if (connected == true) {
+      _fallbackTimer?.cancel();
+    } else if (connected == false) {
+      _startHttpFallback();
+    }
+    if (!mounted) return;
+    setState(() {
+      if (update.orderBook != null) {
+        _orderBook = update.orderBook;
+        _loadingMarket = false;
+      }
+      if (update.assetContext != null) {
+        _liveMarket = widget.market.withContext(update.assetContext!);
+      }
+      if (update.account != null) {
+        _account = update.account;
+        _loadingAccount = false;
+      }
+      if (update.openOrders != null) {
+        _openOrders = update.openOrders!;
+        _loadingAccount = false;
+      }
+    });
+  }
+
+  void _startHttpFallback() {
+    if (_fallbackTimer?.isActive == true) return;
+    _fallbackTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_loadMarket(showLoading: false));
+      unawaited(_loadAccount(showLoading: false));
+    });
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _fallbackTimer?.cancel();
+    unawaited(_realtimeSubscription?.cancel());
+    unawaited(_realtimeClient.close());
     _amountController.dispose();
     _limitPriceController.dispose();
     _takeProfitPriceController.dispose();
@@ -86,13 +127,13 @@ class _HyperliquidContractTradePageState
     }
   }
 
-  Future<void> _loadAccount() async {
+  Future<void> _loadAccount({bool showLoading = true}) async {
     final address = widget.walletIdentity?.address;
     if (address == null || address.isEmpty) {
-      setState(() => _loadingAccount = false);
+      if (mounted) setState(() => _loadingAccount = false);
       return;
     }
-    setState(() => _loadingAccount = true);
+    if (showLoading) setState(() => _loadingAccount = true);
     try {
       final results = await Future.wait<Object>([
         _client.loadAccountState(address),
@@ -106,7 +147,7 @@ class _HyperliquidContractTradePageState
     } catch (_) {
       // Empty account data is a valid degraded state for the trading page.
     } finally {
-      if (mounted) setState(() => _loadingAccount = false);
+      if (mounted && showLoading) setState(() => _loadingAccount = false);
     }
   }
 
@@ -139,6 +180,10 @@ class _HyperliquidContractTradePageState
   }
 
   Future<void> _submitOrder(bool isBuy) async {
+    if (_available <= 0) {
+      await _showDepositSheet();
+      return;
+    }
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
       await _showMessage('请输入正确的下单金额');
@@ -170,6 +215,16 @@ class _HyperliquidContractTradePageState
     );
     if (mounted) setState(() => _loadingSubmit = false);
   }
+
+  Future<void> _showDepositSheet() => showCupertinoModalPopup<void>(
+    context: context,
+    builder: (context) => _HyperliquidUsdcDepositSheet(
+      palette: _palette,
+      contractAvailable: _available,
+      walletIdentity: widget.walletIdentity,
+      defaultNetwork: widget.defaultNetwork,
+    ),
+  );
 
   Future<void> _showMessage(String message, {String title = '提示'}) =>
       showCupertinoDialog<void>(
@@ -210,8 +265,13 @@ class _HyperliquidContractTradePageState
                 icon: Icons.candlestick_chart_outlined,
                 palette: _palette,
                 label: '查看K线',
-                onPressed: () => unawaited(
-                  _showMessage('K线图功能正在接入中', title: '${_market.name} K线'),
+                onPressed: () => Navigator.of(context).push<void>(
+                  _AcoPageRoute<void>(
+                    builder: (_) => _HyperliquidContractKlinePage(
+                      palette: _palette,
+                      market: _market,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -539,8 +599,8 @@ class _FundingHeader extends StatelessWidget {
           Expanded(
             child: _FundingMetric(
               palette: palette,
-              label: '资金费率 / 每小时',
-              value: '${funding >= 0 ? '+' : ''}${funding.toStringAsFixed(4)}%',
+              label: '资金费率',
+              value: '${funding >= 0 ? '+' : ''}${funding.toString()}%',
             ),
           ),
           _FundingMetric(
@@ -1312,6 +1372,881 @@ class _TradeActionButton extends StatelessWidget {
               ),
             ),
     ),
+  );
+}
+
+class _HyperliquidUsdcDepositSheet extends StatefulWidget {
+  const _HyperliquidUsdcDepositSheet({
+    required this.palette,
+    required this.contractAvailable,
+    required this.walletIdentity,
+    required this.defaultNetwork,
+  });
+
+  final AcoPalette palette;
+  final double contractAvailable;
+  final WalletIdentity? walletIdentity;
+  final WalletNetwork defaultNetwork;
+
+  @override
+  State<_HyperliquidUsdcDepositSheet> createState() =>
+      _HyperliquidUsdcDepositSheetState();
+}
+
+class _HyperliquidUsdcDepositSheetState
+    extends State<_HyperliquidUsdcDepositSheet> {
+  static const _minimumAmount = 15.0;
+  static const _assets = [
+    _ContractTransferAsset(chain: 'Arbitrum', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'Ethereum', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'Base', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'BSC', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'Polygon', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'Optimism', symbol: 'USDC'),
+  ];
+
+  String _amount = '';
+  bool _cashToContract = true;
+  bool _showKeypad = true;
+  late _ContractTransferAsset _asset;
+  bool _submitting = false;
+
+  AcoPalette get palette => widget.palette;
+
+  @override
+  void initState() {
+    super.initState();
+    _asset = _assets.firstWhere(
+      (asset) => asset.mayanNetwork == widget.defaultNetwork,
+      orElse: () => _assets.first,
+    );
+  }
+
+  double get _available {
+    if (_cashToContract) return 0;
+    return widget.contractAvailable;
+  }
+
+  double get _parsedAmount => double.tryParse(_amount) ?? 0;
+  bool get _canConfirm =>
+      !_submitting && _cashToContract && _parsedAmount >= _minimumAmount;
+
+  void _append(String value) {
+    if (value == '.') {
+      if (_amount.contains('.')) return;
+      setState(() => _amount = _amount.isEmpty ? '0.' : '$_amount.');
+      return;
+    }
+    final decimalIndex = _amount.indexOf('.');
+    if (decimalIndex >= 0 && _amount.length - decimalIndex > 6) return;
+    setState(() {
+      if (_amount == '0') {
+        _amount = value;
+      } else if (_amount.length < 14) {
+        _amount += value;
+      }
+    });
+  }
+
+  void _delete() {
+    if (_amount.isEmpty) return;
+    setState(() => _amount = _amount.substring(0, _amount.length - 1));
+  }
+
+  void _setFraction(double fraction) {
+    if (_available <= 0) return;
+    setState(() {
+      _amount = _trimTrailingZeros((_available * fraction).toStringAsFixed(6));
+    });
+  }
+
+  void _swapDirection() {
+    setState(() {
+      _cashToContract = !_cashToContract;
+      _amount = '';
+    });
+  }
+
+  Future<void> _pickAsset() async {
+    final selected = await showCupertinoModalPopup<_ContractTransferAsset>(
+      context: context,
+      builder: (context) => _ContractTransferAssetPicker(
+        palette: palette,
+        assets: _assets,
+        selected: _asset,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _asset = selected;
+      _amount = '';
+    });
+  }
+
+  Future<void> _showNotice(String message) => showCupertinoDialog<void>(
+    context: context,
+    builder: (context) => CupertinoAlertDialog(
+      title: const Text('提示'),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(message),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('知道了'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _submitDeposit() async {
+    final identity = widget.walletIdentity;
+    if (identity == null) {
+      await _showNotice('请先创建或导入钱包');
+      return;
+    }
+    if (!_canConfirm) {
+      await _showNotice('请输入至少 $_minimumAmount USDC');
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      final token = WalletChainRegistry.chains[_asset.mayanNetwork]?.usdc;
+      if (token == null) {
+        throw const MayanHyperCoreDepositException('当前源链未配置 USDC');
+      }
+      final mayan = MayanHyperCoreDepositClient();
+      final quote = await mayan.quote(
+        amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
+        fromToken: token.address,
+        fromChain: _asset.mayanChain,
+        destinationAddress: identity.address,
+      );
+      if (!mounted) return;
+      await _showNotice(
+        '已获取 HyperCore 合约账户入金路由。\n\n'
+        '当前版本尚未集成 Mayan Swift v2 的 EVM 交易编码与签名，暂不能提交这笔交易。\n'
+        '路由：${quote.raw['fromChain'] ?? _asset.mayanChain} → HyperCore USDC (perps)',
+      );
+      mayan.close();
+    } on MayanHyperCoreDepositException catch (error) {
+      if (mounted) await _showNotice(error.message);
+    } catch (_) {
+      if (mounted) await _showNotice('获取资金划转路由失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controlColor = palette.dark
+        ? const Color(0xFF1B1B1B)
+        : const Color(0xFFF5F5F5);
+    final destination = _cashToContract ? '合约' : '现金';
+    return CupertinoPopupSurface(
+      isSurfacePainted: false,
+      child: Container(
+        height: MediaQuery.sizeOf(context).height * .68,
+        decoration: BoxDecoration(
+          color: palette.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
+            child: Column(
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: palette.mutedText.withValues(alpha: .25),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      '划转',
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _WalletAssetIcon(symbol: _asset.symbol, size: 25),
+                    const SizedBox(width: 7),
+                    Text(
+                      '至 $destination',
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    CupertinoButton(
+                      key: const Key('contract-transfer-history'),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(36, 36),
+                      onPressed: () => _showNotice('暂无划转记录'),
+                      child: Icon(
+                        Icons.history,
+                        size: 24,
+                        color: palette.primaryText,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TransferAccountPill(
+                        palette: palette,
+                        color: controlColor,
+                        label: _cashToContract ? '现金' : '合约',
+                      ),
+                    ),
+                    SizedBox(
+                      width: 48,
+                      child: CupertinoButton(
+                        key: const Key('contract-transfer-swap'),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(40, 40),
+                        onPressed: _swapDirection,
+                        child: Icon(
+                          Icons.swap_horiz,
+                          size: 28,
+                          color: palette.primaryText,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: _TransferAccountPill(
+                        palette: palette,
+                        color: controlColor,
+                        label: destination,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _showKeypad = true),
+                        child: Text(
+                          _amount.isEmpty ? '0' : _amount,
+                          key: const Key('contract-transfer-amount'),
+                          maxLines: 1,
+                          overflow: TextOverflow.fade,
+                          style: TextStyle(
+                            color: _amount.isEmpty
+                                ? palette.mutedText.withValues(alpha: .68)
+                                : palette.primaryText,
+                            fontSize: 40,
+                            fontWeight: FontWeight.w500,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                    CupertinoButton(
+                      key: const Key('contract-transfer-asset-picker'),
+                      padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
+                      minimumSize: Size.zero,
+                      color: controlColor,
+                      borderRadius: BorderRadius.circular(19),
+                      onPressed: _pickAsset,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _ContractTransferAssetIcon(
+                            asset: _asset,
+                            tokenSize: 21,
+                            chainSize: 10,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            _asset.symbol,
+                            style: TextStyle(
+                              color: palette.primaryText,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Icon(
+                            CupertinoIcons.chevron_down,
+                            color: palette.mutedText,
+                            size: 14,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Text(
+                      '可用 ${_formatMoney(_available)} ${_asset.symbol}',
+                      style: TextStyle(color: palette.mutedText, fontSize: 15),
+                    ),
+                    const SizedBox(width: 9),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(28, 28),
+                      onPressed: () => setState(() {}),
+                      child: Icon(
+                        CupertinoIcons.refresh,
+                        size: 15,
+                        color: palette.mutedText,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF26A24).withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        CupertinoIcons.info_circle_fill,
+                        color: Color(0xFFF26A24),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 7),
+                      Text.rich(
+                        TextSpan(
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: 13,
+                          ),
+                          children: [
+                            const TextSpan(text: '最低划转 '),
+                            TextSpan(
+                              text:
+                                  '${_trimTrailingZeros(_minimumAmount.toString())} ${_asset.symbol}',
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    for (final option in const [
+                      ('10%', .1),
+                      ('20%', .2),
+                      ('50%', .5),
+                      ('80%', .8),
+                      ('100%', 1.0),
+                    ])
+                      Expanded(
+                        child: Padding(
+                          padding: EdgeInsets.only(
+                            right: option.$2 == 1 ? 0 : 8,
+                          ),
+                          child: CupertinoButton(
+                            key: Key('contract-transfer-${option.$1}'),
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size.fromHeight(38),
+                            color: controlColor,
+                            disabledColor: controlColor,
+                            borderRadius: BorderRadius.circular(20),
+                            onPressed: _available <= 0
+                                ? null
+                                : () => _setFraction(option.$2),
+                            child: Text(
+                              option.$1,
+                              style: TextStyle(
+                                color: _available <= 0
+                                    ? palette.mutedText.withValues(alpha: .62)
+                                    : palette.primaryText,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (_showKeypad)
+                  SizedBox(
+                    height: 220,
+                    child: _TransferNumberPad(
+                      palette: palette,
+                      canConfirm: _canConfirm,
+                      onDigit: _append,
+                      onDelete: _delete,
+                      onClear: () => setState(() => _amount = ''),
+                      onHide: () => setState(() => _showKeypad = false),
+                      onConfirm: _submitDeposit,
+                    ),
+                  )
+                else
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: CupertinoButton(
+                      color: controlColor,
+                      borderRadius: BorderRadius.circular(14),
+                      onPressed: () => setState(() => _showKeypad = true),
+                      child: Text(
+                        '输入划转金额',
+                        style: TextStyle(color: palette.primaryText),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TransferAccountPill extends StatelessWidget {
+  const _TransferAccountPill({
+    required this.palette,
+    required this.color,
+    required this.label,
+  });
+
+  final AcoPalette palette;
+  final Color color;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 44,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(22),
+    ),
+    child: Text(
+      label,
+      style: TextStyle(
+        color: palette.primaryText,
+        fontSize: 16,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+class _ContractTransferAsset {
+  const _ContractTransferAsset({required this.chain, required this.symbol});
+
+  final String chain;
+  final String symbol;
+
+  bool isSameAs(_ContractTransferAsset other) =>
+      chain == other.chain && symbol == other.symbol;
+
+  String get chainIconAsset => switch (chain) {
+    'BSC' => 'assets/icons/crypto/domi/chains/network-bsc.png',
+    'Arbitrum' => 'assets/icons/crypto/domi/chains/network-arbitrum.png',
+    'Ethereum' => 'assets/icons/crypto/domi/chains/network-ethereum.png',
+    'Base' => 'assets/icons/crypto/domi/chains/network-base.png',
+    'Polygon' => 'assets/icons/crypto/domi/chains/network-polygon.png',
+    'Optimism' => 'assets/icons/crypto/domi/chains/network-optimism.png',
+    _ => 'assets/icons/crypto/domi/chains/network-ethereum.png',
+  };
+
+  WalletNetwork get mayanNetwork => switch (chain) {
+    'Arbitrum' => WalletNetwork.arbitrum,
+    'Ethereum' => WalletNetwork.ethereum,
+    'Base' => WalletNetwork.base,
+    'BSC' => WalletNetwork.bsc,
+    'Polygon' => WalletNetwork.polygon,
+    'Optimism' => WalletNetwork.optimism,
+    _ => WalletNetwork.arbitrum,
+  };
+
+  String get mayanChain => switch (chain) {
+    'BSC' => 'bsc',
+    _ => chain.toLowerCase(),
+  };
+}
+
+class _ContractTransferAssetIcon extends StatelessWidget {
+  const _ContractTransferAssetIcon({
+    required this.asset,
+    required this.tokenSize,
+    required this.chainSize,
+  });
+
+  final _ContractTransferAsset asset;
+  final double tokenSize;
+  final double chainSize;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: tokenSize + 2,
+    height: tokenSize + 2,
+    child: Stack(
+      clipBehavior: Clip.none,
+      children: [
+        _WalletAssetIcon(symbol: asset.symbol, size: tokenSize),
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: Container(
+            width: chainSize + 3,
+            height: chainSize + 3,
+            padding: const EdgeInsets.all(1.5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1B1B1B),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF1B1B1B)),
+            ),
+            child: Image.asset(asset.chainIconAsset),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ContractTransferAssetPicker extends StatelessWidget {
+  const _ContractTransferAssetPicker({
+    required this.palette,
+    required this.assets,
+    required this.selected,
+  });
+
+  final AcoPalette palette;
+  final List<_ContractTransferAsset> assets;
+  final _ContractTransferAsset selected;
+
+  Widget _buildChainSection(BuildContext context, String chain) {
+    final chainAssets = assets.where((asset) => asset.chain == chain).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 12, bottom: 7),
+          child: Row(
+            children: [
+              Image.asset(
+                chainAssets.first.chainIconAsset,
+                width: 17,
+                height: 17,
+              ),
+              const SizedBox(width: 7),
+              Text(
+                chain,
+                style: TextStyle(
+                  color: palette.accent,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: palette.inputSurface,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Column(
+            children: [
+              for (var index = 0; index < chainAssets.length; index++)
+                _ContractTransferAssetRow(
+                  palette: palette,
+                  asset: chainAssets[index],
+                  selected: selected.isSameAs(chainAssets[index]),
+                  showDivider: index < chainAssets.length - 1,
+                  onPressed: () => Navigator.pop(context, chainAssets[index]),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chains = assets.map((asset) => asset.chain).toSet();
+    return CupertinoPopupSurface(
+      isSurfacePainted: false,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * .68,
+        ),
+        decoration: BoxDecoration(
+          color: palette.background,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 10),
+              Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: palette.mutedText.withValues(alpha: .25),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 18, 8, 8),
+                child: Row(
+                  children: [
+                    Text(
+                      '选择划转币种',
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(40, 40),
+                      onPressed: () => Navigator.pop(context),
+                      child: Icon(
+                        CupertinoIcons.xmark,
+                        color: palette.mutedText,
+                        size: 20,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  children: [
+                    for (final chain in chains)
+                      _buildChainSection(context, chain),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ContractTransferAssetRow extends StatelessWidget {
+  const _ContractTransferAssetRow({
+    required this.palette,
+    required this.asset,
+    required this.selected,
+    required this.showDivider,
+    required this.onPressed,
+  });
+
+  final AcoPalette palette;
+  final _ContractTransferAsset asset;
+  final bool selected;
+  final bool showDivider;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    key: Key('contract-transfer-asset-${asset.chain}-${asset.symbol}'),
+    padding: EdgeInsets.zero,
+    minimumSize: const Size.fromHeight(54),
+    onPressed: onPressed,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        border: showDivider
+            ? Border(bottom: BorderSide(color: palette.border))
+            : null,
+      ),
+      child: Row(
+        children: [
+          _ContractTransferAssetIcon(
+            asset: asset,
+            tokenSize: 28,
+            chainSize: 12,
+          ),
+          const SizedBox(width: 11),
+          Text(
+            asset.symbol,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const Spacer(),
+          if (selected)
+            Icon(
+              CupertinoIcons.check_mark_circled_solid,
+              color: palette.accent,
+              size: 21,
+            ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _TransferNumberPad extends StatelessWidget {
+  const _TransferNumberPad({
+    required this.palette,
+    required this.canConfirm,
+    required this.onDigit,
+    required this.onDelete,
+    required this.onClear,
+    required this.onHide,
+    required this.onConfirm,
+  });
+
+  final AcoPalette palette;
+  final bool canConfirm;
+  final ValueChanged<String> onDigit;
+  final VoidCallback onDelete;
+  final VoidCallback onClear;
+  final VoidCallback onHide;
+  final VoidCallback onConfirm;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        flex: 3,
+        child: Column(
+          children: [
+            for (final row in const [
+              ['1', '2', '3'],
+              ['4', '5', '6'],
+              ['7', '8', '9'],
+              ['hide', '0', '.'],
+            ])
+              Expanded(
+                child: Row(
+                  children: [
+                    for (final value in row)
+                      Expanded(
+                        child: CupertinoButton(
+                          key: Key('contract-transfer-key-$value'),
+                          padding: EdgeInsets.zero,
+                          minimumSize: Size.zero,
+                          onPressed: value == 'hide'
+                              ? onHide
+                              : () => onDigit(value),
+                          child: value == 'hide'
+                              ? Icon(
+                                  Icons.arrow_downward,
+                                  color: palette.primaryText,
+                                  size: 25,
+                                )
+                              : Text(
+                                  value,
+                                  style: TextStyle(
+                                    color: palette.primaryText,
+                                    fontSize: 28,
+                                  ),
+                                ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+      Expanded(
+        child: Column(
+          children: [
+            Expanded(
+              child: CupertinoButton(
+                key: const Key('contract-transfer-delete'),
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: onDelete,
+                child: Icon(
+                  CupertinoIcons.delete_left,
+                  color: palette.primaryText,
+                  size: 28,
+                ),
+              ),
+            ),
+            Expanded(
+              child: CupertinoButton(
+                key: const Key('contract-transfer-clear'),
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: onClear,
+                child: Text(
+                  '清除',
+                  style: TextStyle(color: palette.primaryText, fontSize: 17),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(2, 4, 0, 4),
+                child: SizedBox.expand(
+                  child: CupertinoButton(
+                    key: const Key('contract-transfer-confirm'),
+                    padding: EdgeInsets.zero,
+                    color: canConfirm
+                        ? const Color(0xFFF26A24)
+                        : const Color(0xFF999999),
+                    disabledColor: palette.dark
+                        ? const Color(0xFF3B3B3B)
+                        : const Color(0xFF999999),
+                    borderRadius: BorderRadius.circular(14),
+                    onPressed: canConfirm ? onConfirm : null,
+                    child: const Text(
+                      '确认',
+                      style: TextStyle(
+                        color: _white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
   );
 }
 

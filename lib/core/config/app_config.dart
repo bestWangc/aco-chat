@@ -16,6 +16,22 @@ class AppConfig {
     'ACO_WEBSITE_URL',
     defaultValue: 'https://aco.chat',
   );
+  static const hyperliquidTestnet = bool.fromEnvironment(
+    'ACO_HYPERLIQUID_TESTNET',
+  );
+
+  static String get hyperliquidApiBaseUrl => hyperliquidTestnet
+      ? 'https://api.hyperliquid-testnet.xyz'
+      : 'https://api.hyperliquid.xyz';
+
+  static String get hyperliquidInfoUrl => '$hyperliquidApiBaseUrl/info';
+
+  static String get hyperliquidExchangeUrl => '$hyperliquidApiBaseUrl/exchange';
+
+  static String get hyperliquidWebSocketUrl => hyperliquidTestnet
+      ? 'wss://api.hyperliquid-testnet.xyz/ws'
+      : 'wss://api.hyperliquid.xyz/ws';
+
   const AppConfig({this._apiBaseUrl});
 
   final String? _apiBaseUrl;
