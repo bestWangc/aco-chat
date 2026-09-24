@@ -84,6 +84,9 @@ class WalletBalance {
   final BigInt? balance;
   final Object? error;
 
+  String get id =>
+      '${chain.toLowerCase()}:${tokenAddress?.toLowerCase() ?? symbol.toUpperCase()}';
+
   bool get isAvailable => balance != null;
 }
 

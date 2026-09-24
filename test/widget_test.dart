@@ -57,6 +57,14 @@ void main() {
     expect(await WalletPreferences.walletName(identity), 'Wallet123456');
   });
 
+  test('persists the selected wallet network', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    expect(await WalletPreferences.selectedWalletNetwork(), isNull);
+    await WalletPreferences.saveSelectedWalletNetwork(WalletNetwork.bsc);
+    expect(await WalletPreferences.selectedWalletNetwork(), WalletNetwork.bsc);
+  });
+
   test('keeps the previous wallet when saving another wallet', () async {
     const first = WalletIdentity(
       address: '0x1111111111111111111111111111111111111111',
@@ -677,16 +685,9 @@ void main() {
     expect(swapButton.onPressed, isNotNull);
     await tester.tap(find.text('闪兑'));
     await tester.pumpAndSettle();
-    expect(find.text('comming soon'), findsOneWidget);
-
-    final nftTab = tester.widget<CupertinoButton>(
-      find.ancestor(
-        of: find.text('NFT'),
-        matching: find.byType(CupertinoButton),
-      ),
-    );
-    expect(nftTab.onPressed, isNull, reason: 'NFT 暂未开放');
-    expect(find.text('最近活动'), findsNothing);
+    expect(find.text('闪兑'), findsOneWidget);
+    expect(find.text('代币'), findsOneWidget);
+    expect(find.text('NFT'), findsNothing);
   });
 
   testWidgets('uses a consistent 44 point back button on detail pages', (
@@ -707,6 +708,52 @@ void main() {
     final backButton = find.bySemanticsLabel('返回');
     expect(tester.getSize(backButton), const Size(44, 44));
     expect(tester.getRect(backButton).left, closeTo(8, 1));
+  });
+
+  testWidgets('opens the main DEX flash swap tab from the wallet', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('闪兑'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('闪兑'), findsOneWidget);
+    expect(find.text('代币'), findsOneWidget);
+    expect(find.text('NFT'), findsNothing);
+  });
+
+  testWidgets('shows search fields for DEX tokens contracts and stocks', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const AcoApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('闪兑'));
+    await tester.pump();
+    await tester.tap(find.text('代币'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('dex-token-search')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('dex-token-search')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('dex-search-page-field')), findsOneWidget);
+    expect(find.byKey(const Key('dex-recent-results')), findsOneWidget);
+    expect(find.text('最近浏览'), findsOneWidget);
+    expect(find.byKey(const Key('dex-recent-clear')), findsOneWidget);
+    expect(find.text('取消'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('合约'));
+    await tester.pump();
+    expect(find.byKey(const Key('dex-contract-search')), findsOneWidget);
+
+    await tester.tap(find.text('股票'));
+    await tester.pump();
+    expect(find.byKey(const Key('dex-stock-search')), findsOneWidget);
   });
 
   testWidgets('keeps wallet header controls visible for a long wallet name', (

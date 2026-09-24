@@ -45,6 +45,7 @@ class DexRankingToken {
   const DexRankingToken({
     required this.symbol,
     required this.name,
+    this.quoteSymbol = '',
     required this.stockNameZh,
     required this.chain,
     required this.address,
@@ -62,6 +63,7 @@ class DexRankingToken {
 
   final String symbol;
   final String name;
+  final String quoteSymbol;
   final String stockNameZh;
   final String chain;
   final String address;
@@ -79,6 +81,7 @@ class DexRankingToken {
   DexRankingToken copyWith({
     String? symbol,
     String? name,
+    String? quoteSymbol,
     String? stockNameZh,
     String? chain,
     String? address,
@@ -95,6 +98,7 @@ class DexRankingToken {
   }) => DexRankingToken(
     symbol: symbol ?? this.symbol,
     name: name ?? this.name,
+    quoteSymbol: quoteSymbol ?? this.quoteSymbol,
     stockNameZh: stockNameZh ?? this.stockNameZh,
     chain: chain ?? this.chain,
     address: address ?? this.address,
@@ -121,6 +125,7 @@ class DexRankingToken {
         _value(base, json, 'sym', _value(base, json, 'token_symbol', '未知代币')),
       ),
       name: _value(base, json, 'name'),
+      quoteSymbol: _firstNonEmpty([base['quote_sym'], json['quote_sym']]),
       stockNameZh: _firstNonEmpty([stock['name_zh']]),
       chain: _value(base, json, 'chain'),
       address: _value(base, json, 'addr', _value(base, json, 'address')),
@@ -439,6 +444,50 @@ class DexRankingApiClient {
     throw lastError ?? http.ClientException('热门代币请求失败');
   }
 
+  Future<List<DexRankingToken>> searchTokens(
+    String query, {
+    String chain = 'all',
+    String? marketCode = 'tokens',
+  }) async {
+    final normalized = query.trim();
+    if (normalized.isEmpty) return const [];
+
+    final requestBody = jsonEncode({
+      'chain': chain.trim().isEmpty ? 'all' : chain.trim(),
+      'term': normalized,
+    });
+    Object? lastError;
+    for (final uri in await _resolveSearchUris()) {
+      final requestId = ++_dexHttpRequestId;
+      try {
+        debugPrint(
+          '[DexSearch] requestId=$requestId POST $uri body=$requestBody',
+        );
+        final response = await _client.post(
+          uri,
+          headers: const {'content-type': 'application/json'},
+          body: requestBody,
+        );
+        debugPrint(
+          '[DexSearch] requestId=$requestId response status=${response.statusCode} '
+          'body=${response.body}',
+        );
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          throw http.ClientException('代币搜索请求失败：${response.statusCode}');
+        }
+        final root = _jsonMap(response.body);
+        if (root['code'] != null && root['code'] != 0) {
+          throw http.ClientException('${root['msg'] ?? '代币搜索请求失败'}');
+        }
+        return _tokensFromSearchResponse(root, marketCode: marketCode);
+      } catch (error) {
+        debugPrint('[DexSearch] request failed uri=$uri error=$error');
+        lastError = error;
+      }
+    }
+    throw lastError ?? http.ClientException('代币搜索请求失败');
+  }
+
   Future<DexRankingToken?> dexScreenerTokenInfo(DexRankingToken token) async {
     if (token.pool.trim().isEmpty) {
       debugPrint(
@@ -551,12 +600,91 @@ class DexRankingApiClient {
         .toList(growable: false);
   }
 
+  Future<List<Uri>> _resolveSearchUris() async {
+    final rankingUris = await _resolveRankingUris();
+    return rankingUris
+        .map(
+          (uri) => uri.replace(
+            path: uri.path.replaceFirst(
+              RegExp(r'/ranking/list/?$'),
+              '/search/',
+            ),
+            queryParameters: const {},
+          ),
+        )
+        .toList(growable: false);
+  }
+
   Uri _apiUri(String path) {
     final basePath = _configBaseUri.path.endsWith('/')
         ? _configBaseUri.path.substring(0, _configBaseUri.path.length - 1)
         : _configBaseUri.path;
     return _configBaseUri.replace(path: '$basePath/$path');
   }
+}
+
+DexRankingToken? _tokenFromSearchPool(
+  Map<String, dynamic> pool, {
+  String? marketCode,
+}) {
+  final poolMarketCode = _nonEmptyString(pool['market_code'], '').toLowerCase();
+  if (marketCode == null) {
+    if (poolMarketCode != 'tokens' && poolMarketCode != 'stocks') return null;
+  } else if (poolMarketCode != marketCode.toLowerCase()) {
+    return null;
+  }
+  final symbol = _nonEmptyString(pool['base_sym'], '');
+  final address = _nonEmptyString(pool['base_addr'], '');
+  if (symbol.isEmpty || address.isEmpty) return null;
+
+  return DexRankingToken(
+    symbol: symbol,
+    name: _nonEmptyString(pool['name'], symbol),
+    quoteSymbol: _nonEmptyString(pool['quote_sym'], ''),
+    stockNameZh: poolMarketCode == 'stocks'
+        ? _nonEmptyString(pool['name'], symbol)
+        : '',
+    chain: _nonEmptyString(pool['chain'], ''),
+    address: address,
+    dex: _nonEmptyString(pool['dex'], ''),
+    pool: _nonEmptyString(pool['addr'], ''),
+    logoUri: _nonEmptyString(pool['icon'], ''),
+    price: _nonEmptyString(pool['price_usd'], ''),
+    change: _formatDexSearchChange(pool['pcr']),
+    marketCap: _nonEmptyString(pool['market_value'], ''),
+    volume: _nonEmptyString(pool['vu'], ''),
+    liquidity: _nonEmptyString(pool['tvl_usd'], ''),
+    verified: pool['verified'] == true,
+    createdAt: _parseCreatedAt(pool['ct']),
+  );
+}
+
+List<DexRankingToken> _tokensFromSearchResponse(
+  Map<String, dynamic> response, {
+  String? marketCode,
+}) {
+  final data = response['data'];
+  final pools = data is Map<String, dynamic> ? data['pools'] : null;
+  if (pools is! List) return const [];
+  final seen = <String>{};
+  return pools
+      .whereType<Map<String, dynamic>>()
+      .map((pool) => _tokenFromSearchPool(pool, marketCode: marketCode))
+      .whereType<DexRankingToken>()
+      .where(
+        (token) => seen.add(
+          '${token.chain.toLowerCase()}:${token.address.toLowerCase()}',
+        ),
+      )
+      .toList(growable: false);
+}
+
+String _formatDexSearchChange(Object? value) {
+  final parsed = double.tryParse('$value');
+  if (parsed == null || !parsed.isFinite) return '';
+  final percent = parsed * 100;
+  final sign = percent >= 0 ? '+' : '';
+  return '$sign${percent.toStringAsFixed(2)}%';
 }
 
 Map<String, dynamic> _jsonMap(String body) {

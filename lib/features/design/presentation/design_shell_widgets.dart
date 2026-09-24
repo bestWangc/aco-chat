@@ -53,6 +53,7 @@ class AcoScreenPage extends StatelessWidget {
     this.walletChainIndex = 0,
     this.walletAssetRevision = 0,
     this.onWalletChainSelected,
+    this.initialDexSection = 1,
     this.transferToken,
     this.onSendTokenSelected,
     this.selectedAsset,
@@ -96,6 +97,7 @@ class AcoScreenPage extends StatelessWidget {
   final int walletChainIndex;
   final int walletAssetRevision;
   final ValueChanged<int>? onWalletChainSelected;
+  final int initialDexSection;
   final TransferToken? transferToken;
   final ValueChanged<TransferToken>? onSendTokenSelected;
   final WalletBalance? selectedAsset;
@@ -235,13 +237,7 @@ class AcoScreenPage extends StatelessWidget {
         selectedChain: _supportedWalletChains[walletChainIndex],
         walletIdentity: walletIdentity,
         onOpen: onOpen,
-      ),
-      AcoScreen.dexSwap => _DexSwapPage(
-        palette: palette,
-        selectedChain: _supportedWalletChains[walletChainIndex],
-        onOpen: onOpen,
-        walletIdentity: walletIdentity,
-        secretStore: walletSecretStore ?? SecureWalletSecretStore(),
+        initialSection: initialDexSection,
       ),
       AcoScreen.browserDiscover => _BrowserDiscoverPage(
         palette: palette,

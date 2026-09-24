@@ -137,6 +137,58 @@ void main() {
     expect(bscToken?.symbol, 'NEW');
   });
 
+  test('searches tokens through the Antfun search endpoint', () async {
+    final client = _AntfunSearchClient();
+    final api = DexRankingApiClient(
+      httpClient: client,
+      baseUri: Uri.parse('https://api.test/api/v1'),
+    );
+
+    final tokens = await api.searchTokens('bnb', chain: 'bsc');
+    api.close();
+
+    expect(client.lastRequestUri?.path, '/api/v1/search/');
+    expect(jsonDecode(client.lastRequestBody!), {
+      'chain': 'bsc',
+      'term': 'bnb',
+    });
+    expect(tokens.single.symbol, 'BNB');
+    expect(tokens.single.address, 'token-address');
+    expect(tokens.single.quoteSymbol, 'WBNB');
+    expect(tokens.single.change, '+0.00%');
+  });
+
+  test('searches stocks by the stocks market code', () async {
+    final client = _AntfunSearchClient();
+    final api = DexRankingApiClient(
+      httpClient: client,
+      baseUri: Uri.parse('https://api.test/api/v1'),
+    );
+
+    final stocks = await api.searchTokens('AAPL', marketCode: 'stocks');
+    api.close();
+
+    expect(stocks.single.symbol, 'AAPLon');
+    expect(stocks.single.stockNameZh, 'Apple (Ondo Tokenized)');
+  });
+
+  test('unified search returns tokens and stocks but excludes perps', () async {
+    final client = _AntfunSearchClient();
+    final api = DexRankingApiClient(
+      httpClient: client,
+      baseUri: Uri.parse('https://api.test/api/v1'),
+    );
+
+    final results = await api.searchTokens('AAPL', marketCode: null);
+    api.close();
+
+    expect(
+      results.map((item) => item.symbol),
+      containsAll(<String>['BNB', 'AAPLon']),
+    );
+    expect(results.any((item) => item.symbol == 'BTC'), isFalse);
+  });
+
   test('loads K-line history with the token pool and interval', () async {
     final client = _KlineClient();
     final api = DexRankingApiClient(
@@ -216,6 +268,51 @@ class _DexScreenerClient extends http.BaseClient {
         '}]}';
     return http.StreamedResponse(
       Stream<List<int>>.value(utf8.encode(body)),
+      200,
+      request: request,
+      headers: const {'content-type': 'application/json'},
+    );
+  }
+}
+
+class _AntfunSearchClient extends http.BaseClient {
+  Uri? lastRequestUri;
+  String? lastRequestBody;
+
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    lastRequestUri = request.url;
+    if (request.method == 'GET') {
+      return http.StreamedResponse(
+        Stream<List<int>>.value(
+          utf8.encode('{"urls":["https://ranking.test/api/v1/ranking/list"]}'),
+        ),
+        200,
+        request: request,
+        headers: const {'content-type': 'application/json'},
+      );
+    }
+    final chunks = await request.finalize().toList();
+    lastRequestBody = utf8.decode(chunks.expand((chunk) => chunk).toList());
+    return http.StreamedResponse(
+      Stream<List<int>>.value(
+        utf8.encode(
+          '{"code":0,"data":{"pools":['
+          '{"chain":"bsc","addr":"pool-address","dex":"pancake",'
+          '"base_addr":"token-address","base_sym":"BNB",'
+          '"quote_sym":"WBNB",'
+          '"name":"BNB","price_usd":"600","pcr":"0",'
+          '"market_value":"1000000","tvl_usd":"500000",'
+          '"market_code":"tokens"},'
+          '{"chain":"bsc","addr":"stock-address","dex":"ondo",'
+          '"base_addr":"stock-token","base_sym":"AAPLon",'
+          '"name":"Apple (Ondo Tokenized)","market_code":"stocks"},'
+          '{"chain":"bsc","addr":"perp-address","dex":"hyperliquid",'
+          '"base_addr":"perp-token","base_sym":"BTC",'
+          '"name":"BTC Perpetual","market_code":"perps"}'
+          ']}}',
+        ),
+      ),
       200,
       request: request,
       headers: const {'content-type': 'application/json'},

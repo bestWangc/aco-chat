@@ -27,6 +27,10 @@ class _HyperliquidContractTradePageState
   final _stopLossPriceController = TextEditingController();
   final _stopLossRateController = TextEditingController();
   final _client = HyperliquidApiClient();
+  final _exchange = HyperliquidExchangeClient();
+  final _agentStore = HyperliquidAgentStore();
+  final _builderApprovalStore = HyperliquidBuilderApprovalStore();
+  final _tradeFeeClient = TradeFeeConfigClient();
   final _realtimeClient = HyperliquidRealtimeClient();
 
   HyperliquidOrderBook? _orderBook;
@@ -35,6 +39,8 @@ class _HyperliquidContractTradePageState
   List<HyperliquidOpenOrder> _openOrders = const [];
   StreamSubscription<HyperliquidRealtimeUpdate>? _realtimeSubscription;
   Timer? _fallbackTimer;
+  HyperliquidAgent? _agent;
+  TradeFeeConfig? _tradeFeeConfig;
   bool _loadingMarket = true;
   bool _loadingAccount = true;
   bool _isMarketOrder = true;
@@ -60,6 +66,8 @@ class _HyperliquidContractTradePageState
     _limitPriceController.text = _formatPlainPrice(_market.markPrice);
     unawaited(_loadMarket());
     unawaited(_loadAccount());
+    unawaited(_loadAgent());
+    unawaited(_loadTradeFeeConfig());
     _realtimeSubscription = _realtimeClient
         .subscribe(coin: _market.name, user: widget.walletIdentity?.address)
         .listen(_applyRealtimeUpdate, onError: (_) => _startHttpFallback());
@@ -112,7 +120,34 @@ class _HyperliquidContractTradePageState
     _stopLossPriceController.dispose();
     _stopLossRateController.dispose();
     _client.close();
+    _exchange.close();
+    _tradeFeeClient.close();
     super.dispose();
+  }
+
+  Future<void> _loadAgent() async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return;
+    try {
+      final agent = await _agentStore.read(identity.address);
+      if (mounted) setState(() => _agent = agent);
+    } catch (_) {
+      // The wallet page remains usable even if local agent metadata is absent.
+    }
+  }
+
+  Future<TradeFeeConfig?> _loadTradeFeeConfig() async {
+    try {
+      final config = await _tradeFeeClient.load();
+      if (mounted) setState(() => _tradeFeeConfig = config);
+      return config;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<TradeFeeConfig?> _ensureTradeFeeConfig() async {
+    return _tradeFeeConfig ?? await _loadTradeFeeConfig();
   }
 
   Future<void> _loadMarket({bool showLoading = true}) async {
@@ -176,7 +211,24 @@ class _HyperliquidContractTradePageState
         maxLeverage: maxLeverage,
       ),
     );
-    if (result != null && mounted) setState(() => _leverage = result);
+    if (result == null || !mounted) return;
+    if (widget.walletIdentity == null) return;
+    try {
+      final agentPrivateKey = await _unlockApprovedAgent();
+      if (agentPrivateKey == null) return;
+      await _exchange.updateLeverage(
+        agentPrivateKey: agentPrivateKey,
+        asset: _market.asset,
+        leverage: result,
+      );
+      if (mounted) setState(() => _leverage = result);
+    } on WalletSecurityException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } on HyperliquidExchangeException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } catch (_) {
+      if (mounted) await _showMessage('杠杆设置失败，请稍后重试');
+    }
   }
 
   Future<void> _submitOrder(bool isBuy) async {
@@ -204,16 +256,254 @@ class _HyperliquidContractTradePageState
       await _showMessage('请完善止盈止损参数');
       return;
     }
+    if (_takeProfitStopLoss) {
+      final takeProfit = double.tryParse(_takeProfitPriceController.text);
+      final stopLoss = double.tryParse(_stopLossPriceController.text);
+      final takeProfitRate = double.tryParse(_takeProfitRateController.text);
+      final stopLossRate = double.tryParse(_stopLossRateController.text);
+      if (takeProfit == null ||
+          stopLoss == null ||
+          takeProfit <= 0 ||
+          stopLoss <= 0 ||
+          takeProfitRate == null ||
+          stopLossRate == null ||
+          takeProfitRate <= 0 ||
+          stopLossRate <= 0) {
+        await _showMessage('止盈止损参数必须是大于 0 的数字');
+        return;
+      }
+    }
     if (widget.walletIdentity == null) {
       await _showMessage('请先创建或导入钱包');
       return;
     }
-    setState(() => _loadingSubmit = true);
-    await _showMessage(
-      '订单参数已确认。Hyperliquid 实盘下单需要 EIP-712 签名，当前版本尚未接入签名提交。',
-      title: isBuy ? '做多 ${_market.name}' : '做空 ${_market.name}',
+    final referencePrice = _referencePrice;
+    if (referencePrice <= 0) {
+      await _showMessage('暂时无法获取市场价格，请稍后重试');
+      return;
+    }
+    final marketPrice = isBuy ? referencePrice * 1.05 : referencePrice * .95;
+    final price = _isMarketOrder
+        ? marketPrice
+        : double.parse(_limitPriceController.text);
+    final size = amount / price;
+    if (size <= 0 || double.tryParse(_formatSize(size)) == 0) {
+      await _showMessage('下单数量无效');
+      return;
+    }
+    if (_takeProfitStopLoss) {
+      final takeProfit = double.parse(_takeProfitPriceController.text);
+      final stopLoss = double.parse(_stopLossPriceController.text);
+      final valid = isBuy
+          ? takeProfit > price && stopLoss < price
+          : takeProfit < price && stopLoss > price;
+      if (!valid) {
+        await _showMessage('止盈止损价格方向与开仓方向不匹配');
+        return;
+      }
+    }
+    final feeConfig = await _ensureTradeFeeConfig();
+    final action = _buildOrderAction(
+      isBuy: isBuy,
+      price: price,
+      size: size,
+      builder: feeConfig?.hyperliquid,
     );
-    if (mounted) setState(() => _loadingSubmit = false);
+    final confirmed = await _confirmOrder(
+      title: isBuy ? '确认做多 ${_market.name}' : '确认做空 ${_market.name}',
+      message:
+          '${_isMarketOrder ? '市价' : '限价'}\n'
+          '保证金 ${_formatMoney(amount)} USDC\n'
+          '价格 ${_formatPlainPrice(price)}\n'
+          '数量 ${_formatSize(size)}',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _loadingSubmit = true);
+    try {
+      final agentPrivateKey = await _unlockApprovedAgent(
+        builder: feeConfig?.hyperliquid,
+      );
+      if (agentPrivateKey == null) return;
+      final result = await _exchange.placeOrder(
+        agentPrivateKey: agentPrivateKey,
+        action: action,
+        expiresAfter: DateTime.now().millisecondsSinceEpoch + 60 * 1000,
+      );
+      await _loadAccount(showLoading: false);
+      if (mounted) {
+        await _showMessage(
+          '订单已提交。\n${_exchangeResultMessage(result)}',
+          title: '下单成功',
+        );
+      }
+    } on WalletSecurityException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } on HyperliquidExchangeException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } catch (_) {
+      if (mounted) await _showMessage('下单失败，请检查余额、价格和市场状态');
+    } finally {
+      if (mounted) setState(() => _loadingSubmit = false);
+    }
+  }
+
+  Map<String, dynamic> _buildOrderAction({
+    required bool isBuy,
+    required double price,
+    required double size,
+    HyperliquidBuilderFeeConfig? builder,
+  }) {
+    final sizeText = _formatSize(size);
+    final priceText = _formatOrderPrice(price);
+    final orders = <Map<String, dynamic>>[
+      HyperliquidSigner.orderWire(
+        asset: _market.asset,
+        isBuy: isBuy,
+        price: priceText,
+        size: sizeText,
+        reduceOnly: false,
+        market: _isMarketOrder,
+      ),
+    ];
+    if (_takeProfitStopLoss) {
+      final takeProfit = double.parse(_takeProfitPriceController.text);
+      final stopLoss = double.parse(_stopLossPriceController.text);
+      orders.addAll([
+        HyperliquidSigner.orderWire(
+          asset: _market.asset,
+          isBuy: !isBuy,
+          price: _formatOrderPrice(takeProfit),
+          size: sizeText,
+          reduceOnly: true,
+          triggerPrice: takeProfit,
+          tpsl: 'tp',
+        ),
+        HyperliquidSigner.orderWire(
+          asset: _market.asset,
+          isBuy: !isBuy,
+          price: _formatOrderPrice(stopLoss),
+          size: sizeText,
+          reduceOnly: true,
+          triggerPrice: stopLoss,
+          tpsl: 'sl',
+        ),
+      ]);
+    }
+    final action = <String, dynamic>{
+      'type': 'order',
+      'orders': orders,
+      'grouping': _takeProfitStopLoss ? 'normalTpsl' : 'na',
+    };
+    final builderPayload = builder?.orderBuilder;
+    if (builderPayload != null) action['builder'] = builderPayload;
+    return action;
+  }
+
+  Future<String?> _unlockApprovedAgent({
+    HyperliquidBuilderFeeConfig? builder,
+  }) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) {
+      await _showMessage('请先创建或导入钱包');
+      return null;
+    }
+    final masterMnemonic = await WalletSecurity()
+        .unlockMnemonicWithDeviceProtection(
+          store: SecureWalletSecretStore(),
+          walletAddress: identity.address,
+        );
+    await _ensureBuilderApproval(
+      identity: identity,
+      masterMnemonic: masterMnemonic,
+      builder: builder,
+    );
+    var agent = _agent ?? await _agentStore.read(identity.address);
+    agent ??= await _agentStore.create(identity.address);
+    if (!agent.approved) {
+      await _exchange.approveAgent(
+        masterPrivateKey: WalletIdentity.privateKeyFromMnemonic(masterMnemonic),
+        agentAddress: agent.address,
+        agentName: agent.name,
+      );
+      await _agentStore.markApproved(identity.address, agent);
+      agent = HyperliquidAgent(
+        address: agent.address,
+        name: agent.name,
+        approved: true,
+      );
+      if (mounted) setState(() => _agent = agent);
+    }
+    return WalletIdentity.privateKeyFromMnemonic(
+      await _agentStore.unlock(agent),
+    );
+  }
+
+  Future<void> _ensureBuilderApproval({
+    required WalletIdentity identity,
+    required String masterMnemonic,
+    required HyperliquidBuilderFeeConfig? builder,
+  }) async {
+    if (builder == null || builder.orderBuilder == null) return;
+    final existing = await _builderApprovalStore.read(identity.address);
+    if (existing?.builderAddress == builder.builderAddress &&
+        existing?.maxFeeRate == builder.maxFeeRate) {
+      return;
+    }
+    await _exchange.approveBuilderFee(
+      masterPrivateKey: WalletIdentity.privateKeyFromMnemonic(masterMnemonic),
+      builderAddress: builder.builderAddress,
+      maxFeeRate: builder.maxFeeRate,
+    );
+    await _builderApprovalStore.markApproved(
+      identity.address,
+      HyperliquidBuilderApproval(
+        builderAddress: builder.builderAddress,
+        maxFeeRate: builder.maxFeeRate,
+      ),
+    );
+  }
+
+  Future<bool> _confirmOrder({
+    required String title,
+    required String message,
+  }) async {
+    final result = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (context) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(message),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    return result == true;
+  }
+
+  String _formatSize(double value) =>
+      _trimTrailingZeros(value.toStringAsFixed(_market.szDecimals));
+
+  String _formatOrderPrice(double value) => _trimTrailingZeros(
+    value.toStringAsFixed(math.max(0, 6 - _market.szDecimals)),
+  );
+
+  String _exchangeResultMessage(Map<String, dynamic> result) {
+    final response = result['response'];
+    if (response is Map && response['data'] != null) {
+      return '${response['data']}';
+    }
+    return '${result['status'] ?? 'ok'}';
   }
 
   Future<void> _showDepositSheet() => showCupertinoModalPopup<void>(
@@ -223,6 +513,7 @@ class _HyperliquidContractTradePageState
       contractAvailable: _available,
       walletIdentity: widget.walletIdentity,
       defaultNetwork: widget.defaultNetwork,
+      onCompleted: () => _loadAccount(showLoading: false),
     ),
   );
 
@@ -516,7 +807,11 @@ class _HyperliquidContractTradePageState
     return Column(
       children: [
         for (final position in positions)
-          _PositionRow(palette: _palette, position: position),
+          _PositionRow(
+            palette: _palette,
+            position: position,
+            onClose: () => _closePosition(position),
+          ),
       ],
     );
   }
@@ -531,9 +826,82 @@ class _HyperliquidContractTradePageState
     return Column(
       children: [
         for (final order in _openOrders)
-          _OpenOrderRow(palette: _palette, order: order),
+          _OpenOrderRow(
+            palette: _palette,
+            order: order,
+            onCancel: () => _cancelOrder(order),
+          ),
       ],
     );
+  }
+
+  Future<void> _cancelOrder(HyperliquidOpenOrder order) async {
+    if (_loadingSubmit) return;
+    final confirmed = await _confirmOrder(
+      title: '撤销挂单',
+      message:
+          '${order.coin} ${order.isBuy ? '买入' : '卖出'} ${_formatQuantity(order.size)}',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _loadingSubmit = true);
+    try {
+      final agentPrivateKey = await _unlockApprovedAgent();
+      if (agentPrivateKey == null) return;
+      await _exchange.cancelOrder(
+        agentPrivateKey: agentPrivateKey,
+        asset: _market.asset,
+        orderId: order.orderId,
+      );
+      await _loadAccount(showLoading: false);
+      if (mounted) await _showMessage('挂单已撤销');
+    } on WalletSecurityException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } on HyperliquidExchangeException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } catch (_) {
+      if (mounted) await _showMessage('撤单失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _loadingSubmit = false);
+    }
+  }
+
+  Future<void> _closePosition(HyperliquidPosition position) async {
+    final size = position.size?.abs() ?? 0;
+    if (size <= 0 || _referencePrice <= 0) return;
+    final isBuy = (position.size ?? 0) < 0;
+    final confirmed = await _confirmOrder(
+      title: '确认平仓 ${position.coin}',
+      message:
+          '市价平仓 ${_formatQuantity(size)}，预计价格 ${_formatPlainPrice(_referencePrice)}',
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _loadingSubmit = true);
+    try {
+      final agentPrivateKey = await _unlockApprovedAgent();
+      if (agentPrivateKey == null) return;
+      await _exchange.placeOrder(
+        agentPrivateKey: agentPrivateKey,
+        action: HyperliquidSigner.orderAction(
+          asset: _market.asset,
+          isBuy: isBuy,
+          price: _formatOrderPrice(_referencePrice * (isBuy ? 1.05 : .95)),
+          size: _formatSize(size),
+          reduceOnly: true,
+          market: true,
+        ),
+        expiresAfter: DateTime.now().millisecondsSinceEpoch + 60 * 1000,
+      );
+      await _loadAccount(showLoading: false);
+      if (mounted) await _showMessage('平仓订单已提交');
+    } on WalletSecurityException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } on HyperliquidExchangeException catch (error) {
+      if (mounted) await _showMessage(error.message);
+    } catch (_) {
+      if (mounted) await _showMessage('平仓失败，请稍后重试');
+    } finally {
+      if (mounted) setState(() => _loadingSubmit = false);
+    }
   }
 }
 
@@ -1381,12 +1749,14 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
     required this.contractAvailable,
     required this.walletIdentity,
     required this.defaultNetwork,
+    required this.onCompleted,
   });
 
   final AcoPalette palette;
   final double contractAvailable;
   final WalletIdentity? walletIdentity;
   final WalletNetwork defaultNetwork;
+  final VoidCallback onCompleted;
 
   @override
   State<_HyperliquidUsdcDepositSheet> createState() =>
@@ -1414,8 +1784,13 @@ class _HyperliquidUsdcDepositSheetState
   _ContractTransferAsset _asset = _assets[4];
   bool _submitting = false;
   WalletBalance? _walletBalance;
+  HyperliquidSpotBalance? _spotBalance;
   bool _walletBalanceLoading = false;
   int _walletBalanceRequestId = 0;
+  final _hyperliquidClient = HyperliquidApiClient();
+  final _exchange = HyperliquidExchangeClient();
+  final _tradeFeeClient = TradeFeeConfigClient();
+  TradeFeeConfig? _tradeFeeConfig;
 
   AcoPalette get palette => widget.palette;
 
@@ -1427,6 +1802,9 @@ class _HyperliquidUsdcDepositSheetState
   }
 
   double get _walletBalanceAmount {
+    if (AppConfig.hyperliquidTestnet) {
+      return _spotBalance?.available ?? 0;
+    }
     final balance = _walletBalance;
     if (balance == null || balance.balance == null) return 0;
     return double.tryParse(
@@ -1436,12 +1814,35 @@ class _HyperliquidUsdcDepositSheetState
   }
 
   double get _parsedAmount => double.tryParse(_amount) ?? 0;
-  bool get _canConfirm => !_submitting && _cashToContract && _parsedAmount > 0;
+  bool get _canConfirm => !_submitting && _parsedAmount > 0;
 
   @override
   void initState() {
     super.initState();
     unawaited(_loadWalletBalance());
+    unawaited(_loadTradeFeeConfig());
+  }
+
+  @override
+  void dispose() {
+    _hyperliquidClient.close();
+    _exchange.close();
+    _tradeFeeClient.close();
+    super.dispose();
+  }
+
+  Future<TradeFeeConfig?> _loadTradeFeeConfig() async {
+    try {
+      final config = await _tradeFeeClient.load();
+      if (mounted) setState(() => _tradeFeeConfig = config);
+      return config;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<TradeFeeConfig?> _ensureTradeFeeConfig() async {
+    return _tradeFeeConfig ?? await _loadTradeFeeConfig();
   }
 
   Future<void> _loadWalletBalance() async {
@@ -1450,10 +1851,35 @@ class _HyperliquidUsdcDepositSheetState
     if (mounted) {
       setState(() {
         _walletBalance = null;
+        _spotBalance = null;
         _walletBalanceLoading = identity != null;
       });
     }
     if (identity == null) return;
+
+    if (AppConfig.hyperliquidTestnet) {
+      try {
+        final balances = await _hyperliquidClient.loadSpotBalances(
+          identity.address,
+        );
+        if (!mounted || requestId != _walletBalanceRequestId) return;
+        HyperliquidSpotBalance? selected;
+        for (final balance in balances) {
+          if (balance.coin.toUpperCase() == 'USDC') {
+            selected = balance;
+            break;
+          }
+        }
+        setState(() {
+          _spotBalance = selected;
+          _walletBalanceLoading = false;
+        });
+      } catch (_) {
+        if (!mounted || requestId != _walletBalanceRequestId) return;
+        setState(() => _walletBalanceLoading = false);
+      }
+      return;
+    }
 
     final tokenStore = await SecureAccountTokenStore().read();
     if (!mounted || requestId != _walletBalanceRequestId) return;
@@ -1571,6 +1997,17 @@ class _HyperliquidUsdcDepositSheetState
       await _showNotice('正在获取 ${_asset.symbol} 余额，请稍后重试');
       return false;
     }
+    if (AppConfig.hyperliquidTestnet) {
+      if (_asset.symbol != 'USDC' || _spotBalance == null) {
+        await _showNotice('测试网站内划转仅支持 Hyperliquid Spot USDC');
+        return false;
+      }
+      if (_spotBalance!.available < _parsedAmount) {
+        await _showNotice('Hyperliquid Spot USDC 余额不足');
+        return false;
+      }
+      return true;
+    }
     final selectedBalance = _walletBalance;
     if (selectedBalance == null ||
         selectedBalance.balance == null ||
@@ -1609,37 +2046,17 @@ class _HyperliquidUsdcDepositSheetState
     }
     setState(() => _submitting = true);
     try {
-      if (!await _hasSufficientWalletBalance()) return;
+      if (_cashToContract && !await _hasSufficientWalletBalance()) return;
       if (!mounted) return;
-      final token = _asset.mayanTokenAddress;
-      if (token == null) {
-        throw const MayanHyperCoreDepositException('当前资产暂不支持划转');
+      if (AppConfig.hyperliquidTestnet) {
+        await _submitTestnetTransfer(identity);
+        return;
       }
-      final mayan = MayanHyperCoreDepositClient();
-      try {
-        final quote = await mayan.quote(
-          amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
-          fromToken: token,
-          fromChain: _asset.mayanChain,
-          destinationAddress: identity.address,
-        );
-        if (!mounted) return;
-        final expectedUsdc = double.tryParse(quote.expectedAmountOut);
-        if (expectedUsdc == null || expectedUsdc < _minimumAmount) {
-          await _showNotice(
-            '预计到账约 ${quote.expectedAmountOut} USDC，低于最低划转 '
-            '$_minimumAmount USDC',
-          );
-          return;
-        }
-        await _showNotice(
-          '已获取 HyperCore 合约账户入金路由。\n\n'
-          '当前版本尚未集成 Mayan Swift v2 的 EVM 交易编码与签名，暂不能提交这笔交易。\n'
-          '路由：${quote.raw['fromChain'] ?? _asset.mayanChain} → HyperCore USDC (perps)',
-        );
-      } finally {
-        mayan.close();
+      if (!_cashToContract) {
+        await _submitMayanWithdrawal(identity);
+        return;
       }
+      await _submitMayanDeposit(identity);
     } on MayanHyperCoreDepositException catch (error) {
       if (mounted) await _showNotice(error.message);
     } catch (_) {
@@ -1649,12 +2066,223 @@ class _HyperliquidUsdcDepositSheetState
     }
   }
 
+  Future<void> _submitTestnetTransfer(WalletIdentity identity) async {
+    if (!_cashToContract && _parsedAmount > widget.contractAvailable) {
+      await _showNotice('合约账户 USDC 余额不足');
+      return;
+    }
+    final mnemonic = await _unlockWalletMnemonic(identity);
+    await _exchange.usdClassTransfer(
+      masterPrivateKey: WalletIdentity.privateKeyFromMnemonic(mnemonic),
+      amount: _transferAmount,
+      toPerp: _cashToContract,
+    );
+    widget.onCompleted();
+    if (!mounted) return;
+    await _showNotice(
+      _cashToContract ? 'Spot USDC 已划入合约账户' : '合约 USDC 已划回 Spot',
+    );
+    if (mounted) Navigator.pop(context);
+  }
+
+  Future<void> _submitMayanDeposit(WalletIdentity identity) async {
+    final token = _asset.mayanTokenAddress;
+    if (token == null) {
+      throw const MayanHyperCoreDepositException('当前资产暂不支持划转');
+    }
+    if (_asset.mayanNetwork == WalletNetwork.solana ||
+        _asset.mayanNetwork == WalletNetwork.tron) {
+      throw const MayanHyperCoreDepositException(
+        '当前版本的链上充值只支持 EVM 网络 USDC/原生币',
+      );
+    }
+
+    final mayanFee = (await _ensureTradeFeeConfig())?.mayan;
+    final quoteOptions = mayanFee?.quoteOptions;
+    final buildOptions = mayanFee?.buildOptions;
+    final mayan = MayanHyperCoreDepositClient();
+    try {
+      final quote = await mayan.quote(
+        amount: _transferAmount,
+        fromToken: token,
+        fromChain: _asset.mayanChain,
+        destinationAddress: identity.address,
+        decimals:
+            _walletBalance?.decimals ?? (_asset.symbol == 'USDC' ? 6 : 18),
+        referrer: quoteOptions?['referrer'] as String?,
+        referrerBps: quoteOptions?['referrerBps'] as int?,
+      );
+      if (!mounted) return;
+      final expectedUsdc = _expectedUsdc(quote.expectedAmountOut);
+      if (expectedUsdc == null || expectedUsdc < _minimumAmount) {
+        await _showNotice(
+          '预计到账约 ${quote.expectedAmountOut} USDC，低于最低划转 '
+          '$_minimumAmount USDC',
+        );
+        return;
+      }
+
+      final tokenStore = await SecureAccountTokenStore().read();
+      if (tokenStore == null) {
+        throw const MayanHyperCoreDepositException('请先登录账户后再进行链上充值');
+      }
+      final mnemonic = await _unlockWalletMnemonic(identity);
+      final built = await mayan.buildEvm(
+        quote: quote,
+        swapperAddress: identity.address,
+        destinationAddress: identity.address,
+        signerChainId: LifiApiClient.chainId(_asset.mayanNetwork),
+        referrerAddresses:
+            buildOptions?['referrerAddresses'] as Map<String, dynamic>?,
+      );
+      final transaction = built['transaction'];
+      if (transaction is! Map) {
+        throw const MayanHyperCoreDepositException('Mayan 交易数据无效');
+      }
+      final request = Map<String, dynamic>.from(transaction);
+      await _broadcastMayanDeposit(
+        identity: identity,
+        mnemonic: mnemonic,
+        accessToken: tokenStore.accessToken,
+        request: request,
+      );
+    } finally {
+      mayan.close();
+    }
+  }
+
+  Future<void> _broadcastMayanDeposit({
+    required WalletIdentity identity,
+    required String mnemonic,
+    required String accessToken,
+    required Map<String, dynamic> request,
+  }) async {
+    final rpc = WalletRpcClient(
+      client: http.Client(),
+      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+      ownsClient: true,
+    );
+    try {
+      final fromToken = _asset.mayanTokenAddress;
+      final spender = request['to'] as String?;
+      if (fromToken != null &&
+          fromToken != MayanHyperCoreDepositClient.hyperCorePerpsUsdc &&
+          spender != null &&
+          spender.isNotEmpty) {
+        await const WalletTransferService().ensureErc20AllowanceWithRpc(
+          mnemonic: mnemonic,
+          from: identity.address,
+          network: _asset.mayanNetwork,
+          accessToken: accessToken,
+          rpc: rpc,
+          tokenAddress: fromToken,
+          spender: spender,
+          requiredAmount: LifiApiClient.toBaseUnits(
+            _transferAmount,
+            _walletBalance?.decimals ?? 6,
+          ),
+        );
+      }
+      final result = await const WalletTransferService()
+          .executeTransactionRequestWithRpc(
+            mnemonic: mnemonic,
+            from: identity.address,
+            network: _asset.mayanNetwork,
+            accessToken: accessToken,
+            rpc: rpc,
+            transactionRequest: request,
+          );
+      widget.onCompleted();
+      if (!mounted) return;
+      await _showNotice('充值交易已提交。\n交易哈希：${result.hash}');
+      if (mounted) Navigator.pop(context);
+    } finally {
+      rpc.close();
+    }
+  }
+
+  Future<String> _unlockWalletMnemonic(WalletIdentity identity) =>
+      WalletSecurity().unlockMnemonicWithDeviceProtection(
+        store: SecureWalletSecretStore(),
+        walletAddress: identity.address,
+      );
+
+  String get _transferAmount =>
+      _trimTrailingZeros(_parsedAmount.toStringAsFixed(6));
+
+  double? _expectedUsdc(String rawAmount) {
+    final raw = double.tryParse(rawAmount);
+    if (raw == null) return null;
+    return raw > 100000 ? raw / 1000000 : raw;
+  }
+
+  Future<void> _submitMayanWithdrawal(WalletIdentity identity) async {
+    if (_asset.symbol != 'USDC') {
+      throw const MayanHyperCoreDepositException('合约账户提现目前只支持 USDC');
+    }
+    if (_parsedAmount > widget.contractAvailable) {
+      throw const MayanHyperCoreDepositException('合约账户可提现余额不足');
+    }
+    final token = _asset.mayanTokenAddress;
+    if (token == null ||
+        _asset.mayanNetwork == WalletNetwork.solana ||
+        _asset.mayanNetwork == WalletNetwork.tron) {
+      throw const MayanHyperCoreDepositException('当前提现只支持 EVM 网络 USDC');
+    }
+    final mayanFee = (await _ensureTradeFeeConfig())?.mayan;
+    final quoteOptions = mayanFee?.quoteOptions;
+    final buildOptions = mayanFee?.buildOptions;
+    final mnemonic = await WalletSecurity().unlockMnemonicWithDeviceProtection(
+      store: SecureWalletSecretStore(),
+      walletAddress: identity.address,
+    );
+    final mayan = MayanHyperCoreDepositClient();
+    try {
+      final quote = await mayan.withdrawalQuote(
+        amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
+        toToken: token,
+        toChain: _asset.mayanChain,
+        destinationAddress: identity.address,
+        decimals: 6,
+        referrer: quoteOptions?['referrer'] as String?,
+        referrerBps: quoteOptions?['referrerBps'] as int?,
+      );
+      final built = await mayan.buildEvm(
+        quote: quote,
+        swapperAddress: identity.address,
+        destinationAddress: identity.address,
+        referrerAddresses:
+            buildOptions?['referrerAddresses'] as Map<String, dynamic>?,
+      );
+      final typedData = built['typedData'];
+      if (typedData is! Map<String, dynamic>) {
+        throw const MayanHyperCoreDepositException('Mayan 提现签名数据无效');
+      }
+      final signature = HyperliquidSigner.signTypedData(
+        privateKeyHex: WalletIdentity.privateKeyFromMnemonic(mnemonic),
+        typedData: typedData,
+      );
+      final submitted = await mayan.submitGasless(
+        transaction: built,
+        signature: signature.toHex(),
+      );
+      widget.onCompleted();
+      if (mounted) {
+        await _showNotice('提现已提交。\n订单号：${submitted['orderId'] ?? '-'}');
+        if (mounted) Navigator.pop(context);
+      }
+    } finally {
+      mayan.close();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controlColor = palette.dark
         ? const Color(0xFF1B1B1B)
         : const Color(0xFFF5F5F5);
-    final destination = _cashToContract ? '合约' : '现金';
+    final spotLabel = AppConfig.hyperliquidTestnet ? 'Spot' : '现金';
+    final destination = _cashToContract ? '合约' : spotLabel;
     return CupertinoPopupSurface(
       isSurfacePainted: false,
       child: Container(
@@ -1720,7 +2348,7 @@ class _HyperliquidUsdcDepositSheetState
                       child: _TransferAccountPill(
                         palette: palette,
                         color: controlColor,
-                        label: _cashToContract ? '现金' : '合约',
+                        label: _cashToContract ? spotLabel : '合约',
                       ),
                     ),
                     SizedBox(
@@ -1775,7 +2403,9 @@ class _HyperliquidUsdcDepositSheetState
                       minimumSize: Size.zero,
                       color: controlColor,
                       borderRadius: BorderRadius.circular(19),
-                      onPressed: _pickAsset,
+                      onPressed: AppConfig.hyperliquidTestnet
+                          ? () => _showNotice('测试网仅支持 Hyperliquid Spot USDC')
+                          : _pickAsset,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -2467,10 +3097,15 @@ class _AccountBalanceCard extends StatelessWidget {
 }
 
 class _PositionRow extends StatelessWidget {
-  const _PositionRow({required this.palette, required this.position});
+  const _PositionRow({
+    required this.palette,
+    required this.position,
+    required this.onClose,
+  });
 
   final AcoPalette palette;
   final HyperliquidPosition position;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
@@ -2499,6 +3134,16 @@ class _PositionRow extends StatelessWidget {
             '未实现盈亏',
             '\$${_formatMoney(position.unrealizedPnl ?? 0)}',
           ),
+          const SizedBox(width: 10),
+          CupertinoButton(
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(48, 32),
+            onPressed: onClose,
+            child: Text(
+              '平仓',
+              style: TextStyle(color: palette.accent, fontSize: 13),
+            ),
+          ),
         ],
       ),
     );
@@ -2515,10 +3160,15 @@ class _PositionRow extends StatelessWidget {
 }
 
 class _OpenOrderRow extends StatelessWidget {
-  const _OpenOrderRow({required this.palette, required this.order});
+  const _OpenOrderRow({
+    required this.palette,
+    required this.order,
+    required this.onCancel,
+  });
 
   final AcoPalette palette;
   final HyperliquidOpenOrder order;
+  final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) => Container(
@@ -2542,6 +3192,16 @@ class _OpenOrderRow extends StatelessWidget {
         Text(
           '${_formatQuantity(order.size)} @ ${_formatPlainPrice(order.price)}',
           style: TextStyle(color: palette.primaryText, fontSize: 13),
+        ),
+        const SizedBox(width: 8),
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(48, 32),
+          onPressed: onCancel,
+          child: Text(
+            '撤单',
+            style: TextStyle(color: palette.accent, fontSize: 13),
+          ),
         ),
       ],
     ),

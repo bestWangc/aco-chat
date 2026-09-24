@@ -16,7 +16,6 @@ enum AcoScreen {
   addTokenV1,
   addTokenV2,
   dexToken,
-  dexSwap,
   browserDiscover,
   marketOverview,
   squareFeed,

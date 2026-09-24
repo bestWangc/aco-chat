@@ -9,11 +9,13 @@ class _DexTokenPage extends StatefulWidget {
     required this.selectedChain,
     this.walletIdentity,
     required this.onOpen,
+    this.initialSection = 1,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
   final WalletIdentity? walletIdentity;
   final ValueChanged<AcoScreen> onOpen;
+  final int initialSection;
   @override
   State<_DexTokenPage> createState() => _DexTokenPageState();
 }
@@ -30,7 +32,16 @@ class _DexTokenPageState extends State<_DexTokenPage> {
   @override
   void initState() {
     super.initState();
+    _selectedSection = widget.initialSection;
     _loadHotTokens();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DexTokenPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialSection != widget.initialSection && mounted) {
+      setState(() => _selectedSection = widget.initialSection);
+    }
   }
 
   Future<void> _loadHotTokens() async {
@@ -77,6 +88,20 @@ class _DexTokenPageState extends State<_DexTokenPage> {
         builder: (_) => _DexTokenDetailPage(
           palette: widget.palette,
           token: token,
+          selectedChain: widget.selectedChain,
+          walletIdentity: widget.walletIdentity,
+          onOpen: widget.onOpen,
+        ),
+      ),
+    );
+  }
+
+  void _openSearchPage() {
+    Navigator.of(context).push<void>(
+      _AcoPageRoute<void>(
+        builder: (_) => _DexSearchPage(
+          palette: widget.palette,
+          searchChain: 'all',
           selectedChain: widget.selectedChain,
           walletIdentity: widget.walletIdentity,
           onOpen: widget.onOpen,
@@ -171,6 +196,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
             selectedChain: _rankingChain,
             onChainSelected: _selectRankingChain,
             onSelected: _openToken,
+            onSearchTap: _openSearchPage,
           ),
         ),
       ],
@@ -204,6 +230,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
                       palette: palette,
                       selectedChain: widget.selectedChain,
                       onOpen: widget.onOpen,
+                      walletIdentity: widget.walletIdentity,
                       ethFirst: ethFirst,
                       onEthFirstChanged: (value) =>
                           setState(() => ethFirst = value),
@@ -241,6 +268,8 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
   bool _loading = true;
   String? _error;
   HyperliquidApiClient? _client;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -251,7 +280,16 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
   @override
   void dispose() {
     _client?.close();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  List<HyperliquidMarket> get _visibleMarkets {
+    final query = _searchQuery.trim().toLowerCase();
+    if (query.isEmpty) return _markets;
+    return _markets
+        .where((market) => market.name.toLowerCase().contains(query))
+        .toList();
   }
 
   Future<void> _loadMarkets({bool showLoading = true}) async {
@@ -282,6 +320,7 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
   @override
   Widget build(BuildContext context) {
     final palette = widget.palette;
+    final markets = _visibleMarkets;
     return RefreshIndicator(
       onRefresh: () => _loadMarkets(showLoading: false),
       child: ListView(
@@ -293,7 +332,15 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
             onChanged: widget.onSectionChanged,
           ),
           const SizedBox(height: 8),
-          if (!_loading && _error == null && _markets.isNotEmpty) ...[
+          _DexSearchField(
+            key: const Key('dex-contract-search'),
+            palette: palette,
+            controller: _searchController,
+            placeholder: '搜索合约名称或代码',
+            onChanged: (value) => setState(() => _searchQuery = value),
+          ),
+          const SizedBox(height: 12),
+          if (!_loading && _error == null && markets.isNotEmpty) ...[
             _HyperliquidMarketHeader(palette: palette),
             const SizedBox(height: 4),
           ],
@@ -303,8 +350,10 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
             _buildMessage(palette, _error!, true)
           else if (_markets.isEmpty)
             _buildMessage(palette, '暂无可用合约', false)
+          else if (markets.isEmpty)
+            _buildMessage(palette, '未找到匹配合约', false)
           else
-            ..._markets.map((market) => _buildMarketRow(palette, market)),
+            ...markets.map((market) => _buildMarketRow(palette, market)),
         ],
       ),
     );
@@ -1487,6 +1536,86 @@ class _DexSectionTabs extends StatelessWidget {
   );
 }
 
+class _DexSearchField extends StatelessWidget {
+  const _DexSearchField({
+    required this.palette,
+    required this.controller,
+    required this.placeholder,
+    required this.onChanged,
+    super.key,
+  });
+
+  final AcoPalette palette;
+  final TextEditingController controller;
+  final String placeholder;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 42,
+    decoration: BoxDecoration(
+      color: palette.surfaceRaised,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: palette.border),
+    ),
+    child: CupertinoTextField(
+      controller: controller,
+      onChanged: onChanged,
+      onTapOutside: (_) => _dismissKeyboard(),
+      placeholder: placeholder,
+      prefix: Padding(
+        padding: const EdgeInsets.only(left: 12, right: 8),
+        child: Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
+      ),
+      clearButtonMode: OverlayVisibilityMode.editing,
+      placeholderStyle: TextStyle(color: palette.mutedText, fontSize: 15),
+      style: TextStyle(color: palette.primaryText, fontSize: 15),
+      cursorColor: palette.accent,
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: const BoxDecoration(color: _transparent),
+    ),
+  );
+}
+
+class _DexSearchButton extends StatelessWidget {
+  const _DexSearchButton({
+    required this.palette,
+    required this.placeholder,
+    required this.onPressed,
+    super.key,
+  });
+
+  final AcoPalette palette;
+  final String placeholder;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: Size.zero,
+    onPressed: onPressed,
+    child: Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: palette.surfaceRaised,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: palette.border),
+      ),
+      child: Row(
+        children: [
+          const SizedBox(width: 12),
+          Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            placeholder,
+            style: TextStyle(color: palette.mutedText, fontSize: 15),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 class _DexHotTokenList extends StatelessWidget {
   const _DexHotTokenList({
     required this.palette,
@@ -1499,6 +1628,7 @@ class _DexHotTokenList extends StatelessWidget {
     required this.onTypeSelected,
     required this.onChainSelected,
     required this.onSelected,
+    required this.onSearchTap,
   });
 
   final AcoPalette palette;
@@ -1511,6 +1641,7 @@ class _DexHotTokenList extends StatelessWidget {
   final ValueChanged<String> onTypeSelected;
   final ValueChanged<String> onChainSelected;
   final ValueChanged<DexRankingToken> onSelected;
+  final VoidCallback onSearchTap;
 
   static const _categories = <(String, String?)>[
     ('热门', 'binance_alpha'),
@@ -1548,6 +1679,13 @@ class _DexHotTokenList extends StatelessWidget {
   Widget _buildHeader() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      _DexSearchButton(
+        key: Key(isStock ? 'dex-stock-search' : 'dex-token-search'),
+        palette: palette,
+        placeholder: '搜索代币或股票',
+        onPressed: onSearchTap,
+      ),
+      const SizedBox(height: 14),
       if (!isStock) ...[
         SizedBox(
           height: 38,
@@ -1644,6 +1782,404 @@ class _DexHotTokenList extends StatelessWidget {
         ),
     ],
   );
+}
+
+class _DexSearchPage extends StatefulWidget {
+  const _DexSearchPage({
+    required this.palette,
+    required this.searchChain,
+    required this.selectedChain,
+    required this.walletIdentity,
+    required this.onOpen,
+  });
+
+  final AcoPalette palette;
+  final String searchChain;
+  final _WalletChain selectedChain;
+  final WalletIdentity? walletIdentity;
+  final ValueChanged<AcoScreen> onOpen;
+
+  @override
+  State<_DexSearchPage> createState() => _DexSearchPageState();
+}
+
+class _DexSearchPageState extends State<_DexSearchPage> {
+  static const _recentLimit = 10;
+  static final _recentTokens = <DexRankingToken>[];
+
+  final _controller = TextEditingController();
+  Timer? _debounce;
+  String _query = '';
+  List<DexRankingToken> _results = const [];
+  bool _loading = false;
+  int _requestId = 0;
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged(String value) {
+    final query = value.trim();
+    _debounce?.cancel();
+    ++_requestId;
+    if (query.isEmpty) {
+      setState(() {
+        _query = '';
+        _results = const [];
+        _loading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _query = query;
+      _results = const [];
+      _loading = true;
+    });
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      _search(query);
+    });
+  }
+
+  Future<void> _search(String query) async {
+    final requestId = ++_requestId;
+    final client = DexRankingApiClient();
+    try {
+      final results = await client.searchTokens(
+        query,
+        chain: widget.searchChain,
+        marketCode: null,
+      );
+      if (mounted && requestId == _requestId) {
+        setState(() => _results = results);
+      }
+    } catch (error) {
+      debugPrint('[DexSearchPage] request failed query=$query error=$error');
+      if (mounted && requestId == _requestId) {
+        setState(() => _results = const []);
+      }
+    } finally {
+      client.close();
+      if (mounted && requestId == _requestId) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _openToken(DexRankingToken token) {
+    _rememberToken(token);
+    Navigator.of(context).push<void>(
+      _AcoPageRoute<void>(
+        builder: (_) => _DexTokenDetailPage(
+          palette: widget.palette,
+          token: token,
+          selectedChain: widget.selectedChain,
+          walletIdentity: widget.walletIdentity,
+          onOpen: widget.onOpen,
+        ),
+      ),
+    );
+  }
+
+  void _rememberToken(DexRankingToken token) {
+    _recentTokens.removeWhere((recent) => _sameToken(recent, token));
+    _recentTokens.insert(0, token);
+    if (_recentTokens.length > _recentLimit) {
+      _recentTokens.removeRange(_recentLimit, _recentTokens.length);
+    }
+  }
+
+  void _clearRecent() {
+    if (_recentTokens.isEmpty) return;
+    setState(_recentTokens.clear);
+  }
+
+  bool _sameToken(DexRankingToken first, DexRankingToken second) {
+    final firstIdentity =
+        '${first.chain}|${first.address}|${first.pool}|${first.symbol}';
+    final secondIdentity =
+        '${second.chain}|${second.address}|${second.pool}|${second.symbol}';
+    return firstIdentity == secondIdentity;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = _results
+        .where((token) => token.stockNameZh.isEmpty)
+        .toList();
+    final stocks = _results
+        .where((token) => token.stockNameZh.isNotEmpty)
+        .toList();
+    return CupertinoPageScaffold(
+      backgroundColor: widget.palette.background,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(15, 12, 15, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _DexSearchField(
+                      key: const Key('dex-search-page-field'),
+                      palette: widget.palette,
+                      controller: _controller,
+                      placeholder: '搜索代币或股票',
+                      onChanged: _onChanged,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CupertinoButton(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    minimumSize: Size.zero,
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(
+                      '取消',
+                      style: TextStyle(
+                        color: widget.palette.primaryText,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(child: _buildResults(tokens, stocks)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResults(
+    List<DexRankingToken> tokens,
+    List<DexRankingToken> stocks,
+  ) {
+    if (_query.isEmpty) {
+      return ListView(
+        key: const Key('dex-recent-results'),
+        padding: const EdgeInsets.fromLTRB(15, 24, 15, 24),
+        children: [
+          Row(
+            children: [
+              Text(
+                '最近浏览',
+                style: TextStyle(
+                  color: widget.palette.primaryText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              CupertinoButton(
+                key: const Key('dex-recent-clear'),
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: _clearRecent,
+                child: Text(
+                  '清空',
+                  style: TextStyle(
+                    color: widget.palette.mutedText,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_recentTokens.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 48),
+              child: Center(
+                child: Text(
+                  '暂无最近浏览',
+                  style: TextStyle(
+                    color: widget.palette.mutedText,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            )
+          else
+            ..._recentTokens.map(_buildResultRow),
+        ],
+      );
+    }
+    if (_loading && _results.isEmpty) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+    if (tokens.isEmpty && stocks.isEmpty) {
+      return Center(
+        child: Text(
+          '未找到匹配结果',
+          style: TextStyle(color: widget.palette.mutedText, fontSize: 15),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(15, 12, 15, 24),
+      children: [
+        if (tokens.isNotEmpty) _buildGroup('代币', tokens),
+        if (tokens.isNotEmpty && stocks.isNotEmpty) const SizedBox(height: 24),
+        if (stocks.isNotEmpty) _buildGroup('股票', stocks),
+      ],
+    );
+  }
+
+  Widget _buildResultRow(DexRankingToken token) => Container(
+    decoration: BoxDecoration(
+      border: Border(bottom: BorderSide(color: widget.palette.border)),
+    ),
+    child: _DexSearchResultRow(
+      token: token,
+      palette: widget.palette,
+      onTap: () => _openToken(token),
+    ),
+  );
+
+  Widget _buildGroup(String title, List<DexRankingToken> tokens) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        title,
+        style: TextStyle(
+          color: widget.palette.primaryText,
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 8),
+      for (final token in tokens) _buildResultRow(token),
+    ],
+  );
+}
+
+class _DexSearchResultRow extends StatelessWidget {
+  const _DexSearchResultRow({
+    required this.token,
+    required this.palette,
+    required this.onTap,
+  });
+
+  final DexRankingToken token;
+  final AcoPalette palette;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = token.symbol;
+    final quote = token.quoteSymbol.trim();
+    final age = _dexTokenAge(token.createdAt) ?? '--';
+
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _DexTokenDisplayIcon(token: token, size: 44),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: title,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (quote.isNotEmpty)
+                              TextSpan(
+                                text: '/$quote',
+                                style: TextStyle(
+                                  color: palette.mutedText,
+                                  fontSize: 15,
+                                ),
+                              ),
+                          ],
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (token.verified) ...[
+                      const SizedBox(width: 5),
+                      const _VerifiedTokenBadge(),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Text(
+                      formatDexPrice(token.price),
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      _formatDexChange(token.change),
+                      style: TextStyle(
+                        color: _dexChangeColor(token.change),
+                        fontSize: 15,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '(24h)',
+                      style: TextStyle(color: palette.mutedText, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 84,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FittedBox(
+                  alignment: Alignment.centerRight,
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    formatDexCompactCurrency(token.marketCap),
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  age,
+                  style: TextStyle(color: palette.mutedText, fontSize: 14),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DexHotTokenRow extends StatelessWidget {
@@ -1967,15 +2503,8 @@ String _shortDexAddress(String address) {
 String? _dexTokenAge(DateTime? createdAt) {
   if (createdAt == null) return null;
 
-  final now = DateTime.now();
-  var months = (now.year - createdAt.year) * 12 + now.month - createdAt.month;
-  if (now.day < createdAt.day) months--;
-  if (months < 1) return '不足1个月';
-
-  final years = months ~/ 12;
-  final remainingMonths = months % 12;
-  if (years == 0) return '$months个月';
-  return remainingMonths == 0 ? '$years年' : '$years年$remainingMonths个月';
+  final days = DateTime.now().difference(createdAt).inDays;
+  return '${days < 0 ? 0 : days}天';
 }
 
 String _normalizedDexLogoUrl(String value) {

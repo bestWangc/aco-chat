@@ -29,7 +29,7 @@ void main() {
       [
         {
           'universe': [
-            {'name': 'BTC'},
+            {'name': 'BTC', 'szDecimals': 3},
           ],
         },
         [
@@ -49,6 +49,8 @@ void main() {
 
     expect(markets, hasLength(1));
     expect(markets.single.name, 'BTC');
+    expect(markets.single.asset, 0);
+    expect(markets.single.szDecimals, 3);
     expect(markets.single.markPrice, 65000.5);
     expect(markets.single.funding, 0.0001);
     expect(client.calls, 1);
@@ -170,6 +172,23 @@ void main() {
     expect(orders.single.coin, 'ETH');
     expect(orders.single.isBuy, isTrue);
     expect(orders.single.orderId, 42);
+  });
+
+  test('parses Hyperliquid spot balances', () async {
+    final client = _HyperliquidTestClient([
+      {
+        'balances': [
+          {'coin': 'USDC', 'total': '25.5', 'hold': '2.5'},
+        ],
+      },
+    ]);
+    final api = HyperliquidApiClient(client: client);
+
+    final balances = await api.loadSpotBalances('0xabc');
+
+    expect(balances.single.coin, 'USDC');
+    expect(balances.single.total, 25.5);
+    expect(balances.single.available, 23);
   });
 
   test('parses Hyperliquid websocket market updates', () {

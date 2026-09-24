@@ -9,11 +9,14 @@ class MayanHyperCoreDepositClient {
     http.Client? client,
     Uri? priceUri,
     Uri? explorerUri,
+    Uri? txBuilderUri,
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
        _priceUri = priceUri ?? Uri.parse('https://price-api.mayan.finance/v3'),
        _explorerUri =
-           explorerUri ?? Uri.parse('https://explorer-api.mayan.finance/v3');
+           explorerUri ?? Uri.parse('https://explorer-api.mayan.finance/v3'),
+       _txBuilderUri =
+           txBuilderUri ?? Uri.parse('https://tx-builder.mayan.finance');
 
   static const hyperCorePerpsUsdc =
       '0x0000000000000000000000000000000000000000';
@@ -23,29 +26,41 @@ class MayanHyperCoreDepositClient {
   final bool _ownsClient;
   final Uri _priceUri;
   final Uri _explorerUri;
+  final Uri _txBuilderUri;
 
   Future<MayanHyperCoreDepositQuote> quote({
     required String amount,
     required String fromToken,
     required String fromChain,
     required String destinationAddress,
+    int decimals = 6,
+    String? referrer,
+    int? referrerBps,
   }) async {
+    final queryParameters = <String, String>{
+      'amountIn': amount,
+      'amountIn64': _toBaseUnits(amount, decimals),
+      'fromToken': fromToken,
+      'fromChain': fromChain,
+      'toToken': hyperCorePerpsUsdc,
+      'toChain': 'hypercore',
+      'slippageBps': 'auto',
+      'destinationAddress': destinationAddress,
+      'swift': 'true',
+      'mctp': 'false',
+      'fastMctp': 'false',
+      'wormhole': 'false',
+      'sdkVersion': sdkVersion,
+    };
+    if (referrer != null && referrer.isNotEmpty) {
+      queryParameters['referrer'] = referrer;
+    }
+    if (referrerBps != null && referrerBps > 0) {
+      queryParameters['referrerBps'] = '$referrerBps';
+    }
     final uri = _priceUri.replace(
       path: '${_priceUri.path}/quote',
-      queryParameters: {
-        'amountIn': amount,
-        'fromToken': fromToken,
-        'fromChain': fromChain,
-        'toToken': hyperCorePerpsUsdc,
-        'toChain': 'hypercore',
-        'slippageBps': 'auto',
-        'destinationAddress': destinationAddress,
-        'swift': 'true',
-        'mctp': 'false',
-        'fastMctp': 'false',
-        'wormhole': 'false',
-        'sdkVersion': sdkVersion,
-      },
+      queryParameters: queryParameters,
     );
     final body = await _get(uri, 'Mayan 路由请求失败');
     final quotes = body['quotes'];
@@ -60,6 +75,90 @@ class MayanHyperCoreDepositClient {
     }
     throw const MayanHyperCoreDepositException('当前资产暂不支持划转至合约账户');
   }
+
+  Future<Map<String, dynamic>> buildEvm({
+    required MayanHyperCoreDepositQuote quote,
+    required String swapperAddress,
+    required String destinationAddress,
+    int? signerChainId,
+    Map<String, dynamic>? referrerAddresses,
+  }) async {
+    final params = <String, dynamic>{
+      'swapperAddress': swapperAddress,
+      'destinationAddress': destinationAddress,
+    };
+    if (signerChainId != null) params['signerChainId'] = signerChainId;
+    if (referrerAddresses != null && referrerAddresses.isNotEmpty) {
+      params['referrerAddresses'] = referrerAddresses;
+    }
+    final body = await _postJson(
+      _txBuilderUri.replace(path: '${_txBuilderUri.path}/build'),
+      {'quote': quote.raw, 'params': params},
+      'Mayan 交易构造失败',
+    );
+    final transaction = body['transaction'];
+    if (transaction is! Map<String, dynamic>) {
+      throw const MayanHyperCoreDepositException('Mayan 交易数据无效');
+    }
+    return transaction;
+  }
+
+  Future<MayanHyperCoreDepositQuote> withdrawalQuote({
+    required String amount,
+    required String toToken,
+    required String toChain,
+    required String destinationAddress,
+    int decimals = 6,
+    String? referrer,
+    int? referrerBps,
+  }) async {
+    final queryParameters = <String, String>{
+      'amountIn': amount,
+      'amountIn64': _toBaseUnits(amount, decimals),
+      'fromToken': hyperCorePerpsUsdc,
+      'fromChain': 'hypercore',
+      'toToken': toToken,
+      'toChain': toChain,
+      'slippageBps': 'auto',
+      'destinationAddress': destinationAddress,
+      'swift': 'true',
+      'gasless': 'true',
+      'mctp': 'false',
+      'fastMctp': 'false',
+      'wormhole': 'false',
+      'sdkVersion': sdkVersion,
+    };
+    if (referrer != null && referrer.isNotEmpty) {
+      queryParameters['referrer'] = referrer;
+    }
+    if (referrerBps != null && referrerBps > 0) {
+      queryParameters['referrerBps'] = '$referrerBps';
+    }
+    final uri = _priceUri.replace(
+      path: '${_priceUri.path}/quote',
+      queryParameters: queryParameters,
+    );
+    final body = await _get(uri, 'Mayan 提现路由请求失败');
+    final quotes = body['quotes'];
+    if (quotes is! List) {
+      throw const MayanHyperCoreDepositException('Mayan 返回数据无效');
+    }
+    for (final item in quotes) {
+      if (item is Map) {
+        final quote = MayanHyperCoreDepositQuote.fromJson(item);
+        if (quote.type == 'SWIFT' && quote.swiftVersion == 'V2') return quote;
+      }
+    }
+    throw const MayanHyperCoreDepositException('当前网络暂不支持合约账户提现');
+  }
+
+  Future<Map<String, dynamic>> submitGasless({
+    required Map<String, dynamic> transaction,
+    required String signature,
+  }) => _postJson(_txBuilderUri.replace(path: '${_txBuilderUri.path}/submit'), {
+    'transaction': transaction,
+    'signature': signature,
+  }, 'Mayan 提现提交失败');
 
   Future<MayanDepositStatus> status(String transactionHash) async {
     final body = await _get(
@@ -95,6 +194,48 @@ class MayanHyperCoreDepositClient {
       );
     }
     return decoded;
+  }
+
+  Future<Map<String, dynamic>> _postJson(
+    Uri uri,
+    Map<String, dynamic> payload,
+    String failure,
+  ) async {
+    final response = await _client
+        .post(
+          uri,
+          headers: const {'content-type': 'application/json'},
+          body: jsonEncode(payload),
+        )
+        .timeout(const Duration(seconds: 20));
+    final decoded = response.body.isEmpty
+        ? const <String, dynamic>{}
+        : jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final message = decoded is Map
+          ? decoded['msg'] ?? decoded['message']
+          : null;
+      throw MayanHyperCoreDepositException(
+        '$failure（${message ?? response.statusCode}）',
+      );
+    }
+    if (decoded is! Map<String, dynamic> || decoded['success'] == false) {
+      throw const MayanHyperCoreDepositException('Mayan 返回数据无效');
+    }
+    return decoded;
+  }
+
+  static String _toBaseUnits(String amount, int decimals) {
+    final parts = amount.trim().split('.');
+    final whole = BigInt.parse(parts.first);
+    final fraction = parts.length > 1 ? parts[1] : '';
+    if (fraction.length > decimals) {
+      throw const MayanHyperCoreDepositException('金额精度无效');
+    }
+    final padded = fraction.padRight(decimals, '0');
+    return (whole * BigInt.from(10).pow(decimals) +
+            BigInt.parse(padded.isEmpty ? '0' : padded))
+        .toString();
   }
 
   void close() {

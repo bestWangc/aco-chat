@@ -1,81 +1,22 @@
 part of 'aco_design_shell.dart';
 
-class _DexSwapPage extends StatefulWidget {
-  const _DexSwapPage({
-    required this.palette,
-    required this.selectedChain,
-    required this.onOpen,
-    this.walletIdentity,
-    this.secretStore,
-  });
-  final AcoPalette palette;
-  final _WalletChain selectedChain;
-  final ValueChanged<AcoScreen> onOpen;
-  final WalletIdentity? walletIdentity;
-  final WalletSecretStore? secretStore;
-  @override
-  State<_DexSwapPage> createState() => _DexSwapPageState();
-}
-
-class _DexSwapPageState extends State<_DexSwapPage> {
-  bool ethFirst = true;
-  @override
-  Widget build(BuildContext context) {
-    final palette = widget.palette;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(43, 20, 28, 28),
-      children: [
-        Transform.translate(
-          offset: const Offset(-27, 0),
-          child: _SectionTabs(
-            palette: palette,
-            labels: const ['闪兑', '代币', '合约', '股票'],
-            selected: 0,
-            itemSpacing: 12,
-            fontSize: 18,
-            horizontalPadding: 8,
-            showSelectedIndicator: true,
-          ),
-        ),
-        const SizedBox(height: 24),
-        _DexSwapContent(
-          palette: palette,
-          selectedChain: widget.selectedChain,
-          onOpen: widget.onOpen,
-          walletIdentity: widget.walletIdentity,
-          secretStore: widget.secretStore,
-          ethFirst: ethFirst,
-          onEthFirstChanged: (value) => setState(() => ethFirst = value),
-          recentRecord: null,
-        ),
-      ],
-    );
-  }
-}
-
 class _DexSwapContent extends StatefulWidget {
   const _DexSwapContent({
     required this.palette,
     required this.selectedChain,
     required this.onOpen,
     this.walletIdentity,
-    this.secretStore,
     required this.ethFirst,
     required this.onEthFirstChanged,
     this.recentRecord,
-    this.pool,
-    this.dex,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
   final ValueChanged<AcoScreen> onOpen;
   final WalletIdentity? walletIdentity;
-  final WalletSecretStore? secretStore;
   final bool ethFirst;
   final ValueChanged<bool> onEthFirstChanged;
   final Future<DexSwapRecord?>? recentRecord;
-  final String? pool;
-  final String? dex;
 
   @override
   State<_DexSwapContent> createState() => _DexSwapContentState();
@@ -97,7 +38,6 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   _WalletChain get toChain => _toChain;
   WalletIdentity? get walletIdentity =>
       widget.walletIdentity ?? _resolvedIdentity;
-  WalletSecretStore? get secretStore => widget.secretStore;
   bool get ethFirst => widget.ethFirst;
 
   @override
@@ -122,6 +62,21 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   }
 
   String get _normalizedFromAmount => _fromAmount.replaceAll(',', '').trim();
+
+  @override
+  void didUpdateWidget(covariant _DexSwapContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedChain.network != widget.selectedChain.network) {
+      setState(() {
+        _fromChain = widget.selectedChain;
+        _toChain = widget.selectedChain;
+        _fromSymbol = widget.ethFirst ? _nativeSymbol : 'USDC';
+        _toSymbol = widget.ethFirst ? 'USDC' : _nativeSymbol;
+        _fromAmount = '0';
+        _quote = null;
+      });
+    }
+  }
 
   Future<void> _loadWalletIdentity() async {
     final identity = await WalletPreferences.walletIdentity();
@@ -333,12 +288,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         if (!context.mounted) return;
         _showNotice(context, '交易已发起', '交易哈希：${result.hash}');
         unawaited(
-          _recordDexTrade(
-            result.hash,
-            fromAddress,
-            request,
-            widget.dex ?? quote.tool,
-          ),
+          _recordDexTrade(result.hash, fromAddress, request, quote.tool),
         );
         await _waitForChainConfirmation(result.hash);
       } finally {
@@ -461,7 +411,10 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       ownsClient: true,
     );
     try {
-      final endpoints = await rpc.loadEndpoints(network: fromChain.network.name, accessToken: tokens.accessToken);
+      final endpoints = await rpc.loadEndpoints(
+        network: fromChain.network.name,
+        accessToken: tokens.accessToken,
+      );
       for (var attempt = 0; attempt < 15; attempt++) {
         await Future<void>.delayed(const Duration(seconds: 2));
         final solana = fromChain.network == WalletNetwork.solana;
@@ -565,7 +518,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
           final hash = '${response['result'] ?? ''}';
           _showNotice(context, '交易已发起', '交易哈希：${hash.isEmpty ? '-' : hash}');
           if (hash.isNotEmpty) {
-            unawaited(_recordDexTrade(hash, address, request, widget.dex ?? 'LI.FI'));
+            unawaited(_recordDexTrade(hash, address, request, 'LI.FI'));
             await _waitForChainConfirmation(hash);
           }
         }
@@ -633,7 +586,14 @@ class _DexSwapContentState extends State<_DexSwapContent> {
           final hash = '${response['txid'] ?? ''}';
           _showNotice(context, '交易已发起', '交易 ID：${hash.isEmpty ? '-' : hash}');
           if (hash.isNotEmpty) {
-            unawaited(_recordDexTrade(hash, await _addressForChain(identity, fromChain) ?? '', request, widget.dex ?? 'LI.FI'));
+            unawaited(
+              _recordDexTrade(
+                hash,
+                await _addressForChain(identity, fromChain) ?? '',
+                request,
+                'LI.FI',
+              ),
+            );
             await _waitForChainConfirmation(hash);
           }
         }
@@ -653,7 +613,9 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     Map<String, dynamic> request,
     String dex,
   ) async {
-    final pool = '${widget.pool ?? request['pool'] ?? request['pairAddress'] ?? request['poolAddress'] ?? ''}'.trim();
+    final pool =
+        '${request['pool'] ?? request['pairAddress'] ?? request['poolAddress'] ?? ''}'
+            .trim();
     if (txHash.isEmpty || wallet.isEmpty || pool.isEmpty) return;
     final service = DexTradeService();
     try {
@@ -672,7 +634,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   }
 
   Future<String?> _unlockMnemonic(WalletIdentity identity) async {
-    final store = secretStore ?? SecureWalletSecretStore();
+    final store = SecureWalletSecretStore();
     try {
       return await WalletSecurity().unlockMnemonicWithDeviceProtection(
         store: store,
@@ -736,6 +698,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         ethFirst: ethFirst,
         fromChain: fromChain,
         toChain: toChain,
+        walletIdentity: walletIdentity,
         onEthFirstChanged: widget.onEthFirstChanged,
         onSwapChanged: _setSwap,
         outputAmount: _quote == null
@@ -858,7 +821,11 @@ class _DexSwapQuoteCard extends StatelessWidget {
   );
 }
 
-String _formatTokenUnits(String raw, int decimals) {
+String _formatTokenUnits(
+  String raw,
+  int decimals, {
+  int maxFractionDigits = 8,
+}) {
   if (raw.isEmpty) return '-';
   try {
     final value = BigInt.parse(raw);
@@ -869,7 +836,12 @@ String _formatTokenUnits(String raw, int decimals) {
       '0',
     );
     final split = digits.length - decimals;
-    final fraction = digits.substring(split).replaceFirst(RegExp(r'0+$'), '');
+    var fraction = digits.substring(split).replaceFirst(RegExp(r'0+$'), '');
+    if (fraction.length > maxFractionDigits) {
+      fraction = fraction
+          .substring(0, maxFractionDigits)
+          .replaceFirst(RegExp(r'0+$'), '');
+    }
     return '${negative ? '-' : ''}${digits.substring(0, split)}'
         '${fraction.isEmpty ? '' : '.$fraction'}';
   } catch (_) {
@@ -1079,6 +1051,7 @@ class _DexSwapPanel extends StatefulWidget {
     required this.palette,
     required this.fromChain,
     required this.toChain,
+    this.walletIdentity,
     required this.ethFirst,
     required this.onEthFirstChanged,
     required this.onSwapChanged,
@@ -1087,6 +1060,7 @@ class _DexSwapPanel extends StatefulWidget {
   final AcoPalette palette;
   final _WalletChain fromChain;
   final _WalletChain toChain;
+  final WalletIdentity? walletIdentity;
   final bool ethFirst;
   final ValueChanged<bool> onEthFirstChanged;
   final void Function(
@@ -1111,6 +1085,9 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
   String _fromLogoUri = '';
   String _toLogoUri = '';
   late final TextEditingController _amountController;
+  Map<String, String> _balances = const {};
+  bool _loadingBalances = true;
+  int _balanceRequestId = 0;
 
   @override
   void initState() {
@@ -1119,6 +1096,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
     _toChain = widget.toChain;
     _syncSymbols(widget.ethFirst);
     _amountController = TextEditingController(text: '0');
+    unawaited(_loadBalances());
   }
 
   @override
@@ -1138,6 +1116,73 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
   @override
   void didUpdateWidget(covariant _DexSwapPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final identityChanged =
+        oldWidget.walletIdentity?.address != widget.walletIdentity?.address;
+    final chainChanged =
+        oldWidget.fromChain.network != widget.fromChain.network ||
+        oldWidget.toChain.network != widget.toChain.network;
+    if (identityChanged || chainChanged) {
+      _fromChain = widget.fromChain;
+      _toChain = widget.toChain;
+      unawaited(_loadBalances());
+    }
+  }
+
+  Future<void> _loadBalances() async {
+    final requestId = ++_balanceRequestId;
+    final identity = widget.walletIdentity;
+    AccountTokens? tokenStore;
+    try {
+      tokenStore = await SecureAccountTokenStore().read();
+    } catch (_) {
+      tokenStore = null;
+    }
+    if (identity == null || tokenStore == null) {
+      if (mounted && requestId == _balanceRequestId) {
+        setState(() => _loadingBalances = false);
+      }
+      return;
+    }
+
+    final portfolio = WalletPortfolioService();
+    try {
+      final derivedAddresses = await WalletPreferences.derivedAddresses(
+        identity,
+      );
+      final balances = <String, String>{};
+      final networks = {_fromChain.network, _toChain.network};
+      for (final network in networks) {
+        final items = await portfolio.loadBalances(
+          network: network,
+          identity: identity,
+          derivedAddresses: derivedAddresses,
+          accessToken: tokenStore.accessToken,
+        );
+        for (final item in items) {
+          balances['${network.name}:${item.symbol.toUpperCase()}'] =
+              item.balance == null || item.balance == BigInt.zero
+              ? '0.00'
+              : formatChainAmount(item.balance!, decimals: item.decimals);
+        }
+      }
+      if (mounted && requestId == _balanceRequestId) {
+        setState(() {
+          _balances = balances;
+          _loadingBalances = false;
+        });
+      }
+    } catch (_) {
+      if (mounted && requestId == _balanceRequestId) {
+        setState(() => _loadingBalances = false);
+      }
+    } finally {
+      portfolio.close();
+    }
+  }
+
+  String _balanceFor(_WalletChain chain, String symbol) {
+    if (_loadingBalances) return '读取中…';
+    return _balances['${chain.network.name}:${symbol.toUpperCase()}'] ?? '0.00';
   }
 
   void _pickToken(BuildContext context, String current, bool source) {
@@ -1192,6 +1237,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           label: '兑换货币 · ${_fromChain.displayLabel}',
           symbol: _fromSymbol,
           logoUri: _fromLogoUri,
+          balance: _balanceFor(_fromChain, _fromSymbol),
           value: _amountController.text,
           showMax: true,
           editable: true,
@@ -1254,6 +1300,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           label: '至 · ${_toChain.displayLabel}',
           symbol: _toSymbol,
           logoUri: _toLogoUri,
+          balance: _balanceFor(_toChain, _toSymbol),
           value: widget.outputAmount,
           onTokenTap: (symbol) => _pickToken(context, symbol, false),
         ),
@@ -1762,6 +1809,7 @@ class _DexSwapTokenRow extends StatefulWidget {
     required this.label,
     required this.symbol,
     required this.value,
+    required this.balance,
     this.logoUri = '',
     this.showMax = false,
     this.editable = false,
@@ -1769,7 +1817,7 @@ class _DexSwapTokenRow extends StatefulWidget {
     this.onValueChanged,
   });
   final AcoPalette palette;
-  final String label, symbol, value, logoUri;
+  final String label, symbol, value, balance, logoUri;
   final bool showMax, editable;
   final ValueChanged<String>? onTokenTap;
   final ValueChanged<String>? onValueChanged;
@@ -1892,7 +1940,7 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
             Row(
               children: [
                 Text(
-                  '余额: 0.00',
+                  '余额: ${widget.balance}',
                   style: TextStyle(
                     color: widget.palette.mutedText,
                     fontSize: AcoTypography.bodySmall,

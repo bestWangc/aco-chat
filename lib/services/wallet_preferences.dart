@@ -1,6 +1,7 @@
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_identity_store.dart';
 import 'package:aco_chat/services/wallet_metadata_store.dart';
+import 'package:aco_chat/services/wallet_portfolio_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class StoredWallet {
@@ -15,6 +16,7 @@ class WalletPreferences {
   static const configuredKey = WalletIdentityStore.configuredKey;
   static const walletIdentityKey = WalletIdentityStore.walletIdentityKey;
   static const walletIdentitiesKey = WalletIdentityStore.walletIdentitiesKey;
+  static const selectedWalletNetworkKey = 'wallet.selected-network';
   static final _metadataStore = WalletMetadataStore();
   static final _identityStore = WalletIdentityStore();
 
@@ -54,6 +56,20 @@ class WalletPreferences {
 
   static Future<void> saveWalletIdentity(WalletIdentity identity) =>
       _identityStore.saveIdentity(identity);
+
+  static Future<WalletNetwork?> selectedWalletNetwork() async {
+    final preferences = await SharedPreferences.getInstance();
+    final value = preferences.getString(selectedWalletNetworkKey);
+    for (final network in WalletNetwork.values) {
+      if (network.name == value) return network;
+    }
+    return null;
+  }
+
+  static Future<void> saveSelectedWalletNetwork(WalletNetwork network) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(selectedWalletNetworkKey, network.name);
+  }
 
   static Future<String> walletName(
     WalletIdentity identity, {

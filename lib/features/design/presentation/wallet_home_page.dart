@@ -31,6 +31,7 @@ class _WalletHomeState extends State<_WalletHome> {
   late final AccountTokenStore _tokenStore;
   late final WalletMetadataStore _metadataStore;
   late Future<List<WalletBalance>> _balancesFuture;
+  late Future<Map<String, double>> _assetValuesFuture;
   late Future<double?> _totalBalanceFuture;
   late List<WalletBalance> _initialBalances;
   List<WalletBalance> _displayBalances = const [];
@@ -52,7 +53,8 @@ class _WalletHomeState extends State<_WalletHome> {
         : _placeholderBalances().where((balance) => balance.isNative).toList();
     _displayBalances = _initialBalances;
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
-    _totalBalanceFuture = _loadTotalBalance(_balancesFuture);
+    _assetValuesFuture = _loadAssetValues(_balancesFuture);
+    _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
     unawaited(_prepareInitialBalances(widget.selectedChain.network));
     unawaited(_streamBalances(widget.selectedChain.network, ++_loadGeneration));
     _watchWalletLogin(widget.walletLoginFuture);
@@ -310,7 +312,8 @@ class _WalletHomeState extends State<_WalletHome> {
     final cachedBalances = _balanceCache[network];
     setState(() {
       _balancesFuture = balancesFuture;
-      _totalBalanceFuture = _loadTotalBalance(balancesFuture);
+      _assetValuesFuture = _loadAssetValues(balancesFuture);
+      _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
       _initialBalances =
           cachedBalances ??
           (widget.walletIdentity == null
@@ -341,7 +344,7 @@ class _WalletHomeState extends State<_WalletHome> {
         .where((balance) => balance.isNative || !_isHidden(balance, hidden))
         .toList();
     if (mounted && generation == _loadGeneration) {
-      setState(() => _displayBalances = placeholders);
+      _setDisplayBalances(placeholders);
     }
     final byId = <String, WalletBalance>{};
     await for (final balance in _portfolioService.loadAssetBalances(
@@ -375,15 +378,36 @@ class _WalletHomeState extends State<_WalletHome> {
           )
           .map((a) => byId[a.id] ?? _assetPlaceholder(a, identity.address))
           .toList();
-      setState(() => _displayBalances = ordered);
+      _setDisplayBalances(ordered);
     }
   }
 
-  Future<double?> _loadTotalBalance(
+  void _setDisplayBalances(List<WalletBalance> balances) {
+    if (!mounted) return;
+    final balancesFuture = Future<List<WalletBalance>>.value(balances);
+    setState(() {
+      _displayBalances = balances;
+      _balancesFuture = balancesFuture;
+      _assetValuesFuture = _loadAssetValues(balancesFuture);
+      _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
+    });
+  }
+
+  Future<Map<String, double>> _loadAssetValues(
     Future<List<WalletBalance>> balances,
   ) async {
     try {
-      return _valuationService.totalUsd(await balances);
+      return _valuationService.assetUsdValues(await balances);
+    } catch (_) {
+      return const <String, double>{};
+    }
+  }
+
+  Future<double?> _loadTotalBalance(Future<Map<String, double>> values) async {
+    try {
+      final loaded = await values;
+      if (loaded.isEmpty) return null;
+      return loaded.values.fold<double>(0, (total, value) => total + value);
     } catch (_) {
       return null;
     }
@@ -682,8 +706,7 @@ class _WalletHomeState extends State<_WalletHome> {
                           borderColor: const Color(0xFF9E9E9E),
                           borderWidth: 8,
                           fontWeight: FontWeight.w500,
-                          onPressed: () =>
-                              showAcoAlertNotice(context, '提示', 'comming soon'),
+                          onPressed: () => widget.onOpen(AcoScreen.dexToken),
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -723,22 +746,32 @@ class _WalletHomeState extends State<_WalletHome> {
             ),
           ),
           Expanded(
-            child: ListView.builder(
-              padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
-              itemCount: _displayBalances.length,
-              itemBuilder: (context, index) {
-                final balance = _displayBalances[index];
-                final rawAmount = balance.balance ?? BigInt.zero;
-                final amount = rawAmount == BigInt.zero
-                    ? '0.00'
-                    : formatChainAmount(rawAmount, decimals: balance.decimals);
-                return _WalletAssetRow(
-                  palette: widget.palette,
-                  symbol: balance.symbol,
-                  title: balance.assetName,
-                  amount: amount,
-                  value: '≈0.00 USD',
-                  onTap: () => widget.onAssetSelected(balance),
+            child: FutureBuilder<Map<String, double>>(
+              future: _assetValuesFuture,
+              builder: (context, snapshot) {
+                final values = snapshot.data ?? const <String, double>{};
+                return ListView.builder(
+                  padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
+                  itemCount: _displayBalances.length,
+                  itemBuilder: (context, index) {
+                    final balance = _displayBalances[index];
+                    final rawAmount = balance.balance ?? BigInt.zero;
+                    final amount = rawAmount == BigInt.zero
+                        ? '0.00'
+                        : formatChainAmount(
+                            rawAmount,
+                            decimals: balance.decimals,
+                          );
+                    final value = (values[balance.id] ?? 0).toStringAsFixed(2);
+                    return _WalletAssetRow(
+                      palette: widget.palette,
+                      symbol: balance.symbol,
+                      title: balance.assetName,
+                      amount: amount,
+                      value: '≈$value USD',
+                      onTap: () => widget.onAssetSelected(balance),
+                    );
+                  },
                 );
               },
             ),

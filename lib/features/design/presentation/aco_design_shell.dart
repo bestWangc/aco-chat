@@ -34,7 +34,12 @@ import 'package:aco_chat/services/lifi_api_client.dart';
 import 'package:aco_chat/services/dex_ranking_api_client.dart';
 import 'package:aco_chat/services/dex_trade_service.dart';
 import 'package:aco_chat/services/hyperliquid_api_client.dart';
+import 'package:aco_chat/services/hyperliquid_exchange_client.dart';
+import 'package:aco_chat/services/hyperliquid_agent_store.dart';
+import 'package:aco_chat/services/hyperliquid_builder_approval_store.dart';
+import 'package:aco_chat/services/hyperliquid_signing.dart';
 import 'package:aco_chat/services/mayan_hypercore_deposit_client.dart';
+import 'package:aco_chat/services/trade_fee_config_client.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:aco_chat/services/wallet_transaction_service.dart';
@@ -254,10 +259,12 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   late final ValueNotifier<bool> _isDark;
   late final bool _ownsThemeNotifier;
   int _selectedNav = 0;
+  int _initialDexSection = 1;
   AcoScreen _rootScreen = AcoScreen.walletHome;
   final ValueNotifier<String> _displayName = ValueNotifier<String>('');
   final ValueNotifier<String> _walletName = ValueNotifier<String>('Wallet1');
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
+  bool _walletChainManuallySelected = false;
   TransferToken? _selectedTransferToken;
   WalletBalance? _selectedAssetBalance;
   int _liveListRevision = 0;
@@ -280,6 +287,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     _walletTransactionService = WalletTransactionService();
     _applyAccountProfile(widget.accountProfile);
     _loadWalletName();
+    unawaited(_loadSelectedWalletChain());
     unawaited(_checkForAppUpdate());
     OpenIMChatRepository.messageNotifier.addListener(_onIncomingMessage);
   }
@@ -448,7 +456,23 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   }
 
   void _selectWalletChain(int index) {
+    if (index < 0 || index >= _supportedWalletChains.length) return;
+    _walletChainManuallySelected = true;
     _selectedWalletChain.value = index;
+    unawaited(
+      WalletPreferences.saveSelectedWalletNetwork(
+        _supportedWalletChains[index].network,
+      ),
+    );
+  }
+
+  Future<void> _loadSelectedWalletChain() async {
+    final network = await WalletPreferences.selectedWalletNetwork();
+    if (!mounted || _walletChainManuallySelected || network == null) return;
+    final index = _supportedWalletChains.indexWhere(
+      (chain) => chain.network == network,
+    );
+    if (index >= 0) _selectedWalletChain.value = index;
   }
 
   void _sendToken(TransferToken token) {
@@ -480,6 +504,16 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       setState(() {
         _selectedNav = 0;
         _rootScreen = AcoScreen.walletHome;
+      });
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+
+    if (screen == AcoScreen.dexToken) {
+      setState(() {
+        _selectedNav = 2;
+        _rootScreen = AcoScreen.dexToken;
+        _initialDexSection = 0;
       });
       Navigator.of(context).popUntil((route) => route.isFirst);
       return;
@@ -534,7 +568,6 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       AcoScreen.profileLanguage => AcoScreen.profileLanguage,
       AcoScreen.addTokenV2 => AcoScreen.addTokenV2,
       AcoScreen.dexToken => AcoScreen.dexToken,
-      AcoScreen.dexSwap => AcoScreen.dexSwap,
       AcoScreen.voiceRoom => AcoScreen.voiceRoom,
       AcoScreen.chatV1 => AcoScreen.chatV1,
       AcoScreen.chatV2 => AcoScreen.chatV2,
@@ -610,6 +643,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       walletChainIndex: _selectedWalletChain.value,
       walletAssetRevision: _walletAssetRevision,
       onWalletChainSelected: _selectWalletChain,
+      initialDexSection: _initialDexSection,
       transferToken: _selectedTransferToken,
       onSendTokenSelected: _sendToken,
       selectedAsset: _selectedAssetBalance,
@@ -677,6 +711,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       walletChainIndex: _selectedWalletChain.value,
                       walletAssetRevision: _walletAssetRevision,
                       onWalletChainSelected: _selectWalletChain,
+                      initialDexSection: _initialDexSection,
                       transferToken: _selectedTransferToken,
                       onSendTokenSelected: _sendToken,
                       selectedAsset: _selectedAssetBalance,
@@ -733,6 +768,10 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                               return;
                             }
                             setState(() {
+                              if (index == 2 &&
+                                  _rootScreen != AcoScreen.dexToken) {
+                                _initialDexSection = 1;
+                              }
                               _selectedNav = index;
                               _rootScreen = destinations[index];
                               if (index == 3) _liveListRevision++;

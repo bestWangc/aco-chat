@@ -61,6 +61,7 @@ class HyperliquidApiClient {
             index < contexts.length && contexts[index] is Map
                 ? contexts[index] as Map
                 : const {},
+            asset: index,
           ),
     ];
   }
@@ -122,6 +123,24 @@ class HyperliquidApiClient {
         if (item is Map) HyperliquidOpenOrder.fromJson(item),
     ];
   }
+
+  Future<List<HyperliquidSpotBalance>> loadSpotBalances(String address) async {
+    final payload = await _post({
+      'type': 'spotClearinghouseState',
+      'user': address,
+    });
+    if (payload is! Map) {
+      throw const FormatException('Hyperliquid 返回的现货账户数据无效');
+    }
+    final balances = payload['balances'];
+    if (balances is! List) return const [];
+    return [
+      for (final item in balances)
+        if (item is Map) HyperliquidSpotBalance.fromJson(item),
+    ];
+  }
+
+  Future<dynamic> postInfo(Map<String, dynamic> body) => _post(body);
 
   Future<dynamic> _post(Map<String, dynamic> body) async {
     final response = await _client
@@ -456,6 +475,8 @@ class HyperliquidAssetContext {
 
 class HyperliquidMarket {
   const HyperliquidMarket({
+    this.asset = 0,
+    this.szDecimals = 8,
     required this.name,
     required this.markPrice,
     required this.oraclePrice,
@@ -467,6 +488,8 @@ class HyperliquidMarket {
     required this.isDelisted,
   });
 
+  final int asset;
+  final int szDecimals;
   final String name;
   final double? markPrice;
   final double? oraclePrice;
@@ -494,6 +517,8 @@ class HyperliquidMarket {
   HyperliquidMarket withContext(HyperliquidAssetContext context) {
     if (context.coin != name) return this;
     return HyperliquidMarket(
+      asset: asset,
+      szDecimals: szDecimals,
       name: name,
       markPrice: context.markPrice,
       oraclePrice: context.oraclePrice,
@@ -506,8 +531,10 @@ class HyperliquidMarket {
     );
   }
 
-  factory HyperliquidMarket.fromJson(Map raw, Map context) {
+  factory HyperliquidMarket.fromJson(Map raw, Map context, {int asset = 0}) {
     return HyperliquidMarket(
+      asset: asset,
+      szDecimals: _parseInt(raw['szDecimals']),
       name: '${raw['name'] ?? ''}',
       markPrice: _parseDouble(context['markPx']),
       oraclePrice: _parseDouble(context['oraclePx']),
@@ -652,5 +679,25 @@ class HyperliquidOpenOrder {
     isBuy: raw['side'] == 'B',
     orderId: _parseInt(raw['oid']),
     timestamp: _parseInt(raw['timestamp']),
+  );
+}
+
+class HyperliquidSpotBalance {
+  const HyperliquidSpotBalance({
+    required this.coin,
+    required this.total,
+    required this.hold,
+  });
+
+  final String coin;
+  final double total;
+  final double hold;
+
+  double get available => total - hold;
+
+  factory HyperliquidSpotBalance.fromJson(Map raw) => HyperliquidSpotBalance(
+    coin: '${raw['coin'] ?? ''}',
+    total: _parseDoubleOrZero(raw['total']),
+    hold: _parseDoubleOrZero(raw['hold']),
   );
 }
