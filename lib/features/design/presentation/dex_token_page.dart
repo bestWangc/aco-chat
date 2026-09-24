@@ -187,6 +187,7 @@ class _DexTokenPageState extends State<_DexTokenPage> {
               ? _HyperliquidContractPage(
                   palette: palette,
                   walletIdentity: widget.walletIdentity,
+                  selectedChain: widget.selectedChain,
                   onSectionChanged: _selectSection,
                 )
               : _selectedSection == 0
@@ -221,11 +222,13 @@ class _HyperliquidContractPage extends StatefulWidget {
   const _HyperliquidContractPage({
     required this.palette,
     required this.walletIdentity,
+    required this.selectedChain,
     required this.onSectionChanged,
   });
 
   final AcoPalette palette;
   final WalletIdentity? walletIdentity;
+  final _WalletChain selectedChain;
   final ValueChanged<int> onSectionChanged;
 
   @override
@@ -330,6 +333,7 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
             palette: palette,
             market: market,
             walletIdentity: widget.walletIdentity,
+            defaultNetwork: widget.selectedChain.network,
           ),
         ),
       ),

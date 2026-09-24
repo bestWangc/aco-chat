@@ -1397,30 +1397,24 @@ class _HyperliquidUsdcDepositSheetState
     extends State<_HyperliquidUsdcDepositSheet> {
   static const _minimumAmount = 15.0;
   static const _assets = [
-    _ContractTransferAsset(chain: 'Arbitrum', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'BNB Chain', symbol: 'BNB'),
+    _ContractTransferAsset(chain: 'BNB Chain', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'BNB Chain', symbol: 'USDT'),
+    _ContractTransferAsset(chain: 'Ethereum', symbol: 'ETH'),
     _ContractTransferAsset(chain: 'Ethereum', symbol: 'USDC'),
-    _ContractTransferAsset(chain: 'Base', symbol: 'USDC'),
-    _ContractTransferAsset(chain: 'BSC', symbol: 'USDC'),
-    _ContractTransferAsset(chain: 'Polygon', symbol: 'USDC'),
-    _ContractTransferAsset(chain: 'Optimism', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'Ethereum', symbol: 'USDT'),
+    _ContractTransferAsset(chain: 'Solana', symbol: 'SOL'),
+    _ContractTransferAsset(chain: 'Solana', symbol: 'USDC'),
+    _ContractTransferAsset(chain: 'Solana', symbol: 'USDT'),
   ];
 
   String _amount = '';
   bool _cashToContract = true;
   bool _showKeypad = true;
-  late _ContractTransferAsset _asset;
+  _ContractTransferAsset _asset = _assets[4];
   bool _submitting = false;
 
   AcoPalette get palette => widget.palette;
-
-  @override
-  void initState() {
-    super.initState();
-    _asset = _assets.firstWhere(
-      (asset) => asset.mayanNetwork == widget.defaultNetwork,
-      orElse: () => _assets.first,
-    );
-  }
 
   double get _available {
     if (_cashToContract) return 0;
@@ -1877,21 +1871,26 @@ class _ContractTransferAsset {
     'Base' => 'assets/icons/crypto/domi/chains/network-base.png',
     'Polygon' => 'assets/icons/crypto/domi/chains/network-polygon.png',
     'Optimism' => 'assets/icons/crypto/domi/chains/network-optimism.png',
+    'Solana' => 'assets/icons/crypto/domi/chains/network-solana.png',
     _ => 'assets/icons/crypto/domi/chains/network-ethereum.png',
   };
 
   WalletNetwork get mayanNetwork => switch (chain) {
+    'BNB Chain' => WalletNetwork.bsc,
     'Arbitrum' => WalletNetwork.arbitrum,
     'Ethereum' => WalletNetwork.ethereum,
     'Base' => WalletNetwork.base,
     'BSC' => WalletNetwork.bsc,
     'Polygon' => WalletNetwork.polygon,
     'Optimism' => WalletNetwork.optimism,
+    'Solana' => WalletNetwork.solana,
     _ => WalletNetwork.arbitrum,
   };
 
   String get mayanChain => switch (chain) {
+    'BNB Chain' => 'bsc',
     'BSC' => 'bsc',
+    'Solana' => 'solana',
     _ => chain.toLowerCase(),
   };
 }
