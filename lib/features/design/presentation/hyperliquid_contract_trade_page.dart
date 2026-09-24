@@ -1413,17 +1413,88 @@ class _HyperliquidUsdcDepositSheetState
   bool _showKeypad = true;
   _ContractTransferAsset _asset = _assets[4];
   bool _submitting = false;
+  WalletBalance? _walletBalance;
+  bool _walletBalanceLoading = false;
+  int _walletBalanceRequestId = 0;
 
   AcoPalette get palette => widget.palette;
 
+  Color get _transferAccent => palette.accent;
+
   double get _available {
-    if (_cashToContract) return 0;
+    if (_cashToContract) return _walletBalanceAmount;
     return widget.contractAvailable;
   }
 
+  double get _walletBalanceAmount {
+    final balance = _walletBalance;
+    if (balance == null || balance.balance == null) return 0;
+    return double.tryParse(
+          formatChainAmount(balance.balance!, decimals: balance.decimals),
+        ) ??
+        0;
+  }
+
   double get _parsedAmount => double.tryParse(_amount) ?? 0;
-  bool get _canConfirm =>
-      !_submitting && _cashToContract && _parsedAmount >= _minimumAmount;
+  bool get _canConfirm => !_submitting && _cashToContract && _parsedAmount > 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadWalletBalance());
+  }
+
+  Future<void> _loadWalletBalance() async {
+    final requestId = ++_walletBalanceRequestId;
+    final identity = widget.walletIdentity;
+    if (mounted) {
+      setState(() {
+        _walletBalance = null;
+        _walletBalanceLoading = identity != null;
+      });
+    }
+    if (identity == null) return;
+
+    final tokenStore = await SecureAccountTokenStore().read();
+    if (!mounted || requestId != _walletBalanceRequestId) return;
+    if (tokenStore == null) {
+      setState(() {
+        _walletBalanceLoading = false;
+      });
+      return;
+    }
+
+    final portfolio = WalletPortfolioService();
+    try {
+      final balances = await portfolio.loadBalances(
+        network: _asset.mayanNetwork,
+        identity: identity,
+        derivedAddresses: await WalletPreferences.derivedAddresses(identity),
+        accessToken: tokenStore.accessToken,
+      );
+      if (!mounted || requestId != _walletBalanceRequestId) return;
+
+      WalletBalance? selectedBalance;
+      for (final balance in balances) {
+        if (balance.symbol.toUpperCase() == _asset.symbol.toUpperCase()) {
+          selectedBalance = balance;
+          break;
+        }
+      }
+      setState(() {
+        _walletBalance = selectedBalance;
+        _walletBalanceLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || requestId != _walletBalanceRequestId) return;
+      setState(() {
+        _walletBalance = null;
+        _walletBalanceLoading = false;
+      });
+    } finally {
+      portfolio.close();
+    }
+  }
 
   void _append(String value) {
     if (value == '.') {
@@ -1475,6 +1546,7 @@ class _HyperliquidUsdcDepositSheetState
       _asset = selected;
       _amount = '';
     });
+    unawaited(_loadWalletBalance());
   }
 
   Future<void> _showNotice(String message) => showCupertinoDialog<void>(
@@ -1494,6 +1566,37 @@ class _HyperliquidUsdcDepositSheetState
     ),
   );
 
+  Future<bool> _hasSufficientWalletBalance() async {
+    if (_walletBalanceLoading) {
+      await _showNotice('正在获取 ${_asset.symbol} 余额，请稍后重试');
+      return false;
+    }
+    final selectedBalance = _walletBalance;
+    if (selectedBalance == null ||
+        selectedBalance.balance == null ||
+        selectedBalance.error != null) {
+      if (mounted) {
+        await _showNotice('暂时无法获取 ${_asset.symbol} 余额，请稍后重试');
+      }
+      return false;
+    }
+
+    final requiredAmount = BigInt.parse(
+      LifiApiClient.toBaseUnits(
+        _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
+        selectedBalance.decimals,
+      ),
+    );
+    if (selectedBalance.balance! < requiredAmount) {
+      await _showNotice(
+        '当前 ${_asset.symbol} 余额不足，需要至少 '
+        '${_trimTrailingZeros(_parsedAmount.toStringAsFixed(6))} ${_asset.symbol}',
+      );
+      return false;
+    }
+    return true;
+  }
+
   Future<void> _submitDeposit() async {
     final identity = widget.walletIdentity;
     if (identity == null) {
@@ -1501,29 +1604,42 @@ class _HyperliquidUsdcDepositSheetState
       return;
     }
     if (!_canConfirm) {
-      await _showNotice('请输入至少 $_minimumAmount USDC');
+      await _showNotice('请输入有效的划转金额');
       return;
     }
     setState(() => _submitting = true);
     try {
-      final token = WalletChainRegistry.chains[_asset.mayanNetwork]?.usdc;
+      if (!await _hasSufficientWalletBalance()) return;
+      if (!mounted) return;
+      final token = _asset.mayanTokenAddress;
       if (token == null) {
-        throw const MayanHyperCoreDepositException('当前源链未配置 USDC');
+        throw const MayanHyperCoreDepositException('当前资产暂不支持划转');
       }
       final mayan = MayanHyperCoreDepositClient();
-      final quote = await mayan.quote(
-        amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
-        fromToken: token.address,
-        fromChain: _asset.mayanChain,
-        destinationAddress: identity.address,
-      );
-      if (!mounted) return;
-      await _showNotice(
-        '已获取 HyperCore 合约账户入金路由。\n\n'
-        '当前版本尚未集成 Mayan Swift v2 的 EVM 交易编码与签名，暂不能提交这笔交易。\n'
-        '路由：${quote.raw['fromChain'] ?? _asset.mayanChain} → HyperCore USDC (perps)',
-      );
-      mayan.close();
+      try {
+        final quote = await mayan.quote(
+          amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
+          fromToken: token,
+          fromChain: _asset.mayanChain,
+          destinationAddress: identity.address,
+        );
+        if (!mounted) return;
+        final expectedUsdc = double.tryParse(quote.expectedAmountOut);
+        if (expectedUsdc == null || expectedUsdc < _minimumAmount) {
+          await _showNotice(
+            '预计到账约 ${quote.expectedAmountOut} USDC，低于最低划转 '
+            '$_minimumAmount USDC',
+          );
+          return;
+        }
+        await _showNotice(
+          '已获取 HyperCore 合约账户入金路由。\n\n'
+          '当前版本尚未集成 Mayan Swift v2 的 EVM 交易编码与签名，暂不能提交这笔交易。\n'
+          '路由：${quote.raw['fromChain'] ?? _asset.mayanChain} → HyperCore USDC (perps)',
+        );
+      } finally {
+        mayan.close();
+      }
     } on MayanHyperCoreDepositException catch (error) {
       if (mounted) await _showNotice(error.message);
     } catch (_) {
@@ -1692,14 +1808,14 @@ class _HyperliquidUsdcDepositSheetState
                 Row(
                   children: [
                     Text(
-                      '可用 ${_formatMoney(_available)} ${_asset.symbol}',
+                      '可用 ${_walletBalanceLoading ? '--' : _formatMoney(_available)} ${_asset.symbol}',
                       style: TextStyle(color: palette.mutedText, fontSize: 15),
                     ),
                     const SizedBox(width: 9),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(28, 28),
-                      onPressed: () => setState(() {}),
+                      onPressed: () => unawaited(_loadWalletBalance()),
                       child: Icon(
                         CupertinoIcons.refresh,
                         size: 15,
@@ -1716,14 +1832,14 @@ class _HyperliquidUsdcDepositSheetState
                     vertical: 9,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF26A24).withValues(alpha: .08),
+                    color: _transferAccent.withValues(alpha: .08),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         CupertinoIcons.info_circle_fill,
-                        color: Color(0xFFF26A24),
+                        color: _transferAccent,
                         size: 16,
                       ),
                       const SizedBox(width: 7),
@@ -1737,7 +1853,7 @@ class _HyperliquidUsdcDepositSheetState
                             const TextSpan(text: '最低划转 '),
                             TextSpan(
                               text:
-                                  '${_trimTrailingZeros(_minimumAmount.toString())} ${_asset.symbol}',
+                                  '${_trimTrailingZeros(_minimumAmount.toString())} USDC',
                               style: TextStyle(
                                 color: palette.primaryText,
                                 fontWeight: FontWeight.w600,
@@ -1799,6 +1915,7 @@ class _HyperliquidUsdcDepositSheetState
                       onDelete: _delete,
                       onClear: () => setState(() => _amount = ''),
                       onHide: () => setState(() => _showKeypad = false),
+                      accentColor: palette.accent,
                       onConfirm: _submitDeposit,
                     ),
                   )
@@ -1807,12 +1924,22 @@ class _HyperliquidUsdcDepositSheetState
                     width: double.infinity,
                     height: 50,
                     child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
                       color: controlColor,
                       borderRadius: BorderRadius.circular(14),
                       onPressed: () => setState(() => _showKeypad = true),
-                      child: Text(
-                        '输入划转金额',
-                        style: TextStyle(color: palette.primaryText),
+                      child: Center(
+                        child: Text(
+                          '输入划转金额',
+                          maxLines: 1,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: 16,
+                            height: 1.2,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1893,6 +2020,28 @@ class _ContractTransferAsset {
     'Solana' => 'solana',
     _ => chain.toLowerCase(),
   };
+
+  String? get mayanTokenAddress {
+    if (symbol == 'BNB' || symbol == 'ETH') {
+      return '0x0000000000000000000000000000000000000000';
+    }
+    if (symbol == 'SOL') {
+      return 'So11111111111111111111111111111111111111112';
+    }
+    if (mayanNetwork == WalletNetwork.solana) {
+      return switch (symbol) {
+        'USDC' => WalletChainRegistry.solanaUsdc.address,
+        'USDT' => WalletChainRegistry.solanaUsdt.address,
+        _ => null,
+      };
+    }
+    final definition = WalletChainRegistry.chains[mayanNetwork];
+    return switch (symbol) {
+      'USDC' => definition?.usdc?.address,
+      'USDT' => definition?.usdt?.address,
+      _ => null,
+    };
+  }
 }
 
 class _ContractTransferAssetIcon extends StatelessWidget {
@@ -2129,6 +2278,7 @@ class _TransferNumberPad extends StatelessWidget {
     required this.onDelete,
     required this.onClear,
     required this.onHide,
+    required this.accentColor,
     required this.onConfirm,
   });
 
@@ -2138,6 +2288,7 @@ class _TransferNumberPad extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onClear;
   final VoidCallback onHide;
+  final Color accentColor;
   final VoidCallback onConfirm;
 
   @override
@@ -2222,9 +2373,7 @@ class _TransferNumberPad extends StatelessWidget {
                   child: CupertinoButton(
                     key: const Key('contract-transfer-confirm'),
                     padding: EdgeInsets.zero,
-                    color: canConfirm
-                        ? const Color(0xFFF26A24)
-                        : const Color(0xFF999999),
+                    color: canConfirm ? accentColor : const Color(0xFF999999),
                     disabledColor: palette.dark
                         ? const Color(0xFF3B3B3B)
                         : const Color(0xFF999999),
@@ -2233,7 +2382,7 @@ class _TransferNumberPad extends StatelessWidget {
                     child: const Text(
                       '确认',
                       style: TextStyle(
-                        color: _white,
+                        color: Color(0xFF000000),
                         fontSize: 18,
                         fontWeight: FontWeight.w700,
                       ),
