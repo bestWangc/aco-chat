@@ -197,7 +197,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       },
     );
     WidgetsBinding.instance.addObserver(this);
-    unawaited(_setLiveRoomWakelock(true));
+    _refreshLiveRoomWakelock();
     _apiClient = AccountApiClient();
     _accountSession = AccountSession(_apiClient);
     _skipNextRealtimeSnapshot = widget.initialRoom != null;
@@ -288,8 +288,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
+  void _refreshLiveRoomWakelock() {
+    if (_leaving) return;
+    // The OS can release a wakelock while the live room is active, so
+    // reassert it whenever the page becomes active or rebuilds.
+    unawaited(_setLiveRoomWakelock(true));
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshLiveRoomWakelock();
     if (state == AppLifecycleState.paused) {
       _hostHeartbeatTimer?.cancel();
       _hostHeartbeatTimer = null;
@@ -1774,7 +1782,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   @override
-  Widget build(BuildContext context) => _buildRoom(context);
+  Widget build(BuildContext context) {
+    _refreshLiveRoomWakelock();
+    return _buildRoom(context);
+  }
 }
 
 Future<void> _setLiveRoomWakelock(bool enabled) async {

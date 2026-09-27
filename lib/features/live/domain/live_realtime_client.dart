@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'live_realtime_connector.dart';
+
 typedef LiveRealtimeTicketLoader = Future<String> Function();
 typedef LiveRealtimeEventHandler = void Function(Object? event);
 
@@ -42,13 +44,13 @@ class LiveRealtimeClient {
     try {
       final ticket = await ticketLoader();
       if (_disposed) return;
-      final channel = WebSocketChannel.connect(
+      final channel = connectLiveRealtime(
         uri.replace(queryParameters: {'ticket': ticket}),
       );
 
-      // WebSocketChannel.connect() only creates the channel. The handshake
-      // result is reported by ready, so do not reset retry state or notify the
-      // room until the server has accepted this connection.
+      // The connector only creates the channel. The handshake result is
+      // reported by ready, so do not reset retry state or notify the room
+      // until the server has accepted this connection.
       try {
         await channel.ready.timeout(_handshakeTimeout);
       } on TimeoutException {
