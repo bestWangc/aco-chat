@@ -14,6 +14,8 @@ import 'package:http/http.dart' as http;
 class LifiApiClient {
   static const quoteTimeout = Duration(seconds: 30);
   static const requestTimeout = Duration(seconds: 15);
+  static const sameChainFee = .001;
+  static const crossChainFee = .005;
 
   LifiApiClient({http.Client? client, Uri? baseUri})
     : baseUri = baseUri ?? Uri.parse('https://li.quest/v1'),
@@ -36,10 +38,12 @@ class LifiApiClient {
     String? fromTokenAddress,
     String? toTokenAddress,
     double slippage = .02,
-    double fee = .005,
+    double? fee,
   }) async {
     final fromChain = chainId(fromNetwork);
     final toChain = chainId(toNetwork);
+    final integratorFee =
+        fee ?? (fromChain == toChain ? sameChainFee : crossChainFee);
     final uri = baseUri.replace(
       path: '${baseUri.path}/quote',
       queryParameters: {
@@ -51,7 +55,7 @@ class LifiApiClient {
         'fromAddress': fromAddress,
         if (toAddress != null && toAddress.isNotEmpty) 'toAddress': toAddress,
         'slippage': slippage.toString(),
-        'fee': fee.toString(),
+        'fee': integratorFee.toString(),
         'integrator': 'aco',
       },
     );

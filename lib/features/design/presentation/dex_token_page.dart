@@ -867,7 +867,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   }
 
   void _showTradeSheet(bool buying) {
-    showCupertinoModalPopup<void>(
+    showCupertinoModalPopup<String>(
       context: context,
       barrierColor: CupertinoColors.black.withValues(alpha: .58),
       builder: (_) => _DexTradeSheet(
@@ -876,6 +876,24 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
         buying: buying,
         selectedChain: widget.selectedChain,
         walletIdentity: widget.walletIdentity,
+      ),
+    ).then((hash) {
+      if (hash != null && mounted) _showTradeSubmitted(hash);
+    });
+  }
+
+  void _showTradeSubmitted(String hash) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('交易已提交'),
+        content: Text('交易哈希：$hash'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
@@ -2710,6 +2728,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
   late _DexQuoteAsset _quoteAsset = _availableQuotes.first;
   Map<String, String> _balances = const {};
   bool _loadingBalance = true;
+  bool _submitting = false;
 
   @override
   void initState() {
@@ -2808,6 +2827,276 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
   String get _availableBalance => _loadingBalance
       ? '读取中…'
       : '${_balances[_paySymbol.toUpperCase()] ?? '0'} $_paySymbol';
+
+  WalletNetwork get _network {
+    switch (widget.token.chain.trim().toLowerCase()) {
+      case 'bsc':
+      case 'bnb':
+      case 'bnb chain':
+        return WalletNetwork.bsc;
+      case 'polygon':
+      case 'matic':
+        return WalletNetwork.polygon;
+      case 'base':
+        return WalletNetwork.base;
+      case 'arbitrum':
+        return WalletNetwork.arbitrum;
+      case 'optimism':
+        return WalletNetwork.optimism;
+      case 'sol':
+      case 'solana':
+        return WalletNetwork.solana;
+      case 'tron':
+      case 'trx':
+        return WalletNetwork.tron;
+      default:
+        return WalletNetwork.ethereum;
+    }
+  }
+
+  _WalletChain get _tradeChain => _supportedWalletChains.firstWhere(
+    (chain) => chain.network == _network,
+    orElse: () => widget.selectedChain,
+  );
+
+  String _nativeSymbol(WalletNetwork network) => switch (network) {
+    WalletNetwork.ethereum ||
+    WalletNetwork.arbitrum ||
+    WalletNetwork.optimism ||
+    WalletNetwork.base => 'ETH',
+    WalletNetwork.bsc => 'BNB',
+    WalletNetwork.polygon => 'POL',
+    WalletNetwork.tron => 'TRX',
+    WalletNetwork.solana => 'SOL',
+  };
+
+  int _decimals(String symbol) =>
+      symbol.toUpperCase() == 'USDT' || symbol.toUpperCase() == 'USDC' ? 6 : 18;
+
+  Future<void> _submitTrade() async {
+    if (_submitting) return;
+    final amount = _amountController.text.trim();
+    final parsed = double.tryParse(amount);
+    final identity = widget.walletIdentity;
+    if (parsed == null || parsed <= 0) {
+      _showTradeMessage('交易', '请输入有效的交易数量。');
+      return;
+    }
+    if (identity == null) {
+      _showTradeMessage('交易', '请先连接钱包。');
+      return;
+    }
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(_buying ? '确认买入' : '确认卖出'),
+        content: Text('将使用 $amount $_paySymbol 进行交易，是否继续？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('确认'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _submitting = true);
+    try {
+      final tokenStore = await SecureAccountTokenStore().read();
+      if (tokenStore == null) throw const FormatException('钱包服务尚未连接。');
+      if (_network == WalletNetwork.solana || _network == WalletNetwork.tron) {
+        throw const FormatException('当前买卖流程暂支持 EVM 公链。');
+      }
+      final mnemonic = await _unlockTradeMnemonic(identity);
+      if (!mounted || mnemonic == null) return;
+      final client = LifiApiClient();
+      try {
+        final fromAddress = await _addressForChain(identity, _tradeChain);
+        if (fromAddress == null || fromAddress.isEmpty) {
+          throw const FormatException('当前公链钱包地址不可用。');
+        }
+        final quote = await client.quote(
+          fromNetwork: _network,
+          fromToken: _paySymbol,
+          toNetwork: _network,
+          toToken: _receiveSymbol,
+          fromAmount: amount,
+          fromDecimals: _decimals(_paySymbol),
+          fromAddress: fromAddress,
+          fromTokenAddress: _nonEmptyAddress(
+            _buying ? _quoteAsset.address : widget.token.address,
+          ),
+          toTokenAddress: _nonEmptyAddress(
+            _buying ? widget.token.address : _quoteAsset.address,
+          ),
+        );
+        final request = quote.transactionRequest;
+        if (request == null) throw const FormatException('暂时无法构造交易。');
+        final rpc = WalletRpcClient(
+          client: http.Client(),
+          directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+          ownsClient: true,
+        );
+        try {
+          final isEvm =
+              _network != WalletNetwork.solana &&
+              _network != WalletNetwork.tron;
+          final isNativePayment =
+              _paySymbol.toUpperCase() == _nativeSymbol(_network);
+          if (isEvm && !isNativePayment) {
+            final spender = request['to'] as String?;
+            if (spender == null || !spender.startsWith('0x')) {
+              throw const FormatException('交易授权地址无效。');
+            }
+            final tokenAddress = _buying
+                ? _quoteAsset.address
+                : widget.token.address;
+            final approval = await const WalletTransferService()
+                .ensureErc20AllowanceWithRpc(
+                  mnemonic: mnemonic,
+                  from: fromAddress,
+                  network: _network,
+                  accessToken: tokenStore.accessToken,
+                  rpc: rpc,
+                  tokenAddress: tokenAddress,
+                  spender: spender,
+                  requiredAmount: LifiApiClient.toBaseUnits(
+                    amount,
+                    _decimals(_paySymbol),
+                  ),
+                );
+            if (approval != null) {
+              final approved = await const WalletTransferService()
+                  .waitForErc20AllowanceWithRpc(
+                    network: _network,
+                    accessToken: tokenStore.accessToken,
+                    rpc: rpc,
+                    owner: fromAddress,
+                    tokenAddress: tokenAddress,
+                    spender: spender,
+                    requiredAmount: LifiApiClient.toBaseUnits(
+                      amount,
+                      _decimals(_paySymbol),
+                    ),
+                  );
+              if (!approved) throw const FormatException('代币授权尚未生效。');
+            }
+          }
+          final result = await const WalletTransferService()
+              .executeTransactionRequestWithRpc(
+                mnemonic: mnemonic,
+                from: fromAddress,
+                network: _network,
+                accessToken: tokenStore.accessToken,
+                rpc: rpc,
+                transactionRequest: request,
+              );
+          if (!mounted) return;
+          unawaited(_recordTrade(result.hash, fromAddress, request, quote));
+          Navigator.of(context).pop(result.hash);
+        } finally {
+          rpc.close();
+        }
+      } finally {
+        client.close();
+      }
+    } catch (error) {
+      if (mounted) _showTradeMessage('交易失败', '$error');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  String? _nonEmptyAddress(String value) =>
+      value.trim().isEmpty ? null : value.trim();
+
+  Future<void> _recordTrade(
+    String txHash,
+    String wallet,
+    Map<String, dynamic> request,
+    LifiQuote quote,
+  ) async {
+    final service = DexTradeService();
+    try {
+      await service.record(
+        network: _network.name,
+        wallet: wallet,
+        dex: quote.tool,
+        pool: '${quote.pool ?? request['to'] ?? quote.tool}',
+        txHash: txHash,
+        baseToken: quote.fromTokenAddress,
+        quoteToken: quote.toTokenAddress,
+        toNetwork: _network.name,
+      );
+    } catch (error) {
+      debugPrint('[DexTrade] detail trade record failed: $error');
+    } finally {
+      service.close();
+    }
+  }
+
+  Future<String?> _unlockTradeMnemonic(WalletIdentity identity) async {
+    final password = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        var value = '';
+        return StatefulBuilder(
+          builder: (context, setState) => CupertinoAlertDialog(
+            title: const Text('验证钱包密码'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CupertinoTextField(
+                obscureText: true,
+                autofocus: true,
+                placeholder: '输入钱包密码',
+                onChanged: (next) => setState(() => value = next),
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: value.length < 8
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(value),
+                child: const Text('确认'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (password == null) return null;
+    return WalletSecurity().unlockMnemonic(
+      store: SecureWalletSecretStore(),
+      walletAddress: identity.address,
+      password: password,
+    );
+  }
+
+  void _showTradeMessage(String title, String message) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+  }
 
   void _setAmountFraction(double fraction) {
     final balance =
@@ -3092,9 +3381,9 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
                   padding: EdgeInsets.zero,
                   color: mutedSurface,
                   borderRadius: BorderRadius.circular(26),
-                  onPressed: null,
+                  onPressed: _submitting ? null : _submitTrade,
                   child: Text(
-                    _buying ? '买入' : '卖出',
+                    _submitting ? '处理中…' : (_buying ? '买入' : '卖出'),
                     style: TextStyle(
                       color: palette.mutedText.withValues(alpha: .7),
                       fontSize: 18,

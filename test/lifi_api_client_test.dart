@@ -49,7 +49,7 @@ void main() {
     );
   });
 
-  test('includes the configured LI.FI fee in quote requests', () async {
+  test('uses the lower default fee for same-chain quotes', () async {
     final client = _QuoteClient();
     final api = LifiApiClient(
       client: client,
@@ -64,8 +64,45 @@ void main() {
       fromDecimals: 18,
       fromAddress: '0xabc',
     );
-    expect(client.uri?.queryParameters['fee'], '0.005');
+    expect(client.uri?.queryParameters['fee'], '0.001');
     expect(client.uri?.queryParameters['integrator'], 'aco');
+  });
+
+  test('keeps the higher default fee for cross-chain quotes', () async {
+    final client = _QuoteClient();
+    final api = LifiApiClient(
+      client: client,
+      baseUri: Uri.parse('https://li.quest/v1'),
+    );
+    await api.quote(
+      fromNetwork: WalletNetwork.ethereum,
+      fromToken: 'ETH',
+      toNetwork: WalletNetwork.bsc,
+      toToken: 'USDC',
+      fromAmount: '1',
+      fromDecimals: 18,
+      fromAddress: '0xabc',
+    );
+    expect(client.uri?.queryParameters['fee'], '0.005');
+  });
+
+  test('allows overriding the default LI.FI fee', () async {
+    final client = _QuoteClient();
+    final api = LifiApiClient(
+      client: client,
+      baseUri: Uri.parse('https://li.quest/v1'),
+    );
+    await api.quote(
+      fromNetwork: WalletNetwork.ethereum,
+      fromToken: 'ETH',
+      toNetwork: WalletNetwork.ethereum,
+      toToken: 'USDC',
+      fromAmount: '1',
+      fromDecimals: 18,
+      fromAddress: '0xabc',
+      fee: .002,
+    );
+    expect(client.uri?.queryParameters['fee'], '0.002');
   });
 }
 
@@ -88,7 +125,8 @@ class _QuoteClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     uri = request.url;
-    const body = '{"estimate":{"fromAmount":"1000000000000000000",'
+    const body =
+        '{"estimate":{"fromAmount":"1000000000000000000",'
         '"toAmount":"1","toAmountMin":"1"}}';
     return http.StreamedResponse(
       Stream<List<int>>.value(body.codeUnits),
