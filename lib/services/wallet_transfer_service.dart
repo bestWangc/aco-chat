@@ -126,6 +126,41 @@ class WalletTransferService {
     );
   }
 
+  /// Waits until an ERC-20 allowance is visible on the chain after approval.
+  Future<bool> waitForErc20AllowanceWithRpc({
+    required WalletNetwork network,
+    required String accessToken,
+    required WalletRpcClient rpc,
+    required String owner,
+    required String tokenAddress,
+    required String spender,
+    required String requiredAmount,
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    final endpoints = await rpc.loadEndpoints(
+      network: network.name,
+      accessToken: accessToken,
+    );
+    final data = '0xdd62ed3e${_encodeAddress(owner)}${_encodeAddress(spender)}';
+    final required = BigInt.parse(requiredAmount);
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final response = await rpc.postJson(endpoints, {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'eth_call',
+        'params': [
+          {'to': tokenAddress, 'data': data},
+          'latest',
+        ],
+      });
+      final allowance = _hexToBigInt(response['result'] as String? ?? '0x0');
+      if (allowance >= required) return true;
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    return false;
+  }
+
   Future<WalletTransferResult> executeWithRpc({
     required String mnemonic,
     required String from,

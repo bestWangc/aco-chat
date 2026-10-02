@@ -35,6 +35,7 @@ class AcoScreenPage extends StatelessWidget {
     required this.onThemeToggle,
     this.onWalletReady,
     this.onWalletSelected,
+    this.onWalletTotalChanged,
     this.displayName,
     this.accountId,
     this.chatUserID,
@@ -49,6 +50,7 @@ class AcoScreenPage extends StatelessWidget {
     this.walletIdentity,
     this.walletSecretStore,
     this.walletName = 'Wallet1',
+    this.walletTotals = const <String, double>{},
     this.onWalletNameChanged,
     this.walletChainIndex = 0,
     this.walletAssetRevision = 0,
@@ -79,6 +81,7 @@ class AcoScreenPage extends StatelessWidget {
   final VoidCallback onThemeToggle;
   final Future<void> Function(WalletIdentity, String)? onWalletReady;
   final Future<void> Function(WalletIdentity)? onWalletSelected;
+  final ValueChanged<double>? onWalletTotalChanged;
   final String? displayName;
   final String? accountId;
   final String? chatUserID;
@@ -93,6 +96,7 @@ class AcoScreenPage extends StatelessWidget {
   final WalletIdentity? walletIdentity;
   final WalletSecretStore? walletSecretStore;
   final String walletName;
+  final Map<String, double> walletTotals;
   final Future<void> Function(String name)? onWalletNameChanged;
   final int walletChainIndex;
   final int walletAssetRevision;
@@ -137,6 +141,7 @@ class AcoScreenPage extends StatelessWidget {
         walletIdentity: walletIdentity,
         walletLoginFuture: walletLoginFuture,
         walletName: walletName,
+        onTotalBalanceChanged: onWalletTotalChanged,
         selectedChain: _supportedWalletChains[walletChainIndex],
         onSendTokenSelected: onSendTokenSelected ?? (_) {},
         onAssetSelected: onAssetSelected ?? (_) {},
@@ -146,6 +151,7 @@ class AcoScreenPage extends StatelessWidget {
         onOpen: onOpen,
         walletIdentity: walletIdentity,
         walletName: walletName,
+        walletTotals: walletTotals,
         selectedChain: walletChainIndex,
         onChainSelected: onWalletChainSelected ?? (_) {},
         onWalletSelected: onWalletSelected ?? (_) async {},
@@ -155,6 +161,7 @@ class AcoScreenPage extends StatelessWidget {
         onOpen: onOpen,
         walletIdentity: walletIdentity,
         walletName: walletName,
+        walletTotals: walletTotals,
         selectedChain: walletChainIndex,
         onChainSelected: onWalletChainSelected ?? (_) {},
         onWalletSelected: onWalletSelected ?? (_) async {},

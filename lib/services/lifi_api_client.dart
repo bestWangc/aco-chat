@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:async';
 
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_portfolio_models.dart';
@@ -11,6 +12,9 @@ import 'package:http/http.dart' as http;
 /// step. Callers must still perform ERC-20 allowance checks and show the
 /// transaction confirmation UI before signing or broadcasting it.
 class LifiApiClient {
+  static const quoteTimeout = Duration(seconds: 30);
+  static const requestTimeout = Duration(seconds: 15);
+
   LifiApiClient({http.Client? client, Uri? baseUri})
     : baseUri = baseUri ?? Uri.parse('https://li.quest/v1'),
       _client = client ?? http.Client(),
@@ -51,9 +55,12 @@ class LifiApiClient {
         'integrator': 'aco',
       },
     );
-    final response = await _client
-        .get(uri)
-        .timeout(const Duration(seconds: 15));
+    late final http.Response response;
+    try {
+      response = await _client.get(uri).timeout(quoteTimeout);
+    } on TimeoutException {
+      throw const LifiException('LI.FI 报价请求超时，请检查网络后重试。');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = _errorMessage(response);
       developer.log(
@@ -82,9 +89,7 @@ class LifiApiClient {
         'toChain': '${chainId(toNetwork)}',
       },
     );
-    final response = await _client
-        .get(uri)
-        .timeout(const Duration(seconds: 15));
+    final response = await _client.get(uri).timeout(requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw LifiException('LI.FI 状态查询失败（${response.statusCode}）');
     }
@@ -103,7 +108,7 @@ class LifiApiClient {
             queryParameters: {'chains': '${chainId(network)}'},
           ),
         )
-        .timeout(const Duration(seconds: 15));
+        .timeout(requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw LifiException('LI.FI 代币列表获取失败（${response.statusCode}）');
     }
@@ -245,6 +250,9 @@ class LifiQuote {
     required this.transactionRequest,
     this.priceImpact,
     this.fee,
+    this.fromTokenAddress,
+    this.toTokenAddress,
+    this.pool,
   });
 
   final String fromAmount;
@@ -254,11 +262,16 @@ class LifiQuote {
   final Map<String, dynamic>? transactionRequest;
   final String? priceImpact;
   final String? fee;
+  final String? fromTokenAddress;
+  final String? toTokenAddress;
+  final String? pool;
 
   factory LifiQuote.fromJson(Map<String, dynamic> json) {
     final estimate = json['estimate'] as Map<String, dynamic>? ?? const {};
     final action = json['action'];
     final actionMap = action is Map ? action : const <String, dynamic>{};
+    final fromToken = actionMap['fromToken'];
+    final toToken = actionMap['toToken'];
     final tool = json['tool'];
     final toolName = tool is Map ? tool['name'] : tool;
     return LifiQuote(
@@ -271,7 +284,34 @@ class LifiQuote {
           : null,
       priceImpact: _optionalString(estimate['priceImpact']),
       fee: _feeSummary(estimate),
+      fromTokenAddress: _tokenAddress(fromToken),
+      toTokenAddress: _tokenAddress(toToken),
+      pool: _findPool(json),
     );
+  }
+
+  static String? _tokenAddress(Object? token) {
+    if (token is! Map) return null;
+    return _optionalString(token['address']);
+  }
+
+  static String? _findPool(Object? value) {
+    if (value is Map) {
+      for (final key in ['pool', 'poolAddress', 'pairAddress']) {
+        final candidate = _optionalString(value[key]);
+        if (candidate != null) return candidate;
+      }
+      for (final item in value.values) {
+        final candidate = _findPool(item);
+        if (candidate != null) return candidate;
+      }
+    } else if (value is Iterable) {
+      for (final item in value) {
+        final candidate = _findPool(item);
+        if (candidate != null) return candidate;
+      }
+    }
+    return null;
   }
 
   static String? _optionalString(Object? value) {

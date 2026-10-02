@@ -8,6 +8,7 @@ class _WalletChains extends StatefulWidget {
     required this.onChainSelected,
     required this.onWalletSelected,
     required this.walletName,
+    required this.walletTotals,
     this.walletIdentity,
   });
   final AcoPalette palette;
@@ -16,6 +17,7 @@ class _WalletChains extends StatefulWidget {
   final ValueChanged<int> onChainSelected;
   final Future<void> Function(WalletIdentity) onWalletSelected;
   final String walletName;
+  final Map<String, double> walletTotals;
   final WalletIdentity? walletIdentity;
 
   @override
@@ -38,7 +40,8 @@ class _WalletChainsState extends State<_WalletChains> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedChain != widget.selectedChain ||
         oldWidget.walletIdentity?.address != widget.walletIdentity?.address ||
-        oldWidget.walletName != widget.walletName) {
+        oldWidget.walletName != widget.walletName ||
+        oldWidget.walletTotals != widget.walletTotals) {
       _selectedChain = widget.selectedChain;
       _walletsFuture = _loadWallets(widget.selectedChain);
     }
@@ -128,6 +131,12 @@ class _WalletChainsState extends State<_WalletChains> {
           address: address,
           name: storedWallet.name,
           current: identity.address.toLowerCase() == currentAddress,
+          totalUsd:
+              widget.walletTotals[_walletTotalKey(
+                identity.address,
+                selectedChain.network,
+              )] ??
+              0,
         ),
       );
     }
@@ -242,6 +251,7 @@ class _WalletChainsState extends State<_WalletChains> {
                                     name: wallet.name,
                                     address: wallet.address,
                                     current: wallet.current,
+                                    totalUsd: wallet.totalUsd,
                                     onSelect: () => widget.onWalletSelected(
                                       wallet.identity,
                                     ),
@@ -281,12 +291,14 @@ class _WalletListItem {
     required this.address,
     required this.name,
     required this.current,
+    required this.totalUsd,
   });
 
   final WalletIdentity identity;
   final String address;
   final String name;
   final bool current;
+  final double totalUsd;
 }
 
 class _WalletChainRail extends StatelessWidget {
@@ -365,6 +377,7 @@ class _WalletChainCard extends StatelessWidget {
     required this.name,
     required this.address,
     required this.current,
+    required this.totalUsd,
     required this.onSelect,
     required this.onOpenDetails,
   });
@@ -372,6 +385,7 @@ class _WalletChainCard extends StatelessWidget {
   final String name;
   final String address;
   final bool current;
+  final double totalUsd;
   final VoidCallback onSelect;
   final VoidCallback onOpenDetails;
 
@@ -469,7 +483,7 @@ class _WalletChainCard extends StatelessWidget {
                     ],
                   ),
                   Text(
-                    r'$0.00',
+                    _formatUsd(totalUsd),
                     style: TextStyle(
                       color: palette.primaryText,
                       fontSize: AcoTypography.body,
@@ -523,3 +537,11 @@ class _WalletChainCard extends StatelessWidget {
     ),
   );
 }
+
+String _formatUsd(double value) {
+  if (!value.isFinite) return r'$0.00';
+  return '\$${value.toStringAsFixed(2)}';
+}
+
+String _walletTotalKey(String address, WalletNetwork network) =>
+    '${address.toLowerCase()}:${network.name}';

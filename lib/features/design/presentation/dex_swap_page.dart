@@ -23,6 +23,7 @@ class _DexSwapContent extends StatefulWidget {
 }
 
 class _DexSwapContentState extends State<_DexSwapContent> {
+  static const _quoteIntervalSeconds = 15;
   _WalletChain _fromChain = _supportedWalletChains.first;
   _WalletChain _toChain = _supportedWalletChains.first;
   late String _fromSymbol;
@@ -30,8 +31,18 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   String _fromAmount = '0';
   LifiQuote? _quote;
   bool _loading = false;
-  Timer? _quoteDebounce;
+  bool _submitting = false;
+  BuildContext? _authorizationNoticeContext;
+  Timer? _quoteTimer;
+  int _quoteSecondsRemaining = 0;
+  bool _quotePending = false;
   WalletIdentity? _resolvedIdentity;
+  Future<DexSwapRecord?>? _recentRecordFuture;
+  Map<String, WalletBalance> _balanceSnapshot = const {};
+  String? _quoteKey;
+  String? _quoteSourceTokenAddress;
+  int? _quoteSourceDecimals;
+  DateTime? _quoteFetchedAt;
 
   AcoPalette get palette => widget.palette;
   _WalletChain get fromChain => _fromChain;
@@ -49,7 +60,11 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     _toChain = widget.selectedChain;
     _fromSymbol = _nativeSymbol;
     _toSymbol = 'USDC';
-    if (widget.walletIdentity == null) unawaited(_loadWalletIdentity());
+    if (widget.walletIdentity == null) {
+      unawaited(_loadWalletIdentity());
+    } else {
+      _refreshRecentRecord();
+    }
   }
 
   String get _nativeSymbol => fromChain.nativeToken.symbol;
@@ -74,6 +89,10 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         _toSymbol = widget.ethFirst ? 'USDC' : _nativeSymbol;
         _fromAmount = '0';
         _quote = null;
+        _clearQuoteCache();
+        _quoteTimer?.cancel();
+        _quoteTimer = null;
+        _quoteSecondsRemaining = 0;
       });
     }
   }
@@ -82,21 +101,114 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     final identity = await WalletPreferences.walletIdentity();
     if (!mounted || widget.walletIdentity != null || identity == null) return;
     setState(() => _resolvedIdentity = identity);
-    _scheduleQuote();
+    _refreshRecentRecord();
   }
 
-  void _scheduleQuote() {
-    _quoteDebounce?.cancel();
-    final parsedAmount = double.tryParse(_normalizedFromAmount);
-    if (parsedAmount == null || parsedAmount <= 0 || walletIdentity == null) {
-      return;
-    }
-    _quoteDebounce = Timer(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        _requestQuote(context, showNotice: false, execute: false);
-      }
+  void _refreshRecentRecord() {
+    final identity = walletIdentity;
+    if (identity == null || identity.address.isEmpty) return;
+    setState(() {
+      _recentRecordFuture = _loadRecentRecord(identity);
     });
   }
+
+  Future<DexSwapRecord?> _loadRecentRecord(WalletIdentity identity) async {
+    final tokens = await SecureAccountTokenStore().read();
+    if (tokens == null) return null;
+    final api = AccountApiClient();
+    late final List<Map<String, dynamic>> rows;
+    try {
+      rows = await api.listDexTrades(
+        wallet: identity.address,
+        token: tokens.accessToken,
+      );
+    } finally {
+      api.close();
+    }
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    final network = '${row['network'] ?? ''}';
+    final fromAddress = '${row['base_token'] ?? ''}';
+    final toAddress = '${row['quote_token'] ?? ''}';
+    return DexSwapRecord(
+      source: 'app',
+      network: network,
+      fromAmount: '${row['base_amount'] ?? ''}',
+      fromSymbol: _recordTokenSymbol(network, fromAddress),
+      toAmount: '${row['quote_amount'] ?? ''}',
+      toSymbol: _recordTokenSymbol(network, toAddress),
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      status: '${row['status'] ?? 'pending'}',
+      createdAt:
+          DateTime.tryParse('${row['timestamp'] ?? ''}') ?? DateTime.now(),
+    );
+  }
+
+  void _startQuoteCycle() {
+    final parsedAmount = double.tryParse(_normalizedFromAmount);
+    if (parsedAmount == null || parsedAmount <= 0 || walletIdentity == null) {
+      _stopQuoteCycle();
+      return;
+    }
+    _quoteTimer?.cancel();
+    setState(() => _quoteSecondsRemaining = _quoteIntervalSeconds);
+    _quoteTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_quoteSecondsRemaining <= 1) {
+        setState(() => _quoteSecondsRemaining = _quoteIntervalSeconds);
+        _requestQuote(context, showNotice: false, execute: false);
+      } else {
+        setState(() => _quoteSecondsRemaining--);
+      }
+    });
+    if (mounted) {
+      _requestQuote(context, showNotice: false, execute: false);
+    }
+  }
+
+  void _stopQuoteCycle() {
+    _quoteTimer?.cancel();
+    _quoteTimer = null;
+    if (mounted && _quoteSecondsRemaining != 0) {
+      setState(() => _quoteSecondsRemaining = 0);
+    } else {
+      _quoteSecondsRemaining = 0;
+    }
+  }
+
+  void _clearQuoteCache() {
+    _quoteKey = null;
+    _quoteSourceTokenAddress = null;
+    _quoteSourceDecimals = null;
+    _quoteFetchedAt = null;
+  }
+
+  bool _isReusableQuote(String requestKey) {
+    final fetchedAt = _quoteFetchedAt;
+    return _quote != null &&
+        _quoteKey == requestKey &&
+        fetchedAt != null &&
+        DateTime.now().difference(fetchedAt) < const Duration(seconds: 30);
+  }
+
+  String _quoteRequestKey({
+    required _WalletChain sourceChain,
+    required String sourceSymbol,
+    required _WalletChain targetChain,
+    required String targetSymbol,
+    required String amount,
+    required String fromAddress,
+    required String toAddress,
+  }) => [
+    sourceChain.network.name,
+    sourceSymbol.toUpperCase(),
+    targetChain.network.name,
+    targetSymbol.toUpperCase(),
+    amount,
+    fromAddress.toLowerCase(),
+    toAddress.toLowerCase(),
+  ].join('|');
 
   void _setSwap(
     _WalletChain nextFromChain,
@@ -105,6 +217,11 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     String to,
     String amount,
   ) {
+    final selectionChanged =
+        _fromChain.network != nextFromChain.network ||
+        _toChain.network != nextToChain.network ||
+        _fromSymbol.toUpperCase() != from.toUpperCase() ||
+        _toSymbol.toUpperCase() != to.toUpperCase();
     setState(() {
       _fromChain = nextFromChain;
       _toChain = nextToChain;
@@ -112,13 +229,32 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       _toSymbol = to;
       _fromAmount = amount;
       _quote = null;
+      _clearQuoteCache();
     });
-    _scheduleQuote();
+    final parsedAmount = double.tryParse(_normalizedFromAmount);
+    if (parsedAmount == null || parsedAmount <= 0) {
+      _stopQuoteCycle();
+    } else if (selectionChanged) {
+      _startQuoteCycle();
+    }
+  }
+
+  void _setMaxAmount(String amount) {
+    _fromAmount = amount;
+    _quote = null;
+    _clearQuoteCache();
+    if (mounted) setState(() {});
+    if (double.tryParse(amount.replaceAll(',', '').trim()) != null &&
+        double.parse(amount.replaceAll(',', '').trim()) > 0) {
+      _startQuoteCycle();
+    } else {
+      _stopQuoteCycle();
+    }
   }
 
   @override
   void dispose() {
-    _quoteDebounce?.cancel();
+    _quoteTimer?.cancel();
     super.dispose();
   }
 
@@ -127,23 +263,30 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     bool showNotice = true,
     bool execute = true,
   }) async {
-    if (_loading) return;
+    if (_loading) {
+      if (!execute) _quotePending = true;
+      return;
+    }
     final identity = walletIdentity;
     if (identity == null) {
       if (showNotice) _showNotice(context, '兑换', '请先连接钱包继续兑换。');
       return;
     }
-    final fromAddress = await _addressForChain(identity, fromChain);
-    final toAddress = await _addressForChain(identity, toChain);
+    final sourceSymbol = _fromSymbol;
+    final sourceChain = fromChain;
+    final targetSymbol = _toSymbol;
+    final targetChain = toChain;
+    final fromAddress = await _addressForChain(identity, sourceChain);
+    final toAddress = await _addressForChain(identity, targetChain);
     if (!context.mounted) return;
     if (fromAddress == null || fromAddress.isEmpty) {
       if (showNotice) {
-        await _showMissingChainWallet(context, fromChain);
+        await _showMissingChainWallet(context, sourceChain);
       }
       return;
     }
     if (toAddress == null || toAddress.isEmpty) {
-      if (showNotice) await _showMissingChainWallet(context, toChain);
+      if (showNotice) await _showMissingChainWallet(context, targetChain);
       return;
     }
     final amount = _normalizedFromAmount;
@@ -152,61 +295,82 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       if (showNotice) _showNotice(context, '兑换', '请输入有效的兑换金额。');
       return;
     }
+    final requestKey = _quoteRequestKey(
+      sourceChain: sourceChain,
+      sourceSymbol: sourceSymbol,
+      targetChain: targetChain,
+      targetSymbol: targetSymbol,
+      amount: amount,
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+    );
     if (execute &&
-        !await _hasSufficientBalance(context, identity, amount, fromChain)) {
+        !await _hasSufficientBalance(
+          context,
+          identity,
+          amount,
+          sourceChain,
+          sourceSymbol,
+        )) {
       return;
     }
+    final cachedQuote = execute && _isReusableQuote(requestKey) ? _quote : null;
     setState(() => _loading = true);
-    final client = LifiApiClient();
+    LifiApiClient? client;
     try {
-      final nativeSymbol = switch (fromChain.network) {
-        WalletNetwork.ethereum ||
-        WalletNetwork.base ||
-        WalletNetwork.arbitrum ||
-        WalletNetwork.optimism => 'ETH',
-        WalletNetwork.bsc => 'BNB',
-        WalletNetwork.polygon => 'POL',
-        WalletNetwork.tron => 'TRX',
-        WalletNetwork.solana => 'SOL',
-      };
-      final sourceSymbol = _fromSymbol;
-      final targetSymbol = _toSymbol;
-      final sourceDecimals = _decimalsFor(fromChain, sourceSymbol);
-      List<LifiToken> sourceTokens = const [];
-      List<LifiToken> targetTokens = const [];
-      try {
-        sourceTokens = await client.tokens(fromChain.network);
-        targetTokens = fromChain.network == toChain.network
-            ? sourceTokens
-            : await client.tokens(toChain.network);
-      } catch (_) {
-        // The local registry remains a valid offline fallback.
+      late final LifiQuote quote;
+      late final String? sourceTokenAddress;
+      late final int resolvedSourceDecimals;
+      if (cachedQuote != null) {
+        quote = cachedQuote;
+        sourceTokenAddress = _quoteSourceTokenAddress;
+        resolvedSourceDecimals =
+            _quoteSourceDecimals ?? _decimalsFor(sourceChain, sourceSymbol);
+      } else {
+        client = LifiApiClient();
+        final sourceDecimals = _decimalsFor(sourceChain, sourceSymbol);
+        List<LifiToken> sourceTokens = const [];
+        List<LifiToken> targetTokens = const [];
+        try {
+          sourceTokens = await client.tokens(sourceChain.network);
+          targetTokens = sourceChain.network == targetChain.network
+              ? sourceTokens
+              : await client.tokens(targetChain.network);
+        } catch (_) {
+          // The local registry remains a valid offline fallback.
+        }
+        final sourceToken = sourceTokens.cast<LifiToken?>().firstWhere(
+          (token) => token?.symbol.toUpperCase() == sourceSymbol.toUpperCase(),
+          orElse: () => null,
+        );
+        final targetToken = targetTokens.cast<LifiToken?>().firstWhere(
+          (token) => token?.symbol.toUpperCase() == targetSymbol.toUpperCase(),
+          orElse: () => null,
+        );
+        sourceTokenAddress = sourceToken?.address;
+        resolvedSourceDecimals = sourceToken?.decimals ?? sourceDecimals;
+        quote = await client.quote(
+          fromNetwork: sourceChain.network,
+          fromToken: sourceSymbol,
+          toNetwork: targetChain.network,
+          toToken: targetSymbol,
+          fromAmount: amount,
+          fromDecimals: resolvedSourceDecimals,
+          fromAddress: fromAddress,
+          toAddress: toAddress,
+          fromTokenAddress: sourceToken?.address,
+          toTokenAddress: targetToken?.address,
+        );
+        if (!context.mounted) return;
+        setState(() {
+          _quote = quote;
+          _quoteKey = requestKey;
+          _quoteSourceTokenAddress = sourceTokenAddress;
+          _quoteSourceDecimals = resolvedSourceDecimals;
+          _quoteFetchedAt = DateTime.now();
+        });
       }
-      final sourceToken = sourceTokens.cast<LifiToken?>().firstWhere(
-        (token) => token?.symbol.toUpperCase() == sourceSymbol.toUpperCase(),
-        orElse: () => null,
-      );
-      final targetToken = targetTokens.cast<LifiToken?>().firstWhere(
-        (token) => token?.symbol.toUpperCase() == targetSymbol.toUpperCase(),
-        orElse: () => null,
-      );
-      final sourceTokenAddress = sourceToken?.address;
-      final resolvedSourceDecimals = sourceToken?.decimals ?? sourceDecimals;
-      final quote = await client.quote(
-        fromNetwork: fromChain.network,
-        fromToken: sourceSymbol,
-        toNetwork: toChain.network,
-        toToken: targetSymbol,
-        fromAmount: amount,
-        fromDecimals: resolvedSourceDecimals,
-        fromAddress: fromAddress,
-        toAddress: toAddress,
-        fromTokenAddress: sourceToken?.address,
-        toTokenAddress: targetToken?.address,
-      );
-      client.close();
       if (!context.mounted) return;
-      setState(() => _quote = quote);
       if (!execute) return;
       final request = quote.transactionRequest;
       if (request == null) {
@@ -215,23 +379,28 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         }
         return;
       }
-      if (fromChain.network == WalletNetwork.solana) {
+      if (sourceChain.network == WalletNetwork.solana) {
         await _executeSolanaQuote(
           context,
           identity: identity,
           address: fromAddress,
           request: request,
+          quote: quote,
         );
         return;
       }
-      if (fromChain.network == WalletNetwork.tron) {
-        await _executeTronQuote(context, identity: identity, request: request);
+      if (sourceChain.network == WalletNetwork.tron) {
+        await _executeTronQuote(
+          context,
+          identity: identity,
+          request: request,
+          quote: quote,
+        );
         return;
       }
       if (!context.mounted || !await _confirmSwap(context)) return;
-      final mnemonic = await _unlockMnemonic(identity);
       if (!context.mounted) return;
-      if (mnemonic == null) return;
+      setState(() => _submitting = true);
       final tokens = await SecureAccountTokenStore().read();
       if (!context.mounted) return;
       if (tokens == null) {
@@ -244,16 +413,22 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         ownsClient: true,
       );
       try {
-        if (sourceSymbol != nativeSymbol) {
-          final tokenAddress =
+        final isNativeSource =
+            sourceSymbol.toUpperCase() ==
+            sourceChain.nativeToken.symbol.toUpperCase();
+        String? tokenAddress;
+        String? spender;
+        String? requiredAmount;
+        if (!isNativeSource) {
+          tokenAddress =
               sourceTokenAddress ??
-              LifiApiClient.tokenAddress(fromChain.network, sourceSymbol);
-          final spender = request['to'] as String?;
+              LifiApiClient.tokenAddress(sourceChain.network, sourceSymbol);
+          spender = request['to'] as String?;
           if (spender == null || !spender.startsWith('0x')) {
             _showNotice(context, '兑换失败', 'LI.FI 返回的授权地址无效。');
             return;
           }
-          final requiredAmount = LifiApiClient.toBaseUnits(
+          requiredAmount = LifiApiClient.toBaseUnits(
             amount,
             resolvedSourceDecimals,
           );
@@ -261,47 +436,85 @@ class _DexSwapContentState extends State<_DexSwapContent> {
               !await _confirmApproval(context, sourceSymbol)) {
             return;
           }
+        }
+        final mnemonic = await _unlockMnemonic(context, identity);
+        if (!context.mounted || mnemonic == null) return;
+        if (!isNativeSource) {
           final approval = await const WalletTransferService()
               .ensureErc20AllowanceWithRpc(
                 mnemonic: mnemonic,
                 from: fromAddress,
-                network: fromChain.network,
+                network: sourceChain.network,
                 accessToken: tokens.accessToken,
                 rpc: rpc,
-                tokenAddress: tokenAddress,
-                spender: spender,
-                requiredAmount: requiredAmount,
+                tokenAddress: tokenAddress!,
+                spender: spender!,
+                requiredAmount: requiredAmount!,
               );
           if (approval != null && context.mounted) {
-            _showNotice(context, '授权已提交', '正在等待授权交易进入节点…');
+            debugPrint(
+              '[DexSwap] authorization signed and broadcast: '
+              'network=${sourceChain.network.name} tx=${approval.hash}',
+            );
+            _showAuthorizationSubmittedNotice(context, approval.hash);
+            final approved = await const WalletTransferService()
+                .waitForErc20AllowanceWithRpc(
+                  network: sourceChain.network,
+                  accessToken: tokens.accessToken,
+                  rpc: rpc,
+                  owner: fromAddress,
+                  tokenAddress: tokenAddress,
+                  spender: spender,
+                  requiredAmount: requiredAmount,
+                );
+            if (!approved) {
+              if (context.mounted) {
+                _dismissAuthorizationNotice();
+                _showNotice(context, '授权未确认', '授权交易尚未完成，请稍后重试。');
+              }
+              return;
+            }
+            _dismissAuthorizationNotice();
+          } else if (approval == null) {
+            debugPrint(
+              '[DexSwap] authorization skipped: existing allowance is sufficient',
+            );
           }
         }
         final result = await const WalletTransferService()
             .executeTransactionRequestWithRpc(
               mnemonic: mnemonic,
               from: fromAddress,
-              network: fromChain.network,
+              network: sourceChain.network,
               accessToken: tokens.accessToken,
               rpc: rpc,
               transactionRequest: request,
             );
-        if (!context.mounted) return;
-        _showNotice(context, '交易已发起', '交易哈希：${result.hash}');
+        if (context.mounted) {
+          _dismissAuthorizationNotice();
+          _showBroadcastSuccess(context, result.hash);
+          setState(_clearQuoteCache);
+        }
         unawaited(
-          _recordDexTrade(result.hash, fromAddress, request, quote.tool),
+          _recordDexTrade(
+            result.hash,
+            fromAddress,
+            request,
+            quote.tool,
+            network: sourceChain.network,
+            toNetwork: targetChain.network,
+            quote: quote,
+          ),
         );
-        await _waitForChainConfirmation(result.hash);
       } finally {
         rpc.close();
       }
     } on LifiException catch (error, stackTrace) {
-      client.close();
       debugPrint('[LI.FI] quote failed: ${error.message}');
       debugPrintStack(stackTrace: stackTrace, label: 'LI.FI quote');
       if (!context.mounted) return;
       if (showNotice) _showNotice(context, 'LI.FI 报价失败', error.message);
     } catch (error, stackTrace) {
-      client.close();
       debugPrint('[LI.FI] quote request failed: $error');
       debugPrintStack(stackTrace: stackTrace, label: 'LI.FI quote');
       if (!context.mounted) return;
@@ -309,7 +522,23 @@ class _DexSwapContentState extends State<_DexSwapContent> {
         _showNotice(context, 'LI.FI 报价失败', _lifiFailureMessage(error));
       }
     } finally {
-      if (mounted) setState(() => _loading = false);
+      client?.close();
+      if (mounted) {
+        _dismissAuthorizationNotice();
+        final shouldRequestPending = _quotePending;
+        _quotePending = false;
+        setState(() {
+          _loading = false;
+          _submitting = false;
+        });
+        if (shouldRequestPending) {
+          Future<void>.microtask(() {
+            if (mounted) {
+              _requestQuote(context, showNotice: false, execute: false);
+            }
+          });
+        }
+      }
     }
   }
 
@@ -318,6 +547,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     WalletIdentity identity,
     String amount,
     _WalletChain chain,
+    String symbol,
   ) async {
     final tokenStore = await SecureAccountTokenStore().read();
     if (!context.mounted) return false;
@@ -325,33 +555,41 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       _showNotice(context, '兑换', '钱包服务尚未连接，请稍后重试。');
       return false;
     }
-    final portfolio = WalletPortfolioService();
+    WalletBalance? balance = _balanceSnapshot[_balanceKey(chain, symbol)];
+    final shouldRefresh = balance == null || balance.error != null;
+    final portfolio = shouldRefresh ? WalletPortfolioService() : null;
     try {
-      final derivedAddresses = await WalletPreferences.derivedAddresses(
-        identity,
-      );
-      if (!context.mounted) return false;
-      final balances = await portfolio.loadBalances(
-        network: chain.network,
-        identity: identity,
-        derivedAddresses: derivedAddresses,
-        accessToken: tokenStore.accessToken,
-      );
-      if (!context.mounted) return false;
-      WalletBalance? balance;
-      for (final item in balances) {
-        if (item.symbol.toUpperCase() == _fromSymbol.toUpperCase()) {
-          balance = item;
-          break;
+      if (shouldRefresh) {
+        final derivedAddresses = await WalletPreferences.derivedAddresses(
+          identity,
+        );
+        if (!context.mounted) return false;
+        final balances = await portfolio!.loadBalances(
+          network: chain.network,
+          identity: identity,
+          derivedAddresses: derivedAddresses,
+          accessToken: tokenStore.accessToken,
+        );
+        if (!context.mounted) return false;
+        for (final item in balances) {
+          if (item.symbol.toUpperCase() == symbol.toUpperCase()) {
+            balance = item;
+            break;
+          }
         }
       }
-      if (balance == null || balance.balance == null) return true;
+      // A failed RPC lookup is not an authoritative zero balance. Let the
+      // quote or transaction surface the actual chain error instead of
+      // rejecting a valid amount based on a transient zero.
+      if (balance == null || balance.balance == null || balance.error != null) {
+        return true;
+      }
       final required = LifiApiClient.toBaseUnits(
         amount,
-        _decimalsFor(chain, _fromSymbol),
+        _decimalsFor(chain, symbol),
       );
       if (balance.balance! < BigInt.parse(required)) {
-        _showNotice(context, '余额不足', '当前 $_fromSymbol 余额不足，无法提交本次兑换。');
+        _showNotice(context, '余额不足', '当前 $symbol 余额不足，无法提交本次兑换。');
         return false;
       }
       return true;
@@ -361,8 +599,13 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       }
       return false;
     } finally {
-      portfolio.close();
+      portfolio?.close();
     }
+  }
+
+  void _cacheBalances(Map<String, WalletBalance> balances) {
+    if (!mounted) return;
+    setState(() => _balanceSnapshot = balances);
   }
 
   Future<void> _showMissingChainWallet(
@@ -401,74 +644,68 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     return message.replaceFirst(RegExp(r'^Exception:\s*'), '');
   }
 
-  Future<void> _waitForChainConfirmation(String txHash) async {
-    if (fromChain.network == WalletNetwork.tron) return;
-    final tokens = await SecureAccountTokenStore().read();
-    if (tokens == null || txHash.isEmpty) return;
-    final rpc = WalletRpcClient(
-      client: http.Client(),
-      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
-      ownsClient: true,
+  void _showBroadcastSuccess(
+    BuildContext context,
+    String hash, {
+    String label = '交易哈希',
+  }) {
+    final displayHash = hash.isEmpty || hash == '-'
+        ? '等待节点返回交易标识'
+        : _shortHash(hash);
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text('兑换已提交'),
+        message: Text('$label\n$displayHash\n\n交易已广播，正在等待链上确认。'),
+        actions: [
+          if (hash.isNotEmpty && hash != '-')
+            CupertinoActionSheetAction(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: hash));
+                if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+              },
+              child: const Text('复制交易哈希', style: TextStyle(fontSize: 17)),
+            ),
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('完成', style: TextStyle(fontSize: 17)),
+          ),
+        ],
+      ),
     );
-    try {
-      final endpoints = await rpc.loadEndpoints(
-        network: fromChain.network.name,
-        accessToken: tokens.accessToken,
-      );
-      for (var attempt = 0; attempt < 15; attempt++) {
-        await Future<void>.delayed(const Duration(seconds: 2));
-        final solana = fromChain.network == WalletNetwork.solana;
-        final response = await rpc.postJson(endpoints, {
-          'jsonrpc': '2.0',
-          'id': 1,
-          'method': solana
-              ? 'getSignatureStatuses'
-              : 'eth_getTransactionReceipt',
-          'params': solana
-              ? [
-                  [txHash],
-                  {'searchTransactionHistory': true},
-                ]
-              : [txHash],
-        });
-        final result = response['result'];
-        final receipt = _confirmationReceipt(result, solana: solana);
-        if (receipt != null) {
-          final failed = solana
-              ? receipt['err'] != null
-              : receipt['status'] == '0x0';
-          if (mounted) {
-            _showNotice(
-              context,
-              failed ? '兑换失败' : '兑换成功',
-              failed ? '链上交易执行失败' : '交易已确认',
-            );
-          }
-          return;
-        }
-      }
-    } catch (_) {
-      if (mounted) _showNotice(context, '等待确认超时', '可在交易动态中继续查看状态');
-    } finally {
-      rpc.close();
-    }
   }
 
-  Map<String, dynamic>? _confirmationReceipt(
-    Object? result, {
-    required bool solana,
-  }) {
-    if (!solana) {
-      if (result is Map && result['status'] != null) {
-        return result.cast<String, dynamic>();
-      }
-      return null;
-    }
-    if (result is! Map || result['value'] is! List) return null;
-    final values = result['value'] as List;
-    if (values.isEmpty || values.first is! Map) return null;
-    final receipt = (values.first as Map).cast<String, dynamic>();
-    return receipt['confirmationStatus'] == null ? null : receipt;
+  void _showAuthorizationSubmittedNotice(BuildContext context, String hash) {
+    final displayHash = hash.isEmpty ? '等待节点返回交易标识' : _shortHash(hash);
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) {
+        _authorizationNoticeContext = sheetContext;
+        return CupertinoActionSheet(
+          title: const Text('授权已提交'),
+          message: Text('交易哈希\n$displayHash\n\n正在等待授权生效…'),
+          actions: [
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(sheetContext).pop(),
+              child: const Text('知道了'),
+            ),
+          ],
+        );
+      },
+    ).whenComplete(() {
+      _authorizationNoticeContext = null;
+    });
+  }
+
+  void _dismissAuthorizationNotice() {
+    final sheetContext = _authorizationNoticeContext;
+    if (sheetContext == null) return;
+    if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+  }
+
+  String _shortHash(String value) {
+    if (value.length <= 24) return value;
+    return '${value.substring(0, 12)}…${value.substring(value.length - 10)}';
   }
 
   Future<void> _executeSolanaQuote(
@@ -476,6 +713,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     required WalletIdentity identity,
     required String address,
     required Map<String, dynamic> request,
+    required LifiQuote quote,
   }) async {
     final encoded =
         request['serializedTransaction'] ??
@@ -486,7 +724,9 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       return;
     }
     if (!await _confirmSwap(context)) return;
-    final mnemonic = await _unlockMnemonic(identity);
+    if (!context.mounted) return;
+    setState(() => _submitting = true);
+    final mnemonic = await _unlockMnemonic(context, identity);
     if (mnemonic == null || !context.mounted) return;
     try {
       final signed = const SolanaSigningService().signSerializedTransaction(
@@ -514,13 +754,22 @@ class _DexSwapContentState extends State<_DexSwapContent> {
             {'encoding': 'base64'},
           ],
         });
+        final hash = '${response['result'] ?? ''}';
+        if (hash.isNotEmpty) {
+          unawaited(
+            _recordDexTrade(
+              hash,
+              address,
+              request,
+              quote.tool,
+              network: WalletNetwork.solana,
+              toNetwork: toChain.network,
+              quote: quote,
+            ),
+          );
+        }
         if (context.mounted) {
-          final hash = '${response['result'] ?? ''}';
-          _showNotice(context, '交易已发起', '交易哈希：${hash.isEmpty ? '-' : hash}');
-          if (hash.isNotEmpty) {
-            unawaited(_recordDexTrade(hash, address, request, 'LI.FI'));
-            await _waitForChainConfirmation(hash);
-          }
+          _showBroadcastSuccess(context, hash);
         }
       } finally {
         rpc.close();
@@ -536,6 +785,7 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     BuildContext context, {
     required WalletIdentity identity,
     required Map<String, dynamic> request,
+    required LifiQuote quote,
   }) async {
     final raw =
         request['transaction'] ??
@@ -551,7 +801,9 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       return;
     }
     if (!await _confirmSwap(context)) return;
-    final mnemonic = await _unlockMnemonic(identity);
+    if (!context.mounted) return;
+    setState(() => _submitting = true);
+    final mnemonic = await _unlockMnemonic(context, identity);
     if (mnemonic == null || !context.mounted) return;
     try {
       final signed = const TronSigningService().signSerializedTransaction(
@@ -582,20 +834,22 @@ class _DexSwapContentState extends State<_DexSwapContent> {
           } catch (_) {}
         }
         if (response == null) throw const FormatException('TRON 广播失败');
+        final hash = '${response['txid'] ?? ''}';
+        if (hash.isNotEmpty) {
+          unawaited(
+            _recordDexTrade(
+              hash,
+              await _addressForChain(identity, fromChain) ?? '',
+              request,
+              quote.tool,
+              network: WalletNetwork.tron,
+              toNetwork: toChain.network,
+              quote: quote,
+            ),
+          );
+        }
         if (context.mounted) {
-          final hash = '${response['txid'] ?? ''}';
-          _showNotice(context, '交易已发起', '交易 ID：${hash.isEmpty ? '-' : hash}');
-          if (hash.isNotEmpty) {
-            unawaited(
-              _recordDexTrade(
-                hash,
-                await _addressForChain(identity, fromChain) ?? '',
-                request,
-                'LI.FI',
-              ),
-            );
-            await _waitForChainConfirmation(hash);
-          }
+          _showBroadcastSuccess(context, hash, label: '交易 ID');
         }
       } finally {
         rpc.close();
@@ -611,20 +865,27 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     String txHash,
     String wallet,
     Map<String, dynamic> request,
-    String dex,
-  ) async {
+    String dex, {
+    required WalletNetwork network,
+    required WalletNetwork toNetwork,
+    LifiQuote? quote,
+  }) async {
     final pool =
-        '${request['pool'] ?? request['pairAddress'] ?? request['poolAddress'] ?? ''}'
+        '${quote?.pool ?? request['pool'] ?? request['pairAddress'] ?? request['poolAddress'] ?? request['to'] ?? request['destination'] ?? ''}'
             .trim();
-    if (txHash.isEmpty || wallet.isEmpty || pool.isEmpty) return;
+    final recordPool = pool.isEmpty ? (quote?.tool ?? dex).trim() : pool;
+    if (txHash.isEmpty || wallet.isEmpty || recordPool.isEmpty) return;
     final service = DexTradeService();
     try {
       await service.record(
-        network: fromChain.network.name,
+        network: network.name,
         wallet: wallet,
         dex: dex,
-        pool: pool,
+        pool: recordPool,
         txHash: txHash,
+        baseToken: quote?.fromTokenAddress,
+        quoteToken: quote?.toTokenAddress,
+        toNetwork: toNetwork.name,
       );
     } catch (error) {
       debugPrint('[DexTrade] record failed: $error');
@@ -633,17 +894,79 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     }
   }
 
-  Future<String?> _unlockMnemonic(WalletIdentity identity) async {
+  Future<String?> _unlockMnemonic(
+    BuildContext context,
+    WalletIdentity identity,
+  ) async {
     final store = SecureWalletSecretStore();
     try {
-      return await WalletSecurity().unlockMnemonicWithDeviceProtection(
+      final biometric = await BiometricAuthentication.availability();
+      if (biometric == BiometricAvailability.enrolled) {
+        if (!await BiometricAuthentication.authenticateOrSkip()) {
+          throw const WalletSecurityException('生物识别验证失败');
+        }
+        try {
+          return await WalletSecurity().unlockMnemonicWithDeviceProtection(
+            store: store,
+            walletAddress: identity.address,
+          );
+        } on WalletSecurityException catch (error) {
+          if (error.message != '未配置设备保护') rethrow;
+          // Wallets created with a password-only flow do not have a device
+          // password, so continue with the wallet password below.
+        }
+      }
+      if (!context.mounted) return null;
+      final password = await _requestWalletPassword(context);
+      if (password == null) return null;
+      return await WalletSecurity().unlockMnemonic(
         store: store,
         walletAddress: identity.address,
+        password: password,
       );
-    } on WalletSecurityException {
+    } on WalletSecurityException catch (error) {
+      if (context.mounted) _showNotice(context, '兑换失败', error.message);
+      return null;
+    } catch (error) {
+      if (context.mounted) _showNotice(context, '兑换失败', '钱包解锁失败：$error');
       return null;
     }
   }
+
+  Future<String?> _requestWalletPassword(BuildContext context) =>
+      showCupertinoDialog<String>(
+        context: context,
+        builder: (dialogContext) {
+          var password = '';
+          return StatefulBuilder(
+            builder: (context, setState) => CupertinoAlertDialog(
+              title: const Text('验证钱包密码'),
+              content: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: CupertinoTextField(
+                  obscureText: true,
+                  autofocus: true,
+                  placeholder: '输入钱包密码',
+                  onChanged: (value) => setState(() => password = value),
+                ),
+              ),
+              actions: [
+                CupertinoDialogAction(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('取消'),
+                ),
+                CupertinoDialogAction(
+                  isDefaultAction: true,
+                  onPressed: password.length < 8
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(password),
+                  child: const Text('确认'),
+                ),
+              ],
+            ),
+          );
+        },
+      );
 
   Future<bool> _confirmSwap(BuildContext context) async {
     final result = await showCupertinoDialog<bool>(
@@ -690,60 +1013,99 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      _DexSwapPanel(
-        palette: palette,
-        ethFirst: ethFirst,
-        fromChain: fromChain,
-        toChain: toChain,
-        walletIdentity: walletIdentity,
-        onEthFirstChanged: widget.onEthFirstChanged,
-        onSwapChanged: _setSwap,
-        outputAmount: _quote == null
-            ? '-'
-            : _formatTokenUnits(
-                _quote!.toAmount,
-                _decimalsFor(toChain, _toSymbol),
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _DexSwapPanel(
+              palette: palette,
+              ethFirst: ethFirst,
+              fromChain: fromChain,
+              toChain: toChain,
+              walletIdentity: walletIdentity,
+              onEthFirstChanged: widget.onEthFirstChanged,
+              onSwapChanged: _setSwap,
+              onMaxAmount: _setMaxAmount,
+              onBalancesLoaded: _cacheBalances,
+              outputAmount: _quote == null
+                  ? '-'
+                  : _formatTokenUnits(
+                      _quote!.toAmount,
+                      _decimalsFor(toChain, _toSymbol),
+                    ),
+            ),
+            const SizedBox(height: 28),
+            if (_quoteSecondsRemaining > 0)
+              Padding(
+                padding: const EdgeInsets.only(right: 20, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '下次询价 ${_quoteSecondsRemaining}s',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
+                  ),
+                ),
               ),
-      ),
-      const SizedBox(height: 28),
-      Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        padding: const EdgeInsets.all(9),
-        decoration: BoxDecoration(
-          color: palette.accent.withValues(alpha: .6),
-          borderRadius: BorderRadius.circular(34),
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: palette.accent.withValues(alpha: .6),
+                borderRadius: BorderRadius.circular(34),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(25),
+                child: AcoLimeButton(
+                  label: _loading ? '获取报价中…' : '兑换',
+                  onPressed: () {
+                    if (!_loading) _requestQuote(context);
+                  },
+                  height: 42,
+                  fontSize: 16,
+                  backgroundColor: palette.accent,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _DexSwapQuoteCard(
+              palette: palette,
+              quote: _quote,
+              fromSymbol: _fromSymbol,
+              toSymbol: _toSymbol,
+              fromChain: fromChain.displayLabel,
+              toChain: toChain.displayLabel,
+              fromDecimals: _decimalsFor(fromChain, _fromSymbol),
+              toDecimals: _decimalsFor(toChain, _toSymbol),
+            ),
+            const SizedBox(height: 28),
+            _DexRecentSwapRecord(
+              palette: palette,
+              future: _recentRecordFuture ?? widget.recentRecord,
+            ),
+          ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(25),
-          child: AcoLimeButton(
-            label: _loading ? '获取报价中…' : '兑换',
-            onPressed: () {
-              if (!_loading) _requestQuote(context);
-            },
-            height: 42,
-            fontSize: 16,
-            backgroundColor: palette.accent,
+        if (_submitting)
+          Positioned.fill(
+            child: AbsorbPointer(
+              child: ColoredBox(
+                color: const Color(0x66000000),
+                child: Center(
+                  child: CupertinoActivityIndicator(
+                    radius: 16,
+                    color: palette.primaryText,
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-      const SizedBox(height: 16),
-      _DexSwapQuoteCard(
-        palette: palette,
-        quote: _quote,
-        fromSymbol: _fromSymbol,
-        toSymbol: _toSymbol,
-        fromChain: fromChain.displayLabel,
-        toChain: toChain.displayLabel,
-        fromDecimals: _decimalsFor(fromChain, _fromSymbol),
-        toDecimals: _decimalsFor(toChain, _toSymbol),
-      ),
-      const SizedBox(height: 28),
-      _DexRecentSwapRecord(palette: palette, future: widget.recentRecord),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _DexSwapQuoteCard extends StatelessWidget {
@@ -849,22 +1211,34 @@ String _formatTokenUnits(
   }
 }
 
+String _balanceKey(_WalletChain chain, String symbol) =>
+    _balanceKeyForNetwork(chain.network, symbol);
+
+String _balanceKeyForNetwork(WalletNetwork network, String symbol) =>
+    '${network.name}:${symbol.toUpperCase()}';
+
 class DexSwapRecord {
   const DexSwapRecord({
     required this.source,
+    this.network = '',
     required this.fromAmount,
     required this.fromSymbol,
     required this.toAmount,
     required this.toSymbol,
+    this.fromAddress = '',
+    this.toAddress = '',
     required this.status,
     required this.createdAt,
   });
 
   final String source;
+  final String network;
   final String fromAmount;
   final String fromSymbol;
   final String toAmount;
   final String toSymbol;
+  final String fromAddress;
+  final String toAddress;
   final String status;
   final DateTime createdAt;
 }
@@ -896,7 +1270,7 @@ class _DexRecentSwapRecord extends StatelessWidget {
               '更多记录',
               style: TextStyle(
                 color: palette.mutedText,
-                fontSize: AcoTypography.bodyEmphasis,
+                fontSize: AcoTypography.caption,
               ),
             ),
           ),
@@ -990,19 +1364,38 @@ class _DexSwapRecordListPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
-    navigationBar: const CupertinoNavigationBar(middle: Text('兑换记录')),
+    backgroundColor: palette.background,
     child: SafeArea(
-      child: records.isEmpty
-          ? Center(
-              child: Text('暂无闪兑记录', style: TextStyle(color: palette.mutedText)),
-            )
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-              itemCount: records.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (_, index) =>
-                  _DexSwapRecordCard(palette: palette, record: records[index]),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
+            child: AcoPageHeader(
+              palette: palette,
+              title: '兑换记录',
+              onBack: () => Navigator.of(context).maybePop(),
             ),
+          ),
+          Expanded(
+            child: records.isEmpty
+                ? Center(
+                    child: Text(
+                      '暂无闪兑记录',
+                      style: TextStyle(color: palette.mutedText),
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                    itemCount: records.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (_, index) => _DexSwapRecordCard(
+                      palette: palette,
+                      record: records[index],
+                    ),
+                  ),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -1015,35 +1408,178 @@ class _DexSwapRecordCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    padding: const EdgeInsets.fromLTRB(16, 15, 16, 14),
     decoration: BoxDecoration(
       color: palette.inputSurface,
       borderRadius: BorderRadius.circular(14),
       border: Border.all(color: palette.border),
     ),
-    child: Row(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: Text(
-            '${record.fromAmount} ${record.fromSymbol}  →  '
-            '${record.toAmount} ${record.toSymbol}',
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: AcoTypography.body,
-              fontWeight: FontWeight.w600,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                _formatRecordTime(record.createdAt),
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.caption,
+                ),
+              ),
             ),
-          ),
+            _statusChip(),
+          ],
         ),
-        Text(
-          record.status,
-          style: TextStyle(
-            color: palette.accent,
-            fontSize: AcoTypography.caption,
-          ),
+        const SizedBox(height: 13),
+        Row(
+          children: [
+            Expanded(
+              child: _tokenColumn(
+                '卖出',
+                record.fromAmount,
+                record.fromSymbol,
+                record.fromAddress,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Icon(
+                CupertinoIcons.arrow_right,
+                size: 18,
+                color: palette.mutedText,
+              ),
+            ),
+            Expanded(
+              child: _tokenColumn(
+                '买入',
+                record.toAmount,
+                record.toSymbol,
+                record.toAddress,
+              ),
+            ),
+          ],
         ),
       ],
     ),
   );
+
+  Widget _tokenColumn(
+    String label,
+    String amount,
+    String symbol,
+    String address,
+  ) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          color: palette.mutedText,
+          fontSize: AcoTypography.caption,
+        ),
+      ),
+      const SizedBox(height: 5),
+      Text(
+        '${_formatRecordAmount(amount, record.network, address)} $symbol',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: AcoTypography.body,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      if (address.isNotEmpty) ...[
+        const SizedBox(height: 3),
+        Text(
+          _shortRecordValue(address),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: palette.mutedText,
+            fontSize: AcoTypography.caption,
+          ),
+        ),
+      ],
+    ],
+  );
+
+  Widget _statusChip() {
+    final status = record.status.toLowerCase();
+    final pending = status == 'pending';
+    final label = switch (status) {
+      'success' || 'done' || 'completed' => '成功',
+      'pending' || 'processing' => '处理中',
+      'failed' || 'failure' || 'invalid' => '失败',
+      _ => record.status,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: palette.accent.withValues(alpha: .12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: pending ? palette.accent : palette.mutedText,
+          fontSize: AcoTypography.caption,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+String _shortRecordValue(String value) {
+  final text = value.trim();
+  if (text.isEmpty) return '-';
+  if (text.startsWith('0x') && text.length > 14) {
+    return '${text.substring(0, 8)}...${text.substring(text.length - 6)}';
+  }
+  return text;
+}
+
+String _recordTokenSymbol(String networkName, String address) {
+  final normalized = address.toLowerCase();
+  final network = WalletNetwork.values.cast<WalletNetwork?>().firstWhere(
+    (value) => value?.name == networkName.toLowerCase(),
+    orElse: () => null,
+  );
+  if (network == null) return _shortRecordValue(address);
+  final chain = WalletChainRegistry.chains[network];
+  if (normalized == '0x0000000000000000000000000000000000000000' ||
+      normalized == '11111111111111111111111111111111') {
+    return chain?.symbol ?? _shortRecordValue(address);
+  }
+  for (final token in [chain?.usdt, chain?.usdc]) {
+    if (token?.address.toLowerCase() == normalized) return token!.symbol;
+  }
+  return _shortRecordValue(address);
+}
+
+String _formatRecordAmount(String raw, String networkName, String address) {
+  if (raw.trim().isEmpty) return '-';
+  final network = WalletNetwork.values.cast<WalletNetwork?>().firstWhere(
+    (value) => value?.name == networkName.toLowerCase(),
+    orElse: () => null,
+  );
+  if (network == null) return raw;
+  final chain = WalletChainRegistry.chains[network];
+  var decimals = chain?.decimals ?? 18;
+  final normalized = address.toLowerCase();
+  for (final token in [chain?.usdt, chain?.usdc]) {
+    if (token?.address.toLowerCase() == normalized) decimals = token!.decimals;
+  }
+  return _formatTokenUnits(raw, decimals, maxFractionDigits: 6);
+}
+
+String _formatRecordTime(DateTime value) {
+  final local = value.toLocal();
+  String two(int number) => number.toString().padLeft(2, '0');
+  return '${local.year}/${two(local.month)}/${two(local.day)} '
+      '${two(local.hour)}:${two(local.minute)}';
 }
 
 class _DexSwapPanel extends StatefulWidget {
@@ -1055,6 +1591,8 @@ class _DexSwapPanel extends StatefulWidget {
     required this.ethFirst,
     required this.onEthFirstChanged,
     required this.onSwapChanged,
+    required this.onMaxAmount,
+    required this.onBalancesLoaded,
     required this.outputAmount,
   });
   final AcoPalette palette;
@@ -1071,6 +1609,8 @@ class _DexSwapPanel extends StatefulWidget {
     String amount,
   )
   onSwapChanged;
+  final ValueChanged<String> onMaxAmount;
+  final ValueChanged<Map<String, WalletBalance>> onBalancesLoaded;
   final String outputAmount;
 
   @override
@@ -1150,6 +1690,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
         identity,
       );
       final balances = <String, String>{};
+      final balanceSnapshot = <String, WalletBalance>{};
       final networks = {_fromChain.network, _toChain.network};
       for (final network in networks) {
         final items = await portfolio.loadBalances(
@@ -1159,8 +1700,9 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           accessToken: tokenStore.accessToken,
         );
         for (final item in items) {
-          balances['${network.name}:${item.symbol.toUpperCase()}'] =
-              item.balance == null || item.balance == BigInt.zero
+          final key = _balanceKeyForNetwork(network, item.symbol);
+          balanceSnapshot[key] = item;
+          balances[key] = item.balance == null || item.balance == BigInt.zero
               ? '0.00'
               : formatChainAmount(item.balance!, decimals: item.decimals);
         }
@@ -1170,6 +1712,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           _balances = balances;
           _loadingBalances = false;
         });
+        widget.onBalancesLoaded(balanceSnapshot);
       }
     } catch (_) {
       if (mounted && requestId == _balanceRequestId) {
@@ -1182,7 +1725,7 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
 
   String _balanceFor(_WalletChain chain, String symbol) {
     if (_loadingBalances) return '读取中…';
-    return _balances['${chain.network.name}:${symbol.toUpperCase()}'] ?? '0.00';
+    return _balances[_balanceKey(chain, symbol)] ?? '0.00';
   }
 
   void _pickToken(BuildContext context, String current, bool source) {
@@ -1241,6 +1784,13 @@ class _DexSwapPanelState extends State<_DexSwapPanel> {
           value: _amountController.text,
           showMax: true,
           editable: true,
+          onMaxTap: () {
+            final balance = _balanceFor(_fromChain, _fromSymbol);
+            if (balance == '读取中…') return;
+            _amountController.text = balance;
+            widget.onMaxAmount(balance);
+            setState(() {});
+          },
           onValueChanged: (value) {
             _amountController.text = value;
             widget.onSwapChanged(
@@ -1814,12 +2364,14 @@ class _DexSwapTokenRow extends StatefulWidget {
     this.showMax = false,
     this.editable = false,
     this.onTokenTap,
+    this.onMaxTap,
     this.onValueChanged,
   });
   final AcoPalette palette;
   final String label, symbol, value, balance, logoUri;
   final bool showMax, editable;
   final ValueChanged<String>? onTokenTap;
+  final VoidCallback? onMaxTap;
   final ValueChanged<String>? onValueChanged;
 
   @override
@@ -1901,18 +2453,18 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
           ],
         ),
       ),
-      GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTokenTap == null
-            ? null
-            : () {
-                _focusNode.unfocus();
-                widget.onTokenTap!(widget.symbol);
-              },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Row(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTokenTap == null
+                ? null
+                : () {
+                    _focusNode.unfocus();
+                    widget.onTokenTap!(widget.symbol);
+                  },
+            child: Row(
               children: [
                 _WalletAssetIcon(
                   symbol: widget.symbol,
@@ -1936,19 +2488,29 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Text(
-                  '余额: ${widget.balance}',
-                  style: TextStyle(
-                    color: widget.palette.mutedText,
-                    fontSize: AcoTypography.bodySmall,
-                  ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Text(
+                '余额: ${widget.balance}',
+                style: TextStyle(
+                  color: widget.palette.mutedText,
+                  fontSize: AcoTypography.bodySmall,
                 ),
-                if (widget.showMax) ...[
-                  const SizedBox(width: 10),
-                  Container(
+              ),
+              if (widget.showMax) ...[
+                const SizedBox(width: 10),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: widget.onMaxTap == null
+                      ? null
+                      : () {
+                          _focusNode.unfocus();
+                          _controller.text = widget.balance;
+                          widget.onMaxTap!();
+                        },
+                  child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 6,
                       vertical: 2,
@@ -1965,11 +2527,11 @@ class _DexSwapTokenRowState extends State<_DexSwapTokenRow> {
                       ),
                     ),
                   ),
-                ],
+                ),
               ],
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     ],
   );

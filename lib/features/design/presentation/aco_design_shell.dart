@@ -263,6 +263,8 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   AcoScreen _rootScreen = AcoScreen.walletHome;
   final ValueNotifier<String> _displayName = ValueNotifier<String>('');
   final ValueNotifier<String> _walletName = ValueNotifier<String>('Wallet1');
+  final ValueNotifier<Map<String, double>> _walletTotals =
+      ValueNotifier<Map<String, double>>({});
   final ValueNotifier<int> _selectedWalletChain = ValueNotifier<int>(0);
   bool _walletChainManuallySelected = false;
   TransferToken? _selectedTransferToken;
@@ -381,6 +383,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
     if (_ownsThemeNotifier) _isDark.dispose();
     _displayName.dispose();
     _walletName.dispose();
+    _walletTotals.dispose();
     _username.dispose();
     _avatarUrl.dispose();
     _identity.dispose();
@@ -464,6 +467,18 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         _supportedWalletChains[index].network,
       ),
     );
+  }
+
+  void _cacheWalletTotal(
+    WalletIdentity? identity,
+    WalletNetwork network,
+    double total,
+  ) {
+    if (identity == null) return;
+    final value = total.isFinite ? total : 0.0;
+    final key = _walletTotalKey(identity.address, network);
+    if (_walletTotals.value[key] == value) return;
+    _walletTotals.value = {..._walletTotals.value, key: value};
   }
 
   Future<void> _loadSelectedWalletChain() async {
@@ -623,54 +638,62 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
       _staffIdentity,
       _walletName,
       _selectedWalletChain,
+      _walletTotals,
     ]),
-    builder: (_, _) => AcoScreenPage(
-      screen: screen,
-      dark: _isDark.value,
-      isRoot: false,
-      onOpen: _open,
-      chatUserID: OpenIMChatRepository.pendingConversation?.userID,
-      chatGroupID: OpenIMChatRepository.pendingConversation?.groupID,
-      chatName: OpenIMChatRepository.pendingConversation?.showName,
-      chatConversationID:
-          OpenIMChatRepository.pendingConversation?.conversationID,
-      onThemeToggle: _toggleTheme,
-      onWalletReady: _completeAddedWallet,
-      onWalletSelected: _selectWallet,
-      walletIdentity: widget.walletIdentity,
-      walletName: _walletName.value,
-      onWalletNameChanged: _saveWalletName,
-      walletChainIndex: _selectedWalletChain.value,
-      walletAssetRevision: _walletAssetRevision,
-      onWalletChainSelected: _selectWalletChain,
-      initialDexSection: _initialDexSection,
-      transferToken: _selectedTransferToken,
-      onSendTokenSelected: _sendToken,
-      selectedAsset: _selectedAssetBalance,
-      walletTransactionService: _walletTransactionService,
-      onAssetSelected: _openAsset,
-      accountId: _accountId,
-      walletLoginFuture: widget.walletLoginFuture,
-      username: _username.value,
-      avatarUrl: _avatarUrl.value,
-      identity: _identity.value,
-      staffIdentity: _staffIdentity.value,
-      displayName: _displayName.value,
-      onDisplayNameChanged: (name) {
-        if (mounted) _displayName.value = name;
-      },
-      onUsernameChanged: (username) {
-        if (mounted) _username.value = username;
-      },
-      onAvatarUrlChanged: (avatarUrl) {
-        if (mounted) _avatarUrl.value = avatarUrl;
-      },
-      language: _language,
-      liveListRevision: _liveListRevision,
-      hasAppUpdate: _hasAppUpdate,
-      onOpenAppUpdate: () => const AppUpdateService().openWebsite(),
-      onLanguageChanged: (language) => setState(() => _language = language),
-    ),
+    builder: (_, _) {
+      final selectedNetwork =
+          _supportedWalletChains[_selectedWalletChain.value].network;
+      return AcoScreenPage(
+        screen: screen,
+        dark: _isDark.value,
+        isRoot: false,
+        onOpen: _open,
+        chatUserID: OpenIMChatRepository.pendingConversation?.userID,
+        chatGroupID: OpenIMChatRepository.pendingConversation?.groupID,
+        chatName: OpenIMChatRepository.pendingConversation?.showName,
+        chatConversationID:
+            OpenIMChatRepository.pendingConversation?.conversationID,
+        onThemeToggle: _toggleTheme,
+        onWalletReady: _completeAddedWallet,
+        onWalletSelected: _selectWallet,
+        onWalletTotalChanged: (total) =>
+            _cacheWalletTotal(widget.walletIdentity, selectedNetwork, total),
+        walletIdentity: widget.walletIdentity,
+        walletName: _walletName.value,
+        walletTotals: _walletTotals.value,
+        onWalletNameChanged: _saveWalletName,
+        walletChainIndex: _selectedWalletChain.value,
+        walletAssetRevision: _walletAssetRevision,
+        onWalletChainSelected: _selectWalletChain,
+        initialDexSection: _initialDexSection,
+        transferToken: _selectedTransferToken,
+        onSendTokenSelected: _sendToken,
+        selectedAsset: _selectedAssetBalance,
+        walletTransactionService: _walletTransactionService,
+        onAssetSelected: _openAsset,
+        accountId: _accountId,
+        walletLoginFuture: widget.walletLoginFuture,
+        username: _username.value,
+        avatarUrl: _avatarUrl.value,
+        identity: _identity.value,
+        staffIdentity: _staffIdentity.value,
+        displayName: _displayName.value,
+        onDisplayNameChanged: (name) {
+          if (mounted) _displayName.value = name;
+        },
+        onUsernameChanged: (username) {
+          if (mounted) _username.value = username;
+        },
+        onAvatarUrlChanged: (avatarUrl) {
+          if (mounted) _avatarUrl.value = avatarUrl;
+        },
+        language: _language,
+        liveListRevision: _liveListRevision,
+        hasAppUpdate: _hasAppUpdate,
+        onOpenAppUpdate: () => const AppUpdateService().openWebsite(),
+        onLanguageChanged: (language) => setState(() => _language = language),
+      );
+    },
   );
 
   @override
@@ -698,49 +721,61 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                       _staffIdentity,
                       _walletName,
                       _selectedWalletChain,
+                      _walletTotals,
                     ]),
-                    builder: (_, _) => AcoScreenPage(
-                      screen: _rootScreen,
-                      dark: dark,
-                      isRoot: true,
-                      onOpen: _open,
-                      onThemeToggle: _toggleTheme,
-                      walletIdentity: widget.walletIdentity,
-                      walletName: _walletName.value,
-                      onWalletNameChanged: _saveWalletName,
-                      walletChainIndex: _selectedWalletChain.value,
-                      walletAssetRevision: _walletAssetRevision,
-                      onWalletChainSelected: _selectWalletChain,
-                      initialDexSection: _initialDexSection,
-                      transferToken: _selectedTransferToken,
-                      onSendTokenSelected: _sendToken,
-                      selectedAsset: _selectedAssetBalance,
-                      walletTransactionService: _walletTransactionService,
-                      onAssetSelected: _openAsset,
-                      accountId: _accountId,
-                      walletLoginFuture: widget.walletLoginFuture,
-                      username: _username.value,
-                      avatarUrl: _avatarUrl.value,
-                      identity: _identity.value,
-                      staffIdentity: _staffIdentity.value,
-                      displayName: _displayName.value,
-                      onDisplayNameChanged: (name) {
-                        if (mounted) _displayName.value = name;
-                      },
-                      onUsernameChanged: (username) {
-                        if (mounted) _username.value = username;
-                      },
-                      onAvatarUrlChanged: (avatarUrl) {
-                        if (mounted) _avatarUrl.value = avatarUrl;
-                      },
-                      language: _language,
-                      liveListRevision: _liveListRevision,
-                      hasAppUpdate: _hasAppUpdate,
-                      onOpenAppUpdate: () =>
-                          const AppUpdateService().openWebsite(),
-                      onLanguageChanged: (language) =>
-                          setState(() => _language = language),
-                    ),
+                    builder: (_, _) {
+                      final selectedNetwork =
+                          _supportedWalletChains[_selectedWalletChain.value]
+                              .network;
+                      return AcoScreenPage(
+                        screen: _rootScreen,
+                        dark: dark,
+                        isRoot: true,
+                        onOpen: _open,
+                        onThemeToggle: _toggleTheme,
+                        onWalletTotalChanged: (total) => _cacheWalletTotal(
+                          widget.walletIdentity,
+                          selectedNetwork,
+                          total,
+                        ),
+                        walletIdentity: widget.walletIdentity,
+                        walletName: _walletName.value,
+                        walletTotals: _walletTotals.value,
+                        onWalletNameChanged: _saveWalletName,
+                        walletChainIndex: _selectedWalletChain.value,
+                        walletAssetRevision: _walletAssetRevision,
+                        onWalletChainSelected: _selectWalletChain,
+                        initialDexSection: _initialDexSection,
+                        transferToken: _selectedTransferToken,
+                        onSendTokenSelected: _sendToken,
+                        selectedAsset: _selectedAssetBalance,
+                        walletTransactionService: _walletTransactionService,
+                        onAssetSelected: _openAsset,
+                        accountId: _accountId,
+                        walletLoginFuture: widget.walletLoginFuture,
+                        username: _username.value,
+                        avatarUrl: _avatarUrl.value,
+                        identity: _identity.value,
+                        staffIdentity: _staffIdentity.value,
+                        displayName: _displayName.value,
+                        onDisplayNameChanged: (name) {
+                          if (mounted) _displayName.value = name;
+                        },
+                        onUsernameChanged: (username) {
+                          if (mounted) _username.value = username;
+                        },
+                        onAvatarUrlChanged: (avatarUrl) {
+                          if (mounted) _avatarUrl.value = avatarUrl;
+                        },
+                        language: _language,
+                        liveListRevision: _liveListRevision,
+                        hasAppUpdate: _hasAppUpdate,
+                        onOpenAppUpdate: () =>
+                            const AppUpdateService().openWebsite(),
+                        onLanguageChanged: (language) =>
+                            setState(() => _language = language),
+                      );
+                    },
                   ),
                 ),
                 ValueListenableBuilder<bool>(

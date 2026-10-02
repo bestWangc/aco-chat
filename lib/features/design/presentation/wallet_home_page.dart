@@ -9,6 +9,7 @@ class _WalletHome extends StatefulWidget {
     required this.onSendTokenSelected,
     required this.onAssetSelected,
     required this.walletName,
+    this.onTotalBalanceChanged,
     this.walletIdentity,
     this.walletLoginFuture,
   });
@@ -18,6 +19,7 @@ class _WalletHome extends StatefulWidget {
   final ValueChanged<TransferToken> onSendTokenSelected;
   final ValueChanged<WalletBalance> onAssetSelected;
   final String walletName;
+  final ValueChanged<double>? onTotalBalanceChanged;
   final WalletIdentity? walletIdentity;
   final Future<AccountProfile?>? walletLoginFuture;
 
@@ -36,6 +38,7 @@ class _WalletHomeState extends State<_WalletHome> {
   late List<WalletBalance> _initialBalances;
   List<WalletBalance> _displayBalances = const [];
   int _loadGeneration = 0;
+  int _totalBalanceGeneration = 0;
   final Map<WalletNetwork, List<WalletBalance>> _balanceCache = {};
   final LayerLink _walletActionsLink = LayerLink();
   OverlayEntry? _walletActionsEntry;
@@ -55,6 +58,7 @@ class _WalletHomeState extends State<_WalletHome> {
     _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
     _assetValuesFuture = _loadAssetValues(_balancesFuture);
     _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
+    _watchTotalBalance(_totalBalanceFuture);
     unawaited(_prepareInitialBalances(widget.selectedChain.network));
     unawaited(_streamBalances(widget.selectedChain.network, ++_loadGeneration));
     _watchWalletLogin(widget.walletLoginFuture);
@@ -323,6 +327,7 @@ class _WalletHomeState extends State<_WalletHome> {
                     .toList());
       _displayBalances = _initialBalances;
     });
+    _watchTotalBalance(_totalBalanceFuture);
     unawaited(_prepareInitialBalances(network));
     final generation = ++_loadGeneration;
     unawaited(_streamBalances(network, generation));
@@ -391,6 +396,20 @@ class _WalletHomeState extends State<_WalletHome> {
       _assetValuesFuture = _loadAssetValues(balancesFuture);
       _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
     });
+    _watchTotalBalance(_totalBalanceFuture);
+  }
+
+  void _watchTotalBalance(Future<double?> future) {
+    final generation = ++_totalBalanceGeneration;
+    unawaited(() async {
+      try {
+        final total = await future;
+        if (!mounted || generation != _totalBalanceGeneration) return;
+        widget.onTotalBalanceChanged?.call(total ?? 0);
+      } catch (_) {
+        // Keep the cached value unchanged when valuation is unavailable.
+      }
+    }());
   }
 
   Future<Map<String, double>> _loadAssetValues(

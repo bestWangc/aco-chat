@@ -621,6 +621,7 @@ class AccountApiClient {
     required String clientId,
     String? baseToken,
     String? quoteToken,
+    String? toNetwork,
     required String token,
   }) async {
     final response = await _httpClient.post(
@@ -636,6 +637,7 @@ class AccountApiClient {
         if (baseToken != null && baseToken.isNotEmpty) 'base_token': baseToken,
         if (quoteToken != null && quoteToken.isNotEmpty)
           'quote_token': quoteToken,
+        if (toNetwork != null && toNetwork.isNotEmpty) 'to_network': toNetwork,
       }),
     );
     return _body(response);
