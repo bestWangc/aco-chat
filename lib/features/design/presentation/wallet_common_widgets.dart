@@ -462,13 +462,16 @@ class _WalletAssetIcon extends StatelessWidget {
     final asset = switch (normalized) {
       'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
       'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
+      'ALD' => 'assets/icons/crypto/tokens/ald.png',
       'IOST' => null,
       _ => 'assets/icons/crypto/tokens/${normalized.toLowerCase()}.svg',
     };
     final remoteLogo = logoUri;
-    if (remoteLogo != null &&
-        (remoteLogo.startsWith('https://') ||
-            remoteLogo.startsWith('http://'))) {
+    final shouldUseRemoteLogo =
+        normalized != 'ALD' &&
+        remoteLogo != null &&
+        (remoteLogo.startsWith('https://') || remoteLogo.startsWith('http://'));
+    if (shouldUseRemoteLogo) {
       return SizedBox(
         width: size,
         height: size,

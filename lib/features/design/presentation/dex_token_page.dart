@@ -2746,6 +2746,16 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isAldToken) {
+      return ClipOval(
+        child: Image.asset(
+          'assets/icons/crypto/tokens/ald.png',
+          width: widget.size,
+          height: widget.size,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
     final uri = widget.token.logoUri;
     if (!(uri.startsWith('http://') || uri.startsWith('https://'))) {
       return _unknownTokenIcon();
@@ -2788,6 +2798,10 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
   }
 
   Widget _unknownTokenIcon() => _dexUnknownTokenIcon(widget.size);
+
+  bool get _isAldToken =>
+      widget.token.address.toLowerCase() ==
+      '0x3cbd513239d9e5538a4caed8ed53ef77009df473';
 
   Widget _loadingTokenIcon() => _dexLoadingTokenIcon(widget.size);
 }

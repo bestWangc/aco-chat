@@ -1452,6 +1452,7 @@ class _HotTokenIcon extends StatelessWidget {
     final asset = switch (normalized) {
       'USDT' => 'assets/icons/crypto/domi/tokens/usdt.png',
       'USDC' => 'assets/icons/crypto/domi/tokens/usdc.png',
+      'ALD' => 'assets/icons/crypto/tokens/ald.png',
       _ => null,
     };
     if (asset != null) {
