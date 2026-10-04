@@ -243,6 +243,7 @@ class AcoScreenPage extends StatelessWidget {
         palette: palette,
         selectedChain: _supportedWalletChains[walletChainIndex],
         walletIdentity: walletIdentity,
+        avatarUrl: avatarUrl ?? '',
         onOpen: onOpen,
         initialSection: initialDexSection,
       ),

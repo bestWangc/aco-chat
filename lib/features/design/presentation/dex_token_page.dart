@@ -8,12 +8,14 @@ class _DexTokenPage extends StatefulWidget {
     required this.palette,
     required this.selectedChain,
     this.walletIdentity,
+    this.avatarUrl = '',
     required this.onOpen,
     this.initialSection = 1,
   });
   final AcoPalette palette;
   final _WalletChain selectedChain;
   final WalletIdentity? walletIdentity;
+  final String avatarUrl;
   final ValueChanged<AcoScreen> onOpen;
   final int initialSection;
   @override
@@ -688,6 +690,8 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   bool _loadingChart = false;
   int _chartRequestId = 0;
   DexRankingToken? _tokenInfo;
+  List<DexSwapRecord> _tradeActivities = const [];
+  bool _loadingTradeActivities = false;
   double? _realtimePrice;
   DexKlineRealtimeClient? _realtimeClient;
   StreamSubscription<DexPriceUpdate>? _realtimeSubscription;
@@ -700,6 +704,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     super.initState();
     unawaited(_loadCandlesThenConnect(_selectedRange));
     _loadDexScreenerTokenInfo();
+    unawaited(_loadTradeActivities());
   }
 
   @override
@@ -707,6 +712,67 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     _realtimeSubscription?.cancel();
     _realtimeClient?.close();
     super.dispose();
+  }
+
+  Future<void> _loadTradeActivities() async {
+    if (mounted) setState(() => _loadingTradeActivities = true);
+    final tokens = await SecureAccountTokenStore().read();
+    if (tokens == null) {
+      if (mounted) setState(() => _loadingTradeActivities = false);
+      return;
+    }
+    final api = AccountApiClient();
+    try {
+      final rows = await api.listDexTrades(
+        tokenAddress: widget.token.address,
+        token: tokens.accessToken,
+      );
+      final tokenAddress = widget.token.address.toLowerCase();
+      final poolAddress = widget.token.pool.toLowerCase();
+      final matchingRows = rows.where((row) {
+        final pool = '${row['pool'] ?? ''}'.toLowerCase();
+        final base = '${row['base_token'] ?? ''}'.toLowerCase();
+        final quote = '${row['quote_token'] ?? ''}'.toLowerCase();
+        return pool == poolAddress ||
+            (tokenAddress.isNotEmpty &&
+                (base == tokenAddress || quote == tokenAddress));
+      });
+      final records = matchingRows
+          .map(_tradeActivityFromRow)
+          .toList(growable: false);
+      if (mounted) setState(() => _tradeActivities = records);
+    } catch (error) {
+      debugPrint('[DexDetail] trade activity load failed error=$error');
+    } finally {
+      api.close();
+      if (mounted) setState(() => _loadingTradeActivities = false);
+    }
+  }
+
+  Future<void> _refreshDetail() async {
+    await Future.wait([_loadTradeActivities(), _loadDexScreenerTokenInfo()]);
+  }
+
+  DexSwapRecord _tradeActivityFromRow(Map<String, dynamic> row) {
+    final network = '${row['network'] ?? widget.token.chain}';
+    final fromAddress = '${row['base_token'] ?? ''}';
+    final toAddress = '${row['quote_token'] ?? ''}';
+    return DexSwapRecord(
+      source: 'app',
+      network: network,
+      fromAmount: '${row['base_amount'] ?? ''}',
+      fromSymbol: _recordTokenSymbol(network, fromAddress),
+      toAmount: '${row['quote_amount'] ?? ''}',
+      toSymbol: _recordTokenSymbol(network, toAddress),
+      fromAddress: fromAddress,
+      toAddress: toAddress,
+      status: '${row['status'] ?? 'pending'}',
+      side: '${row['side'] ?? 'buy'}',
+      createdAt:
+          DateTime.tryParse('${row['timestamp'] ?? ''}') ?? DateTime.now(),
+      nickname: '${row['nickname'] ?? '匿名用户'}',
+      avatarUrl: '${row['avatar_url'] ?? ''}',
+    );
   }
 
   Future<void> _connectRealtime(String range) async {
@@ -883,19 +949,123 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   }
 
   void _showTradeSubmitted(String hash) {
-    showCupertinoDialog<void>(
+    final shortHash = _shortTradeHash(hash);
+    showCupertinoModalPopup<void>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('交易已提交'),
-        content: Text('交易哈希：$hash'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
+      barrierColor: CupertinoColors.black.withValues(alpha: .58),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: CupertinoPopupSurface(
+          isSurfacePainted: true,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF173E0C),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.check_mark,
+                    color: Color(0xFF8BEA25),
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  '交易已提交',
+                  style: TextStyle(fontSize: 21, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '已发送到区块链，等待网络确认',
+                  style: TextStyle(
+                    color: CupertinoColors.systemGrey,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: widget.palette.surfaceRaised,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('交易哈希', style: TextStyle(fontSize: 12)),
+                      const SizedBox(height: 5),
+                      Text(
+                        shortHash,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontFamily: 'monospace',
+                          color: widget.palette.primaryText,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        onPressed: hash.isEmpty
+                            ? null
+                            : () async {
+                                await Clipboard.setData(
+                                  ClipboardData(text: hash),
+                                );
+                                if (sheetContext.mounted) {
+                                  Navigator.of(sheetContext).pop();
+                                }
+                              },
+                        child: Text(
+                          '复制哈希',
+                          style: TextStyle(color: widget.palette.accent),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: CupertinoButton(
+                        padding: EdgeInsets.zero,
+                        color: widget.palette.accent,
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: Text(
+                          '完成',
+                          style: TextStyle(
+                            color: widget.palette.dark ? _black : _white,
+                            fontSize: 17,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
       ),
     );
+  }
+
+  String _shortTradeHash(String value) {
+    if (value.isEmpty) return '等待节点返回交易标识';
+    if (value.length <= 24) return value;
+    return '${value.substring(0, 12)}…${value.substring(value.length - 10)}';
   }
 
   String _klineInterval(String range) => switch (range) {
@@ -1096,20 +1266,27 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                   ],
                 ),
         ),
-        const SizedBox(height: 24),
-        _DexTokenDetailTabs(
-          palette: palette,
-          selected: _selectedDetailTab,
-          onChanged: (index) => setState(() => _selectedDetailTab = index),
-        ),
-        const SizedBox(height: 20),
-        if (_selectedDetailTab == 0)
-          _DexTradeActivityCard(palette: palette, token: token)
-        else
-          _DexHolderList(palette: palette),
       ],
     );
   }
+
+  Widget _buildTradeActivityRefresh(AcoPalette palette) => RefreshIndicator(
+    onRefresh: _refreshDetail,
+    color: palette.accent,
+    backgroundColor: palette.surfaceRaised,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(15, 0, 15, 24),
+      children: [
+        _DexTradeActivityCard(
+          palette: palette,
+          token: _displayToken,
+          records: _tradeActivities,
+          loading: _loadingTradeActivities,
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -1125,9 +1302,34 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
               onPressed: () => Navigator.of(context).pop(),
             ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(15, 20, 15, 24),
-                children: [_buildTokenDetails(palette)],
+              child: NestedScrollView(
+                headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(15, 20, 15, 0),
+                      child: Column(
+                        children: [
+                          _buildTokenDetails(palette),
+                          const SizedBox(height: 24),
+                          _DexTokenDetailTabs(
+                            palette: palette,
+                            selected: _selectedDetailTab,
+                            onChanged: (index) =>
+                                setState(() => _selectedDetailTab = index),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+                body: _selectedDetailTab == 0
+                    ? _buildTradeActivityRefresh(palette)
+                    : ListView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.fromLTRB(15, 0, 15, 24),
+                        children: [_DexHolderList(palette: palette)],
+                      ),
               ),
             ),
             _DexTradeActions(
@@ -1420,110 +1622,220 @@ class _DexHolderRow extends StatelessWidget {
 }
 
 class _DexTradeActivityCard extends StatelessWidget {
-  const _DexTradeActivityCard({required this.palette, required this.token});
+  const _DexTradeActivityCard({
+    required this.palette,
+    required this.token,
+    this.records = const [],
+    this.loading = false,
+  });
 
   final AcoPalette palette;
   final DexRankingToken token;
+  final List<DexSwapRecord> records;
+  final bool loading;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    decoration: BoxDecoration(
-      color: const Color(0xFF191919),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        _DexTokenDisplayIcon(token: token, size: 36),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      token.name.isEmpty ? token.symbol : token.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF173E0C),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      '买入',
-                      style: TextStyle(
-                        color: palette.accent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '5天前',
-                style: TextStyle(color: palette.mutedText, fontSize: 12),
-              ),
-            ],
-          ),
+  Widget build(BuildContext context) {
+    if (records.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 18),
+        alignment: Alignment.center,
+        child: Text(
+          loading ? '加载中' : '暂无交易动态',
+          style: TextStyle(color: palette.mutedText, fontSize: 13),
         ),
-        const SizedBox(width: 12),
-        SizedBox(
-          width: 118,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text.rich(
-                TextSpan(
+      );
+    }
+    return Column(
+      children: [
+        for (final record in records) ...[
+          _buildRow(record),
+          if (record != records.last) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRow(DexSwapRecord record) {
+    final fromAmount = _formatRecordAmount(
+      record.fromAmount,
+      record.network,
+      record.fromAddress,
+    );
+    final toAmount = _formatRecordAmount(
+      record.toAmount,
+      record.network,
+      record.toAddress,
+    );
+    final toIsUsdt = record.toSymbol.toUpperCase() == 'USDT';
+    var usdtAmount = fromAmount;
+    var tokenAmount = toAmount;
+    if (toIsUsdt) {
+      usdtAmount = toAmount;
+      tokenAmount = fromAmount;
+    }
+    final usdtValue = double.tryParse(usdtAmount);
+    final tokenValue = double.tryParse(tokenAmount);
+    final cost = usdtValue != null && tokenValue != null && tokenValue > 0
+        ? usdtValue / tokenValue
+        : null;
+    final tradeSummary = record.status.toLowerCase() == 'failed'
+        ? '交易失败'
+        : '$usdtAmount USDT 买入 $tokenAmount';
+    final costSummary = cost == null ? '' : '成本价 ${_formatCost(cost)} USDT';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF191919),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AcoAvatar(size: 36, imageUrl: record.avatarUrl),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    TextSpan(
-                      text: 'at ',
-                      style: TextStyle(color: palette.mutedText, fontSize: 14),
+                    Flexible(
+                      child: Text(
+                        record.nickname.isEmpty ? '匿名用户' : record.nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
-                    TextSpan(
-                      text: '${formatDexCompactCurrency(token.marketCap)} MC',
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: 14,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _statusColor(record),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        _statusLabel(record),
+                        style: TextStyle(
+                          color: _statusTextColor(record),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        _relativeRecordTime(record.createdAt),
+                        textAlign: TextAlign.right,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                formatDexPrice(token.price),
-                style: TextStyle(
-                  color: palette.accent,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                const SizedBox(height: 3),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        tradeSummary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 16,
+                        ),
+                      ),
+                      if (costSummary.isNotEmpty)
+                        Text(
+                          costSummary,
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: 13,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
+
+  String _statusLabel(DexSwapRecord record) {
+    switch (record.status.toLowerCase()) {
+      case 'failed':
+      case 'reverted':
+        return '失败';
+      case 'pending':
+      case 'processing':
+        return '处理中';
+      default:
+        return record.side == 'sell' ? '卖出' : '买入';
+    }
+  }
+
+  Color _statusColor(DexSwapRecord record) {
+    switch (record.status.toLowerCase()) {
+      case 'failed':
+      case 'reverted':
+        return const Color(0xFF4A1D24);
+      case 'pending':
+      case 'processing':
+        return const Color(0xFF3E3A19);
+      default:
+        return const Color(0xFF173E0C);
+    }
+  }
+
+  Color _statusTextColor(DexSwapRecord record) {
+    switch (record.status.toLowerCase()) {
+      case 'failed':
+      case 'reverted':
+        return const Color(0xFFFF6B7A);
+      case 'pending':
+      case 'processing':
+        return const Color(0xFFFFD866);
+      default:
+        return record.side == 'sell' ? const Color(0xFFFF6B7A) : palette.accent;
+    }
+  }
+
+  String _formatCost(double value) {
+    final digits = value >= 1 ? 6 : 10;
+    return value
+        .toStringAsFixed(digits)
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+}
+
+String _relativeRecordTime(DateTime value) {
+  final minutes = DateTime.now().difference(value.toLocal()).inMinutes;
+  if (minutes < 1) return '刚刚';
+  if (minutes < 60) return '$minutes分钟前';
+  final hours = minutes ~/ 60;
+  if (hours < 24) return '$hours小时前';
+  final days = hours ~/ 24;
+  return '$days天前';
 }
 
 class _DexSectionTabs extends StatelessWidget {
@@ -2895,6 +3207,18 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
       ? '读取中…'
       : '${_balances[_paySymbol.toUpperCase()] ?? '0'} $_paySymbol';
 
+  double get _availableBalanceValue =>
+      double.tryParse(_balances[_paySymbol.toUpperCase()] ?? '') ?? 0;
+
+  bool get _canSubmit {
+    final amount = double.tryParse(_amountController.text.trim()) ?? 0;
+    return !_submitting &&
+        !_loadingBalance &&
+        widget.walletIdentity != null &&
+        amount > 0 &&
+        amount <= _availableBalanceValue;
+  }
+
   WalletNetwork get _network {
     switch (widget.token.chain.trim().toLowerCase()) {
       case 'bsc':
@@ -2937,8 +3261,17 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
     WalletNetwork.solana => 'SOL',
   };
 
-  int _decimals(String symbol) =>
-      symbol.toUpperCase() == 'USDT' || symbol.toUpperCase() == 'USDC' ? 6 : 18;
+  int _decimals(String symbol) {
+    final normalized = symbol.trim().toUpperCase();
+    final definition = WalletChainRegistry.chains[_network];
+    if (normalized == definition?.usdt?.symbol.toUpperCase()) {
+      return definition!.usdt!.decimals;
+    }
+    if (normalized == definition?.usdc?.symbol.toUpperCase()) {
+      return definition!.usdc!.decimals;
+    }
+    return definition?.decimals ?? 18;
+  }
 
   Future<void> _submitTrade() async {
     if (_submitting) return;
@@ -2953,22 +3286,111 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
       _showTradeMessage('交易', '请先连接钱包。');
       return;
     }
-    final confirmed = await showCupertinoDialog<bool>(
+    final payAddress = _buying ? _quoteAsset.address : widget.token.address;
+    final receiveAddress = _buying ? widget.token.address : _quoteAsset.address;
+    final confirmed = await showCupertinoModalPopup<bool>(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(_buying ? '确认买入' : '确认卖出'),
-        content: Text('将使用 $amount $_paySymbol 进行交易，是否继续？'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: CupertinoPopupSurface(
+          isSurfacePainted: true,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 10),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    _buying ? '确认买入' : '确认卖出',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  _confirmationRow('交易方向', _buying ? '买入' : '卖出'),
+                  _confirmationRow(
+                    _buying ? '支付数量' : '卖出数量',
+                    '$amount $_paySymbol',
+                  ),
+                  _confirmationTokenRow(
+                    _buying ? '买入代币' : '获得代币',
+                    _receiveSymbol,
+                    receiveAddress,
+                  ),
+                  _confirmationTokenRow(
+                    _buying ? '支付代币' : '卖出代币',
+                    _paySymbol,
+                    payAddress,
+                  ),
+                  _confirmationRow('网络', _networkLabel(_network)),
+                  _confirmationRow(
+                    '交易路由',
+                    widget.token.dex.trim().isEmpty
+                        ? 'LI.FI'
+                        : widget.token.dex,
+                  ),
+                  _confirmationRow('钱包', _shortWallet(identity.address)),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '实际到账数量、网络手续费和路由费用以链上执行结果为准。',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: CupertinoColors.systemGrey,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 42,
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            borderRadius: BorderRadius.circular(10),
+                            onPressed: () =>
+                                Navigator.of(sheetContext).pop(false),
+                            child: Text(
+                              '取消',
+                              style: TextStyle(
+                                color: widget.palette.accent,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: SizedBox(
+                          height: 42,
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            color: widget.palette.accent,
+                            borderRadius: BorderRadius.circular(10),
+                            onPressed: () =>
+                                Navigator.of(sheetContext).pop(true),
+                            child: Text(
+                              '确认交易',
+                              style: TextStyle(
+                                color: CupertinoColors.black,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
           ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('确认'),
-          ),
-        ],
+        ),
       ),
     );
     if (confirmed != true || !mounted) return;
@@ -2995,6 +3417,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
           fromAmount: amount,
           fromDecimals: _decimals(_paySymbol),
           fromAddress: fromAddress,
+          toAddress: fromAddress,
           fromTokenAddress: _nonEmptyAddress(
             _buying ? _quoteAsset.address : widget.token.address,
           ),
@@ -3077,6 +3500,90 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  Widget _confirmationRow(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 13,
+            color: CupertinoColors.systemGrey,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontSize: 13),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _confirmationTokenRow(String label, String symbol, String address) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13,
+                color: CupertinoColors.systemGrey,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    symbol,
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    address.trim().isEmpty ? '合约地址未知' : address,
+                    textAlign: TextAlign.right,
+                    softWrap: true,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: CupertinoColors.systemGrey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  String _networkLabel(WalletNetwork network) => switch (network) {
+    WalletNetwork.ethereum => 'Ethereum',
+    WalletNetwork.arbitrum => 'Arbitrum',
+    WalletNetwork.optimism => 'Optimism',
+    WalletNetwork.base => 'Base',
+    WalletNetwork.bsc => 'BNB Chain',
+    WalletNetwork.polygon => 'Polygon',
+    WalletNetwork.tron => 'TRON',
+    WalletNetwork.solana => 'Solana',
+  };
+
+  String _shortWallet(String address) {
+    final value = address.trim();
+    if (value.length <= 14) return value;
+    return '${value.substring(0, 8)}...${value.substring(value.length - 6)}';
   }
 
   String? _nonEmptyAddress(String value) =>
@@ -3446,13 +3953,19 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
                 height: 52,
                 child: CupertinoButton(
                   padding: EdgeInsets.zero,
-                  color: mutedSurface,
+                  color: _canSubmit
+                      ? (_buying
+                            ? const Color(0xFF25C66A)
+                            : const Color(0xFFEB456C))
+                      : mutedSurface,
                   borderRadius: BorderRadius.circular(26),
-                  onPressed: _submitting ? null : _submitTrade,
+                  onPressed: _canSubmit ? _submitTrade : null,
                   child: Text(
                     _submitting ? '处理中…' : (_buying ? '买入' : '卖出'),
                     style: TextStyle(
-                      color: palette.mutedText.withValues(alpha: .7),
+                      color: _canSubmit
+                          ? Colors.white
+                          : palette.mutedText.withValues(alpha: .7),
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
                     ),

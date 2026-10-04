@@ -644,15 +644,18 @@ class AccountApiClient {
   }
 
   Future<List<Map<String, dynamic>>> listDexTrades({
-    required String wallet,
+    String? wallet,
     String? dex,
     String? pool,
+    String? tokenAddress,
     required String token,
   }) async {
     final query = <String, String>{
-      'wallet': wallet,
+      if (wallet != null && wallet.isNotEmpty) 'wallet': wallet,
       if (dex != null && dex.isNotEmpty) 'dex': dex,
       if (pool != null && pool.isNotEmpty) 'pool': pool,
+      if (tokenAddress != null && tokenAddress.isNotEmpty)
+        'token_address': tokenAddress,
     };
     final response = await _httpClient.get(
       _uri('dex/trades').replace(queryParameters: query),

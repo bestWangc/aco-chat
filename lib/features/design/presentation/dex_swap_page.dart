@@ -1228,6 +1228,9 @@ class DexSwapRecord {
     this.fromAddress = '',
     this.toAddress = '',
     required this.status,
+    this.side = 'buy',
+    this.nickname = '',
+    this.avatarUrl = '',
     required this.createdAt,
   });
 
@@ -1240,6 +1243,9 @@ class DexSwapRecord {
   final String fromAddress;
   final String toAddress;
   final String status;
+  final String side;
+  final String nickname;
+  final String avatarUrl;
   final DateTime createdAt;
 }
 
