@@ -692,6 +692,9 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   DexRankingToken? _tokenInfo;
   List<DexSwapRecord> _tradeActivities = const [];
   bool _loadingTradeActivities = false;
+  List<DexSwapRecord> _myTradeActivities = const [];
+  bool _loadingMyTradeActivities = false;
+  WalletIdentity? _resolvedWalletIdentity;
   double? _realtimePrice;
   DexKlineRealtimeClient? _realtimeClient;
   StreamSubscription<DexPriceUpdate>? _realtimeSubscription;
@@ -699,12 +702,16 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
 
   DexRankingToken get _displayToken => _tokenInfo ?? widget.token;
 
+  WalletIdentity? get _activeWalletIdentity =>
+      widget.walletIdentity ?? _resolvedWalletIdentity;
+
   @override
   void initState() {
     super.initState();
     unawaited(_loadCandlesThenConnect(_selectedRange));
     _loadDexScreenerTokenInfo();
     unawaited(_loadTradeActivities());
+    unawaited(_loadMyTradeActivities());
   }
 
   @override
@@ -750,7 +757,52 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   }
 
   Future<void> _refreshDetail() async {
-    await Future.wait([_loadTradeActivities(), _loadDexScreenerTokenInfo()]);
+    await Future.wait([
+      _loadTradeActivities(),
+      _loadDexScreenerTokenInfo(),
+      _loadMyTradeActivities(),
+    ]);
+  }
+
+  Future<void> _loadMyTradeActivities() async {
+    final identity = await _resolveWalletIdentity();
+    final tokens = await SecureAccountTokenStore().read();
+    if (identity == null || tokens == null) {
+      if (mounted) setState(() => _myTradeActivities = const []);
+      return;
+    }
+    if (mounted) setState(() => _loadingMyTradeActivities = true);
+    final api = AccountApiClient();
+    try {
+      final rows = await api.listDexTrades(
+        wallet: identity.address,
+        tokenAddress: widget.token.address,
+        token: tokens.accessToken,
+      );
+      if (mounted) {
+        setState(() {
+          _myTradeActivities = rows
+              .map(_tradeActivityFromRow)
+              .toList(growable: false);
+        });
+      }
+    } catch (error) {
+      debugPrint('[DexDetail] current user trades load failed error=$error');
+    } finally {
+      api.close();
+      if (mounted) setState(() => _loadingMyTradeActivities = false);
+    }
+  }
+
+  Future<WalletIdentity?> _resolveWalletIdentity() async {
+    final configuredIdentity = widget.walletIdentity;
+    if (configuredIdentity != null) return configuredIdentity;
+
+    final storedIdentity = await WalletPreferences.walletIdentity();
+    if (mounted && storedIdentity != null) {
+      setState(() => _resolvedWalletIdentity = storedIdentity);
+    }
+    return storedIdentity;
   }
 
   DexSwapRecord _tradeActivityFromRow(Map<String, dynamic> row) {
@@ -1328,7 +1380,17 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                     : ListView(
                         physics: const AlwaysScrollableScrollPhysics(),
                         padding: const EdgeInsets.fromLTRB(15, 0, 15, 24),
-                        children: [_DexHolderList(palette: palette)],
+                        children: [
+                          _DexTradeActivityCard(
+                            palette: palette,
+                            token: _displayToken,
+                            records: _myTradeActivities,
+                            loading: _loadingMyTradeActivities,
+                            emptyMessage: _activeWalletIdentity == null
+                                ? '连接钱包后查看你的买入卖出记录'
+                                : '暂无买入卖出记录',
+                          ),
+                        ],
                       ),
               ),
             ),
@@ -1476,7 +1538,7 @@ class _DexTokenDetailTabs extends StatelessWidget {
     children: [
       _buildTab('交易动态', 0),
       const SizedBox(width: 20),
-      _buildTab('持有者(456)', 1),
+      _buildTab('持仓', 1),
     ],
   );
 
@@ -1524,115 +1586,20 @@ class _DexTokenDetailTabs extends StatelessWidget {
   }
 }
 
-class _DexHolder {
-  const _DexHolder({
-    required this.nickname,
-    required this.holdingTime,
-    required this.totalValue,
-  });
-
-  final String nickname;
-  final String holdingTime;
-  final String totalValue;
-}
-
-const _mockDexHolders = <_DexHolder>[
-  _DexHolder(nickname: '早起的鸟儿', holdingTime: '持有 18小时', totalValue: '\$18.72M'),
-  _DexHolder(
-    nickname: 'ZEC Builder',
-    holdingTime: '持有 35天',
-    totalValue: '\$14.04M',
-  ),
-  _DexHolder(nickname: '链上观察员', holdingTime: '持有 72天', totalValue: '\$10.28M'),
-  _DexHolder(
-    nickname: 'Moon Walker',
-    holdingTime: '持有 150天',
-    totalValue: '\$7.40M',
-  ),
-  _DexHolder(nickname: '长期主义者', holdingTime: '持有 12天', totalValue: '\$4.91M'),
-  _DexHolder(
-    nickname: 'Crypto Fox',
-    holdingTime: '持有 28天',
-    totalValue: '\$3.22M',
-  ),
-];
-
-class _DexHolderList extends StatelessWidget {
-  const _DexHolderList({required this.palette});
-
-  final AcoPalette palette;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      for (final holder in _mockDexHolders) ...[
-        _DexHolderRow(holder: holder, palette: palette),
-        if (holder != _mockDexHolders.last) const SizedBox(height: 8),
-      ],
-    ],
-  );
-}
-
-class _DexHolderRow extends StatelessWidget {
-  const _DexHolderRow({required this.holder, required this.palette});
-
-  final _DexHolder holder;
-  final AcoPalette palette;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    decoration: BoxDecoration(
-      color: const Color(0xFF191919),
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                holder.nickname,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                holder.holdingTime,
-                style: TextStyle(color: palette.mutedText, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-        Text(
-          holder.totalValue,
-          style: TextStyle(
-            color: palette.accent,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
 class _DexTradeActivityCard extends StatelessWidget {
   const _DexTradeActivityCard({
     required this.palette,
     required this.token,
     this.records = const [],
     this.loading = false,
+    this.emptyMessage = '暂无交易动态',
   });
 
   final AcoPalette palette;
   final DexRankingToken token;
   final List<DexSwapRecord> records;
   final bool loading;
+  final String emptyMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -1641,7 +1608,7 @@ class _DexTradeActivityCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 18),
         alignment: Alignment.center,
         child: Text(
-          loading ? '加载中' : '暂无交易动态',
+          loading ? '加载中' : emptyMessage,
           style: TextStyle(color: palette.mutedText, fontSize: 13),
         ),
       );
