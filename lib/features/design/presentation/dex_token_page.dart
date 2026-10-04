@@ -2091,123 +2091,135 @@ class _DexSearchResultRow extends StatelessWidget {
     final title = token.symbol;
     final quote = token.quoteSymbol.trim();
     final age = _dexTokenAge(token.createdAt) ?? '--';
+    const metricGap = SizedBox(width: 6);
 
     return CupertinoButton(
       padding: const EdgeInsets.symmetric(vertical: 8),
       minimumSize: Size.zero,
       onPressed: onTap,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _DexTokenDisplayIcon(token: token, size: 44),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text.rich(
-                        TextSpan(
+      child: SizedBox(
+        width: double.infinity,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _DexTokenDisplayIcon(token: token, size: 44),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
                           children: [
-                            TextSpan(
-                              text: title,
-                              style: TextStyle(
-                                color: palette.primaryText,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
+                            Expanded(
+                              child: Text.rich(
+                                TextSpan(
+                                  children: [
+                                    TextSpan(
+                                      text: title,
+                                      style: TextStyle(
+                                        color: palette.primaryText,
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (quote.isNotEmpty)
+                                      TextSpan(
+                                        text: '/$quote',
+                                        style: TextStyle(
+                                          color: palette.mutedText,
+                                          fontSize: 15,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            if (quote.isNotEmpty)
-                              TextSpan(
-                                text: '/$quote',
+                            if (token.verified) ...[
+                              const SizedBox(width: 5),
+                              const _VerifiedTokenBadge(),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        formatDexCompactCurrency(token.marketCap),
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const ClampingScrollPhysics(),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                formatDexPrice(token.price),
+                                maxLines: 1,
+                                overflow: TextOverflow.visible,
+                                softWrap: false,
                                 style: TextStyle(
-                                  color: palette.mutedText,
+                                  color: palette.primaryText,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              metricGap,
+                              Text(
+                                _formatDexChange(token.change),
+                                maxLines: 1,
+                                overflow: TextOverflow.visible,
+                                softWrap: false,
+                                style: TextStyle(
+                                  color: _dexChangeColor(token.change),
                                   fontSize: 15,
                                 ),
                               ),
-                          ],
+                              metricGap,
+                              Text(
+                                '(24h)',
+                                style: TextStyle(
+                                  color: palette.mutedText,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        age,
                         maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (token.verified) ...[
-                      const SizedBox(width: 5),
-                      const _VerifiedTokenBadge(),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const ClampingScrollPhysics(),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              formatDexPrice(token.price),
-                              maxLines: 1,
-                              overflow: TextOverflow.visible,
-                              softWrap: false,
-                              style: TextStyle(
-                                color: palette.primaryText,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              _formatDexChange(token.change),
-                              maxLines: 1,
-                              overflow: TextOverflow.visible,
-                              softWrap: false,
-                              style: TextStyle(
-                                color: _dexChangeColor(token.change),
-                                fontSize: 15,
-                              ),
-                            ),
-                            Text(
-                              '(24h)',
-                              style: TextStyle(
-                                color: palette.mutedText,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
+                        softWrap: false,
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: 14,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                formatDexCompactCurrency(token.marketCap),
-                maxLines: 1,
-                overflow: TextOverflow.visible,
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                age,
-                style: TextStyle(color: palette.mutedText, fontSize: 14),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
