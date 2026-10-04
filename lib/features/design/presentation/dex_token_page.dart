@@ -809,6 +809,13 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     final network = '${row['network'] ?? widget.token.chain}';
     final fromAddress = '${row['base_token'] ?? ''}';
     final toAddress = '${row['quote_token'] ?? ''}';
+    final rawSide = '${row['side'] ?? ''}'.toLowerCase();
+    final side = switch (rawSide) {
+      'sell' || 'buy' => rawSide,
+      _ when fromAddress.toLowerCase() == widget.token.address.toLowerCase() =>
+        'sell',
+      _ => 'buy',
+    };
     return DexSwapRecord(
       source: 'app',
       network: network,
@@ -819,7 +826,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
       fromAddress: fromAddress,
       toAddress: toAddress,
       status: '${row['status'] ?? 'pending'}',
-      side: '${row['side'] ?? 'buy'}',
+      side: side,
       createdAt:
           DateTime.tryParse('${row['timestamp'] ?? ''}') ?? DateTime.now(),
       nickname: '${row['nickname'] ?? '匿名用户'}',
@@ -1001,7 +1008,6 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   }
 
   void _showTradeSubmitted(String hash) {
-    final shortHash = _shortTradeHash(hash);
     showCupertinoModalPopup<void>(
       context: context,
       barrierColor: CupertinoColors.black.withValues(alpha: .58),
@@ -1057,7 +1063,8 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                       const Text('交易哈希', style: TextStyle(fontSize: 12)),
                       const SizedBox(height: 5),
                       Text(
-                        shortHash,
+                        hash.isEmpty ? '等待节点返回交易标识' : hash,
+                        softWrap: true,
                         style: TextStyle(
                           fontSize: 14,
                           fontFamily: 'monospace',
@@ -1112,12 +1119,6 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
         ),
       ),
     );
-  }
-
-  String _shortTradeHash(String value) {
-    if (value.isEmpty) return '等待节点返回交易标识';
-    if (value.length <= 24) return value;
-    return '${value.substring(0, 12)}…${value.substring(value.length - 10)}';
   }
 
   String _klineInterval(String range) => switch (range) {
@@ -1646,9 +1647,13 @@ class _DexTradeActivityCard extends StatelessWidget {
     final cost = usdtValue != null && tokenValue != null && tokenValue > 0
         ? usdtValue / tokenValue
         : null;
-    final tradeSummary = record.status.toLowerCase() == 'failed'
-        ? '交易失败'
-        : '$usdtAmount USDT 买入 $tokenAmount';
+    final tradeSummary = switch (record.status.toLowerCase()) {
+      'failed' || 'reverted' => '交易失败',
+      _ =>
+        record.side == 'sell'
+            ? '卖出 $tokenAmount，获得 $usdtAmount USDT'
+            : '$usdtAmount USDT 买入 $tokenAmount',
+    };
     final costSummary = cost == null ? '' : '成本价 ${_formatCost(cost)} USDT';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -1821,7 +1826,7 @@ class _DexSectionTabs extends StatelessWidget {
     offset: Offset(selectedSection == 0 ? 16 : 0, 0),
     child: _SectionTabs(
       palette: palette,
-      labels: const ['闪兑', '代币', '合约', '股票'],
+      labels: const ['闪兑&跨链', '代币', '合约', '股票'],
       selected: selectedSection,
       itemSpacing: 12,
       fontSize: 18,
@@ -3111,16 +3116,61 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
     }
     final portfolio = WalletPortfolioService();
     try {
+      final network = _network;
+      final derivedAddresses = await WalletPreferences.derivedAddresses(
+        identity,
+      );
       final balances = await portfolio.loadBalances(
-        network: widget.selectedChain.network,
+        network: network,
         identity: identity,
-        derivedAddresses: await WalletPreferences.derivedAddresses(identity),
+        derivedAddresses: derivedAddresses,
         accessToken: tokenStore.accessToken,
       );
+      final customTokens = await WalletMetadataStore().customTokens(identity);
+      final tokenMetadata = customTokens
+          .cast<CustomTokenDefinition?>()
+          .firstWhere(
+            (token) =>
+                token?.network == network.name &&
+                token?.address.toLowerCase() ==
+                    widget.token.address.toLowerCase(),
+            orElse: () => null,
+          );
+      final customAssets = [
+        if (tokenMetadata != null)
+          WalletAsset(
+            network: network,
+            symbol: tokenMetadata.symbol,
+            name: tokenMetadata.symbol,
+            decimals: tokenMetadata.decimals,
+            isNative: false,
+            tokenAddress: tokenMetadata.address,
+          ),
+        if (tokenMetadata == null && widget.token.address.isNotEmpty)
+          WalletAsset(
+            network: network,
+            symbol: widget.token.symbol,
+            name: widget.token.name,
+            decimals: _decimals(widget.token.symbol),
+            isNative: false,
+            tokenAddress: widget.token.address,
+          ),
+      ];
+      final allBalances = [...balances];
+      if (customAssets.isNotEmpty) {
+        await for (final balance in portfolio.loadAssetBalances(
+          network: network,
+          identity: identity,
+          accessToken: tokenStore.accessToken,
+          assets: customAssets,
+        )) {
+          allBalances.add(balance);
+        }
+      }
       if (!mounted) return;
       setState(() {
         _balances = {
-          for (final balance in balances)
+          for (final balance in allBalances)
             balance.symbol.toUpperCase(): balance.balance == null
                 ? '0'
                 : formatChainAmount(
@@ -3586,6 +3636,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
         txHash: txHash,
         baseToken: quote.fromTokenAddress,
         quoteToken: quote.toTokenAddress,
+        side: _buying ? 'buy' : 'sell',
         toNetwork: _network.name,
       );
     } catch (error) {
@@ -3654,9 +3705,11 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
   }
 
   void _setAmountFraction(double fraction) {
-    final balance =
-        double.tryParse(_balances[_paySymbol.toUpperCase()] ?? '') ?? 0;
-    final amount = _formatTradeAmount(balance * fraction);
+    final balanceText = _balances[_paySymbol.toUpperCase()] ?? '0';
+    final balance = double.tryParse(balanceText) ?? 0;
+    final amount = fraction == 1
+        ? balanceText
+        : _formatTradeAmount(balance * fraction);
     _amountController
       ..text = amount
       ..selection = TextSelection.collapsed(offset: amount.length);
@@ -3734,226 +3787,240 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
     final mutedSurface = palette.primaryText.withValues(alpha: .07);
     final inputSurface = palette.primaryText.withValues(alpha: .05);
     final inputBorder = palette.primaryText.withValues(alpha: .12);
-    return CupertinoPopupSurface(
-      isSurfacePainted: false,
-      child: SafeArea(
-        top: false,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
-          decoration: BoxDecoration(
-            color: palette.background,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 42,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: palette.mutedText.withValues(alpha: .42),
-                  borderRadius: BorderRadius.circular(99),
-                ),
+    return PopScope(
+      canPop: !_submitting,
+      child: CupertinoPopupSurface(
+        isSurfacePainted: false,
+        child: SafeArea(
+          top: false,
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 18),
+            decoration: BoxDecoration(
+              color: palette.background,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
               ),
-              const SizedBox(height: 24),
-              Row(
+            ),
+            child: AbsorbPointer(
+              absorbing: _submitting,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: Container(
-                      height: 40,
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: mutedSurface,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        children: [
-                          _DexTradeModeTab(
-                            label: '买入',
-                            selected: _buying,
-                            color: const Color(0xFF25C66A),
-                            onPressed: () => _setBuying(true),
-                          ),
-                          _DexTradeModeTab(
-                            label: '卖出',
-                            selected: !_buying,
-                            color: const Color(0xFFEB456C),
-                            onPressed: () => _setBuying(false),
-                          ),
-                        ],
-                      ),
+                  Container(
+                    width: 42,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: palette.mutedText.withValues(alpha: .42),
+                      borderRadius: BorderRadius.circular(99),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 22),
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 18, 16, 15),
-                decoration: BoxDecoration(
-                  color: inputSurface,
-                  border: Border.all(color: inputBorder),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: CupertinoTextField(
-                            controller: _amountController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            placeholder: '0',
-                            placeholderStyle: TextStyle(
-                              color: palette.mutedText.withValues(alpha: .7),
-                              fontSize: 44,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            style: TextStyle(
-                              color: palette.primaryText,
-                              fontSize: 44,
-                              fontWeight: FontWeight.w700,
-                            ),
-                            padding: EdgeInsets.zero,
-                            decoration: const BoxDecoration(),
-                            onChanged: (_) => setState(() {}),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          height: 40,
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: mutedSurface,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            children: [
+                              _DexTradeModeTab(
+                                label: '买入',
+                                selected: _buying,
+                                color: const Color(0xFF25C66A),
+                                onPressed: () => _setBuying(true),
+                              ),
+                              _DexTradeModeTab(
+                                label: '卖出',
+                                selected: !_buying,
+                                color: const Color(0xFFEB456C),
+                                onPressed: () => _setBuying(false),
+                              ),
+                            ],
                           ),
                         ),
-                        Text(
-                          _paySymbol,
-                          style: TextStyle(
-                            color: palette.primaryText,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 16, 15),
+                    decoration: BoxDecoration(
+                      color: inputSurface,
+                      border: Border.all(color: inputBorder),
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: CupertinoTextField(
+                                controller: _amountController,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                placeholder: '0',
+                                placeholderStyle: TextStyle(
+                                  color: palette.mutedText.withValues(
+                                    alpha: .7,
+                                  ),
+                                  fontSize: 44,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                style: TextStyle(
+                                  color: palette.primaryText,
+                                  fontSize: 44,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                                padding: EdgeInsets.zero,
+                                decoration: const BoxDecoration(),
+                                onChanged: (_) => setState(() {}),
+                              ),
+                            ),
+                            Text(
+                              _paySymbol,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: 22,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            onPressed: _availableQuotes.length > 1
+                                ? _pickQuote
+                                : null,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text.rich(
+                                  TextSpan(
+                                    style: TextStyle(
+                                      color: palette.mutedText,
+                                      fontSize: 14,
+                                    ),
+                                    children: [
+                                      const TextSpan(text: '可用 '),
+                                      TextSpan(
+                                        text: _availableBalance,
+                                        style: TextStyle(
+                                          color: palette.primaryText,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_availableQuotes.length > 1) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    CupertinoIcons.chevron_down,
+                                    color: palette.primaryText,
+                                    size: 13,
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: _availableQuotes.length > 1
-                            ? _pickQuote
-                            : null,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text.rich(
-                              TextSpan(
-                                style: TextStyle(
-                                  color: palette.mutedText,
-                                  fontSize: 14,
-                                ),
-                                children: [
-                                  const TextSpan(text: '可用 '),
-                                  TextSpan(
-                                    text: _availableBalance,
-                                    style: TextStyle(
-                                      color: palette.primaryText,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (_availableQuotes.length > 1) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                CupertinoIcons.chevron_down,
-                                color: palette.primaryText,
-                                size: 13,
-                              ),
-                            ],
-                          ],
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Text(
+                        '预计获得数量',
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: 16,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Text(
-                    '预计获得数量',
-                    style: TextStyle(color: palette.mutedText, fontSize: 16),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '$_estimatedReceive $_receiveSymbol',
-                    style: TextStyle(
-                      color: palette.primaryText,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  for (final option in const [
-                    ('10%', .1),
-                    ('25%', .25),
-                    ('50%', .5),
-                    ('MAX', 1.0),
-                  ])
-                    Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          right: option.$1 == 'MAX' ? 0 : 10,
+                      const Spacer(),
+                      Text(
+                        '$_estimatedReceive $_receiveSymbol',
+                        style: TextStyle(
+                          color: palette.primaryText,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
                         ),
-                        child: CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size.fromHeight(42),
-                          color: mutedSurface,
-                          borderRadius: BorderRadius.circular(10),
-                          onPressed: _loadingBalance
-                              ? null
-                              : () => _setAmountFraction(option.$2),
-                          child: Text(
-                            option.$1,
-                            style: TextStyle(
-                              color: palette.primaryText,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      for (final option in const [
+                        ('10%', .1),
+                        ('25%', .25),
+                        ('50%', .5),
+                        ('MAX', 1.0),
+                      ])
+                        Expanded(
+                          child: Padding(
+                            padding: EdgeInsets.only(
+                              right: option.$1 == 'MAX' ? 0 : 10,
+                            ),
+                            child: CupertinoButton(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size.fromHeight(42),
+                              color: mutedSurface,
+                              borderRadius: BorderRadius.circular(10),
+                              onPressed: _loadingBalance
+                                  ? null
+                                  : () => _setAmountFraction(option.$2),
+                              child: Text(
+                                option.$1,
+                                style: TextStyle(
+                                  color: palette.primaryText,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
                         ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      color: _canSubmit
+                          ? (_buying
+                                ? const Color(0xFF25C66A)
+                                : const Color(0xFFEB456C))
+                          : mutedSurface,
+                      borderRadius: BorderRadius.circular(26),
+                      onPressed: _canSubmit ? _submitTrade : null,
+                      child: Text(
+                        _submitting ? '处理中…' : (_buying ? '买入' : '卖出'),
+                        style: TextStyle(
+                          color: _canSubmit
+                              ? Colors.white
+                              : palette.mutedText.withValues(alpha: .7),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  color: _canSubmit
-                      ? (_buying
-                            ? const Color(0xFF25C66A)
-                            : const Color(0xFFEB456C))
-                      : mutedSurface,
-                  borderRadius: BorderRadius.circular(26),
-                  onPressed: _canSubmit ? _submitTrade : null,
-                  child: Text(
-                    _submitting ? '处理中…' : (_buying ? '买入' : '卖出'),
-                    style: TextStyle(
-                      color: _canSubmit
-                          ? Colors.white
-                          : palette.mutedText.withValues(alpha: .7),
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),

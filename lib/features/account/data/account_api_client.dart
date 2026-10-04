@@ -621,6 +621,7 @@ class AccountApiClient {
     required String clientId,
     String? baseToken,
     String? quoteToken,
+    String? side,
     String? toNetwork,
     required String token,
   }) async {
@@ -637,6 +638,7 @@ class AccountApiClient {
         if (baseToken != null && baseToken.isNotEmpty) 'base_token': baseToken,
         if (quoteToken != null && quoteToken.isNotEmpty)
           'quote_token': quoteToken,
+        if (side != null && side.isNotEmpty) 'side': side,
         if (toNetwork != null && toNetwork.isNotEmpty) 'to_network': toNetwork,
       }),
     );

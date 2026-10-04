@@ -13,10 +13,14 @@ class WalletRpcClient {
     this.ownsClient = false,
   });
 
-  static const requestTimeout = Duration(seconds: 5);
+  // Public RPC nodes can take several seconds to answer during congestion.
+  // Keep enough time for allowance checks and transaction broadcasts while
+  // still failing promptly when an endpoint is unavailable.
+  static const requestTimeout = Duration(seconds: 15);
   final http.Client client;
   final Uri directoryBaseUri;
   final bool ownsClient;
+  int _endpointCursor = 0;
 
   Future<List<Uri>> loadEndpoints({
     required String network,
@@ -55,10 +59,18 @@ class WalletRpcClient {
     List<Uri> endpoints,
     Map<String, Object> request,
   ) async {
+    if (endpoints.isEmpty) {
+      throw const FormatException('RPC endpoint list is empty');
+    }
+    final start = _endpointCursor++ % endpoints.length;
+    final orderedEndpoints = [
+      ...endpoints.skip(start),
+      ...endpoints.take(start),
+    ];
     final result = Completer<Map<String, dynamic>>();
-    var remaining = endpoints.length;
+    var remaining = orderedEndpoints.length;
     Object? lastError;
-    for (final uri in endpoints) {
+    for (final uri in orderedEndpoints) {
       _postJsonToUri(uri, request)
           .then((value) {
             if (!result.isCompleted) result.complete(value);

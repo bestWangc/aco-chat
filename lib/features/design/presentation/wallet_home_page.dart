@@ -710,7 +710,7 @@ class _WalletHomeState extends State<_WalletHome> {
                     children: [
                       Expanded(
                         child: _OutlineButton(
-                          label: '闪兑',
+                          label: '闪兑&跨链',
                           icon: CupertinoIcons.bolt_fill,
                           palette: widget.palette,
                           height: 58,

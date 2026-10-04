@@ -25,6 +25,7 @@ class DexTradeService {
     required String txHash,
     String? baseToken,
     String? quoteToken,
+    String? side,
     String? toNetwork,
   }) async {
     unawaited(flushPending());
@@ -40,6 +41,7 @@ class DexTradeService {
       txHash: txHash,
       baseToken: baseToken,
       quoteToken: quoteToken,
+      side: side,
       toNetwork: toNetwork,
     );
   }
@@ -53,6 +55,7 @@ class DexTradeService {
     required String txHash,
     String? baseToken,
     String? quoteToken,
+    String? side,
     String? toNetwork,
   }) async {
     final tokens = await _tokenStore.read();
@@ -67,6 +70,7 @@ class DexTradeService {
       'tx_hash': txHash,
       if (baseToken case final token?) 'base_token': token,
       if (quoteToken case final token?) 'quote_token': token,
+      if (side case final value?) 'side': value,
       if (toNetwork case final network?) 'to_network': network,
     };
     final queue = prefs.getStringList(_queueKey) ?? <String>[];
@@ -81,6 +85,7 @@ class DexTradeService {
       txHash: txHash,
       baseToken: baseToken,
       quoteToken: quoteToken,
+      side: side,
       toNetwork: toNetwork,
       clientId: clientId,
       token: tokens.accessToken,
@@ -107,6 +112,7 @@ class DexTradeService {
           txHash: '${value['tx_hash']}',
           baseToken: value['base_token']?.toString(),
           quoteToken: value['quote_token']?.toString(),
+          side: value['side']?.toString(),
           toNetwork: value['to_network']?.toString(),
         );
         final remaining = prefs.getStringList(_queueKey) ?? <String>[];
