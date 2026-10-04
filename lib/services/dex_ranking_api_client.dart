@@ -651,7 +651,7 @@ DexRankingToken? _tokenFromSearchPool(
     logoUri: _nonEmptyString(pool['icon'], ''),
     price: _nonEmptyString(pool['price_usd'], ''),
     change: _formatDexSearchChange(pool['pcr']),
-    marketCap: _nonEmptyString(pool['market_value'], ''),
+    marketCap: _nonEmptyString(pool['tvl_usd'], ''),
     volume: _nonEmptyString(pool['vu'], ''),
     liquidity: _nonEmptyString(pool['tvl_usd'], ''),
     verified: pool['verified'] == true,

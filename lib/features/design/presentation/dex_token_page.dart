@@ -2142,26 +2142,44 @@ class _DexSearchResultRow extends StatelessWidget {
                 const SizedBox(height: 2),
                 Row(
                   children: [
-                    Text(
-                      formatDexPrice(token.price),
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const ClampingScrollPhysics(),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              formatDexPrice(token.price),
+                              maxLines: 1,
+                              overflow: TextOverflow.visible,
+                              softWrap: false,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              _formatDexChange(token.change),
+                              maxLines: 1,
+                              overflow: TextOverflow.visible,
+                              softWrap: false,
+                              style: TextStyle(
+                                color: _dexChangeColor(token.change),
+                                fontSize: 15,
+                              ),
+                            ),
+                            Text(
+                              '(24h)',
+                              style: TextStyle(
+                                color: palette.mutedText,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _formatDexChange(token.change),
-                      style: TextStyle(
-                        color: _dexChangeColor(token.change),
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '(24h)',
-                      style: TextStyle(color: palette.mutedText, fontSize: 14),
                     ),
                   ],
                 ),
@@ -2169,30 +2187,25 @@ class _DexSearchResultRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          SizedBox(
-            width: 84,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FittedBox(
-                  alignment: Alignment.centerRight,
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    formatDexCompactCurrency(token.marketCap),
-                    style: TextStyle(
-                      color: palette.primaryText,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                formatDexCompactCurrency(token.marketCap),
+                maxLines: 1,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  age,
-                  style: TextStyle(color: palette.mutedText, fontSize: 14),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                age,
+                style: TextStyle(color: palette.mutedText, fontSize: 14),
+              ),
+            ],
           ),
         ],
       ),
@@ -2538,20 +2551,63 @@ String _normalizedDexLogoUrl(String value) {
 }
 
 String formatDexCompactCurrency(String value) {
-  final parsed = double.tryParse(value.trim());
+  final normalized = value.trim().replaceFirst(RegExp(r'^\$'), '');
+  final suffixed = RegExp(
+    r'^(-?[\d.,]+)\s*([KMBT])$',
+    caseSensitive: false,
+  ).firstMatch(normalized);
+  if (suffixed != null) {
+    final number = double.tryParse(suffixed.group(1)!.replaceAll(',', ''));
+    if (number != null && number.isFinite) {
+      return _formatDexCompactValue(
+        number * _dexCurrencyMultiplier(suffixed.group(2)!),
+      );
+    }
+  }
+
+  final parsed = double.tryParse(normalized.replaceAll(',', ''));
   if (parsed == null) return value.isEmpty ? '--' : '\$$value';
 
+  return _formatDexCompactValue(parsed);
+}
+
+String _formatDexCompactValue(double parsed) {
+  if (!parsed.isFinite) return '\$$parsed';
+
   final absolute = parsed.abs();
-  final (divisor, suffix) = absolute >= 1e9
-      ? (1e9, 'B')
-      : absolute >= 1e6
-      ? (1e6, 'M')
-      : absolute >= 1e3
-      ? (1e3, 'K')
-      : (1, '');
+  var divisor = 1.0;
+  var suffix = '';
+  if (absolute >= 1e12) {
+    divisor = 1e12;
+    suffix = 'T';
+  } else if (absolute >= 1e9) {
+    divisor = 1e9;
+    suffix = 'B';
+  } else if (absolute >= 1e6) {
+    divisor = 1e6;
+    suffix = 'M';
+  } else if (absolute >= 1e3) {
+    divisor = 1e3;
+    suffix = 'K';
+  }
   final number = _trimTrailingZeros((absolute / divisor).toStringAsFixed(2));
   final sign = parsed < 0 ? '-' : '';
   return '\$$sign$number$suffix';
+}
+
+double _dexCurrencyMultiplier(String suffix) {
+  switch (suffix.toUpperCase()) {
+    case 'K':
+      return 1e3;
+    case 'M':
+      return 1e6;
+    case 'B':
+      return 1e9;
+    case 'T':
+      return 1e12;
+    default:
+      return 1;
+  }
 }
 
 String formatDexPrice(String value) {
