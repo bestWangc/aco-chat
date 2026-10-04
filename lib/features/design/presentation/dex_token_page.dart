@@ -953,6 +953,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   Widget _buildTokenDetails(AcoPalette palette) {
     final token = _displayToken;
     final price = _realtimePrice?.toString() ?? token.price;
+    final marketCap = _tokenInfo?.marketCap ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -982,16 +983,14 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        FittedBox(
-                          alignment: Alignment.centerLeft,
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            formatDexPrice(price),
-                            style: TextStyle(
-                              color: palette.primaryText,
-                              fontSize: AcoTypography.metric,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        Text(
+                          formatDexPrice(price),
+                          maxLines: 2,
+                          softWrap: true,
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: AcoTypography.metric,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ],
@@ -1004,7 +1003,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                   children: [
                     _MarketStat(
                       label: '市值',
-                      value: formatDexCompactCurrency(token.marketCap),
+                      value: formatDexCompactCurrency(marketCap),
                       palette: palette,
                       width: marketWidth,
                     ),

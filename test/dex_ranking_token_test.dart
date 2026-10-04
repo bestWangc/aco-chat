@@ -156,6 +156,8 @@ void main() {
     expect(tokens.single.address, 'token-address');
     expect(tokens.single.quoteSymbol, 'WBNB');
     expect(tokens.single.change, '+0.00%');
+    expect(tokens.single.marketCap, '500000');
+    expect(tokens.single.liquidity, '500000');
   });
 
   test('searches stocks by the stocks market code', () async {
@@ -262,7 +264,7 @@ class _DexScreenerClient extends http.BaseClient {
         '"info":{"imageUrl":"https://detail.test/new-logo.png"},'
         '"priceUsd":"1.23",'
         '"priceChange":{"m5":0.25},'
-        '"volume":{"h24":45678},'
+        '"volume":{"h24":45678},"vu":45678,'
         '"liquidity":{"usd":987654},'
         '"marketCap":1234567'
         '}]}';

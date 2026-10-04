@@ -504,7 +504,8 @@ class DexRankingApiClient {
     debugPrint('[DexScreener] GET $uri');
     final response = await _client.get(uri);
     debugPrint(
-      '[DexScreener] response status=${response.statusCode} body=${response.body}',
+      '[DexScreener] detail response url=$uri '
+      'status=${response.statusCode} body=${response.body}',
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw http.ClientException('DexScreener 请求失败：${response.statusCode}');
@@ -514,7 +515,19 @@ class DexRankingApiClient {
     if (pairs is! List) return null;
     final pairValues = pairs.whereType<Map<String, dynamic>>();
     final pair = pairValues.isEmpty ? null : pairValues.first;
-    return pair == null ? null : _mergeDexScreenerPair(token, pair);
+    if (pair == null) return null;
+
+    final parsed = _mergeDexScreenerPair(token, pair);
+    debugPrint(
+      '[DexScreener] detail fields symbol=${parsed.symbol} '
+      'marketCap=${pair['marketCap']} '
+      'liquidity.usd=${DexRankingToken._asMap(pair['liquidity'])['usd']} '
+      'volume.h24=${DexRankingToken._asMap(pair['volume'])['h24']} '
+      'parsedMarketCap=${parsed.marketCap} '
+      'parsedLiquidity=${parsed.liquidity} '
+      'parsedVolume=${parsed.volume}',
+    );
+    return parsed;
   }
 
   Future<List<DexKline>> klineHistory(
@@ -717,9 +730,9 @@ DexRankingToken _mergeDexScreenerPair(
   Map<String, dynamic> pair,
 ) {
   final base = DexRankingToken._asMap(pair['baseToken']);
-  final liquidity = DexRankingToken._asMap(pair['liquidity']);
   final priceChange = DexRankingToken._asMap(pair['priceChange']);
   final volume = DexRankingToken._asMap(pair['volume']);
+  final liquidity = DexRankingToken._asMap(pair['liquidity']);
 
   return fallback.copyWith(
     symbol: _nonEmptyString(base['symbol'], fallback.symbol),
@@ -735,12 +748,9 @@ DexRankingToken _mergeDexScreenerPair(
       priceChange['m5'] ?? priceChange['h24'],
       fallback.change,
     ),
-    marketCap: _nonEmptyString(
-      pair['marketCap'] ?? pair['fdv'],
-      fallback.marketCap,
-    ),
-    volume: _nonEmptyString(volume['h24'], fallback.volume),
-    liquidity: _nonEmptyString(liquidity['usd'], fallback.liquidity),
+    marketCap: _nonEmptyString(pair['marketCap'], ''),
+    volume: _nonEmptyString(volume['h24'], ''),
+    liquidity: _nonEmptyString(liquidity['usd'], ''),
     createdAt: _parseCreatedAt(pair['pairCreatedAt']) ?? fallback.createdAt,
   );
 }
