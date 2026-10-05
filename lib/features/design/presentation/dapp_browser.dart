@@ -236,6 +236,8 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
                     javaScriptEnabled: true,
                     javaScriptCanOpenWindowsAutomatically: false,
                     supportMultipleWindows: false,
+                    mediaPlaybackRequiresUserGesture: false,
+                    allowsInlineMediaPlayback: true,
                     useShouldOverrideUrlLoading: true,
                     safeBrowsingEnabled: true,
                     clearCache: false,
@@ -856,7 +858,14 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     final security = WalletSecurity();
     final store = SecureWalletSecretStore();
     final biometric = await BiometricAuthentication.availability();
-    if (allowBiometric && biometric == BiometricAvailability.enrolled) {
+    final biometricAvailable =
+        allowBiometric && biometric == BiometricAvailability.enrolled;
+    final hasDeviceProtection = await security.hasDeviceProtection(
+      store: store,
+      walletAddress: identity.address,
+    );
+    final canUseBiometric = biometricAvailable && hasDeviceProtection;
+    if (canUseBiometric) {
       if (!await BiometricAuthentication.authenticateOrSkip()) return null;
       return security.unlockMnemonicWithDeviceProtection(
         store: store,
@@ -865,11 +874,23 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     }
     final password = await _requestPassword();
     if (password == null) return null;
-    return security.unlockMnemonic(
+    final mnemonic = await security.unlockMnemonic(
       store: store,
       walletAddress: identity.address,
       password: password,
     );
+    if (biometricAvailable) {
+      try {
+        await security.saveMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: identity.address,
+          mnemonic: mnemonic,
+        );
+      } catch (_) {
+        // Signing already has a valid password-authenticated mnemonic.
+      }
+    }
+    return mnemonic;
   }
 
   Future<String?> _requestPassword() => showCupertinoDialog<String>(

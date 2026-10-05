@@ -229,6 +229,11 @@ class WalletSecurity {
     );
   }
 
+  Future<bool> hasDeviceProtection({
+    required WalletSecretStore store,
+    required String walletAddress,
+  }) async => (await store.read(_devicePasswordKey(walletAddress))) != null;
+
   Future<void> deleteMnemonic({
     required WalletSecretStore store,
     required String walletAddress,
