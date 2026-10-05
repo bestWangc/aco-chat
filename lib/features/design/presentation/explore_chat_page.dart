@@ -748,6 +748,15 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     return name?.isNotEmpty == true ? name! : (_conversationTarget ?? '聊天');
   }
 
+  String? _senderNameForMessage(
+    _ChatHistoryMessage message,
+    Message? sourceMessage,
+  ) {
+    if (!_isGroup || message.mine || sourceMessage == null) return null;
+    final nickname = sourceMessage.senderNickname?.trim();
+    return nickname?.isNotEmpty == true ? nickname : sourceMessage.sendID;
+  }
+
   Future<void> _pickChatImage(ImageSource source, {XFile? selected}) async {
     setState(() => _morePanelVisible = false);
     File? pickedImage;
@@ -1605,6 +1614,10 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                         message.isVoiceCallRecord,
                                     sendFailed: message.sendFailed,
                                     mine: message.mine,
+                                    senderName: _senderNameForMessage(
+                                      message,
+                                      sourceMessage,
+                                    ),
                                     avatarUrl: _isGroup
                                         ? sourceMessage?.senderFaceUrl ??
                                               _resolvedPeerAvatar
@@ -2529,6 +2542,7 @@ class _ChatMessage extends StatelessWidget {
     required this.isVoiceCallRecord,
     required this.sendFailed,
     required this.mine,
+    this.senderName,
     this.avatarUrl,
     this.ownAvatarUrl,
     this.onAvatarLongPress,
@@ -2555,6 +2569,7 @@ class _ChatMessage extends StatelessWidget {
   final bool isVoiceCallRecord;
   final bool sendFailed;
   final bool mine;
+  final String? senderName;
   final String? avatarUrl;
   final String? ownAvatarUrl;
   final VoidCallback? onAvatarLongPress;
@@ -2588,7 +2603,28 @@ class _ChatMessage extends StatelessWidget {
             Flexible(
               child: ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: _copyableMessageBody(context, maxWidth: maxBubbleWidth),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (senderName?.trim().isNotEmpty == true) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2, bottom: 4),
+                        child: Text(
+                          senderName!.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF8D8D8D),
+                            fontSize: 12,
+                            height: 1.15,
+                          ),
+                        ),
+                      ),
+                    ],
+                    _copyableMessageBody(context, maxWidth: maxBubbleWidth),
+                  ],
+                ),
               ),
             ),
             if (mine) ...[
