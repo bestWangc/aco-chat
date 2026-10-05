@@ -25,6 +25,17 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
   final _addressController = TextEditingController();
   late Future<List<DappEntry>> _hotDapps;
   late Future<List<DappEntry>> _earningsDapps;
+  var _selectedSection = 0;
+
+  static const _community = DappEntry(
+    id: 'wandering-earth',
+    name: '流浪地球',
+    category: 'game',
+    subcategory: 'game',
+    url: 'https://wander.acogame.fun',
+    iconUrl: '',
+    networks: ['bsc'],
+  );
 
   @override
   void initState() {
@@ -112,55 +123,70 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
             Expanded(
               child: _SectionTabs(
                 palette: widget.palette,
-                labels: const ['热门'],
-                selected: 0,
+                labels: const ['热门', 'ACO 社区'],
+                selected: _selectedSection,
                 itemSpacing: 20,
+                onChanged: (index) => setState(() => _selectedSection = index),
               ),
             ),
           ],
         ),
       ),
       const SizedBox(height: 10),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: FutureBuilder<List<DappEntry>>(
-          future: _hotDapps,
-          builder: (_, snapshot) {
-            final dapps = snapshot.data ?? const <DappEntry>[];
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const SizedBox(height: 85);
-            }
-            if (dapps.isEmpty) {
-              return SizedBox(
-                height: 85,
-                child: Align(
-                  alignment: Alignment.topLeft,
-                  child: Text(
-                    '${widget.selectedChain.network.name} 暂无热门 DApp',
-                    style: TextStyle(
-                      color: widget.palette.mutedText,
-                      fontSize: AcoTypography.caption,
+      if (_selectedSection == 0)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: FutureBuilder<List<DappEntry>>(
+            future: _hotDapps,
+            builder: (_, snapshot) {
+              final dapps = snapshot.data ?? const <DappEntry>[];
+              if (snapshot.connectionState != ConnectionState.done) {
+                return const SizedBox(height: 85);
+              }
+              if (dapps.isEmpty) {
+                return SizedBox(
+                  height: 85,
+                  child: Align(
+                    alignment: Alignment.topLeft,
+                    child: Text(
+                      '${widget.selectedChain.network.name} 暂无热门 DApp',
+                      style: TextStyle(
+                        color: widget.palette.mutedText,
+                        fontSize: AcoTypography.caption,
+                      ),
                     ),
                   ),
-                ),
+                );
+              }
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  for (final dapp in dapps.take(5))
+                    Flexible(
+                      child: _DiscoverShortcut(
+                        palette: widget.palette,
+                        dapp: dapp,
+                        onTap: () => _openDapp(context, dapp),
+                      ),
+                    ),
+                ],
               );
-            }
-            return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                for (final dapp in dapps.take(5))
-                  Flexible(
-                    child: _DiscoverShortcut(
-                      palette: widget.palette,
-                      dapp: dapp,
-                      onTap: () => _openDapp(context, dapp),
-                    ),
-                  ),
-              ],
-            );
-          },
+            },
+          ),
+        )
+      else
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: _DiscoverShortcut(
+              palette: widget.palette,
+              dapp: _community,
+              onTap: () => _openDapp(context, _community),
+              logoAsset: 'assets/images/community_wandering_earth.webp',
+            ),
+          ),
         ),
-      ),
       const SizedBox(height: 22),
       _DiscoverPromoCarousel(palette: widget.palette),
       const SizedBox(height: 30),

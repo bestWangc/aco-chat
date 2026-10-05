@@ -32,6 +32,9 @@ const _trustWalletDappLogos = <String, String>{
 };
 
 String _dappLogoAsset(String dappId) {
+  if (dappId == 'wandering-earth') {
+    return 'assets/images/community_wandering_earth.webp';
+  }
   final trustWalletLogo = _trustWalletDappLogos[dappId];
   return trustWalletLogo == null
       ? 'assets/images/dapps/$dappId.webp'
@@ -106,10 +109,12 @@ class _DiscoverShortcut extends StatelessWidget {
     required this.palette,
     required this.dapp,
     required this.onTap,
+    this.logoAsset,
   });
   final AcoPalette palette;
   final DappEntry dapp;
   final VoidCallback onTap;
+  final String? logoAsset;
 
   Widget _fallbackIcon(IconData icon) {
     if (dapp.iconUrl.isEmpty) {
@@ -154,7 +159,7 @@ class _DiscoverShortcut extends StatelessWidget {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.asset(
-                _dappLogoAsset(dapp.id),
+                logoAsset ?? _dappLogoAsset(dapp.id),
                 width: 52,
                 height: 52,
                 fit: BoxFit.contain,
