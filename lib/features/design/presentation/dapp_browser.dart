@@ -199,7 +199,17 @@ class _DappBrowserMenuAction extends StatelessWidget {
 }
 
 class _DappBrowserPageState extends State<_DappBrowserPage> {
-  final _connectedOrigins = <String>{};
+  static final _keepAliveByDapp = <String, InAppWebViewKeepAlive>{};
+  static final _connectedPermissionKeys = <String>{};
+
+  final _sessionConnectedOrigins = <String>{};
+  late final bool _restoringWebView = _keepAliveByDapp.containsKey(
+    widget.dappId,
+  );
+  late final InAppWebViewKeepAlive _keepAlive = _keepAliveByDapp.putIfAbsent(
+    widget.dappId,
+    InAppWebViewKeepAlive.new,
+  );
   InAppWebViewController? _controller;
   late Uri _currentUri;
   late _WalletChain _activeChain;
@@ -209,16 +219,46 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   bool get _isEvmChain =>
       WalletChainRegistry.chains[_activeChain.network]?.isEvm ?? false;
 
+  InAppWebViewSettings get _webViewSettings => InAppWebViewSettings(
+    javaScriptEnabled: true,
+    javaScriptCanOpenWindowsAutomatically: false,
+    supportMultipleWindows: false,
+    cacheEnabled: true,
+    domStorageEnabled: true,
+    databaseEnabled: true,
+    incognito: false,
+    sharedCookiesEnabled: true,
+    thirdPartyCookiesEnabled: true,
+    mediaPlaybackRequiresUserGesture: false,
+    allowsInlineMediaPlayback: true,
+    useShouldOverrideUrlLoading: true,
+    safeBrowsingEnabled: true,
+    clearCache: false,
+  );
+
+  UnmodifiableListView<UserScript> get _initialUserScripts {
+    final scripts = <UserScript>[_dappStorageUserScript];
+    if (_isEvmChain) {
+      scripts.add(_evmProviderUserScript);
+    } else if (_activeChain.network == WalletNetwork.solana) {
+      scripts.add(_solanaProviderUserScript);
+    }
+    return UnmodifiableListView(scripts);
+  }
+
   @override
   void initState() {
     super.initState();
     _activeChain = widget.selectedChain;
     _currentUri = _normalizeDappUri(widget.initialUrl);
+    if (_restoringWebView) _isLoading = false;
+    unawaited(_restoreConnectedPermissions());
   }
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: widget.palette.background,
+    resizeToAvoidBottomInset: false,
     child: SafeArea(
       left: false,
       right: false,
@@ -229,24 +269,14 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
             child: Stack(
               children: [
                 InAppWebView(
-                  initialUrlRequest: URLRequest(
-                    url: WebUri(_currentUri.toString()),
-                  ),
-                  initialSettings: InAppWebViewSettings(
-                    javaScriptEnabled: true,
-                    javaScriptCanOpenWindowsAutomatically: false,
-                    supportMultipleWindows: false,
-                    mediaPlaybackRequiresUserGesture: false,
-                    allowsInlineMediaPlayback: true,
-                    useShouldOverrideUrlLoading: true,
-                    safeBrowsingEnabled: true,
-                    clearCache: false,
-                  ),
-                  initialUserScripts: _isEvmChain
-                      ? UnmodifiableListView([_evmProviderUserScript])
-                      : _activeChain.network == WalletNetwork.solana
-                      ? UnmodifiableListView([_solanaProviderUserScript])
-                      : null,
+                  keepAlive: _keepAlive,
+                  initialUrlRequest: _restoringWebView
+                      ? null
+                      : URLRequest(url: WebUri(_currentUri.toString())),
+                  initialSettings: _restoringWebView ? null : _webViewSettings,
+                  initialUserScripts: _restoringWebView
+                      ? null
+                      : _initialUserScripts,
                   onWebViewCreated: _onWebViewCreated,
                   onLoadStart: (_, url) => _onLocationChanged(url),
                   onLoadStop: (_, url) {
@@ -400,6 +430,10 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
 
   void _onWebViewCreated(InAppWebViewController controller) {
     _controller = controller;
+    if (_restoringWebView && mounted) {
+      setState(() => _isLoading = false);
+      unawaited(_syncRestoredUrl(controller));
+    }
     controller.addJavaScriptHandler(
       handlerName: 'acoDappProvider',
       callback: (arguments) => _handleProviderRequest(arguments),
@@ -408,7 +442,87 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       handlerName: 'acoSolanaProvider',
       callback: (arguments) => _handleSolanaProviderRequest(arguments),
     );
+    controller.addJavaScriptHandler(
+      handlerName: 'acoDappStorageGet',
+      callback: (arguments) => _loadDappStorage(arguments),
+    );
+    controller.addJavaScriptHandler(
+      handlerName: 'acoDappStorageSet',
+      callback: (arguments) => _saveDappStorage(arguments),
+    );
   }
+
+  Future<void> _restoreConnectedPermissions() async {
+    final preferences = await SharedPreferences.getInstance();
+    _connectedPermissionKeys.addAll(
+      preferences.getStringList('dapp.connected_permissions') ?? const [],
+    );
+  }
+
+  String? _connectionPermissionKey() {
+    final origin = _origin;
+    final identity = widget.walletIdentity;
+    if (origin == null || identity == null) return null;
+    return '$origin|${_activeChain.network.name}|${identity.address.toLowerCase()}';
+  }
+
+  bool _isOriginConnected() {
+    final key = _connectionPermissionKey();
+    return key != null && _connectedPermissionKeys.contains(key);
+  }
+
+  Future<void> _rememberOriginConnection() async {
+    final key = _connectionPermissionKey();
+    if (key == null) return;
+    _connectedPermissionKeys.add(key);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setStringList(
+      'dapp.connected_permissions',
+      _connectedPermissionKeys.toList(growable: false),
+    );
+  }
+
+  Future<void> _syncRestoredUrl(InAppWebViewController controller) async {
+    final url = await controller.getUrl();
+    if (url != null) _onLocationChanged(url);
+  }
+
+  Future<Map<String, String>> _loadDappStorage(List<dynamic> arguments) async {
+    final origin = _storageOrigin(arguments);
+    if (origin == null) return const {};
+    final preferences = await SharedPreferences.getInstance();
+    final encoded = preferences.getString(_dappStorageKey(origin));
+    if (encoded == null || encoded.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(encoded);
+      if (decoded is! Map) return const {};
+      return decoded.map((key, value) => MapEntry('$key', '$value'));
+    } on FormatException {
+      return const {};
+    }
+  }
+
+  Future<bool> _saveDappStorage(List<dynamic> arguments) async {
+    if (arguments.length != 1 || arguments.first is! Map) return false;
+    final payload = Map<String, dynamic>.from(arguments.first as Map);
+    final origin = payload['origin'];
+    final data = payload['data'];
+    if (origin is! String || data is! Map) return false;
+    final values = <String, String>{
+      for (final entry in data.entries) '${entry.key}': '${entry.value}',
+    };
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.setString(_dappStorageKey(origin), jsonEncode(values));
+  }
+
+  String? _storageOrigin(List<dynamic> arguments) {
+    if (arguments.length != 1 || arguments.first is! String) return null;
+    final origin = arguments.first as String;
+    return origin == _origin ? origin : null;
+  }
+
+  String _dappStorageKey(String origin) =>
+      'dapp.local_storage.${Uri.encodeComponent(origin)}';
 
   Future<Map<String, dynamic>> _handleSolanaProviderRequest(
     List<dynamic> arguments,
@@ -446,21 +560,21 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     }
     final address = await _solanaAddress(identity);
     if (address == null) return _providerError(4100, 'Solana 地址尚未准备完成');
-    if (!_connectedOrigins.contains(origin)) {
+    if (!_sessionConnectedOrigins.contains(origin)) {
       final approved = await _confirm(
         title: '连接 Solana 钱包',
         message: '$origin 将读取 $address 的公开地址。',
         action: '连接',
       );
       if (!approved) return _providerError(4001, '用户拒绝连接钱包');
-      _connectedOrigins.add(origin);
+      _sessionConnectedOrigins.add(origin);
     }
     return _providerResult({'publicKey': address});
   }
 
   Map<String, dynamic> _disconnectSolanaWallet() {
     final origin = _origin;
-    if (origin != null) _connectedOrigins.remove(origin);
+    if (origin != null) _sessionConnectedOrigins.remove(origin);
     return _providerResult(null);
   }
 
@@ -469,7 +583,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     final origin = _origin;
     if (identity == null ||
         origin == null ||
-        !_connectedOrigins.contains(origin)) {
+        !_sessionConnectedOrigins.contains(origin)) {
       return _providerError(4100, '请先连接钱包');
     }
     if (rawParams is! Map || rawParams['message'] is! String) {
@@ -513,7 +627,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     final origin = _origin;
     if (identity == null ||
         origin == null ||
-        !_connectedOrigins.contains(origin)) {
+        !_sessionConnectedOrigins.contains(origin)) {
       return _providerError(4100, '请先连接钱包');
     }
     if (rawParams is! Map || rawParams['transaction'] is! String) {
@@ -586,8 +700,9 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
             radix: 16,
           ).toString(),
         ),
-        'eth_accounts' => _providerResult(_accountsForCurrentOrigin()),
+        'eth_accounts' => _accountsForCurrentOrigin(),
         'eth_requestAccounts' => _requestAccounts(),
+        'eth_call' => _ethCall(request['params']),
         'wallet_switchEthereumChain' => _switchEthereumChain(request['params']),
         'personal_sign' => _signMessage(request['params'], personal: true),
         'eth_sign' => _signMessage(request['params'], personal: false),
@@ -607,20 +722,61 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   }
 
   Future<Map<String, dynamic>> _requestAccounts() async {
+    await _restoreConnectedPermissions();
     final identity = widget.walletIdentity;
     if (identity == null) return _providerError(4100, '请先创建或导入钱包');
     final origin = _origin;
     if (origin == null) return _providerError(4100, '当前页面来源无效');
-    if (!_connectedOrigins.contains(origin)) {
+    if (!_isOriginConnected()) {
       final approved = await _confirm(
         title: '连接钱包',
         message: '$origin 将读取 ${identity.address} 的公开地址。',
         action: '连接',
       );
       if (!approved) return _providerError(4001, '用户拒绝连接钱包');
-      _connectedOrigins.add(origin);
+      await _rememberOriginConnection();
     }
     return _providerResult([identity.address]);
+  }
+
+  Future<Map<String, dynamic>> _ethCall(dynamic rawParams) async {
+    if (rawParams is! List || rawParams.isEmpty || rawParams.first is! Map) {
+      return _providerError(-32602, 'eth_call 参数无效');
+    }
+    final tokens = await SecureAccountTokenStore().read();
+    if (tokens == null || tokens.accessToken.isEmpty) {
+      return _providerError(4100, '账户尚未登录');
+    }
+    final call = Map<String, Object>.from(rawParams.first as Map);
+    final blockTag = rawParams.length > 1 && rawParams[1] is String
+        ? rawParams[1] as String
+        : 'latest';
+    final rpc = WalletRpcClient(
+      client: http.Client(),
+      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+      ownsClient: true,
+    );
+    try {
+      final endpoints = await rpc.loadEndpoints(
+        network: _activeChain.network.name,
+        accessToken: tokens.accessToken,
+      );
+      final response = await rpc.postJson(endpoints, {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'eth_call',
+        'params': [call, blockTag],
+      });
+      final result = response['result'];
+      if (result is! String) {
+        return _providerError(-32000, 'eth_call 返回结果无效');
+      }
+      return _providerResult(result);
+    } catch (_) {
+      return _providerError(-32000, 'eth_call 执行失败');
+    } finally {
+      rpc.close();
+    }
   }
 
   Future<Map<String, dynamic>> _switchEthereumChain(dynamic rawParams) async {
@@ -655,9 +811,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   }) async {
     final identity = widget.walletIdentity;
     final origin = _origin;
-    if (identity == null ||
-        origin == null ||
-        !_connectedOrigins.contains(origin)) {
+    if (identity == null || origin == null || !_isOriginConnected()) {
       return _providerError(4100, '请先连接钱包');
     }
     if (rawParams is! List || rawParams.length < 2) {
@@ -709,9 +863,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   Future<Map<String, dynamic>> _sendTransaction(dynamic rawParams) async {
     final identity = widget.walletIdentity;
     final origin = _origin;
-    if (identity == null ||
-        origin == null ||
-        !_connectedOrigins.contains(origin)) {
+    if (identity == null || origin == null || !_isOriginConnected()) {
       return _providerError(4100, '请先连接钱包');
     }
     if (!_isEvmChain) return _providerError(4200, '当前网络不是 EVM 网络');
@@ -730,17 +882,6 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     if (to is! String || !RegExp(r'^0x[0-9a-fA-F]{40}$').hasMatch(to)) {
       return _providerError(-32602, '当前仅支持 EVM 原生资产转账');
     }
-    const unsupportedFields = {
-      'gas',
-      'gasPrice',
-      'maxFeePerGas',
-      'maxPriorityFeePerGas',
-      'nonce',
-    };
-    final unsupported = unsupportedFields.where(transaction.containsKey);
-    if (unsupported.isNotEmpty) {
-      return _providerError(4200, '交易包含暂不支持的字段：${unsupported.join(', ')}');
-    }
     final value = _parseHexInteger(transaction['value'] ?? '0x0');
     if (value == null || value < BigInt.zero) {
       return _providerError(-32602, '交易金额无效');
@@ -752,18 +893,22 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     }
 
     final data = transaction['data'] ?? transaction['input'] ?? '0x';
-    if (data is! String) return _providerError(-32602, '交易调用数据无效');
+    if (data is! String || !data.startsWith('0x')) {
+      return _providerError(-32602, '交易调用数据无效');
+    }
+    final dataBytes = _evmMessageBytes(data);
+    if (dataBytes == null) return _providerError(-32602, '交易调用数据无效');
+    final hasContractData = data != '0x';
+    final requestedGas = _parseHexInteger(transaction['gas'] ?? '');
+    final gasLimit = _gasLimitFor(
+      requestedGas,
+      hasContractData: hasContractData,
+    );
     final tokenCall = _parseSupportedTokenCall(
       contract: to,
       data: data,
       network: _activeChain.network,
     );
-    if (data != '0x' && tokenCall == null) {
-      return _providerError(4200, '当前仅支持已登记代币的转账和授权');
-    }
-    if (tokenCall != null && value != BigInt.zero) {
-      return _providerError(-32602, '代币交易不能同时携带原生资产金额');
-    }
 
     final tokens = await SecureAccountTokenStore().read();
     if (tokens == null) {
@@ -776,6 +921,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
         to: to,
         value: value,
         tokenCall: tokenCall,
+        hasContractData: hasContractData,
       ),
       action: tokenCall?.isApproval == true ? '确认授权' : '确认交易',
     );
@@ -801,8 +947,8 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
           network: _activeChain.network,
           accessToken: tokens.accessToken,
           rpc: rpc,
-          data: tokenCall?.data ?? const [],
-          gasLimit: tokenCall == null ? 21000 : 65000,
+          data: dataBytes,
+          gasLimit: gasLimit,
         );
         return _providerResult(result.hash);
       } finally {
@@ -820,11 +966,19 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     required String to,
     required BigInt value,
     required _Erc20Call? tokenCall,
+    required bool hasContractData,
   }) {
     final base = '$origin 请求发送一笔交易。\n\n网络：${_activeChain.displayLabel}\n';
     if (tokenCall == null) {
+      if (hasContractData) {
+        return '$base'
+            '目标合约：$to\n'
+            '附带金额：${_weiToDecimal(value)} ${_activeChain.nativeToken.symbol}\n'
+            '类型：智能合约调用\n\n'
+            '请确认你信任该 DApp 及目标合约。网络费将按当前网络实时估算。';
+      }
       return '$base'
-          '收款地址：${_shortAddress(to)}\n'
+          '收款地址：$to\n'
           '金额：${_weiToDecimal(value)} ${_activeChain.nativeToken.symbol}\n\n'
           '网络费将按当前网络实时估算。交易签名必须输入钱包密码。';
     }
@@ -840,10 +994,20 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
         : '这是标准 ERC-20 代币转账。';
     return '$base'
         '代币：${tokenCall.token.symbol}\n'
-        '$action：${_shortAddress(tokenCall.recipient)}\n'
+        '$action：${tokenCall.recipient}\n'
         '${tokenCall.isApproval ? '授权额度' : '金额'}：$amount\n'
-        '代币合约：${_shortAddress(to)}\n\n'
+        '代币合约：$to\n\n'
         '$warning\n网络费将按当前网络实时估算。交易签名必须输入钱包密码。';
+  }
+
+  int _gasLimitFor(BigInt? requested, {required bool hasContractData}) {
+    final fallback = hasContractData ? 300000 : 21000;
+    if (requested == null) return fallback;
+    final minimum = BigInt.from(21000);
+    final maximum = BigInt.from(2000000);
+    if (requested < minimum) return minimum.toInt();
+    if (requested > maximum) return maximum.toInt();
+    return requested.toInt();
   }
 
   /// Unlocks wallet material for a DApp request.
@@ -923,12 +1087,13 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     },
   );
 
-  List<String> _accountsForCurrentOrigin() {
+  Future<Map<String, dynamic>> _accountsForCurrentOrigin() async {
+    await _restoreConnectedPermissions();
     final identity = widget.walletIdentity;
-    if (identity == null || !_connectedOrigins.contains(_origin)) {
-      return const [];
+    if (identity == null || !_isOriginConnected()) {
+      return _providerResult(const []);
     }
-    return [identity.address];
+    return _providerResult([identity.address]);
   }
 
   String? get _origin {
@@ -1130,6 +1295,58 @@ String _baseUnitsToDecimal(BigInt value, int decimals) {
 }
 
 String _lamportsToSol(BigInt lamports) => _baseUnitsToDecimal(lamports, 9);
+
+final _dappStorageUserScript = UserScript(
+  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+  forMainFrameOnly: true,
+  source: '''
+(() => {
+  if (!window.flutter_inappwebview) return;
+  const origin = window.location.origin;
+  const snapshot = () => {
+    const data = {};
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+      if (key !== null) data[key] = window.localStorage.getItem(key);
+    }
+    return window.flutter_inappwebview.callHandler(
+      'acoDappStorageSet',
+      {origin, data},
+    ).catch(() => null);
+  };
+  const restore = async () => {
+    try {
+      const saved = await window.flutter_inappwebview.callHandler(
+        'acoDappStorageGet',
+        origin,
+      );
+      if (saved && typeof saved === 'object') {
+        Object.keys(saved).forEach((key) => {
+          if (window.localStorage.getItem(key) === null) {
+            window.localStorage.setItem(key, saved[key]);
+          }
+        });
+      }
+    } catch (_) {}
+    window.localStorage.addEventListener?.('storage', snapshot);
+    const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
+    const originalRemoveItem = window.localStorage.removeItem.bind(window.localStorage);
+    window.localStorage.setItem = (...args) => {
+      originalSetItem(...args);
+      snapshot();
+    };
+    window.localStorage.removeItem = (...args) => {
+      originalRemoveItem(...args);
+      snapshot();
+    };
+    snapshot();
+    window.setInterval(snapshot, 1000);
+    window.addEventListener('beforeunload', snapshot);
+  };
+  restore();
+})();
+''',
+);
 
 final _evmProviderUserScript = UserScript(
   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
