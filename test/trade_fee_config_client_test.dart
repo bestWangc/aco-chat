@@ -37,6 +37,7 @@ void main() {
           'referrerBps': 5,
           'referrerAddresses': {'evm': '0xFee', 'solana': 'SolanaFee'},
         },
+        'lifi': {'sameChainFee': 0.0015, 'crossChainFee': 0.003},
       },
     });
     final config = TradeFeeConfigClient(
@@ -57,6 +58,8 @@ void main() {
     expect(result.mayan.buildOptions, {
       'referrerAddresses': {'evm': '0xFee', 'solana': 'SolanaFee'},
     });
+    expect(result.lifi.sameChainFee, 0.0015);
+    expect(result.lifi.crossChainFee, 0.003);
   });
 
   test('treats disabled fee sections as absent transaction options', () {

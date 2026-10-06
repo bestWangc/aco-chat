@@ -46,18 +46,25 @@ class TradeFeeConfigClient {
 }
 
 class TradeFeeConfig {
-  const TradeFeeConfig({required this.hyperliquid, required this.mayan});
+  const TradeFeeConfig({
+    required this.hyperliquid,
+    required this.mayan,
+    required this.lifi,
+  });
 
   const TradeFeeConfig.empty()
     : hyperliquid = const HyperliquidBuilderFeeConfig.empty(),
-      mayan = const MayanFeeConfig.empty();
+      mayan = const MayanFeeConfig.empty(),
+      lifi = const LifiFeeConfig.empty();
 
   final HyperliquidBuilderFeeConfig hyperliquid;
   final MayanFeeConfig mayan;
+  final LifiFeeConfig lifi;
 
   factory TradeFeeConfig.fromJson(Map<String, dynamic> json) {
     final hyperliquid = json['hyperliquid'];
     final mayan = json['mayan'];
+    final lifi = json['lifi'];
     return TradeFeeConfig(
       hyperliquid: HyperliquidBuilderFeeConfig.fromJson(
         hyperliquid is Map
@@ -69,8 +76,35 @@ class TradeFeeConfig {
             ? Map<String, dynamic>.from(mayan.cast<String, dynamic>())
             : const {},
       ),
+      lifi: LifiFeeConfig.fromJson(
+        lifi is Map
+            ? Map<String, dynamic>.from(lifi.cast<String, dynamic>())
+            : const {},
+      ),
     );
   }
+}
+
+class LifiFeeConfig {
+  const LifiFeeConfig({
+    required this.sameChainFee,
+    required this.crossChainFee,
+  });
+
+  const LifiFeeConfig.empty() : sameChainFee = 0, crossChainFee = 0;
+
+  final double sameChainFee;
+  final double crossChainFee;
+
+  factory LifiFeeConfig.fromJson(Map<String, dynamic> json) {
+    return LifiFeeConfig(
+      sameChainFee: _doubleValue(json['sameChainFee']),
+      crossChainFee: _doubleValue(json['crossChainFee']),
+    );
+  }
+
+  double feeFor({required bool sameChain}) =>
+      sameChain ? sameChainFee : crossChainFee;
 }
 
 class HyperliquidBuilderFeeConfig {
@@ -161,6 +195,9 @@ class MayanFeeConfig {
 
 int _intValue(Object? value) =>
     value is num ? value.toInt() : int.tryParse('$value') ?? 0;
+
+double _doubleValue(Object? value) =>
+    value is num ? value.toDouble() : double.tryParse('$value') ?? 0;
 
 class TradeFeeConfigException implements Exception {
   const TradeFeeConfigException(this.message);

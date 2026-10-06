@@ -4,6 +4,7 @@ import 'dart:async';
 
 import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_portfolio_models.dart';
+import 'package:aco_chat/services/trade_fee_config_client.dart';
 import 'package:http/http.dart' as http;
 
 /// Minimal LI.FI REST client used by the in-app swap flow.
@@ -14,17 +15,22 @@ import 'package:http/http.dart' as http;
 class LifiApiClient {
   static const quoteTimeout = Duration(seconds: 30);
   static const requestTimeout = Duration(seconds: 15);
-  static const sameChainFee = .001;
-  static const crossChainFee = .005;
 
-  LifiApiClient({http.Client? client, Uri? baseUri})
-    : baseUri = baseUri ?? Uri.parse('https://li.quest/v1'),
-      _client = client ?? http.Client(),
-      _ownsClient = client == null;
+  LifiApiClient({
+    http.Client? client,
+    Uri? baseUri,
+    Future<TradeFeeConfig> Function()? feeConfigLoader,
+  }) : baseUri = baseUri ?? Uri.parse('https://li.quest/v1'),
+       _client = client ?? http.Client(),
+       _ownsClient = client == null,
+       _feeConfigClient = TradeFeeConfigClient(),
+       _feeConfigLoader = feeConfigLoader;
 
   final http.Client _client;
   final Uri baseUri;
   final bool _ownsClient;
+  final TradeFeeConfigClient _feeConfigClient;
+  final Future<TradeFeeConfig> Function()? _feeConfigLoader;
 
   Future<LifiQuote> quote({
     required WalletNetwork fromNetwork,
@@ -42,8 +48,7 @@ class LifiApiClient {
   }) async {
     final fromChain = chainId(fromNetwork);
     final toChain = chainId(toNetwork);
-    final integratorFee =
-        fee ?? (fromChain == toChain ? sameChainFee : crossChainFee);
+    final integratorFee = fee ?? await _loadIntegratorFee(fromChain == toChain);
     final uri = baseUri.replace(
       path: '${baseUri.path}/quote',
       queryParameters: {
@@ -200,6 +205,17 @@ class LifiApiClient {
 
   void close() {
     if (_ownsClient) _client.close();
+    _feeConfigClient.close();
+  }
+
+  Future<double> _loadIntegratorFee(bool sameChain) async {
+    try {
+      final config =
+          await (_feeConfigLoader?.call() ?? _feeConfigClient.load());
+      return config.lifi.feeFor(sameChain: sameChain);
+    } on Object catch (_) {
+      return 0;
+    }
   }
 
   static String _errorMessage(http.Response response) {

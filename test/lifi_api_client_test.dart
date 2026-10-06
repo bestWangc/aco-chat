@@ -1,4 +1,5 @@
 import 'package:aco_chat/services/lifi_api_client.dart';
+import 'package:aco_chat/services/trade_fee_config_client.dart';
 import 'package:aco_chat/services/wallet_portfolio_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -30,6 +31,7 @@ void main() {
     final api = LifiApiClient(
       client: client,
       baseUri: Uri.parse('https://li.quest/v1'),
+      feeConfigLoader: _feeConfigLoader,
     );
     await expectLater(
       api.quote(
@@ -54,6 +56,7 @@ void main() {
     final api = LifiApiClient(
       client: client,
       baseUri: Uri.parse('https://li.quest/v1'),
+      feeConfigLoader: _feeConfigLoader,
     );
     await api.quote(
       fromNetwork: WalletNetwork.ethereum,
@@ -64,7 +67,7 @@ void main() {
       fromDecimals: 18,
       fromAddress: '0xabc',
     );
-    expect(client.uri?.queryParameters['fee'], '0.001');
+    expect(client.uri?.queryParameters['fee'], '0.0015');
     expect(client.uri?.queryParameters['integrator'], 'aco');
   });
 
@@ -73,6 +76,7 @@ void main() {
     final api = LifiApiClient(
       client: client,
       baseUri: Uri.parse('https://li.quest/v1'),
+      feeConfigLoader: _feeConfigLoader,
     );
     await api.quote(
       fromNetwork: WalletNetwork.ethereum,
@@ -83,7 +87,7 @@ void main() {
       fromDecimals: 18,
       fromAddress: '0xabc',
     );
-    expect(client.uri?.queryParameters['fee'], '0.005');
+    expect(client.uri?.queryParameters['fee'], '0.003');
   });
 
   test('allows overriding the default LI.FI fee', () async {
@@ -105,6 +109,10 @@ void main() {
     expect(client.uri?.queryParameters['fee'], '0.002');
   });
 }
+
+Future<TradeFeeConfig> _feeConfigLoader() async => TradeFeeConfig.fromJson({
+  'lifi': {'sameChainFee': 0.0015, 'crossChainFee': 0.003},
+});
 
 class _ErrorClient extends http.BaseClient {
   @override
