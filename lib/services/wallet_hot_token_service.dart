@@ -41,7 +41,7 @@ class WalletHotTokenService {
   WalletHotTokenService({http.Client? client})
     : _client = client ?? http.Client();
 
-  static const _cachePrefix = 'wallet.hot-tokens.v2.';
+  static const _cachePrefix = 'wallet.hot-tokens.v3.';
   final http.Client _client;
 
   Future<List<WalletHotToken>> load(String chain) async {
