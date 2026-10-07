@@ -1465,6 +1465,7 @@ class _HotTokenIcon extends StatelessWidget {
         child: CachedNetworkImage(
           imageUrl: imageUrl,
           fit: BoxFit.cover,
+          placeholder: (_, _) => _letterIcon(normalized),
           errorWidget: (_, _, _) => _letterIcon(normalized),
         ),
       );
