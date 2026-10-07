@@ -2774,7 +2774,7 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
         width: widget.size,
         height: widget.size,
         fit: BoxFit.cover,
-        placeholder: (context, url) => _loadingTokenIcon(),
+        placeholder: (context, url) => _letterTokenIcon(widget.token.symbol),
         imageBuilder: (_, imageProvider) {
           if (!_loggedLoaded) {
             _loggedLoaded = true;
@@ -2797,7 +2797,7 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
               'url=$url error=$error; fallback=placeholder',
             );
           }
-          return _unknownTokenIcon();
+          return _letterTokenIcon(widget.token.symbol);
         },
       ),
     );
@@ -2809,7 +2809,8 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
       widget.token.address.toLowerCase() ==
       '0x3cbd513239d9e5538a4caed8ed53ef77009df473';
 
-  Widget _loadingTokenIcon() => _dexLoadingTokenIcon(widget.size);
+  Widget _letterTokenIcon(String symbol) =>
+      _dexLetterTokenIcon(symbol, widget.size);
 }
 
 Widget _dexUnknownTokenIcon(double size) => Container(
@@ -2826,15 +2827,26 @@ Widget _dexUnknownTokenIcon(double size) => Container(
   ),
 );
 
-Widget _dexLoadingTokenIcon(double size) => Container(
-  width: size,
-  height: size,
-  decoration: const BoxDecoration(
-    color: Color(0xFF303030),
-    shape: BoxShape.circle,
-  ),
-  child: const CupertinoActivityIndicator(color: CupertinoColors.white),
-);
+Widget _dexLetterTokenIcon(String symbol, double size) {
+  final normalized = symbol.trim().toUpperCase();
+  return Container(
+    width: size,
+    height: size,
+    decoration: const BoxDecoration(
+      color: Color(0xFF2680D9),
+      shape: BoxShape.circle,
+    ),
+    alignment: Alignment.center,
+    child: Text(
+      normalized.isEmpty ? '?' : normalized.substring(0, 1),
+      style: TextStyle(
+        color: CupertinoColors.white,
+        fontSize: size * .42,
+        fontWeight: FontWeight.w700,
+      ),
+    ),
+  );
+}
 
 String _shortDexAddress(String address) {
   if (address.length <= 10) return address;
