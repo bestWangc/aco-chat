@@ -1397,7 +1397,7 @@ class _AddTokenHotRow extends StatelessWidget {
           SizedBox(
             width: 46,
             height: 46,
-            child: _HotTokenIcon(symbol: token.symbol),
+            child: _HotTokenIcon(symbol: token.symbol, logoUrl: token.logoUrl),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -1443,8 +1443,9 @@ class _AddTokenHotRow extends StatelessWidget {
 }
 
 class _HotTokenIcon extends StatelessWidget {
-  const _HotTokenIcon({required this.symbol});
+  const _HotTokenIcon({required this.symbol, this.logoUrl = ''});
   final String symbol;
+  final String logoUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -1458,17 +1459,39 @@ class _HotTokenIcon extends StatelessWidget {
     if (asset != null) {
       return ClipOval(child: Image.asset(asset, fit: BoxFit.cover));
     }
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        color: Color(0xFF2680D9),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Text(
-          normalized.isEmpty ? '?' : normalized.substring(0, 1),
-          style: const TextStyle(color: _white, fontWeight: FontWeight.w700),
+    if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
+      final imageUrl = _hotTokenLogoRequestUrl(logoUrl);
+      return ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          fit: BoxFit.cover,
+          errorWidget: (_, _, _) => _letterIcon(normalized),
         ),
-      ),
-    );
+      );
+    }
+    return _letterIcon(normalized);
   }
+
+  Widget _letterIcon(String normalized) => DecoratedBox(
+    decoration: const BoxDecoration(
+      color: Color(0xFF2680D9),
+      shape: BoxShape.circle,
+    ),
+    child: Center(
+      child: Text(
+        normalized.isEmpty ? '?' : normalized.substring(0, 1),
+        style: const TextStyle(color: _white, fontWeight: FontWeight.w700),
+      ),
+    ),
+  );
+}
+
+String _hotTokenLogoRequestUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      (uri.host != 'cdn.dexscreener.com' && uri.host != 'dd.dexscreener.com')) {
+    return value;
+  }
+  return 'https://img2.ant.fun/md/${base64Url.encode(utf8.encode(value))}';
 }

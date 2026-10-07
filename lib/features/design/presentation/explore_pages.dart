@@ -29,7 +29,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
 
   static const _community = DappEntry(
     id: 'wandering-earth',
-    name: '流浪地球',
+    name: '流浪星球',
     category: 'game',
     subcategory: 'game',
     url: 'https://wander.acogame.fun',

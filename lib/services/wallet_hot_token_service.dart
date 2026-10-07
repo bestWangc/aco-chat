@@ -11,18 +11,21 @@ class WalletHotToken {
     required this.name,
     required this.address,
     required this.decimals,
+    this.logoUrl = '',
   });
 
   final String symbol;
   final String name;
   final String address;
   final int decimals;
+  final String logoUrl;
 
   factory WalletHotToken.fromJson(Map<String, dynamic> json) => WalletHotToken(
     symbol: json['symbol'] as String? ?? '',
     name: json['name'] as String? ?? '',
     address: json['address'] as String? ?? '',
     decimals: (json['decimals'] as num?)?.toInt() ?? 0,
+    logoUrl: json['logo_url'] as String? ?? json['logoUrl'] as String? ?? '',
   );
 
   Map<String, dynamic> toJson() => {
@@ -30,6 +33,7 @@ class WalletHotToken {
     'name': name,
     'address': address,
     'decimals': decimals,
+    'logo_url': logoUrl,
   };
 }
 
