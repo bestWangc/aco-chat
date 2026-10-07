@@ -2862,12 +2862,19 @@ String _normalizedDexLogoUrl(String value) {
 
 String _dexLogoRequestUrl(String value) {
   final uri = Uri.tryParse(value);
-  if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+  if (uri == null ||
+      uri.scheme != 'https' ||
+      !_shouldProxyDexLogoHost(uri.host)) {
     return value;
   }
   final encoded = base64Url.encode(utf8.encode(value));
   return 'https://img2.ant.fun/md/$encoded';
 }
+
+bool _shouldProxyDexLogoHost(String host) => switch (host.toLowerCase()) {
+  'cdn.dexscreener.com' || 'dd.dexscreener.com' => true,
+  _ => false,
+};
 
 String formatDexCompactCurrency(String value) {
   final normalized = value.trim().replaceFirst(RegExp(r'^\$'), '');
