@@ -2732,15 +2732,16 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
 
   void _logRequest() {
     final uri = widget.token.logoUri;
-    final requestUri = _normalizedDexLogoUrl(uri);
+    final sourceUri = _normalizedDexLogoUrl(uri);
+    final requestUri = _dexLogoRequestUrl(sourceUri);
     if (uri.isEmpty) {
       debugPrint('[DexLogo] missing url symbol=${widget.token.symbol}');
     } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
       debugPrint(
         '[DexLogo] request symbol=${widget.token.symbol} url=$requestUri',
       );
-      if (requestUri != uri) {
-        debugPrint('[DexLogo] original url=$uri');
+      if (requestUri != sourceUri) {
+        debugPrint('[DexLogo] source url=$sourceUri');
       }
     } else {
       debugPrint(
@@ -2766,7 +2767,7 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
       return _unknownTokenIcon();
     }
 
-    final requestUri = _normalizedDexLogoUrl(uri);
+    final requestUri = _dexLogoRequestUrl(_normalizedDexLogoUrl(uri));
     return ClipOval(
       child: CachedNetworkImage(
         imageUrl: requestUri,
@@ -2857,6 +2858,15 @@ String _normalizedDexLogoUrl(String value) {
   return uri
       .replace(queryParameters: {...uri.queryParameters, 'format': 'png'})
       .toString();
+}
+
+String _dexLogoRequestUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+    return value;
+  }
+  final encoded = base64Url.encode(utf8.encode(value));
+  return 'https://img2.ant.fun/md/$encoded';
 }
 
 String formatDexCompactCurrency(String value) {
