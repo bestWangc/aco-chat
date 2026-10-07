@@ -188,11 +188,11 @@ class MayanHyperCoreDepositClient {
         : jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map
-          ? decoded['msg'] ?? decoded['message']
+          ? decoded['msg'] ?? decoded['message'] ?? decoded['error']
           : null;
-      final detail =
-          message ??
-          (response.body.trim().isEmpty ? response.statusCode : response.body);
+      final detail = _safeFailureDetail(
+        message ?? (response.body.trim().isEmpty ? response.statusCode : null),
+      );
       throw MayanHyperCoreDepositException('$failure（$detail）');
     }
     if (decoded is! Map<String, dynamic>) {
@@ -200,7 +200,7 @@ class MayanHyperCoreDepositClient {
     }
     if (decoded['code'] != null) {
       throw MayanHyperCoreDepositException(
-        '$failure（${decoded['msg'] ?? decoded['code']}）',
+        '$failure（${_safeFailureDetail(decoded['msg'] ?? decoded['error'] ?? decoded['code'])}）',
       );
     }
     return decoded;
@@ -227,17 +227,37 @@ class MayanHyperCoreDepositClient {
         : jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map
-          ? decoded['msg'] ?? decoded['message']
+          ? decoded['msg'] ?? decoded['message'] ?? decoded['error']
           : null;
-      final detail =
-          message ??
-          (response.body.trim().isEmpty ? response.statusCode : response.body);
+      final detail = _safeFailureDetail(
+        message ?? (response.body.trim().isEmpty ? response.statusCode : null),
+      );
       throw MayanHyperCoreDepositException('$failure（$detail）');
     }
     if (decoded is! Map<String, dynamic> || decoded['success'] == false) {
-      throw const MayanHyperCoreDepositException('Mayan 返回数据无效');
+      final detail = decoded is Map
+          ? _safeFailureDetail(
+              decoded['msg'] ?? decoded['message'] ?? decoded['error'],
+            )
+          : null;
+      throw MayanHyperCoreDepositException(
+        detail == null ? 'Mayan 返回数据无效' : 'Mayan 交易失败（$detail）',
+      );
     }
     return decoded;
+  }
+
+  static String _safeFailureDetail(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty) return '服务暂时不可用，请稍后重试';
+    final normalized = text.toLowerCase();
+    if (normalized.contains('api key') || normalized.contains('unauthorized')) {
+      return '充值服务配置未完成，请稍后重试';
+    }
+    if (text.length > 160 || text.startsWith('{') || text.startsWith('[')) {
+      return '服务暂时不可用，请稍后重试';
+    }
+    return text;
   }
 
   static String _toBaseUnits(String amount, int decimals) {

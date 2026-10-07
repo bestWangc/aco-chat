@@ -2707,49 +2707,6 @@ class _DexTokenDisplayIcon extends StatefulWidget {
 }
 
 class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
-  bool _loggedLoaded = false;
-  bool _loggedFailure = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _startLogoLoad();
-  }
-
-  @override
-  void didUpdateWidget(covariant _DexTokenDisplayIcon oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.token.logoUri != widget.token.logoUri) {
-      _startLogoLoad();
-    }
-  }
-
-  void _startLogoLoad() {
-    _loggedLoaded = false;
-    _loggedFailure = false;
-    _logRequest();
-  }
-
-  void _logRequest() {
-    final uri = widget.token.logoUri;
-    final sourceUri = _normalizedDexLogoUrl(uri);
-    final requestUri = _dexLogoRequestUrl(sourceUri);
-    if (uri.isEmpty) {
-      debugPrint('[DexLogo] missing url symbol=${widget.token.symbol}');
-    } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
-      debugPrint(
-        '[DexLogo] request symbol=${widget.token.symbol} url=$requestUri',
-      );
-      if (requestUri != sourceUri) {
-        debugPrint('[DexLogo] source url=$sourceUri');
-      }
-    } else {
-      debugPrint(
-        '[DexLogo] unsupported url symbol=${widget.token.symbol} url=$uri',
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isAldToken) {
@@ -2776,12 +2733,6 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
         fit: BoxFit.cover,
         placeholder: (context, url) => _letterTokenIcon(widget.token.symbol),
         imageBuilder: (_, imageProvider) {
-          if (!_loggedLoaded) {
-            _loggedLoaded = true;
-            debugPrint(
-              '[DexLogo] loaded symbol=${widget.token.symbol} url=$requestUri',
-            );
-          }
           return Image(
             image: imageProvider,
             width: widget.size,
@@ -2789,16 +2740,8 @@ class _DexTokenDisplayIconState extends State<_DexTokenDisplayIcon> {
             fit: BoxFit.cover,
           );
         },
-        errorWidget: (context, url, error) {
-          if (!_loggedFailure) {
-            _loggedFailure = true;
-            debugPrint(
-              '[DexLogo] bitmap failed symbol=${widget.token.symbol} '
-              'url=$url error=$error; fallback=placeholder',
-            );
-          }
-          return _letterTokenIcon(widget.token.symbol);
-        },
+        errorWidget: (context, url, error) =>
+            _letterTokenIcon(widget.token.symbol),
       ),
     );
   }

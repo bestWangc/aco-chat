@@ -212,7 +212,7 @@ class _HyperliquidContractTradePageState
 
   Future<void> _chooseLeverage() async {
     if (_available <= 0) {
-      await _showMessage('请先充值 USDC，统一账户无需资金划转');
+      await _showDepositSheet();
       return;
     }
     final maxLeverage = math.max(1, _market.maxLeverage);
@@ -247,7 +247,7 @@ class _HyperliquidContractTradePageState
 
   Future<void> _submitOrder(bool isBuy) async {
     if (_available <= 0) {
-      await _showMessage('请先充值 USDC，统一账户无需 Spot → 合约划转');
+      await _showDepositSheet();
       return;
     }
     final amount = double.tryParse(_amountController.text);
@@ -632,6 +632,21 @@ class _HyperliquidContractTradePageState
           ],
         ),
       );
+
+  Future<void> _showDepositSheet() async {
+    if (!mounted) return;
+    await showCupertinoModalPopup<void>(
+      context: context,
+      builder: (_) => _HyperliquidUsdcDepositSheet(
+        palette: _palette,
+        contractAvailable: _available,
+        walletIdentity: widget.walletIdentity,
+        defaultNetwork: widget.defaultNetwork,
+        onCompleted: () => unawaited(_loadAccount(showLoading: false)),
+        rechargeOnly: true,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
@@ -1871,6 +1886,7 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
     required this.walletIdentity,
     required this.defaultNetwork,
     required this.onCompleted,
+    this.rechargeOnly = false,
   });
 
   final AcoPalette palette;
@@ -1878,6 +1894,7 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
   final WalletIdentity? walletIdentity;
   final WalletNetwork defaultNetwork;
   final VoidCallback onCompleted;
+  final bool rechargeOnly;
 
   @override
   State<_HyperliquidUsdcDepositSheet> createState() =>
@@ -2070,6 +2087,7 @@ class _HyperliquidUsdcDepositSheetState
   }
 
   void _swapDirection() {
+    if (widget.rechargeOnly) return;
     setState(() {
       _cashToContract = !_cashToContract;
       _amount = '';
@@ -2468,7 +2486,30 @@ class _HyperliquidUsdcDepositSheetState
         ? const Color(0xFF1B1B1B)
         : const Color(0xFFF5F5F5);
     final spotLabel = AppConfig.hyperliquidTestnet ? 'Spot' : '现金';
-    final destination = _cashToContract ? '合约' : spotLabel;
+    late final String sourceLabel;
+    late final String destination;
+    late final String transferTitle;
+    late final String historyMessage;
+    late final String amountPlaceholder;
+    if (widget.rechargeOnly) {
+      sourceLabel = AppConfig.hyperliquidTestnet ? 'Spot' : '钱包';
+      destination = '合约';
+      transferTitle = '充值';
+      historyMessage = '暂无充值记录';
+      amountPlaceholder = '输入充值金额';
+    } else if (_cashToContract) {
+      sourceLabel = spotLabel;
+      destination = '合约';
+      transferTitle = '划转';
+      historyMessage = '暂无划转记录';
+      amountPlaceholder = '输入划转金额';
+    } else {
+      sourceLabel = '合约';
+      destination = spotLabel;
+      transferTitle = '提现';
+      historyMessage = '暂无划转记录';
+      amountPlaceholder = '输入划转金额';
+    }
     return CupertinoPopupSurface(
       isSurfacePainted: false,
       child: Container(
@@ -2495,7 +2536,7 @@ class _HyperliquidUsdcDepositSheetState
                 Row(
                   children: [
                     Text(
-                      '划转',
+                      transferTitle,
                       style: TextStyle(
                         color: palette.primaryText,
                         fontSize: 17,
@@ -2518,7 +2559,7 @@ class _HyperliquidUsdcDepositSheetState
                       key: const Key('contract-transfer-history'),
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(36, 36),
-                      onPressed: () => _showNotice('暂无划转记录'),
+                      onPressed: () => _showNotice(historyMessage),
                       child: Icon(
                         Icons.history,
                         size: 24,
@@ -2534,23 +2575,33 @@ class _HyperliquidUsdcDepositSheetState
                       child: _TransferAccountPill(
                         palette: palette,
                         color: controlColor,
-                        label: _cashToContract ? spotLabel : '合约',
+                        label: sourceLabel,
                       ),
                     ),
-                    SizedBox(
-                      width: 48,
-                      child: CupertinoButton(
-                        key: const Key('contract-transfer-swap'),
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(40, 40),
-                        onPressed: _swapDirection,
+                    if (widget.rechargeOnly)
+                      SizedBox(
+                        width: 48,
                         child: Icon(
-                          Icons.swap_horiz,
-                          size: 28,
-                          color: palette.primaryText,
+                          Icons.arrow_forward,
+                          size: 24,
+                          color: palette.mutedText,
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        width: 48,
+                        child: CupertinoButton(
+                          key: const Key('contract-transfer-swap'),
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(40, 40),
+                          onPressed: _swapDirection,
+                          child: Icon(
+                            Icons.swap_horiz,
+                            size: 28,
+                            color: palette.primaryText,
+                          ),
                         ),
                       ),
-                    ),
                     Expanded(
                       child: _TransferAccountPill(
                         palette: palette,
@@ -2706,7 +2757,7 @@ class _HyperliquidUsdcDepositSheetState
                       onPressed: () => setState(() => _showKeypad = true),
                       child: Center(
                         child: Text(
-                          '输入划转金额',
+                          amountPlaceholder,
                           maxLines: 1,
                           textAlign: TextAlign.center,
                           style: TextStyle(
