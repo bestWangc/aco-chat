@@ -144,6 +144,7 @@ class HyperliquidBuilderFeeConfig {
 class MayanFeeConfig {
   const MayanFeeConfig({
     required this.enabled,
+    required this.apiKey,
     required this.referrer,
     required this.referrerBps,
     required this.referrerAddresses,
@@ -151,11 +152,13 @@ class MayanFeeConfig {
 
   const MayanFeeConfig.empty()
     : enabled = false,
+      apiKey = '',
       referrer = '',
       referrerBps = 0,
       referrerAddresses = const {};
 
   final bool enabled;
+  final String apiKey;
   final String referrer;
   final int referrerBps;
   final Map<String, String> referrerAddresses;
@@ -171,6 +174,7 @@ class MayanFeeConfig {
     }
     return MayanFeeConfig(
       enabled: json['enabled'] == true,
+      apiKey: '${json['apiKey'] ?? ''}'.trim(),
       referrer: '${json['referrer'] ?? ''}'.trim(),
       referrerBps: _intValue(json['referrerBps']),
       referrerAddresses: addresses,

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_security.dart';
+import 'package:aco_chat/core/config/app_config.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class HyperliquidAgent {
@@ -43,6 +44,11 @@ class HyperliquidAgentStore {
       );
       final address = '${json['address'] ?? ''}';
       if (address.isEmpty) return null;
+      final network = '${json['network'] ?? ''}';
+      final currentNetwork = AppConfig.hyperliquidTestnet
+          ? 'testnet'
+          : 'mainnet';
+      if (network != currentNetwork) return null;
       return HyperliquidAgent(
         address: address,
         name: '${json['name'] ?? 'ACO Agent'}',
@@ -96,6 +102,7 @@ class HyperliquidAgentStore {
         'address': agent.address,
         'name': agent.name,
         'approved': agent.approved,
+        'network': AppConfig.hyperliquidTestnet ? 'testnet' : 'mainnet',
       }),
     );
   }

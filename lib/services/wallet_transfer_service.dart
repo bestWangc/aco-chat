@@ -9,11 +9,164 @@ class WalletTransferResult {
   final String status;
 }
 
+class WalletFeeEstimate {
+  const WalletFeeEstimate({
+    required this.gasLimit,
+    required this.gasPriceWei,
+    required this.feeWei,
+    required this.nativeBalanceWei,
+    required this.assetBalanceWei,
+  });
+
+  final BigInt gasLimit;
+  final BigInt gasPriceWei;
+  final BigInt feeWei;
+  final BigInt nativeBalanceWei;
+  final BigInt assetBalanceWei;
+
+  bool get hasSufficientNativeBalance => nativeBalanceWei >= feeWei;
+}
+
 /// Builds and signs an EVM native transfer. Broadcasting is injected so the
 /// same signing path can be used by production RPC clients and tests.
 class WalletTransferService {
   const WalletTransferService({this.broadcast});
   final Future<String> Function(String rawTransaction)? broadcast;
+
+  /// Estimates a native or ERC-20 EVM transfer using the configured RPC.
+  /// The estimate includes the current native balance and the asset balance,
+  /// so the caller can keep the submit action disabled until both checks pass.
+  Future<WalletFeeEstimate> estimateEvmTransfer({
+    required String from,
+    required String to,
+    required WalletNetwork network,
+    required String accessToken,
+    required WalletRpcClient rpc,
+    required BigInt amountRaw,
+    String? tokenAddress,
+  }) async {
+    if (tokenAddress != null && tokenAddress.isNotEmpty) {
+      _validateEvmAddress(tokenAddress);
+    }
+    _validateEvmAddress(from);
+    _validateEvmAddress(to);
+    final endpoints = await rpc.loadEndpoints(
+      network: network.name,
+      accessToken: accessToken,
+    );
+    Future<Map<String, dynamic>> call(String method, List<Object> params) =>
+        rpc.postJson(endpoints, {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': method,
+          'params': params,
+        });
+
+    final isToken = tokenAddress != null && tokenAddress.isNotEmpty;
+    final data = isToken ? _transferData(to, amountRaw) : '0x';
+    final target = isToken ? tokenAddress : to;
+    final value = isToken ? '0x0' : _quantity(amountRaw);
+    final gasResponse = await call('eth_estimateGas', [
+      {'from': from, 'to': target, 'value': value, 'data': data},
+    ]);
+    final gasLimit = _hexToBigInt(gasResponse['result'] as String? ?? '0x0');
+    if (gasLimit <= BigInt.zero) {
+      throw const FormatException('节点无法估算网络费');
+    }
+    final gasPrice = _hexToBigInt(
+      (await call('eth_gasPrice', const []))['result'] as String? ?? '0x0',
+    );
+    final nativeBalance = _hexToBigInt(
+      (await call('eth_getBalance', [from, 'latest']))['result'] as String? ??
+          '0x0',
+    );
+    final assetBalance = isToken
+        ? _hexToBigInt(
+            (await call('eth_call', [
+                      {
+                        'to': tokenAddress,
+                        'data': '0x70a08231${_encodeAddress(from)}',
+                      },
+                      'latest',
+                    ]))['result']
+                    as String? ??
+                '0x0',
+          )
+        : nativeBalance;
+    return WalletFeeEstimate(
+      gasLimit: gasLimit,
+      gasPriceWei: gasPrice,
+      feeWei: gasLimit * gasPrice,
+      nativeBalanceWei: nativeBalance,
+      assetBalanceWei: assetBalance,
+    );
+  }
+
+  /// Signs and broadcasts either a native EVM transfer or an ERC-20 transfer.
+  Future<WalletTransferResult> executeEvmTransferWithRpc({
+    required String mnemonic,
+    required String from,
+    required String to,
+    required WalletNetwork network,
+    required String accessToken,
+    required WalletRpcClient rpc,
+    required BigInt amountRaw,
+    String? tokenAddress,
+  }) async {
+    final estimate = await estimateEvmTransfer(
+      from: from,
+      to: to,
+      network: network,
+      accessToken: accessToken,
+      rpc: rpc,
+      amountRaw: amountRaw,
+      tokenAddress: tokenAddress,
+    );
+    final isToken = tokenAddress != null && tokenAddress.isNotEmpty;
+    if (estimate.assetBalanceWei < amountRaw) {
+      throw const FormatException('资产余额不足');
+    }
+    if (estimate.nativeBalanceWei < estimate.feeWei) {
+      throw const FormatException('原生币余额不足以支付网络费');
+    }
+    if (!isToken && estimate.nativeBalanceWei < amountRaw + estimate.feeWei) {
+      throw const FormatException('余额不足（包含网络费）');
+    }
+
+    final endpoints = await rpc.loadEndpoints(
+      network: network.name,
+      accessToken: accessToken,
+    );
+    Future<Map<String, dynamic>> call(String method, List<Object> params) =>
+        rpc.postJson(endpoints, {
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': method,
+          'params': params,
+        });
+    final nonce = _hexToBigInt(
+      (await call('eth_getTransactionCount', [from, 'pending']))['result']
+              as String? ??
+          '0x0',
+    );
+    final chainId = _hexToBigInt(
+      (await call('eth_chainId', const []))['result'] as String? ?? '0x0',
+    );
+    return execute(
+      mnemonic: mnemonic,
+      from: from,
+      to: isToken ? tokenAddress : to,
+      amount: '0',
+      valueBaseUnits: isToken ? BigInt.zero : amountRaw,
+      chainId: chainId.toInt(),
+      nonce: nonce.toInt(),
+      gasPriceWei: estimate.gasPriceWei.toInt(),
+      gasLimit: estimate.gasLimit.toInt(),
+      data: isToken ? _hexToBytes(_transferData(to, amountRaw)) : const [],
+      broadcast: (raw) async =>
+          (await call('eth_sendRawTransaction', [raw]))['result'] as String,
+    );
+  }
 
   /// Signs and broadcasts the EVM transaction returned by a LI.FI quote.
   /// The caller must have shown the exact transaction request to the user.
@@ -218,16 +371,17 @@ class WalletTransferService {
     int gasPriceWei = 1,
     int gasLimit = 21000,
     List<int> data = const [],
+    BigInt? valueBaseUnits,
     Future<String> Function(String rawTransaction)? broadcast,
   }) async {
-    final value = int.parse(decimalToBaseUnits(amount));
+    final value = valueBaseUnits ?? BigInt.parse(decimalToBaseUnits(amount));
     final privateKey = WalletIdentity.privateKeyFromMnemonic(mnemonic);
     final unsigned = _rlp([
       _intBytes(nonce),
       _intBytes(gasPriceWei),
       _intBytes(gasLimit),
       _addressBytes(to),
-      _intBytes(value),
+      _bigIntBytes(value),
       data,
       _intBytes(chainId),
       <int>[],
@@ -241,7 +395,7 @@ class WalletTransferService {
       _intBytes(gasPriceWei),
       _intBytes(gasLimit),
       _addressBytes(to),
-      _intBytes(value),
+      _bigIntBytes(value),
       data,
       _intBytes(signature.v + 8 + chainId * 2),
       _bigIntBytes(signature.r),
@@ -304,6 +458,17 @@ class WalletTransferService {
     }
     return normalized.padLeft(64, '0');
   }
+
+  static void _validateEvmAddress(String value) {
+    if (!RegExp(r'^0x[0-9a-fA-F]{40}$').hasMatch(value)) {
+      throw const FormatException('EVM 地址无效');
+    }
+  }
+
+  static String _transferData(String recipient, BigInt amount) =>
+      '0xa9059cbb${_encodeAddress(recipient)}${_encodeUint(amount)}';
+
+  static String _quantity(BigInt value) => '0x${value.toRadixString(16)}';
 
   static String _encodeUint(BigInt value) =>
       value.toRadixString(16).padLeft(64, '0');

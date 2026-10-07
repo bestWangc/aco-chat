@@ -21,6 +21,23 @@ class _ExchangeClient extends http.BaseClient {
 }
 
 void main() {
+  test('localizes the unified account transfer error', () {
+    const error = HyperliquidExchangeException(
+      'Action disabled when unified account is active',
+    );
+
+    expect(error.message, contains('无需执行 Spot → 合约划转'));
+  });
+
+  test('localizes the testnet onboarding deposit error', () {
+    const error = HyperliquidExchangeException(
+      'Must deposit before performing actions. User: 0x123',
+    );
+
+    expect(error.message, contains('主网存款、测试网 Faucet'));
+    expect(error.toString(), error.message);
+  });
+
   test('submits a signed order payload to the exchange endpoint', () async {
     final client = _ExchangeClient();
     final exchange = HyperliquidExchangeClient(

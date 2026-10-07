@@ -228,6 +228,11 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
       chain: widget.balance.chain,
       iconAsset: _tokenIconAsset(),
       feeSymbol: widget.selectedChain.nativeToken.symbol,
+      network: widget.selectedChain.network,
+      tokenAddress: widget.balance.tokenAddress,
+      decimals: widget.balance.decimals,
+      isNative: widget.balance.isNative,
+      sourceAddress: widget.balance.address,
       availableAmount: _amount,
     );
     if (widget.onSendTokenSelected == null) {
@@ -259,6 +264,11 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             child: CustomScrollView(
               controller: _transactionScrollController,
               slivers: [
+                if (widget.transactionService != null)
+                  CupertinoSliverRefreshControl(
+                    onRefresh: () =>
+                        _loadTransactions(_selectedDirection, reset: true),
+                  ),
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
                   sliver: SliverToBoxAdapter(
@@ -644,8 +654,8 @@ class _TokenTransactionTile extends StatelessWidget {
 }
 
 String _shortWalletAddress(String address) {
-  if (address.length <= 12) return address;
-  return '${address.substring(0, 6)}...${address.substring(address.length - 4)}';
+  if (address.length <= 14) return address;
+  return '${address.substring(0, 6)}...${address.substring(address.length - 8)}';
 }
 
 String _formatTransactionTime(int timestamp) {

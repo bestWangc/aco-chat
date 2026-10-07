@@ -135,6 +135,11 @@ class TransferToken {
     required this.chain,
     required this.iconAsset,
     required this.feeSymbol,
+    required this.network,
+    this.tokenAddress,
+    this.decimals = 18,
+    this.isNative = true,
+    this.sourceAddress,
     this.availableAmount = '0',
   });
 
@@ -143,6 +148,11 @@ class TransferToken {
   final String chain;
   final String iconAsset;
   final String feeSymbol;
+  final WalletNetwork network;
+  final String? tokenAddress;
+  final int decimals;
+  final bool isNative;
+  final String? sourceAddress;
   final String availableAmount;
 }
 
@@ -152,6 +162,13 @@ List<TransferToken> _transferTokensForChain(_WalletChain chain) {
     name: chain.nativeToken.title,
     chain: chain.label,
     feeSymbol: chain.nativeToken.symbol,
+    network: chain.network,
+    decimals: chain.network == WalletNetwork.tron
+        ? 6
+        : chain.network == WalletNetwork.solana
+        ? 9
+        : 18,
+    isNative: true,
     iconAsset: switch (chain.network) {
       WalletNetwork.ethereum ||
       WalletNetwork.base ||
@@ -171,6 +188,18 @@ List<TransferToken> _transferTokensForChain(_WalletChain chain) {
       chain: chain.label,
       iconAsset: 'assets/icons/crypto/domi/tokens/usdt.png',
       feeSymbol: chain.nativeToken.symbol,
+      network: chain.network,
+      tokenAddress: chain.network == WalletNetwork.tron
+          ? WalletChainRegistry.tronUsdt.address
+          : chain.network == WalletNetwork.solana
+          ? WalletChainRegistry.solanaUsdt.address
+          : WalletChainRegistry.chains[chain.network]?.usdt?.address,
+      decimals: chain.network == WalletNetwork.tron
+          ? WalletChainRegistry.tronUsdt.decimals
+          : chain.network == WalletNetwork.solana
+          ? WalletChainRegistry.solanaUsdt.decimals
+          : WalletChainRegistry.chains[chain.network]?.usdt?.decimals ?? 6,
+      isNative: false,
     ),
   ];
 }

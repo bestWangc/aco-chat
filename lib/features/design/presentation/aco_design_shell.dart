@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -24,6 +25,7 @@ import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_identity_store.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
 import 'package:aco_chat/services/wallet_valuation_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
@@ -46,6 +48,8 @@ import 'package:aco_chat/services/wallet_transaction_service.dart';
 import 'package:aco_chat/services/dapp_directory_service.dart';
 import 'package:aco_chat/services/solana_signing_service.dart';
 import 'package:aco_chat/services/tron_signing_service.dart';
+import 'package:aco_chat/services/tron_transfer_service.dart';
+import 'package:aco_chat/services/solana_transfer_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';

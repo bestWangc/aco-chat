@@ -28,21 +28,20 @@ class _Client extends http.BaseClient {
 
 void main() {
   test('only accepts a Swift v2 perps route into HyperCore', () async {
-    final client = MayanHyperCoreDepositClient(
-      client: _Client({
-        'quotes': [
-          {
-            'type': 'SWIFT',
-            'swiftVersion': 'V2',
-            'toChain': 'hypercore',
-            'toToken': {'name': 'USDC (perps)'},
-            'expectedAmountOut': '9.95',
-            'minReceived': '9.9',
-            'deadline64': '1735689600',
-          },
-        ],
-      }),
-    );
+    final httpClient = _Client({
+      'quotes': [
+        {
+          'type': 'SWIFT',
+          'swiftVersion': 'V2',
+          'toChain': 'hypercore',
+          'toToken': {'name': 'USDC (perps)'},
+          'expectedAmountOut': '9.95',
+          'minReceived': '9.9',
+          'deadline64': '1735689600',
+        },
+      ],
+    });
+    final client = MayanHyperCoreDepositClient(client: httpClient);
 
     final quote = await client.quote(
       amount: '10',
@@ -53,6 +52,16 @@ void main() {
 
     expect(quote.isPerpsSwiftRoute, isTrue);
     expect(quote.expectedAmountOut, '9.95');
+    expect(httpClient.requestUri?.queryParameters['userAddr'], isNull);
+    expect(httpClient.requestUri?.queryParameters['destAddr'], isNull);
+    expect(
+      httpClient.requestUri?.queryParameters['forwarderAddress'],
+      MayanHyperCoreDepositClient.evmForwarder,
+    );
+    expect(
+      httpClient.requestUri?.queryParameters['destinationAddress'],
+      isNull,
+    );
   });
 
   test('rejects a route that targets the spot balance', () async {

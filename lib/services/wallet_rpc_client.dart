@@ -93,6 +93,24 @@ class WalletRpcClient {
     Map<String, Object> request,
   ) => _postJsonToUri(endpoint, request);
 
+  Future<Map<String, dynamic>> postJsonPath(
+    List<Uri> endpoints,
+    String path,
+    Map<String, Object> request,
+  ) async {
+    Object? lastError;
+    for (final endpoint in endpoints) {
+      try {
+        final base = endpoint.path.replaceFirst(RegExp(r'/$'), '');
+        final uri = endpoint.replace(path: '$base/$path');
+        return await _postJsonToUri(uri, request);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw HttpException('All wallet RPC endpoints failed: $lastError');
+  }
+
   Future<Map<String, dynamic>> _postJsonToUri(
     Uri uri,
     Map<String, Object> request,

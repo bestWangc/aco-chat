@@ -124,6 +124,17 @@ class HyperliquidApiClient {
     ];
   }
 
+  Future<List<HyperliquidUserFill>> loadUserFills(String address) async {
+    final payload = await _post({'type': 'userFills', 'user': address});
+    if (payload is! List) {
+      throw const FormatException('Hyperliquid 返回的历史成交数据无效');
+    }
+    return [
+      for (final item in payload)
+        if (item is Map) HyperliquidUserFill.fromJson(item),
+    ];
+  }
+
   Future<List<HyperliquidSpotBalance>> loadSpotBalances(String address) async {
     final payload = await _post({
       'type': 'spotClearinghouseState',
@@ -555,6 +566,11 @@ class HyperliquidPosition {
     required this.entryPrice,
     required this.unrealizedPnl,
     required this.liquidationPrice,
+    this.positionValue,
+    this.marginUsed,
+    this.fundingSinceOpen,
+    this.returnOnEquity,
+    this.leverage,
   });
 
   final String coin;
@@ -562,14 +578,32 @@ class HyperliquidPosition {
   final double? entryPrice;
   final double? unrealizedPnl;
   final double? liquidationPrice;
+  final double? positionValue;
+  final double? marginUsed;
+  final double? fundingSinceOpen;
+  final double? returnOnEquity;
+  final double? leverage;
 
-  factory HyperliquidPosition.fromJson(Map raw) => HyperliquidPosition(
-    coin: '${raw['coin'] ?? ''}',
-    size: _parseDouble(raw['szi']),
-    entryPrice: _parseDouble(raw['entryPx']),
-    unrealizedPnl: _parseDouble(raw['unrealizedPnl']),
-    liquidationPrice: _parseDouble(raw['liquidationPx']),
-  );
+  factory HyperliquidPosition.fromJson(Map raw) {
+    final leverageRaw = raw['leverage'];
+    final leverageMap = leverageRaw is Map ? leverageRaw : const {};
+    return HyperliquidPosition(
+      coin: '${raw['coin'] ?? ''}',
+      size: _parseDouble(raw['szi']),
+      entryPrice: _parseDouble(raw['entryPx']),
+      unrealizedPnl: _parseDouble(raw['unrealizedPnl']),
+      liquidationPrice: _parseDouble(raw['liquidationPx']),
+      positionValue: _parseDouble(raw['positionValue']),
+      marginUsed: _parseDouble(raw['marginUsed']),
+      fundingSinceOpen: _parseDouble(
+        raw['cumFunding'] is Map
+            ? (raw['cumFunding'] as Map)['sinceOpen']
+            : raw['cumFunding'],
+      ),
+      returnOnEquity: _parseDouble(raw['returnOnEquity']),
+      leverage: _parseDouble(leverageMap['value'] ?? leverageRaw),
+    );
+  }
 }
 
 class HyperliquidOrderBook {
@@ -679,6 +713,42 @@ class HyperliquidOpenOrder {
     isBuy: raw['side'] == 'B',
     orderId: _parseInt(raw['oid']),
     timestamp: _parseInt(raw['timestamp']),
+  );
+}
+
+class HyperliquidUserFill {
+  const HyperliquidUserFill({
+    required this.coin,
+    required this.price,
+    required this.size,
+    required this.isBuy,
+    required this.timestamp,
+    required this.fee,
+    required this.closedPnl,
+    required this.direction,
+    required this.tradeId,
+  });
+
+  final String coin;
+  final double? price;
+  final double? size;
+  final bool isBuy;
+  final int timestamp;
+  final double? fee;
+  final double? closedPnl;
+  final String direction;
+  final int tradeId;
+
+  factory HyperliquidUserFill.fromJson(Map raw) => HyperliquidUserFill(
+    coin: '${raw['coin'] ?? ''}',
+    price: _parseDouble(raw['px']),
+    size: _parseDouble(raw['sz']),
+    isBuy: raw['side'] == 'B',
+    timestamp: _parseInt(raw['time']),
+    fee: _parseDouble(raw['fee']),
+    closedPnl: _parseDouble(raw['closedPnl']),
+    direction: '${raw['dir'] ?? ''}',
+    tradeId: _parseInt(raw['tid']),
   );
 }
 

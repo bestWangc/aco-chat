@@ -1,5 +1,9 @@
 part of 'aco_design_shell.dart';
 
+/// Agent keys live only for the current app process. Leaving a page does not
+/// require another unlock, while an app restart naturally clears the cache.
+final Map<String, String> _hyperliquidSessionAgentKeys = {};
+
 class _HyperliquidContractTradePage extends StatefulWidget {
   const _HyperliquidContractTradePage({
     required this.palette,
@@ -37,10 +41,12 @@ class _HyperliquidContractTradePageState
   HyperliquidMarket? _liveMarket;
   HyperliquidAccountState? _account;
   List<HyperliquidOpenOrder> _openOrders = const [];
+  List<HyperliquidUserFill> _userFills = const [];
   StreamSubscription<HyperliquidRealtimeUpdate>? _realtimeSubscription;
   Timer? _fallbackTimer;
   HyperliquidAgent? _agent;
   TradeFeeConfig? _tradeFeeConfig;
+  double _spotUsdcAvailable = 0;
   bool _loadingMarket = true;
   bool _loadingAccount = true;
   bool _isMarketOrder = true;
@@ -52,7 +58,8 @@ class _HyperliquidContractTradePageState
 
   AcoPalette get _palette => widget.palette;
   HyperliquidMarket get _market => _liveMarket ?? widget.market;
-  double get _available => _account?.withdrawable ?? 0;
+  double get _available =>
+      math.max(_account?.withdrawable ?? 0, _spotUsdcAvailable);
   double get _referencePrice =>
       _market.markPrice ??
       _orderBook?.asks.firstOrNull?.price ??
@@ -173,11 +180,18 @@ class _HyperliquidContractTradePageState
       final results = await Future.wait<Object>([
         _client.loadAccountState(address),
         _client.loadOpenOrders(address),
+        _client.loadSpotBalances(address),
+        _client.loadUserFills(address),
       ]);
       if (!mounted) return;
       setState(() {
         _account = results[0] as HyperliquidAccountState;
         _openOrders = results[1] as List<HyperliquidOpenOrder>;
+        final spotBalances = results[2] as List<HyperliquidSpotBalance>;
+        _spotUsdcAvailable = spotBalances
+            .where((balance) => balance.coin.toUpperCase() == 'USDC')
+            .fold<double>(0, (total, balance) => total + balance.available);
+        _userFills = results[3] as List<HyperliquidUserFill>;
       });
     } catch (_) {
       // Empty account data is a valid degraded state for the trading page.
@@ -198,7 +212,7 @@ class _HyperliquidContractTradePageState
 
   Future<void> _chooseLeverage() async {
     if (_available <= 0) {
-      await _showMessage('请先划转资金后再设置杠杆倍数');
+      await _showMessage('请先充值 USDC，统一账户无需资金划转');
       return;
     }
     final maxLeverage = math.max(1, _market.maxLeverage);
@@ -233,7 +247,7 @@ class _HyperliquidContractTradePageState
 
   Future<void> _submitOrder(bool isBuy) async {
     if (_available <= 0) {
-      await _showDepositSheet();
+      await _showMessage('请先充值 USDC，统一账户无需 Spot → 合约划转');
       return;
     }
     final amount = double.tryParse(_amountController.text);
@@ -328,6 +342,9 @@ class _HyperliquidContractTradePageState
         agentPrivateKey: agentPrivateKey,
         action: action,
         expiresAfter: DateTime.now().millisecondsSinceEpoch + 60 * 1000,
+        debugSignerAddress: HyperliquidSigner.addressFromPrivateKey(
+          agentPrivateKey,
+        ),
       );
       await _loadAccount(showLoading: false);
       if (mounted) {
@@ -395,7 +412,15 @@ class _HyperliquidContractTradePageState
       'grouping': _takeProfitStopLoss ? 'normalTpsl' : 'na',
     };
     final builderPayload = builder?.orderBuilder;
-    if (builderPayload != null) action['builder'] = builderPayload;
+    if (builderPayload != null) {
+      // Hyperliquid parses builder addresses as bytes and canonicalizes them
+      // to lowercase before verifying the signature. Keep the exact same
+      // canonical representation in both the MessagePack payload and JSON.
+      action['builder'] = {
+        ...builderPayload,
+        'b': '${builderPayload['b']}'.toLowerCase(),
+      };
+    }
     return action;
   }
 
@@ -407,11 +432,10 @@ class _HyperliquidContractTradePageState
       await _showMessage('请先创建或导入钱包');
       return null;
     }
-    final masterMnemonic = await WalletSecurity()
-        .unlockMnemonicWithDeviceProtection(
-          store: SecureWalletSecretStore(),
-          walletAddress: identity.address,
-        );
+    final cacheKey = identity.address.toLowerCase();
+    final cachedPrivateKey = _hyperliquidSessionAgentKeys[cacheKey];
+    if (cachedPrivateKey != null) return cachedPrivateKey;
+    final masterMnemonic = await _authorizeWallet(identity);
     await _ensureBuilderApproval(
       identity: identity,
       masterMnemonic: masterMnemonic,
@@ -433,8 +457,84 @@ class _HyperliquidContractTradePageState
       );
       if (mounted) setState(() => _agent = agent);
     }
-    return WalletIdentity.privateKeyFromMnemonic(
+    final agentPrivateKey = WalletIdentity.privateKeyFromMnemonic(
       await _agentStore.unlock(agent),
+    );
+    final derivedAddress = HyperliquidSigner.addressFromPrivateKey(
+      agentPrivateKey,
+    );
+    developer.log(
+      'agent metadata=${agent.address} derived=$derivedAddress '
+      'approved=${agent.approved} network=${AppConfig.hyperliquidTestnet ? 'testnet' : 'mainnet'}',
+      name: 'HyperliquidAgent',
+    );
+    if (derivedAddress.toLowerCase() != agent.address.toLowerCase()) {
+      throw const WalletSecurityException('API Agent 钱包数据不一致，请重新授权');
+    }
+    _hyperliquidSessionAgentKeys[cacheKey] = agentPrivateKey;
+    return agentPrivateKey;
+  }
+
+  Future<String> _authorizeWallet(WalletIdentity identity) async {
+    final store = SecureWalletSecretStore();
+    final security = WalletSecurity();
+    final biometric = await BiometricAuthentication.availability();
+    if (biometric == BiometricAvailability.enrolled) {
+      if (!await BiometricAuthentication.authenticateOrSkip()) {
+        throw const WalletSecurityException('生物识别验证失败');
+      }
+      try {
+        return await security.unlockMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: identity.address,
+        );
+      } on WalletSecurityException catch (error) {
+        if (error.message != '未配置设备保护') rethrow;
+      }
+    }
+    if (!mounted) throw const WalletSecurityException('钱包授权已取消');
+    final password = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        var value = '';
+        return StatefulBuilder(
+          builder: (context, setState) => CupertinoAlertDialog(
+            title: const Text('验证钱包密码'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CupertinoTextField(
+                obscureText: true,
+                autofocus: true,
+                placeholder: '输入钱包密码',
+                onChanged: (text) => setState(() => value = text),
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: value.length < 8
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(value),
+                child: const Text('确认'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    if (password == null) {
+      throw const WalletSecurityException('钱包授权已取消');
+    }
+    return security.unlockMnemonic(
+      store: store,
+      walletAddress: identity.address,
+      password: password,
     );
   }
 
@@ -494,9 +594,18 @@ class _HyperliquidContractTradePageState
   String _formatSize(double value) =>
       _trimTrailingZeros(value.toStringAsFixed(_market.szDecimals));
 
-  String _formatOrderPrice(double value) => _trimTrailingZeros(
-    value.toStringAsFixed(math.max(0, 6 - _market.szDecimals)),
-  );
+  String _formatOrderPrice(double value) {
+    if (!value.isFinite || value == 0) return '0';
+    // Hyperliquid perp prices are limited both by the market's decimal
+    // precision and by five significant digits. Merely using 6-szDecimals
+    // can produce values such as 125.181, which are not divisible by the
+    // actual tick size (0.01 for that price range).
+    final maxDecimals = math.max(0, 6 - _market.szDecimals);
+    final magnitude = (math.log(value.abs()) / math.ln10).floor();
+    final significantDecimals = math.max(0, 5 - magnitude - 1);
+    final decimals = math.min(maxDecimals, significantDecimals);
+    return _trimTrailingZeros(value.toStringAsFixed(decimals));
+  }
 
   String _exchangeResultMessage(Map<String, dynamic> result) {
     final response = result['response'];
@@ -505,17 +614,6 @@ class _HyperliquidContractTradePageState
     }
     return '${result['status'] ?? 'ok'}';
   }
-
-  Future<void> _showDepositSheet() => showCupertinoModalPopup<void>(
-    context: context,
-    builder: (context) => _HyperliquidUsdcDepositSheet(
-      palette: _palette,
-      contractAvailable: _available,
-      walletIdentity: widget.walletIdentity,
-      defaultNetwork: widget.defaultNetwork,
-      onCompleted: () => _loadAccount(showLoading: false),
-    ),
-  );
 
   Future<void> _showMessage(String message, {String title = '提示'}) =>
       showCupertinoDialog<void>(
@@ -538,82 +636,86 @@ class _HyperliquidContractTradePageState
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: _palette.background,
-    child: SafeArea(
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: AcoPageHeader(
-              palette: _palette,
-              titleFollowsBack: true,
-              backButtonOffset: Offset.zero,
-              onBack: () => Navigator.pop(context),
-              titleWidget: Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: _MarketTitle(palette: _palette, market: _market),
-              ),
-              right: AcoIconButton(
-                icon: Icons.candlestick_chart_outlined,
+    child: GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: FocusScope.of(context).unfocus,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: AcoPageHeader(
                 palette: _palette,
-                label: '查看K线',
-                onPressed: () => Navigator.of(context).push<void>(
-                  _AcoPageRoute<void>(
-                    builder: (_) => _HyperliquidContractKlinePage(
-                      palette: _palette,
-                      market: _market,
+                titleFollowsBack: true,
+                backButtonOffset: Offset.zero,
+                onBack: () => Navigator.pop(context),
+                titleWidget: Padding(
+                  padding: const EdgeInsets.only(left: 12),
+                  child: _MarketTitle(palette: _palette, market: _market),
+                ),
+                right: AcoIconButton(
+                  icon: Icons.candlestick_chart_outlined,
+                  palette: _palette,
+                  label: '查看K线',
+                  onPressed: () => Navigator.of(context).push<void>(
+                    _AcoPageRoute<void>(
+                      builder: (_) => _HyperliquidContractKlinePage(
+                        palette: _palette,
+                        market: _market,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-          Container(height: 1, color: _palette.border),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 20),
-              child: Column(
-                children: [
-                  _FundingHeader(
-                    palette: _palette,
-                    market: _market,
-                    currentPrice: _referencePrice,
-                    leverage: _leverage,
-                    onLeveragePressed: _chooseLeverage,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 10,
-                          child: _OrderBookPanel(
-                            palette: _palette,
-                            book: _orderBook,
-                            market: _market,
-                            loading: _loadingMarket,
-                            levelCount: _takeProfitStopLoss ? 11 : 8,
-                            onPriceSelected: (price) => setState(() {
-                              _isMarketOrder = false;
-                              _limitPriceController.text = _formatPlainPrice(
-                                price,
-                              );
-                            }),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(flex: 17, child: _buildOrderForm()),
-                      ],
+            Container(height: 1, color: _palette.border),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(
+                  children: [
+                    _FundingHeader(
+                      palette: _palette,
+                      market: _market,
+                      currentPrice: _referencePrice,
+                      leverage: _leverage,
+                      onLeveragePressed: _chooseLeverage,
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Container(height: 1, color: _palette.border),
-                  _buildAccountSection(),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 10,
+                            child: _OrderBookPanel(
+                              palette: _palette,
+                              book: _orderBook,
+                              market: _market,
+                              loading: _loadingMarket,
+                              levelCount: _takeProfitStopLoss ? 11 : 8,
+                              onPriceSelected: (price) => setState(() {
+                                _isMarketOrder = false;
+                                _limitPriceController.text = _formatPlainPrice(
+                                  price,
+                                );
+                              }),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(flex: 17, child: _buildOrderForm()),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(height: 1, color: _palette.border),
+                    _buildAccountSection(),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
   );
@@ -719,7 +821,7 @@ class _HyperliquidContractTradePageState
       ),
       const SizedBox(height: 10),
       _TradeActionButton(
-        label: _available > 0 ? '做多' : '资金划转',
+        label: _available > 0 ? '做多' : '请先充值',
         color: const Color(0xFF25C26E),
         loading: _loadingSubmit,
         onPressed: () => _submitOrder(true),
@@ -732,7 +834,7 @@ class _HyperliquidContractTradePageState
       ),
       const SizedBox(height: 10),
       _TradeActionButton(
-        label: _available > 0 ? '做空' : '资金划转',
+        label: _available > 0 ? '做空' : '请先充值',
         color: const Color(0xFFF14D51),
         loading: _loadingSubmit,
         onPressed: () => _submitOrder(false),
@@ -741,7 +843,7 @@ class _HyperliquidContractTradePageState
   );
 
   Widget _buildAccountSection() {
-    const labels = ['余额', '持仓', '挂单'];
+    const labels = ['余额', '持仓', '挂单', '历史成交'];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 28),
       child: Column(
@@ -785,6 +887,7 @@ class _HyperliquidContractTradePageState
           if (_selectedTab == 0) _buildBalanceTab(),
           if (_selectedTab == 1) _buildPositionsTab(),
           if (_selectedTab == 2) _buildOrdersTab(),
+          if (_selectedTab == 3) _buildFillsTab(),
         ],
       ),
     );
@@ -793,6 +896,7 @@ class _HyperliquidContractTradePageState
   Widget _buildBalanceTab() => _AccountBalanceCard(
     palette: _palette,
     account: _account,
+    available: _available,
     loading: _loadingAccount,
   );
 
@@ -810,6 +914,7 @@ class _HyperliquidContractTradePageState
           _PositionRow(
             palette: _palette,
             position: position,
+            markPrice: _referencePrice,
             onClose: () => _closePosition(position),
           ),
       ],
@@ -831,6 +936,21 @@ class _HyperliquidContractTradePageState
             order: order,
             onCancel: () => _cancelOrder(order),
           ),
+      ],
+    );
+  }
+
+  Widget _buildFillsTab() {
+    if (_loadingAccount) {
+      return const Center(child: CupertinoActivityIndicator());
+    }
+    if (_userFills.isEmpty) {
+      return _EmptyTradeState(palette: _palette, text: '暂无历史成交');
+    }
+    return Column(
+      children: [
+        for (final fill in _userFills)
+          _UserFillRow(palette: _palette, fill: fill),
       ],
     );
   }
@@ -1371,22 +1491,22 @@ class _OrderTypeField extends StatelessWidget {
         final selected = await showCupertinoModalPopup<bool>(
           context: context,
           builder: (context) => CupertinoActionSheet(
-            title: const Text('选择订单类型'),
+            title: const Text('选择订单类型', style: TextStyle(fontSize: 16)),
             actions: [
               CupertinoActionSheetAction(
                 isDefaultAction: marketOrder,
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('市价'),
+                child: const Text('市价', style: TextStyle(fontSize: 18)),
               ),
               CupertinoActionSheetAction(
                 isDefaultAction: !marketOrder,
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('限价'),
+                child: const Text('限价', style: TextStyle(fontSize: 18)),
               ),
             ],
             cancelButton: CupertinoActionSheetAction(
               onPressed: () => Navigator.pop(context),
-              child: const Text('取消'),
+              child: const Text('取消', style: TextStyle(fontSize: 17)),
             ),
           ),
         );
@@ -1521,6 +1641,7 @@ class _TradeTextField extends StatelessWidget {
         Expanded(
           child: CupertinoTextField(
             controller: controller,
+            autofocus: false,
             padding: EdgeInsets.zero,
             decoration: null,
             placeholder: placeholder,
@@ -1765,7 +1886,6 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
 
 class _HyperliquidUsdcDepositSheetState
     extends State<_HyperliquidUsdcDepositSheet> {
-  static const _minimumAmount = 15.0;
   static const _assets = [
     _ContractTransferAsset(chain: 'BNB Chain', symbol: 'BNB'),
     _ContractTransferAsset(chain: 'BNB Chain', symbol: 'USDC'),
@@ -1793,8 +1913,6 @@ class _HyperliquidUsdcDepositSheetState
   TradeFeeConfig? _tradeFeeConfig;
 
   AcoPalette get palette => widget.palette;
-
-  Color get _transferAccent => palette.accent;
 
   double get _available {
     if (_cashToContract) return _walletBalanceAmount;
@@ -2059,23 +2177,54 @@ class _HyperliquidUsdcDepositSheetState
       await _submitMayanDeposit(identity);
     } on MayanHyperCoreDepositException catch (error) {
       if (mounted) await _showNotice(error.message);
-    } catch (_) {
-      if (mounted) await _showNotice('获取资金划转路由失败，请稍后重试');
+    } on HyperliquidExchangeException catch (error) {
+      if (error.isUnifiedAccountActive) {
+        widget.onCompleted();
+        if (!mounted) return;
+        await _showNotice(error.message);
+        if (mounted) Navigator.pop(context);
+      } else if (mounted) {
+        await _showNotice(error.message);
+      }
+    } catch (error) {
+      if (mounted) {
+        final detail = error.toString().trim();
+        await _showNotice(detail.isEmpty ? '获取资金划转路由失败，请稍后重试' : detail);
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
   Future<void> _submitTestnetTransfer(WalletIdentity identity) async {
+    // The trade page can remain mounted while the user switches wallets in
+    // the shell. Never sign a transfer with the stale identity captured when
+    // the page was opened.
+    final activeIdentity = await WalletIdentityStore().activeIdentity();
+    if (activeIdentity != null &&
+        activeIdentity.address.toLowerCase() !=
+            identity.address.toLowerCase()) {
+      await _showNotice('当前页面仍绑定旧钱包地址，请返回后重新进入合约交易页面');
+      return;
+    }
     if (!_cashToContract && _parsedAmount > widget.contractAvailable) {
       await _showNotice('合约账户 USDC 余额不足');
       return;
     }
-    final mnemonic = await _unlockWalletMnemonic(identity);
+    final mnemonic = await _authorizeWallet(identity);
+    final signedIdentity = WalletIdentity.fromMnemonic(mnemonic);
+    if (signedIdentity.address.toLowerCase() !=
+        identity.address.toLowerCase()) {
+      throw WalletSecurityException(
+        '钱包地址与安全存储中的助记词不一致：'
+        '${signedIdentity.address}',
+      );
+    }
     await _exchange.usdClassTransfer(
       masterPrivateKey: WalletIdentity.privateKeyFromMnemonic(mnemonic),
       amount: _transferAmount,
       toPerp: _cashToContract,
+      expectedSignerAddress: signedIdentity.address,
     );
     widget.onCompleted();
     if (!mounted) return;
@@ -2100,7 +2249,7 @@ class _HyperliquidUsdcDepositSheetState
     final mayanFee = (await _ensureTradeFeeConfig())?.mayan;
     final quoteOptions = mayanFee?.quoteOptions;
     final buildOptions = mayanFee?.buildOptions;
-    final mayan = MayanHyperCoreDepositClient();
+    final mayan = MayanHyperCoreDepositClient(apiKey: mayanFee?.apiKey);
     try {
       final quote = await mayan.quote(
         amount: _transferAmount,
@@ -2113,20 +2262,11 @@ class _HyperliquidUsdcDepositSheetState
         referrerBps: quoteOptions?['referrerBps'] as int?,
       );
       if (!mounted) return;
-      final expectedUsdc = _expectedUsdc(quote.expectedAmountOut);
-      if (expectedUsdc == null || expectedUsdc < _minimumAmount) {
-        await _showNotice(
-          '预计到账约 ${quote.expectedAmountOut} USDC，低于最低划转 '
-          '$_minimumAmount USDC',
-        );
-        return;
-      }
-
       final tokenStore = await SecureAccountTokenStore().read();
       if (tokenStore == null) {
         throw const MayanHyperCoreDepositException('请先登录账户后再进行链上充值');
       }
-      final mnemonic = await _unlockWalletMnemonic(identity);
+      final mnemonic = await _authorizeWallet(identity);
       final built = await mayan.buildEvm(
         quote: quote,
         swapperAddress: identity.address,
@@ -2201,20 +2341,69 @@ class _HyperliquidUsdcDepositSheetState
     }
   }
 
-  Future<String> _unlockWalletMnemonic(WalletIdentity identity) =>
-      WalletSecurity().unlockMnemonicWithDeviceProtection(
-        store: SecureWalletSecretStore(),
-        walletAddress: identity.address,
-      );
+  Future<String> _authorizeWallet(WalletIdentity identity) async {
+    final store = SecureWalletSecretStore();
+    final security = WalletSecurity();
+    final biometric = await BiometricAuthentication.availability();
+    if (biometric == BiometricAvailability.enrolled) {
+      if (!await BiometricAuthentication.authenticateOrSkip()) {
+        throw const WalletSecurityException('生物识别验证失败');
+      }
+      try {
+        return await security.unlockMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: identity.address,
+        );
+      } on WalletSecurityException catch (error) {
+        if (error.message != '未配置设备保护') rethrow;
+      }
+    }
+    if (!mounted) throw const WalletSecurityException('钱包授权已取消');
+    final password = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        var value = '';
+        return StatefulBuilder(
+          builder: (context, setState) => CupertinoAlertDialog(
+            title: const Text('验证钱包密码'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: CupertinoTextField(
+                obscureText: true,
+                autofocus: true,
+                placeholder: '输入钱包密码',
+                onChanged: (text) => setState(() => value = text),
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: value.length < 8
+                    ? null
+                    : () => Navigator.of(dialogContext).pop(value),
+                child: const Text('确认'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (password == null) {
+      throw const WalletSecurityException('钱包授权已取消');
+    }
+    return security.unlockMnemonic(
+      store: store,
+      walletAddress: identity.address,
+      password: password,
+    );
+  }
 
   String get _transferAmount =>
       _trimTrailingZeros(_parsedAmount.toStringAsFixed(6));
-
-  double? _expectedUsdc(String rawAmount) {
-    final raw = double.tryParse(rawAmount);
-    if (raw == null) return null;
-    return raw > 100000 ? raw / 1000000 : raw;
-  }
 
   Future<void> _submitMayanWithdrawal(WalletIdentity identity) async {
     if (_asset.symbol != 'USDC') {
@@ -2232,11 +2421,8 @@ class _HyperliquidUsdcDepositSheetState
     final mayanFee = (await _ensureTradeFeeConfig())?.mayan;
     final quoteOptions = mayanFee?.quoteOptions;
     final buildOptions = mayanFee?.buildOptions;
-    final mnemonic = await WalletSecurity().unlockMnemonicWithDeviceProtection(
-      store: SecureWalletSecretStore(),
-      walletAddress: identity.address,
-    );
-    final mayan = MayanHyperCoreDepositClient();
+    final mnemonic = await _authorizeWallet(identity);
+    final mayan = MayanHyperCoreDepositClient(apiKey: mayanFee?.apiKey);
     try {
       final quote = await mayan.withdrawalQuote(
         amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
@@ -2455,47 +2641,6 @@ class _HyperliquidUsdcDepositSheetState
                   ],
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _transferAccent.withValues(alpha: .08),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        CupertinoIcons.info_circle_fill,
-                        color: _transferAccent,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 7),
-                      Text.rich(
-                        TextSpan(
-                          style: TextStyle(
-                            color: palette.mutedText,
-                            fontSize: 13,
-                          ),
-                          children: [
-                            const TextSpan(text: '最低划转 '),
-                            TextSpan(
-                              text:
-                                  '${_trimTrailingZeros(_minimumAmount.toString())} USDC',
-                              style: TextStyle(
-                                color: palette.primaryText,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
                     for (final option in const [
@@ -2622,6 +2767,7 @@ class _ContractTransferAsset {
       chain == other.chain && symbol == other.symbol;
 
   String get chainIconAsset => switch (chain) {
+    'BNB Chain' => 'assets/icons/crypto/domi/chains/network-bsc.png',
     'BSC' => 'assets/icons/crypto/domi/chains/network-bsc.png',
     'Arbitrum' => 'assets/icons/crypto/domi/chains/network-arbitrum.png',
     'Ethereum' => 'assets/icons/crypto/domi/chains/network-ethereum.png',
@@ -3032,11 +3178,13 @@ class _AccountBalanceCard extends StatelessWidget {
   const _AccountBalanceCard({
     required this.palette,
     required this.account,
+    required this.available,
     required this.loading,
   });
 
   final AcoPalette palette;
   final HyperliquidAccountState? account;
+  final double available;
   final bool loading;
 
   @override
@@ -3069,12 +3217,17 @@ class _AccountBalanceCard extends StatelessWidget {
         const SizedBox(height: 18),
         Row(
           children: [
-            Expanded(child: _metric('总余额', account?.accountValue ?? 0)),
-            Expanded(child: _metric('可用余额', account?.withdrawable ?? 0)),
+            Expanded(
+              child: _metric(
+                '总余额',
+                math.max(account?.accountValue ?? 0, available),
+              ),
+            ),
+            Expanded(child: _metric('可用余额', available)),
           ],
         ),
         const SizedBox(height: 16),
-        _metric('未实现盈亏', account?.totalUnrealizedPnl ?? 0),
+        _metric('盈亏', account?.totalUnrealizedPnl ?? 0),
       ],
     );
   }
@@ -3100,49 +3253,208 @@ class _PositionRow extends StatelessWidget {
   const _PositionRow({
     required this.palette,
     required this.position,
+    required this.markPrice,
     required this.onClose,
   });
 
   final AcoPalette palette;
   final HyperliquidPosition position;
+  final double markPrice;
   final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
     final isLong = (position.size ?? 0) >= 0;
+    final pnl = position.unrealizedPnl ?? 0;
+    final sideColor = isLong
+        ? const Color(0xFF25C26E)
+        : const Color(0xFFF14D51);
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 14, 8, 13),
       decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.border)),
+        color: palette.surface.withValues(alpha: .55),
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: Text(
-              '${position.coin} ${isLong ? '多' : '空'}',
-              style: TextStyle(
-                color: isLong
-                    ? const Color(0xFF25C26E)
-                    : const Color(0xFFF14D51),
-                fontWeight: FontWeight.w700,
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: sideColor.withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  isLong ? '多' : '空',
+                  style: TextStyle(
+                    color: sideColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Text(
+                position.coin,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (position.leverage != null) ...[
+                const SizedBox(width: 7),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.mutedText.withValues(alpha: .14),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    '${_formatQuantity(position.leverage)}x',
+                    style: TextStyle(
+                      color: palette.mutedText,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '盈亏',
+                    style: TextStyle(color: palette.mutedText, fontSize: 11),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${pnl >= 0 ? '+' : ''}\$${_formatMoney(pnl)}',
+                        style: TextStyle(
+                          color: pnl >= 0 ? sideColor : const Color(0xFFF14D51),
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (position.returnOnEquity != null) ...[
+                        const SizedBox(width: 4),
+                        Text(
+                          '(${_formatPercent(position.returnOnEquity!)})',
+                          style: TextStyle(
+                            color: pnl >= 0
+                                ? sideColor
+                                : const Color(0xFFF14D51),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(width: 8),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(72, 40),
+                onPressed: onClose,
+                child: Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: palette.accent.withValues(alpha: .14),
+                    border: Border.all(
+                      color: palette.accent.withValues(alpha: .82),
+                    ),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '平仓',
+                      style: TextStyle(
+                        color: palette.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          _valueColumn('持仓量', _formatQuantity(position.size?.abs())),
-          const SizedBox(width: 22),
-          _valueColumn(
-            '未实现盈亏',
-            '\$${_formatMoney(position.unrealizedPnl ?? 0)}',
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _valueColumn(
+                  '持仓数量',
+                  _formatQuantity(position.size?.abs()),
+                ),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '开仓均价',
+                  _formatPlainPrice(position.entryPrice),
+                ),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '标记价格',
+                  _formatPlainPrice(markPrice > 0 ? markPrice : null),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          CupertinoButton(
-            padding: EdgeInsets.zero,
-            minimumSize: const Size(48, 32),
-            onPressed: onClose,
-            child: Text(
-              '平仓',
-              style: TextStyle(color: palette.accent, fontSize: 13),
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _valueColumn(
+                  '持仓价值',
+                  position.positionValue == null
+                      ? '--'
+                      : '\$${_formatMoney(position.positionValue!)}',
+                ),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '保证金',
+                  position.marginUsed == null
+                      ? '--'
+                      : '\$${_formatMoney(position.marginUsed!)}',
+                ),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '资金费',
+                  position.fundingSinceOpen == null
+                      ? '--'
+                      : '\$${_formatMoney(position.fundingSinceOpen!)}',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _valueColumn(
+                  '强平价格',
+                  _formatPlainPrice(position.liquidationPrice),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -3150,11 +3462,18 @@ class _PositionRow extends StatelessWidget {
   }
 
   Widget _valueColumn(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.end,
+    crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(label, style: TextStyle(color: palette.mutedText, fontSize: 11)),
       const SizedBox(height: 4),
-      Text(value, style: TextStyle(color: palette.primaryText, fontSize: 13)),
+      Text(
+        value,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     ],
   );
 }
@@ -3171,40 +3490,254 @@ class _OpenOrderRow extends StatelessWidget {
   final VoidCallback onCancel;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(vertical: 14),
-    decoration: BoxDecoration(
-      border: Border(bottom: BorderSide(color: palette.border)),
-    ),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            '${order.coin} ${order.isBuy ? '买入' : '卖出'}',
-            style: TextStyle(
-              color: order.isBuy
-                  ? const Color(0xFF25C26E)
-                  : const Color(0xFFF14D51),
-              fontWeight: FontWeight.w700,
-            ),
+  Widget build(BuildContext context) {
+    final sideColor = order.isBuy
+        ? const Color(0xFF25C26E)
+        : const Color(0xFFF14D51);
+    final notional = order.price != null && order.size != null
+        ? order.price! * order.size!.abs()
+        : null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 14, 8, 13),
+      decoration: BoxDecoration(
+        color: palette.surface.withValues(alpha: .55),
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: sideColor.withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  order.isBuy ? '买入' : '卖出',
+                  style: TextStyle(
+                    color: sideColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                order.coin,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 7),
+              Text(
+                '限价单',
+                style: TextStyle(color: palette.mutedText, fontSize: 11),
+              ),
+              const Spacer(),
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(64, 36),
+                onPressed: onCancel,
+                child: Container(
+                  height: 32,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: palette.accent.withValues(alpha: .14),
+                    border: Border.all(
+                      color: palette.accent.withValues(alpha: .82),
+                    ),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Center(
+                    child: Text(
+                      '撤单',
+                      style: TextStyle(
+                        color: palette.accent,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        Text(
-          '${_formatQuantity(order.size)} @ ${_formatPlainPrice(order.price)}',
-          style: TextStyle(color: palette.primaryText, fontSize: 13),
-        ),
-        const SizedBox(width: 8),
-        CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: const Size(48, 32),
-          onPressed: onCancel,
-          child: Text(
-            '撤单',
-            style: TextStyle(color: palette.accent, fontSize: 13),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _valueColumn('委托数量', _formatQuantity(order.size?.abs())),
+              ),
+              Expanded(
+                child: _valueColumn('委托价格', _formatPlainPrice(order.price)),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '名义价值',
+                  notional == null ? '--' : '\$${_formatMoney(notional)}',
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 10),
+          Text(
+            '订单号 ${order.orderId} · ${_formatOrderTime(order.timestamp)}',
+            style: TextStyle(color: palette.mutedText, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _valueColumn(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: TextStyle(color: palette.mutedText, fontSize: 11)),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
         ),
-      ],
-    ),
+      ),
+    ],
+  );
+}
+
+class _UserFillRow extends StatelessWidget {
+  const _UserFillRow({required this.palette, required this.fill});
+
+  final AcoPalette palette;
+  final HyperliquidUserFill fill;
+
+  @override
+  Widget build(BuildContext context) {
+    final sideColor = fill.isBuy
+        ? const Color(0xFF25C26E)
+        : const Color(0xFFF14D51);
+    final notional = fill.price != null && fill.size != null
+        ? fill.price! * fill.size!.abs()
+        : null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 13),
+      decoration: BoxDecoration(
+        color: palette.surface.withValues(alpha: .55),
+        border: Border.all(color: palette.border),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: sideColor.withValues(alpha: .14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  fill.isBuy ? '买入' : '卖出',
+                  style: TextStyle(
+                    color: sideColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                fill.coin,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  fill.direction.isEmpty ? '成交' : fill.direction,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: palette.mutedText, fontSize: 11),
+                ),
+              ),
+              Text(
+                _formatOrderTime(fill.timestamp),
+                style: TextStyle(color: palette.mutedText, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _valueColumn('成交数量', _formatQuantity(fill.size?.abs())),
+              ),
+              Expanded(
+                child: _valueColumn('成交价格', _formatPlainPrice(fill.price)),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '成交额',
+                  notional == null ? '--' : '\$${_formatMoney(notional)}',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _valueColumn(
+                  '手续费',
+                  fill.fee == null ? '--' : '\$${_formatMoney(fill.fee!)}',
+                ),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '已实现盈亏',
+                  fill.closedPnl == null
+                      ? '--'
+                      : '\$${_formatMoney(fill.closedPnl!)}',
+                ),
+              ),
+              Expanded(
+                child: _valueColumn(
+                  '成交编号',
+                  fill.tradeId == 0 ? '--' : '${fill.tradeId}',
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _valueColumn(String label, String value) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: TextStyle(color: palette.mutedText, fontSize: 11)),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: TextStyle(
+          color: palette.primaryText,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    ],
   );
 }
 
@@ -3248,3 +3781,16 @@ String _formatQuantity(double? value) {
 
 String _formatMoney(double value) =>
     value == 0 ? '0' : _trimTrailingZeros(value.toStringAsFixed(2));
+
+String _formatOrderTime(int timestamp) {
+  if (timestamp <= 0) return '--';
+  final date = DateTime.fromMillisecondsSinceEpoch(timestamp);
+  final hour = date.hour.toString().padLeft(2, '0');
+  final minute = date.minute.toString().padLeft(2, '0');
+  return '${date.month}/${date.day} $hour:$minute';
+}
+
+String _formatPercent(double value) {
+  final percent = value * 100;
+  return '${percent >= 0 ? '+' : ''}${_trimTrailingZeros(percent.toStringAsFixed(2))}%';
+}

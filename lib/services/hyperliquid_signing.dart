@@ -82,6 +82,13 @@ class HyperliquidSigner {
   static String privateKeyFromMnemonic(String mnemonic) =>
       WalletIdentity.privateKeyFromMnemonic(mnemonic);
 
+  static String addressFromPrivateKey(String privateKeyHex) =>
+      EthAddrEncoder().encodeKey(
+        ETHSigner.fromKeyBytes(
+          _hexBytes(privateKeyHex),
+        ).toVerifyKey().edsaVerifyKey.publicKey.toBytes(),
+      );
+
   static HyperliquidSignature signL1Action({
     required String privateKeyHex,
     required Map<String, dynamic> action,
@@ -115,18 +122,87 @@ class HyperliquidSigner {
     final signedAction = <String, dynamic>{...action};
     signedAction['signatureChainId'] = '0x66eee';
     signedAction['hyperliquidChain'] = isMainnet ? 'Mainnet' : 'Testnet';
-    final typedData = Eip712TypedData.fromJson({
-      'domain': {
+    return _signDigest(
+      privateKeyHex,
+      _userActionDigest(
+        primaryType: primaryType,
+        fields: fields,
+        message: signedAction,
+      ),
+    );
+  }
+
+  /// Equivalent to eth_account.messages.encode_typed_data(full_message=...).
+  /// User-signed Hyperliquid actions only use primitive EIP-712 fields, so
+  /// encoding them directly avoids differences between Dart EIP-712 packages.
+  static List<int> _userActionDigest({
+    required String primaryType,
+    required List<Map<String, String>> fields,
+    required Map<String, dynamic> message,
+  }) {
+    final domainHash = _structHash(
+      typeName: 'EIP712Domain',
+      fields: _domainTypes,
+      values: {
         'name': _userDomainName,
         'version': '1',
         'chainId': int.parse('66eee', radix: 16),
         'verifyingContract': _zeroAddress,
       },
-      'types': {primaryType: fields, 'EIP712Domain': _domainTypes},
-      'primaryType': primaryType,
-      'message': signedAction,
-    });
-    return _signDigest(privateKeyHex, typedData.encode());
+    );
+    final actionHash = _structHash(
+      typeName: primaryType,
+      fields: fields,
+      values: message,
+    );
+    return QuickCrypto.keccack256Hash([
+      0x19,
+      0x01,
+      ...domainHash,
+      ...actionHash,
+    ]);
+  }
+
+  static List<int> _structHash({
+    required String typeName,
+    required List<Map<String, String>> fields,
+    required Map<String, dynamic> values,
+  }) {
+    final type =
+        '$typeName(${fields.map((field) => '${field['type']} ${field['name']}').join(',')})';
+    final encoded = <int>[...QuickCrypto.keccack256Hash(utf8.encode(type))];
+    for (final field in fields) {
+      final fieldType = field['type'];
+      final value = values[field['name']];
+      if (fieldType == 'string') {
+        encoded.addAll(QuickCrypto.keccack256Hash(utf8.encode('$value')));
+      } else if (fieldType == 'address') {
+        final bytes = _hexBytes('$value');
+        if (bytes.length != 20) throw const FormatException('地址长度无效');
+        encoded.addAll(List<int>.filled(12, 0));
+        encoded.addAll(bytes);
+      } else if (fieldType == 'bool') {
+        encoded.addAll(List<int>.filled(31, 0));
+        encoded.add(value == true ? 1 : 0);
+      } else if (fieldType == 'uint64' || fieldType == 'uint256') {
+        encoded.addAll(_uint256(value));
+      } else {
+        throw FormatException('不支持的 EIP-712 字段类型：$fieldType');
+      }
+    }
+    return QuickCrypto.keccack256Hash(encoded);
+  }
+
+  static List<int> _uint256(Object? value) {
+    final number = value is int ? value : int.parse('$value');
+    if (number < 0) throw const FormatException('无符号整数不能为负数');
+    final bytes = <int>[];
+    var remaining = number;
+    do {
+      bytes.insert(0, remaining & 0xff);
+      remaining >>= 8;
+    } while (remaining > 0);
+    return [...List<int>.filled(32 - bytes.length, 0), ...bytes];
   }
 
   static HyperliquidSignature signTypedData({
@@ -285,6 +361,10 @@ class HyperliquidSigner {
       data.addAll(_hexBytes(vaultAddress));
     }
     if (expiresAfter != null) {
+      // Hyperliquid's official SDK uses a zero marker for the optional
+      // expiresAfter field (the vault marker above is the one that uses 0/1
+      // to distinguish null from an address). This byte is part of the
+      // signed phantom-agent digest.
       data.add(0);
       data.addAll(_uint64(expiresAfter));
     }

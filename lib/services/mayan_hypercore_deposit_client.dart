@@ -10,6 +10,7 @@ class MayanHyperCoreDepositClient {
     Uri? priceUri,
     Uri? explorerUri,
     Uri? txBuilderUri,
+    this.apiKey,
   }) : _client = client ?? http.Client(),
        _ownsClient = client == null,
        _priceUri = priceUri ?? Uri.parse('https://price-api.mayan.finance/v3'),
@@ -21,12 +22,17 @@ class MayanHyperCoreDepositClient {
   static const hyperCorePerpsUsdc =
       '0x0000000000000000000000000000000000000000';
   static const sdkVersion = '15_2_2';
+  // Mayan's Forwarder is deployed at the same address on supported EVM
+  // networks. Supplying it lets the quote service validate the route and
+  // prevents the "Forwarder not accepted" response.
+  static const evmForwarder = '0x337685fdaB40D39bd02028545a4FfA7D287cC3E2';
 
   final http.Client _client;
   final bool _ownsClient;
   final Uri _priceUri;
   final Uri _explorerUri;
   final Uri _txBuilderUri;
+  final String? apiKey;
 
   Future<MayanHyperCoreDepositQuote> quote({
     required String amount,
@@ -45,11 +51,14 @@ class MayanHyperCoreDepositClient {
       'toToken': hyperCorePerpsUsdc,
       'toChain': 'hypercore',
       'slippageBps': 'auto',
-      'destinationAddress': destinationAddress,
+      // HyperCore destination addresses belong to the execution/build call.
+      // Passing an address while fetching a Swift v2 quote makes Mayan treat
+      // it as a forwarder and can result in "Forwarder not accepted".
       'swift': 'true',
       'mctp': 'false',
       'fastMctp': 'false',
       'wormhole': 'false',
+      'forwarderAddress': evmForwarder,
       'sdkVersion': sdkVersion,
     };
     if (referrer != null && referrer.isNotEmpty) {
@@ -120,12 +129,12 @@ class MayanHyperCoreDepositClient {
       'toToken': toToken,
       'toChain': toChain,
       'slippageBps': 'auto',
-      'destinationAddress': destinationAddress,
       'swift': 'true',
       'gasless': 'true',
       'mctp': 'false',
       'fastMctp': 'false',
       'wormhole': 'false',
+      'forwarderAddress': evmForwarder,
       'sdkVersion': sdkVersion,
     };
     if (referrer != null && referrer.isNotEmpty) {
@@ -181,9 +190,10 @@ class MayanHyperCoreDepositClient {
       final message = decoded is Map
           ? decoded['msg'] ?? decoded['message']
           : null;
-      throw MayanHyperCoreDepositException(
-        '$failure（${message ?? response.statusCode}）',
-      );
+      final detail =
+          message ??
+          (response.body.trim().isEmpty ? response.statusCode : response.body);
+      throw MayanHyperCoreDepositException('$failure（$detail）');
     }
     if (decoded is! Map<String, dynamic>) {
       throw MayanHyperCoreDepositException('$failure（返回格式无效）');
@@ -204,7 +214,11 @@ class MayanHyperCoreDepositClient {
     final response = await _client
         .post(
           uri,
-          headers: const {'content-type': 'application/json'},
+          headers: {
+            'content-type': 'application/json',
+            if (apiKey != null && apiKey!.trim().isNotEmpty)
+              'x-api-key': apiKey!.trim(),
+          },
           body: jsonEncode(payload),
         )
         .timeout(const Duration(seconds: 20));
@@ -215,9 +229,10 @@ class MayanHyperCoreDepositClient {
       final message = decoded is Map
           ? decoded['msg'] ?? decoded['message']
           : null;
-      throw MayanHyperCoreDepositException(
-        '$failure（${message ?? response.statusCode}）',
-      );
+      final detail =
+          message ??
+          (response.body.trim().isEmpty ? response.statusCode : response.body);
+      throw MayanHyperCoreDepositException('$failure（$detail）');
     }
     if (decoded is! Map<String, dynamic> || decoded['success'] == false) {
       throw const MayanHyperCoreDepositException('Mayan 返回数据无效');

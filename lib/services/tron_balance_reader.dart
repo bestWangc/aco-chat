@@ -22,10 +22,11 @@ class TronBalanceReader {
     decimals: asset.decimals,
     tokenAddress: asset.tokenAddress,
     request: () async {
-      final account = await _rpcClient.postJson(rpcEndpoints, {
-        'address': address,
-        'visible': true,
-      });
+      final account = await _rpcClient.postJsonPath(
+        rpcEndpoints,
+        'wallet/getaccount',
+        {'address': address, 'visible': true},
+      );
       return asset.isNative
           ? _nativeBalance(account)
           : _trc20Balance(account, asset.tokenAddress!);
@@ -37,7 +38,7 @@ class TronBalanceReader {
     required String address,
     required List<Uri> rpcEndpoints,
   }) {
-    final account = _rpcClient.postJson(rpcEndpoints, {
+    final account = _rpcClient.postJsonPath(rpcEndpoints, 'wallet/getaccount', {
       'address': address,
       'visible': true,
     });
