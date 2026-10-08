@@ -614,10 +614,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     );
     if (!approved) return _providerError(4001, '用户拒绝签名');
     try {
-      final mnemonic = await _unlockWalletMnemonic(
-        identity,
-        allowBiometric: true,
-      );
+      final mnemonic = await _unlockWalletMnemonic(identity);
       if (mnemonic == null) return _providerError(4001, '用户取消钱包验证');
       final signature = await const SolanaSigningService().signMessage(
         mnemonic: mnemonic,
@@ -661,10 +658,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
         action: '确认签名',
       );
       if (!approved) return _providerError(4001, '用户拒绝交易');
-      final mnemonic = await _unlockWalletMnemonic(
-        identity,
-        allowBiometric: false,
-      );
+      final mnemonic = await _unlockWalletMnemonic(identity);
       if (mnemonic == null) return _providerError(4001, '用户取消钱包验证');
       final signed = const SolanaSigningService().signSerializedNativeTransfer(
         mnemonic: mnemonic,
@@ -850,10 +844,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     if (!approved) return _providerError(4001, '用户拒绝签名');
 
     try {
-      final mnemonic = await _unlockWalletMnemonic(
-        identity,
-        allowBiometric: true,
-      );
+      final mnemonic = await _unlockWalletMnemonic(identity);
       if (mnemonic == null) return _providerError(4001, '用户取消钱包验证');
       final signature = personal
           ? WalletIdentity.signPersonalMessage(
@@ -937,10 +928,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     if (!approved) return _providerError(4001, '用户拒绝交易');
 
     try {
-      final mnemonic = await _unlockWalletMnemonic(
-        identity,
-        allowBiometric: false,
-      );
+      final mnemonic = await _unlockWalletMnemonic(identity);
       if (mnemonic == null) return _providerError(4001, '用户取消钱包验证');
       final rpc = WalletRpcClient(
         client: http.Client(),
@@ -1019,51 +1007,17 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     return requested.toInt();
   }
 
-  /// Unlocks wallet material for a DApp request.
-  ///
-  /// Transaction signing must pass [allowBiometric] as false. Keeping this
-  /// decision at the native boundary prevents a future transaction handler
-  /// from accidentally inheriting the message-signing authentication path.
-  Future<String?> _unlockWalletMnemonic(
-    WalletIdentity identity, {
-    required bool allowBiometric,
-  }) async {
+  /// Unlocks wallet material for a DApp request with the wallet password.
+  Future<String?> _unlockWalletMnemonic(WalletIdentity identity) async {
     final security = WalletSecurity();
     final store = SecureWalletSecretStore();
-    final biometric = await BiometricAuthentication.availability();
-    final biometricAvailable =
-        allowBiometric && biometric == BiometricAvailability.enrolled;
-    final hasDeviceProtection = await security.hasDeviceProtection(
-      store: store,
-      walletAddress: identity.address,
-    );
-    final canUseBiometric = biometricAvailable && hasDeviceProtection;
-    if (canUseBiometric) {
-      if (!await BiometricAuthentication.authenticateOrSkip()) return null;
-      return security.unlockMnemonicWithDeviceProtection(
-        store: store,
-        walletAddress: identity.address,
-      );
-    }
     final password = await _requestPassword();
     if (password == null) return null;
-    final mnemonic = await security.unlockMnemonic(
+    return security.unlockMnemonic(
       store: store,
       walletAddress: identity.address,
       password: password,
     );
-    if (biometricAvailable) {
-      try {
-        await security.saveMnemonicWithDeviceProtection(
-          store: store,
-          walletAddress: identity.address,
-          mnemonic: mnemonic,
-        );
-      } catch (_) {
-        // Signing already has a valid password-authenticated mnemonic.
-      }
-    }
-    return mnemonic;
   }
 
   Future<String?> _requestPassword() => showCupertinoDialog<String>(
