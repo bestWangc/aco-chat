@@ -17,6 +17,30 @@ class _LiveStreamPage extends StatelessWidget {
 
 enum LiveRoomExitReason { kicked }
 
+Future<Uint8List> _encodeImageAsPng(
+  Uint8List bytes, {
+  int? targetWidth,
+  int? targetHeight,
+}) async {
+  final codec = await ui.instantiateImageCodec(
+    bytes,
+    targetWidth: targetWidth,
+    targetHeight: targetHeight,
+  );
+  try {
+    final frame = await codec.getNextFrame();
+    try {
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('无法生成图片 PNG');
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } finally {
+      frame.image.dispose();
+    }
+  } finally {
+    codec.dispose();
+  }
+}
+
 /// 联席主持人拥有与主持人相同的会议管理权限。
 bool _isLiveModeratorRole(String? role) => role == 'host' || role == 'cohost';
 
@@ -1569,10 +1593,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       final senderName = nickname == null || nickname.isEmpty ? '成员' : nickname;
       if (payload['type'] == _chatImageType) {
         final imageUrl = payload['url'];
+        final previewImageUrl = payload['preview_url'];
         final imageName = payload['name'];
         if (imageUrl is! String ||
             imageUrl.trim().isEmpty ||
             imageUrl.length > _maxChatImageUrlLength ||
+            (previewImageUrl != null &&
+                (previewImageUrl is! String ||
+                    previewImageUrl.trim().isEmpty ||
+                    previewImageUrl.length > _maxChatImageUrlLength)) ||
             (imageName is String &&
                 imageName.length > _maxChatImageNameLength)) {
           return;
@@ -1581,6 +1610,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           nickname: senderName,
           text: '',
           imageUrl: imageUrl,
+          previewImageUrl: previewImageUrl as String?,
           imageName: imageName is String ? imageName : null,
           identity: identity,
           staffIdentity: staffIdentity,
@@ -1686,10 +1716,25 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         bytes: bytes,
         filename: image.name,
       );
+      String? previewUrl;
+      try {
+        final previewBytes = await _encodeImageAsPng(
+          bytes,
+          targetWidth: 480,
+          targetHeight: 480,
+        );
+        previewUrl = (await _accountSession.uploadChatFile(
+          bytes: previewBytes,
+          filename: '${uploaded.name}.preview.png',
+        )).url;
+      } catch (_) {
+        // Sending the original image should still work if its thumbnail fails.
+      }
       final payload = utf8.encode(
         jsonEncode({
           'type': _chatImageType,
           'url': uploaded.url,
+          'preview_url': ?previewUrl,
           'name': uploaded.name,
           'identity': _liveKitIdentity,
           'staff_identity': _liveKitStaffIdentity,
@@ -1707,6 +1752,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         nickname: _localChatNickname,
         text: '',
         imageUrl: uploaded.url,
+        previewImageUrl: previewUrl,
         imageName: uploaded.name,
         identity: _liveKitIdentity,
         staffIdentity: _liveKitStaffIdentity,
@@ -1727,7 +1773,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       case LiveChatSendLimit.allowed:
         return true;
       case LiveChatSendLimit.payloadTooLarge:
-        _showNotice(context, '发送失败', '弹幕内容过长，请控制在 512 字节以内。');
+        _showNotice(context, '发送失败', '弹幕内容过长，请控制在 1024 字节以内。');
         return false;
       case LiveChatSendLimit.sentTooRecently:
         _showNotice(context, '发送太快', '请稍后再发送。');
@@ -1762,6 +1808,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     required String nickname,
     required String text,
     String? imageUrl,
+    String? previewImageUrl,
     String? imageName,
     int identity = 0,
     int staffIdentity = 0,
@@ -1776,6 +1823,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         identity: identity,
         staffIdentity: staffIdentity,
         imageUrl: imageUrl,
+        previewImageUrl: previewImageUrl,
         imageName: imageName,
       ),
     );

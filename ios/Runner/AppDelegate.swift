@@ -4,6 +4,7 @@ import LocalAuthentication
 import UIKit
 import AVFoundation
 import MediaPlayer
+import Photos
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -17,6 +18,40 @@ import MediaPlayer
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     prepareWebRTCAudioDevice()
+    FlutterMethodChannel(
+      name: "aco/downloads",
+      binaryMessenger: engineBridge.applicationRegistrar.messenger()
+    ).setMethodCallHandler { call, result in
+      guard call.method == "saveImage" else {
+        result(FlutterMethodNotImplemented)
+        return
+      }
+      guard let args = call.arguments as? [String: Any],
+            let data = args["bytes"] as? FlutterStandardTypedData,
+            let image = UIImage(data: data.data) else {
+        result(FlutterError(code: "INVALID_IMAGE", message: "图片数据无效", details: nil))
+        return
+      }
+      PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+        guard status == .authorized || status == .limited else {
+          DispatchQueue.main.async {
+            result(FlutterError(code: "PERMISSION_DENIED", message: "未获得相册权限", details: nil))
+          }
+          return
+        }
+        PHPhotoLibrary.shared().performChanges({
+          PHAssetChangeRequest.creationRequestForAsset(from: image)
+        }) { saved, error in
+          DispatchQueue.main.async {
+            if saved {
+              result(nil)
+            } else {
+              result(FlutterError(code: "SAVE_FAILED", message: error?.localizedDescription, details: nil))
+            }
+          }
+        }
+      }
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoLiveAudioBackground") {
       let channel = FlutterMethodChannel(
         name: "aco/live-audio-background",

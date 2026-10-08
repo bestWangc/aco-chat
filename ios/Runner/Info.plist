@@ -32,6 +32,8 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于从相册选择会议封面。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于保存聊天和会议弹幕中的图片到相册。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>用于拍摄聊天图片、扫描收款地址和二维码。</string>
 	<key>NSMicrophoneUsageDescription</key>

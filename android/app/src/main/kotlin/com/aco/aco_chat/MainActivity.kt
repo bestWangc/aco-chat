@@ -18,6 +18,8 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
+    private var pendingImageSave: Pair<ByteArray, MethodChannel.Result>? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/sensitive-screen")
@@ -41,16 +43,27 @@ class MainActivity : FlutterFragmentActivity() {
             }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/downloads")
             .setMethodCallHandler { call, result ->
-                if (call.method != "saveText") {
+                if (call.method != "saveText" && call.method != "saveImage") {
                     result.notImplemented()
                     return@setMethodCallHandler
                 }
-                val filename = call.argument<String>("filename") ?: "aco-chat.txt"
                 val bytes = call.argument<ByteArray>("bytes")
                 if (bytes == null) {
                     result.error("INVALID_DATA", "文件内容为空", null)
                     return@setMethodCallHandler
                 }
+                if (call.method == "saveImage") {
+                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
+                        checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        pendingImageSave = bytes to result
+                        requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 4203)
+                    } else {
+                        saveImage(bytes, result)
+                    }
+                    return@setMethodCallHandler
+                }
+                val filename = call.argument<String>("filename") ?: "aco-chat.txt"
                 try {
                     val values = ContentValues().apply {
                         put(MediaStore.Downloads.DISPLAY_NAME, filename)
@@ -181,6 +194,60 @@ class MainActivity : FlutterFragmentActivity() {
                     ),
                 )
             }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != 4203) return
+        val pending = pendingImageSave ?: return
+        pendingImageSave = null
+        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
+            saveImage(pending.first, pending.second)
+        } else {
+            pending.second.error("PERMISSION_DENIED", "未获得相册权限", null)
+        }
+    }
+
+    private fun saveImage(bytes: ByteArray, result: MethodChannel.Result) {
+        val isPng = bytes.size > 3 && bytes[0] == 0x89.toByte() && bytes[1] == 0x50.toByte()
+        val isGif = bytes.size > 3 && String(bytes, 0, 3) == "GIF"
+        val isWebp = bytes.size > 12 && String(bytes, 8, 4) == "WEBP"
+        val extension = when {
+            isPng -> "png"
+            isGif -> "gif"
+            isWebp -> "webp"
+            else -> "jpg"
+        }
+        val mimeType = when {
+            isPng -> "image/png"
+            isGif -> "image/gif"
+            isWebp -> "image/webp"
+            else -> "image/jpeg"
+        }
+        var uri: Uri? = null
+        try {
+            val values = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, "aco-chat-${System.currentTimeMillis()}.$extension")
+                put(MediaStore.Images.Media.MIME_TYPE, mimeType)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Aco Chat")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("无法创建图片")
+            contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                ?: throw IllegalStateException("无法写入图片")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.Images.Media.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+            }
+            result.success(uri.toString())
+        } catch (error: Exception) {
+            if (uri != null) contentResolver.delete(uri, null, null)
+            result.error("SAVE_FAILED", error.message, null)
+        }
     }
 
     private fun hasBluetoothOutput(audioManager: AudioManager): Boolean =

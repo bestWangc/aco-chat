@@ -2650,6 +2650,8 @@ class _ChatMessage extends StatelessWidget {
         image,
         maxWidth: maxWidth,
         previewImage: image.image,
+        imageBytes: bytes,
+        imageUrl: previewImageUrl ?? imageUrl,
       );
     }
 
@@ -2666,6 +2668,7 @@ class _ChatMessage extends StatelessWidget {
               ),
         maxWidth: maxWidth,
         previewImage: CachedNetworkImageProvider(previewUrl),
+        imageUrl: previewUrl,
       );
     }
 
@@ -2761,13 +2764,19 @@ class _ChatMessage extends StatelessWidget {
     Widget thumbnail, {
     required double maxWidth,
     required ImageProvider previewImage,
+    Uint8List? imageBytes,
+    String? imageUrl,
   }) => Semantics(
     button: true,
     label: '查看原图',
     child: GestureDetector(
       onTap: () => Navigator.of(context).push<void>(
         CupertinoPageRoute<void>(
-          builder: (_) => _ChatImagePreview(image: previewImage),
+          builder: (_) => _ChatImagePreview(
+            image: previewImage,
+            imageBytes: imageBytes,
+            imageUrl: imageUrl,
+          ),
         ),
       ),
       child: ClipRRect(
@@ -3034,10 +3043,62 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
   );
 }
 
-class _ChatImagePreview extends StatelessWidget {
-  const _ChatImagePreview({required this.image});
+class _ChatImagePreview extends StatefulWidget {
+  const _ChatImagePreview({
+    required this.image,
+    this.imageBytes,
+    this.imageUrl,
+  });
 
   final ImageProvider image;
+  final Uint8List? imageBytes;
+  final String? imageUrl;
+
+  @override
+  State<_ChatImagePreview> createState() => _ChatImagePreviewState();
+}
+
+class _ChatImagePreviewState extends State<_ChatImagePreview> {
+  bool _saving = false;
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      Uint8List? bytes = widget.imageBytes;
+      final url = widget.imageUrl;
+      if (url != null && url.isNotEmpty) {
+        try {
+          final response = await http.get(Uri.parse(url));
+          if (response.statusCode != 200) throw Exception('下载失败');
+          bytes = response.bodyBytes;
+        } catch (_) {
+          if (bytes == null) rethrow;
+        }
+      }
+      if (bytes == null || bytes.isEmpty) throw Exception('图片内容为空');
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        bytes = await _encodeImageAsPng(bytes);
+      }
+      await const MethodChannel(
+        'aco/downloads',
+      ).invokeMethod<void>('saveImage', {'bytes': bytes});
+      if (mounted) _showNotice(context, '保存成功', '图片已保存到相册。');
+    } on PlatformException catch (error) {
+      debugPrint('[ChatImageSave] ${error.code}: ${error.message}');
+      if (mounted) {
+        final message = error.code == 'PERMISSION_DENIED'
+            ? '请在系统设置中允许 Aco Chat 添加照片到相册。'
+            : '保存到相册失败，请稍后重试。';
+        _showNotice(context, '保存失败', message);
+      }
+    } catch (error) {
+      debugPrint('[ChatImageSave] $error');
+      if (mounted) _showNotice(context, '保存失败', '请检查网络或相册权限后重试。');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
@@ -3049,7 +3110,7 @@ class _ChatImagePreview extends StatelessWidget {
             child: InteractiveViewer(
               minScale: 1,
               maxScale: 4,
-              child: Image(image: image, fit: BoxFit.contain),
+              child: Image(image: widget.image, fit: BoxFit.contain),
             ),
           ),
           Positioned(
@@ -3063,6 +3124,16 @@ class _ChatImagePreview extends StatelessWidget {
                 color: Color(0xFFFFFFFF),
                 size: 22,
               ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: CupertinoButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const CupertinoActivityIndicator()
+                  : const Text('保存图片'),
             ),
           ),
         ],

@@ -492,6 +492,7 @@ class LiveMessage {
     this.identity = 0,
     this.staffIdentity = 0,
     this.imageUrl,
+    this.previewImageUrl,
     this.imageName,
   });
 
@@ -502,6 +503,7 @@ class LiveMessage {
   final int identity;
   final int staffIdentity;
   final String? imageUrl;
+  final String? previewImageUrl;
   final String? imageName;
 
   factory LiveMessage.fromJson(Map<String, dynamic> json) => LiveMessage(
@@ -512,6 +514,8 @@ class LiveMessage {
     identity: (json['identity'] as num?)?.toInt() ?? 0,
     staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
     imageUrl: json['image_url'] as String?,
+    previewImageUrl:
+        json['preview_image_url'] as String? ?? json['preview_url'] as String?,
     imageName: json['image_name'] as String?,
   );
 }

@@ -132,6 +132,7 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
           name: message.nickname,
           text: message.text,
           imageUrl: message.imageUrl,
+          previewImageUrl: message.previewImageUrl,
           imageName: message.imageName,
           identity: message.identity,
           staffIdentity: message.staffIdentity,
@@ -573,6 +574,7 @@ class _RoomMessage extends StatelessWidget {
     required this.name,
     required this.text,
     this.imageUrl,
+    this.previewImageUrl,
     this.imageName,
     required this.identity,
     required this.staffIdentity,
@@ -582,6 +584,7 @@ class _RoomMessage extends StatelessWidget {
   final String name;
   final String text;
   final String? imageUrl;
+  final String? previewImageUrl;
   final String? imageName;
   final int identity;
   final int staffIdentity;
@@ -680,6 +683,7 @@ class _RoomMessage extends StatelessWidget {
                     const SizedBox(height: 7),
                     _LiveChatImage(
                       url: imageUrl!,
+                      previewUrl: previewImageUrl,
                       name: imageName,
                       maxWidth: math.min(240, maxBubbleWidth - 28),
                     ),
@@ -694,43 +698,57 @@ class _RoomMessage extends StatelessWidget {
 class _LiveChatImage extends StatelessWidget {
   const _LiveChatImage({
     required this.url,
+    this.previewUrl,
     required this.name,
     required this.maxWidth,
   });
 
   final String url;
+  final String? previewUrl;
   final String? name;
   final double maxWidth;
 
   @override
   Widget build(BuildContext context) {
-    final uri = Uri.tryParse(url);
-    final imageUrl = uri?.hasScheme == true
-        ? url
-        : Uri.parse(const AppConfig().apiBaseUrl).replace(path: url).toString();
+    final imageUrl = _liveCoverUrl(url);
+    final thumbnailUrl = _liveCoverUrl(previewUrl ?? url);
     return Semantics(
       label: name == null || name!.isEmpty ? '聊天图片' : '聊天图片：$name',
-      image: true,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(10),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: 240),
-          child: AcoNetworkImage(
-            url: imageUrl,
-            memCacheWidth: (maxWidth * MediaQuery.devicePixelRatioOf(context))
-                .round(),
-            memCacheHeight: (240 * MediaQuery.devicePixelRatioOf(context))
-                .round(),
-            fit: BoxFit.cover,
-            placeholder: (context, url) => SizedBox(
-              width: maxWidth,
-              height: 120,
-              child: const Center(child: CupertinoActivityIndicator()),
+      button: true,
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push<void>(
+          CupertinoPageRoute<void>(
+            builder: (_) => _ChatImagePreview(
+              image: CachedNetworkImageProvider(imageUrl),
+              imageUrl: imageUrl,
             ),
-            errorWidget: (context, url, error) => SizedBox(
-              width: maxWidth,
-              height: 120,
-              child: const Center(child: Text('图片加载失败')),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth, maxHeight: 240),
+            child: AcoNetworkImage(
+              url: thumbnailUrl,
+              memCacheWidth: (maxWidth * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+              memCacheHeight: (240 * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+              fit: BoxFit.cover,
+              placeholder: (context, url) => SizedBox(
+                width: maxWidth,
+                height: 120,
+                child: const Center(child: CupertinoActivityIndicator()),
+              ),
+              errorWidget: (context, url, error) => SizedBox(
+                width: maxWidth,
+                height: 120,
+                child: AcoNetworkImage(
+                  url: imageUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, _, _) => const Center(child: Text('图片加载失败')),
+                ),
+              ),
             ),
           ),
         ),

@@ -52,7 +52,7 @@ enum LiveChatSendLimit {
 
 /// Enforces local bounds before a chat payload is published to LiveKit.
 class LiveChatRateLimiter {
-  static const maxMessageBytes = 512;
+  static const maxMessageBytes = 1024;
   static const minimumInterval = Duration(milliseconds: 250);
   static const rateWindow = Duration(seconds: 1);
   static const maxMessagesPerWindow = 20;
