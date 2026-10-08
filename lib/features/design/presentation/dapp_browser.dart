@@ -256,6 +256,15 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   }
 
   @override
+  void dispose() {
+    final keepAlive = _keepAliveByDapp.remove(widget.dappId);
+    if (keepAlive != null) {
+      unawaited(InAppWebViewController.disposeKeepAlive(keepAlive));
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: widget.palette.background,
     resizeToAvoidBottomInset: false,
