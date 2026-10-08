@@ -131,6 +131,7 @@ class HyperliquidExchangeClient {
     required String masterPrivateKey,
     required String destination,
     required String amount,
+    String? expectedSignerAddress,
   }) {
     final time = _now();
     final action = <String, dynamic>{
@@ -145,6 +146,7 @@ class HyperliquidExchangeClient {
       nonce: time,
       primaryType: 'HyperliquidTransaction:Withdraw',
       fields: HyperliquidSigner.withdrawTypes,
+      expectedSignerAddress: expectedSignerAddress,
     );
   }
 
@@ -182,6 +184,11 @@ class HyperliquidExchangeClient {
     String? debugSignerAddress,
     String? expectedSignerAddress,
   }) async {
+    if (expectedSignerAddress != null &&
+        debugSignerAddress?.toLowerCase() !=
+            expectedSignerAddress.toLowerCase()) {
+      throw const HyperliquidExchangeException('签名钱包地址与当前钱包不一致');
+    }
     final payload = <String, dynamic>{
       'action': action,
       'nonce': nonce,

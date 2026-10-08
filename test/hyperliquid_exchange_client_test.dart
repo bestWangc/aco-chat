@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:aco_chat/services/hyperliquid_exchange_client.dart';
+import 'package:aco_chat/services/hyperliquid_signing.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -94,5 +95,52 @@ void main() {
     expect(action['builder'], '0x0000000000000000000000000000000000000001');
     expect(action['maxFeeRate'], '0.01%');
     expect(request['signature'], isA<Map<String, dynamic>>());
+  });
+
+  test('submits a signed Arbitrum withdrawal request', () async {
+    const privateKey =
+        '0x0123456789012345678901234567890123456789012345678901234567890123';
+    final client = _ExchangeClient();
+    final exchange = HyperliquidExchangeClient(
+      client: client,
+      endpoint: Uri.parse('https://example.test/exchange'),
+    );
+
+    await exchange.withdraw(
+      masterPrivateKey: privateKey,
+      destination: '0x0000000000000000000000000000000000000001',
+      amount: '9',
+      expectedSignerAddress: HyperliquidSigner.addressFromPrivateKey(
+        privateKey,
+      ),
+    );
+
+    final request = client.request!;
+    final action = request['action'] as Map<String, dynamic>;
+    expect(action['type'], 'withdraw3');
+    expect(action['destination'], '0x0000000000000000000000000000000000000001');
+    expect(action['amount'], '9');
+    expect(action['time'], request['nonce']);
+    expect(request['signature'], isA<Map<String, dynamic>>());
+  });
+
+  test('rejects a withdrawal signed by a different wallet', () async {
+    final client = _ExchangeClient();
+    final exchange = HyperliquidExchangeClient(
+      client: client,
+      endpoint: Uri.parse('https://example.test/exchange'),
+    );
+
+    await expectLater(
+      exchange.withdraw(
+        masterPrivateKey:
+            '0x0123456789012345678901234567890123456789012345678901234567890123',
+        destination: '0x0000000000000000000000000000000000000001',
+        amount: '9',
+        expectedSignerAddress: '0x0000000000000000000000000000000000000001',
+      ),
+      throwsA(isA<HyperliquidExchangeException>()),
+    );
+    expect(client.request, isNull);
   });
 }

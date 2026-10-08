@@ -15,22 +15,42 @@ import 'package:http/http.dart' as http;
 class LifiApiClient {
   static const quoteTimeout = Duration(seconds: 30);
   static const requestTimeout = Duration(seconds: 15);
+  static const hyperCoreChainId = 1337;
+  static const hyperCorePerpsUsdc =
+      '0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
 
-  LifiApiClient({
-    http.Client? client,
-    Uri? baseUri,
-    Future<TradeFeeConfig> Function()? feeConfigLoader,
-  }) : baseUri = baseUri ?? Uri.parse('https://li.quest/v1'),
-       _client = client ?? http.Client(),
-       _ownsClient = client == null,
-       _feeConfigClient = TradeFeeConfigClient(),
-       _feeConfigLoader = feeConfigLoader;
+  LifiApiClient({http.Client? client, Uri? baseUri, this.feeConfigLoader})
+    : baseUri = baseUri ?? Uri.parse('https://li.quest/v1'),
+      _client = client ?? http.Client(),
+      _ownsClient = client == null,
+      _feeConfigClient = TradeFeeConfigClient();
 
   final http.Client _client;
   final Uri baseUri;
   final bool _ownsClient;
   final TradeFeeConfigClient _feeConfigClient;
-  final Future<TradeFeeConfig> Function()? _feeConfigLoader;
+  final Future<TradeFeeConfig> Function()? feeConfigLoader;
+
+  Future<LifiQuote> hyperCoreDepositQuote({
+    required WalletNetwork fromNetwork,
+    required String fromTokenAddress,
+    required String amount,
+    required int decimals,
+    required String walletAddress,
+    String? destinationAddress,
+  }) => quote(
+    fromNetwork: fromNetwork,
+    fromToken: fromTokenAddress,
+    fromTokenAddress: fromTokenAddress,
+    toNetwork: fromNetwork,
+    toToken: hyperCorePerpsUsdc,
+    fromAmount: amount,
+    fromDecimals: decimals,
+    fromAddress: walletAddress,
+    toAddress: destinationAddress ?? walletAddress,
+    toTokenAddress: hyperCorePerpsUsdc,
+    toChainId: hyperCoreChainId,
+  );
 
   Future<LifiQuote> quote({
     required WalletNetwork fromNetwork,
@@ -43,11 +63,12 @@ class LifiApiClient {
     String? toAddress,
     String? fromTokenAddress,
     String? toTokenAddress,
+    int? toChainId,
     double slippage = .02,
     double? fee,
   }) async {
     final fromChain = chainId(fromNetwork);
-    final toChain = chainId(toNetwork);
+    final toChain = toChainId ?? chainId(toNetwork);
     final integratorFee = fee ?? await _loadIntegratorFee(fromChain == toChain);
     final uri = baseUri.replace(
       path: '${baseUri.path}/quote',
@@ -210,8 +231,7 @@ class LifiApiClient {
 
   Future<double> _loadIntegratorFee(bool sameChain) async {
     try {
-      final config =
-          await (_feeConfigLoader?.call() ?? _feeConfigClient.load());
+      final config = await (feeConfigLoader?.call() ?? _feeConfigClient.load());
       return config.lifi.feeFor(sameChain: sameChain);
     } on Object catch (_) {
       return 0;
@@ -263,6 +283,8 @@ class LifiApiClient {
 
 class LifiQuote {
   const LifiQuote({
+    required this.fromChainId,
+    required this.toChainId,
     required this.fromAmount,
     required this.toAmount,
     required this.toAmountMin,
@@ -272,10 +294,13 @@ class LifiQuote {
     this.fee,
     this.fromTokenAddress,
     this.toTokenAddress,
+    this.approvalAddress,
     this.pool,
   });
 
   final String fromAmount;
+  final int? fromChainId;
+  final int? toChainId;
   final String toAmount;
   final String toAmountMin;
   final String tool;
@@ -284,6 +309,7 @@ class LifiQuote {
   final String? fee;
   final String? fromTokenAddress;
   final String? toTokenAddress;
+  final String? approvalAddress;
   final String? pool;
 
   factory LifiQuote.fromJson(Map<String, dynamic> json) {
@@ -295,6 +321,8 @@ class LifiQuote {
     final tool = json['tool'];
     final toolName = tool is Map ? tool['name'] : tool;
     return LifiQuote(
+      fromChainId: _chainId(actionMap['fromChainId']),
+      toChainId: _chainId(actionMap['toChainId']),
       fromAmount: '${estimate['fromAmount'] ?? actionMap['fromAmount'] ?? ''}',
       toAmount: '${estimate['toAmount'] ?? ''}',
       toAmountMin: '${estimate['toAmountMin'] ?? ''}',
@@ -306,9 +334,13 @@ class LifiQuote {
       fee: _feeSummary(estimate),
       fromTokenAddress: _tokenAddress(fromToken),
       toTokenAddress: _tokenAddress(toToken),
+      approvalAddress: _optionalString(estimate['approvalAddress']),
       pool: _findPool(json),
     );
   }
+
+  static int? _chainId(Object? value) =>
+      value is num ? value.toInt() : int.tryParse('$value');
 
   static String? _tokenAddress(Object? token) {
     if (token is! Map) return null;
@@ -343,22 +375,23 @@ class LifiQuote {
   static String? _feeSummary(Map<String, dynamic> estimate) {
     final feeCosts = estimate['feeCosts'];
     if (feeCosts is! List || feeCosts.isEmpty) return null;
-    final values = feeCosts
-        .whereType<Map>()
-        .map((fee) {
-          final usd = _optionalString(fee['amountUSD']);
-          if (usd != null) return '\$$usd';
-          final amount = _optionalString(fee['amount']);
-          final token = _optionalString(
-            fee['token'] is Map
-                ? (fee['token'] as Map)['symbol']
-                : fee['token'],
-          );
-          if (amount == null) return null;
-          return token == null ? amount : '$amount $token';
-        })
-        .whereType<String>()
-        .toList();
+    var usdTotal = 0.0;
+    var hasUsd = false;
+    final values = <String>[];
+    for (final fee in feeCosts.whereType<Map>()) {
+      final usd = double.tryParse(_optionalString(fee['amountUSD']) ?? '');
+      if (usd != null) {
+        usdTotal += usd;
+        hasUsd = true;
+        continue;
+      }
+      final amount = _optionalString(fee['amount']);
+      final token = _optionalString(
+        fee['token'] is Map ? (fee['token'] as Map)['symbol'] : fee['token'],
+      );
+      if (amount != null) values.add(token == null ? amount : '$amount $token');
+    }
+    if (hasUsd) values.insert(0, '\$${usdTotal.toStringAsFixed(4)}');
     return values.isEmpty ? null : values.join(' + ');
   }
 }

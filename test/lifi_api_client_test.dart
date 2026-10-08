@@ -1,5 +1,6 @@
 import 'package:aco_chat/services/lifi_api_client.dart';
 import 'package:aco_chat/services/trade_fee_config_client.dart';
+import 'package:aco_chat/services/wallet_chain_registry.dart';
 import 'package:aco_chat/services/wallet_portfolio_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -24,6 +25,20 @@ void main() {
     });
     expect(quote.fromAmount, '');
     expect(quote.tool, 'jumper');
+  });
+
+  test('combines USD route fees in the quote summary', () {
+    final quote = LifiQuote.fromJson({
+      'estimate': {
+        'toAmount': '100',
+        'toAmountMin': '99',
+        'feeCosts': [
+          {'amountUSD': '0.0330'},
+          {'amountUSD': '0.0266'},
+        ],
+      },
+    });
+    expect(quote.fee, '\$0.0596');
   });
 
   test('shows nested LI.FI error reason', () async {
@@ -107,6 +122,95 @@ void main() {
       fee: .002,
     );
     expect(client.uri?.queryParameters['fee'], '0.002');
+  });
+
+  test('supports HyperCore as a non-wallet destination chain', () async {
+    final client = _QuoteClient();
+    final api = LifiApiClient(
+      client: client,
+      baseUri: Uri.parse('https://li.quest/v1'),
+    );
+    await api.quote(
+      fromNetwork: WalletNetwork.arbitrum,
+      fromToken: 'USDC',
+      toNetwork: WalletNetwork.arbitrum,
+      toToken: 'USDC',
+      fromAmount: '1',
+      fromDecimals: 6,
+      fromAddress: '0xabc',
+      toAddress: '0xabc',
+      toChainId: LifiApiClient.hyperCoreChainId,
+      toTokenAddress: LifiApiClient.hyperCorePerpsUsdc,
+      fee: .003,
+    );
+    expect(client.uri?.queryParameters['toChain'], '1337');
+    expect(
+      client.uri?.queryParameters['toToken'],
+      LifiApiClient.hyperCorePerpsUsdc,
+    );
+  });
+
+  test('quotes HyperCore deposits directly without an API key', () async {
+    final client = _QuoteClient();
+    final api = LifiApiClient(
+      client: client,
+      baseUri: Uri.parse('https://li.quest/v1'),
+      feeConfigLoader: _feeConfigLoader,
+    );
+    await api.hyperCoreDepositQuote(
+      fromNetwork: WalletNetwork.arbitrum,
+      fromTokenAddress: LifiApiClient.hyperCorePerpsUsdc,
+      amount: '1.25',
+      decimals: 6,
+      walletAddress: '0xabc',
+    );
+    expect(client.uri?.host, 'li.quest');
+    expect(client.uri?.queryParameters['fromAmount'], '1250000');
+    expect(client.uri?.queryParameters['toChain'], '1337');
+    expect(client.uri?.queryParameters['fee'], '0.003');
+    expect(client.uri?.queryParameters['integrator'], 'aco');
+  });
+
+  test(
+    'uses the selected chain address and wallet-specific deposit receiver',
+    () async {
+      final client = _QuoteClient();
+      final api = LifiApiClient(
+        client: client,
+        baseUri: Uri.parse('https://li.quest/v1'),
+        feeConfigLoader: _feeConfigLoader,
+      );
+      await api.hyperCoreDepositQuote(
+        fromNetwork: WalletNetwork.solana,
+        fromTokenAddress: WalletChainRegistry.solanaUsdc.address,
+        amount: '1',
+        decimals: WalletChainRegistry.solanaUsdc.decimals,
+        walletAddress: 'SolanaWalletAddress11111111111111111111111111',
+        destinationAddress: '0xabc',
+      );
+      expect(
+        client.uri?.queryParameters['fromChain'],
+        '${LifiApiClient.chainId(WalletNetwork.solana)}',
+      );
+      expect(
+        client.uri?.queryParameters['fromToken'],
+        WalletChainRegistry.solanaUsdc.address,
+      );
+      expect(client.uri?.queryParameters['fromAmount'], '1000000');
+      expect(
+        client.uri?.queryParameters['fromAddress'],
+        'SolanaWalletAddress11111111111111111111111111',
+      );
+      expect(client.uri?.queryParameters['toAddress'], '0xabc');
+      expect(client.uri?.queryParameters['toChain'], '1337');
+    },
+  );
+
+  test('represents native SOL with the LI.FI native token address', () {
+    expect(
+      LifiApiClient.tokenAddress(WalletNetwork.solana, 'SOL'),
+      '11111111111111111111111111111111',
+    );
   });
 }
 

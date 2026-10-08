@@ -709,122 +709,135 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
     valueListenable: _isDark,
     builder: (_, dark, _) {
-      return CupertinoPageScaffold(
-        backgroundColor: dark && _rootScreen == AcoScreen.walletHome
-            ? _black
-            : AcoPalette(dark).background,
-        child: _AcoViewport(
-          child: AcoSafeArea(
-            left: false,
-            right: false,
-            bottom: false,
-            child: Column(
-              children: [
-                Expanded(
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([
-                      _displayName,
-                      _username,
-                      _avatarUrl,
-                      _identity,
-                      _staffIdentity,
-                      _walletName,
-                      _selectedWalletChain,
-                      _walletTotals,
-                    ]),
-                    builder: (_, _) {
-                      final selectedNetwork =
-                          _supportedWalletChains[_selectedWalletChain.value]
-                              .network;
-                      return AcoScreenPage(
-                        screen: _rootScreen,
-                        dark: dark,
-                        isRoot: true,
-                        onOpen: _open,
-                        onThemeToggle: _toggleTheme,
-                        onWalletTotalChanged: (total) => _cacheWalletTotal(
-                          widget.walletIdentity,
-                          selectedNetwork,
-                          total,
-                        ),
-                        walletIdentity: widget.walletIdentity,
-                        walletName: _walletName.value,
-                        walletTotals: _walletTotals.value,
-                        onWalletNameChanged: _saveWalletName,
-                        walletChainIndex: _selectedWalletChain.value,
-                        walletAssetRevision: _walletAssetRevision,
-                        onWalletChainSelected: _selectWalletChain,
-                        initialDexSection: _initialDexSection,
-                        transferToken: _selectedTransferToken,
-                        onSendTokenSelected: _sendToken,
-                        selectedAsset: _selectedAssetBalance,
-                        walletTransactionService: _walletTransactionService,
-                        onAssetSelected: _openAsset,
-                        accountId: _accountId,
-                        walletLoginFuture: widget.walletLoginFuture,
-                        username: _username.value,
-                        avatarUrl: _avatarUrl.value,
-                        identity: _identity.value,
-                        staffIdentity: _staffIdentity.value,
-                        displayName: _displayName.value,
-                        onDisplayNameChanged: (name) {
-                          if (mounted) _displayName.value = name;
-                        },
-                        onUsernameChanged: (username) {
-                          if (mounted) _username.value = username;
-                        },
-                        onAvatarUrlChanged: (avatarUrl) {
-                          if (mounted) _avatarUrl.value = avatarUrl;
-                        },
-                        language: _language,
-                        liveListRevision: _liveListRevision,
-                        hasAppUpdate: _hasAppUpdate,
-                        onOpenAppUpdate: () =>
-                            const AppUpdateService().openWebsite(),
-                        onLanguageChanged: (language) =>
-                            setState(() => _language = language),
-                      );
-                    },
-                  ),
-                ),
-                ValueListenableBuilder<bool>(
-                  valueListenable: OpenIMChatRepository.messageUnreadNotifier,
-                  builder: (_, hasUnreadMessages, _) =>
-                      ValueListenableBuilder<int>(
-                        valueListenable:
-                            OpenIMChatRepository.friendRequestCountNotifier,
-                        builder: (_, friendRequestCount, _) => AcoBottomNav(
-                          selected: _selectedNav,
+      final mediaQuery = MediaQuery.of(context);
+      final safePadding = EdgeInsets.fromLTRB(
+        math.max(0, mediaQuery.viewPadding.left - mediaQuery.viewInsets.left),
+        math.max(0, mediaQuery.viewPadding.top - mediaQuery.viewInsets.top),
+        math.max(0, mediaQuery.viewPadding.right - mediaQuery.viewInsets.right),
+        math.max(
+          0,
+          mediaQuery.viewPadding.bottom - mediaQuery.viewInsets.bottom,
+        ),
+      );
+      return MediaQuery(
+        data: mediaQuery.copyWith(padding: safePadding),
+        child: CupertinoPageScaffold(
+          backgroundColor: dark && _rootScreen == AcoScreen.walletHome
+              ? _black
+              : AcoPalette(dark).background,
+          child: _AcoViewport(
+            child: AcoSafeArea(
+              left: false,
+              right: false,
+              bottom: false,
+              child: Column(
+                children: [
+                  Expanded(
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([
+                        _displayName,
+                        _username,
+                        _avatarUrl,
+                        _identity,
+                        _staffIdentity,
+                        _walletName,
+                        _selectedWalletChain,
+                        _walletTotals,
+                      ]),
+                      builder: (_, _) {
+                        final selectedNetwork =
+                            _supportedWalletChains[_selectedWalletChain.value]
+                                .network;
+                        return AcoScreenPage(
+                          screen: _rootScreen,
                           dark: dark,
-                          showSocialBadge:
-                              hasUnreadMessages || friendRequestCount > 0,
-                          onSelected: (index) {
-                            const destinations = [
-                              AcoScreen.walletHome,
-                              AcoScreen.browserDiscover,
-                              AcoScreen.dexToken,
-                              AcoScreen.squareFeed,
-                              AcoScreen.socialMessages,
-                            ];
-                            if (index == 4) {
-                              OpenIMChatRepository.markMessagesSeen();
-                              _open(AcoScreen.socialMessages);
-                              return;
-                            }
-                            setState(() {
-                              if (index == 2 &&
-                                  _rootScreen != AcoScreen.dexToken) {
-                                _initialDexSection = 1;
-                              }
-                              _selectedNav = index;
-                              _rootScreen = destinations[index];
-                              if (index == 3) _liveListRevision++;
-                            });
+                          isRoot: true,
+                          onOpen: _open,
+                          onThemeToggle: _toggleTheme,
+                          onWalletTotalChanged: (total) => _cacheWalletTotal(
+                            widget.walletIdentity,
+                            selectedNetwork,
+                            total,
+                          ),
+                          walletIdentity: widget.walletIdentity,
+                          walletName: _walletName.value,
+                          walletTotals: _walletTotals.value,
+                          onWalletNameChanged: _saveWalletName,
+                          walletChainIndex: _selectedWalletChain.value,
+                          walletAssetRevision: _walletAssetRevision,
+                          onWalletChainSelected: _selectWalletChain,
+                          initialDexSection: _initialDexSection,
+                          transferToken: _selectedTransferToken,
+                          onSendTokenSelected: _sendToken,
+                          selectedAsset: _selectedAssetBalance,
+                          walletTransactionService: _walletTransactionService,
+                          onAssetSelected: _openAsset,
+                          accountId: _accountId,
+                          walletLoginFuture: widget.walletLoginFuture,
+                          username: _username.value,
+                          avatarUrl: _avatarUrl.value,
+                          identity: _identity.value,
+                          staffIdentity: _staffIdentity.value,
+                          displayName: _displayName.value,
+                          onDisplayNameChanged: (name) {
+                            if (mounted) _displayName.value = name;
                           },
+                          onUsernameChanged: (username) {
+                            if (mounted) _username.value = username;
+                          },
+                          onAvatarUrlChanged: (avatarUrl) {
+                            if (mounted) _avatarUrl.value = avatarUrl;
+                          },
+                          language: _language,
+                          liveListRevision: _liveListRevision,
+                          hasAppUpdate: _hasAppUpdate,
+                          onOpenAppUpdate: () =>
+                              const AppUpdateService().openWebsite(),
+                          onLanguageChanged: (language) =>
+                              setState(() => _language = language),
+                        );
+                      },
+                    ),
+                  ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: OpenIMChatRepository.messageUnreadNotifier,
+                    builder: (_, hasUnreadMessages, _) =>
+                        ValueListenableBuilder<int>(
+                          valueListenable:
+                              OpenIMChatRepository.friendRequestCountNotifier,
+                          builder: (_, friendRequestCount, _) => AcoBottomNav(
+                            selected: _selectedNav,
+                            dark: dark,
+                            showSocialBadge:
+                                hasUnreadMessages || friendRequestCount > 0,
+                            onSelected: (index) {
+                              const destinations = [
+                                AcoScreen.walletHome,
+                                AcoScreen.browserDiscover,
+                                AcoScreen.dexToken,
+                                AcoScreen.squareFeed,
+                                AcoScreen.socialMessages,
+                              ];
+                              if (index == 4) {
+                                OpenIMChatRepository.markMessagesSeen();
+                                _open(AcoScreen.socialMessages);
+                                return;
+                              }
+                              setState(() {
+                                if (index == 2 &&
+                                    _rootScreen != AcoScreen.dexToken) {
+                                  _initialDexSection = 1;
+                                }
+                                _selectedNav = index;
+                                _rootScreen = destinations[index];
+                                if (index == 3) _liveListRevision++;
+                              });
+                            },
+                          ),
                         ),
-                      ),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

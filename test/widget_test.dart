@@ -1192,6 +1192,27 @@ void main() {
     expect(find.text('39800.00'), findsNothing);
   });
 
+  testWidgets('does not switch to Solana when no Solana wallet exists', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const AcoApp());
+
+    await tester.tap(find.byKey(const Key('wallet-network-selector')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('选择公链 Solana'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂无Solana钱包'), findsOneWidget);
+    expect(find.text('导入钱包'), findsOneWidget);
+    expect(find.text('创建钱包'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ethereum'), findsOneWidget);
+    expect(find.text('暂无钱包'), findsOneWidget);
+  });
+
   testWidgets('opens wallet list from the wallet dropdown', (
     WidgetTester tester,
   ) async {

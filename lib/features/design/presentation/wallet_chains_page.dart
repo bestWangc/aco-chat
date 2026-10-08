@@ -27,6 +27,7 @@ class _WalletChains extends StatefulWidget {
 class _WalletChainsState extends State<_WalletChains> {
   late int _selectedChain;
   late Future<List<_WalletListItem>> _walletsFuture;
+  int _chainSelectionRequestId = 0;
 
   @override
   void initState() {
@@ -47,14 +48,57 @@ class _WalletChainsState extends State<_WalletChains> {
     }
   }
 
-  void _selectChain(int index) {
+  Future<void> _selectChain(int index) async {
     if (index == _selectedChain) return;
+    final requestId = ++_chainSelectionRequestId;
+    final chain = _supportedWalletChains[index];
+    if (chain.derivedAddressKey != null) {
+      final wallets = await _loadWallets(index);
+      if (!mounted || requestId != _chainSelectionRequestId) return;
+      if (wallets.isEmpty) {
+        await _showMissingChainWallet(chain.label);
+        return;
+      }
+    }
+    if (!mounted || requestId != _chainSelectionRequestId) return;
     setState(() {
       _selectedChain = index;
       _walletsFuture = _loadWallets(index);
     });
     widget.onChainSelected(index);
   }
+
+  Future<void> _showMissingChainWallet(String chainLabel) =>
+      showCupertinoDialog<void>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: Text('暂无$chainLabel钱包'),
+          content: const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: Text('请先导入或创建对应的钱包，再切换到该网络。'),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                widget.onOpen(AcoScreen.walletSetupImport);
+              },
+              child: const Text('导入钱包'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+                widget.onOpen(AcoScreen.walletSetupCreate);
+              },
+              child: const Text('创建钱包'),
+            ),
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+          ],
+        ),
+      );
 
   Future<void> _showAddWalletSheet(BuildContext context) async {
     await showCupertinoModalPopup<void>(

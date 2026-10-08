@@ -25,6 +25,7 @@ class _HyperliquidContractTradePage extends StatefulWidget {
 class _HyperliquidContractTradePageState
     extends State<_HyperliquidContractTradePage> {
   final _amountController = TextEditingController();
+  final _amountFocusNode = FocusNode();
   final _limitPriceController = TextEditingController();
   final _takeProfitPriceController = TextEditingController();
   final _takeProfitRateController = TextEditingController();
@@ -121,6 +122,7 @@ class _HyperliquidContractTradePageState
     unawaited(_realtimeSubscription?.cancel());
     unawaited(_realtimeClient.close());
     _amountController.dispose();
+    _amountFocusNode.dispose();
     _limitPriceController.dispose();
     _takeProfitPriceController.dispose();
     _takeProfitRateController.dispose();
@@ -146,9 +148,13 @@ class _HyperliquidContractTradePageState
   Future<TradeFeeConfig?> _loadTradeFeeConfig() async {
     try {
       final config = await _tradeFeeClient.load();
+      debugPrint(
+        '[HyperliquidBuilder] builderAddress=${config.hyperliquid.builderAddress}',
+      );
       if (mounted) setState(() => _tradeFeeConfig = config);
       return config;
-    } catch (_) {
+    } catch (error) {
+      debugPrint('[HyperliquidBuilder] config load failed: $error');
       return null;
     }
   }
@@ -338,7 +344,7 @@ class _HyperliquidContractTradePageState
         builder: feeConfig?.hyperliquid,
       );
       if (agentPrivateKey == null) return;
-      final result = await _exchange.placeOrder(
+      await _exchange.placeOrder(
         agentPrivateKey: agentPrivateKey,
         action: action,
         expiresAfter: DateTime.now().millisecondsSinceEpoch + 60 * 1000,
@@ -348,10 +354,7 @@ class _HyperliquidContractTradePageState
       );
       await _loadAccount(showLoading: false);
       if (mounted) {
-        await _showMessage(
-          '订单已提交。\n${_exchangeResultMessage(result)}',
-          title: '下单成功',
-        );
+        await _showMessage('订单已提交。', title: '下单成功');
       }
     } on WalletSecurityException catch (error) {
       if (mounted) await _showMessage(error.message);
@@ -360,8 +363,19 @@ class _HyperliquidContractTradePageState
     } catch (_) {
       if (mounted) await _showMessage('下单失败，请检查余额、价格和市场状态');
     } finally {
-      if (mounted) setState(() => _loadingSubmit = false);
+      if (mounted) {
+        setState(() => _loadingSubmit = false);
+        await _dismissOrderAmountFocus();
+      }
     }
+  }
+
+  Future<void> _dismissOrderAmountFocus() async {
+    _amountFocusNode.unfocus();
+    if (mounted) FocusScope.of(context).unfocus();
+    await WidgetsBinding.instance.endOfFrame;
+    _amountFocusNode.unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
   }
 
   Map<String, dynamic> _buildOrderAction({
@@ -476,6 +490,8 @@ class _HyperliquidContractTradePageState
   }
 
   Future<String> _authorizeWallet(WalletIdentity identity) async {
+    FocusScope.of(context).unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     final store = SecureWalletSecretStore();
     final security = WalletSecurity();
     final biometric = await BiometricAuthentication.availability();
@@ -526,8 +542,7 @@ class _HyperliquidContractTradePageState
         );
       },
     );
-    FocusManager.instance.primaryFocus?.unfocus();
-    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+    await _dismissOrderAmountFocus();
     if (password == null) {
       throw const WalletSecurityException('钱包授权已取消');
     }
@@ -543,7 +558,28 @@ class _HyperliquidContractTradePageState
     required String masterMnemonic,
     required HyperliquidBuilderFeeConfig? builder,
   }) async {
+    debugPrint(
+      '[HyperliquidBuilder] network=${AppConfig.hyperliquidTestnet ? 'testnet' : 'mainnet'} '
+      'approval builderAddress=${builder?.builderAddress ?? '(none)'}',
+    );
     if (builder == null || builder.orderBuilder == null) return;
+    try {
+      final builderAccount = await _client.loadAccountState(
+        builder.builderAddress,
+      );
+      debugPrint(
+        '[HyperliquidBuilder] builder perp accountValue=${builderAccount.accountValue} USDC',
+      );
+      final spotBalances = await _client.loadSpotBalances(
+        builder.builderAddress,
+      );
+      final spotUsdc = spotBalances
+          .where((balance) => balance.coin.toUpperCase() == 'USDC')
+          .fold<double>(0, (total, balance) => total + balance.available);
+      debugPrint('[HyperliquidBuilder] builder spot USDC available=$spotUsdc');
+    } catch (error) {
+      debugPrint('[HyperliquidBuilder] balance lookup failed: $error');
+    }
     final existing = await _builderApprovalStore.read(identity.address);
     if (existing?.builderAddress == builder.builderAddress &&
         existing?.maxFeeRate == builder.maxFeeRate) {
@@ -607,14 +643,6 @@ class _HyperliquidContractTradePageState
     return _trimTrailingZeros(value.toStringAsFixed(decimals));
   }
 
-  String _exchangeResultMessage(Map<String, dynamic> result) {
-    final response = result['response'];
-    if (response is Map && response['data'] != null) {
-      return '${response['data']}';
-    }
-    return '${result['status'] ?? 'ok'}';
-  }
-
   Future<void> _showMessage(String message, {String title = '提示'}) =>
       showCupertinoDialog<void>(
         context: context,
@@ -633,17 +661,17 @@ class _HyperliquidContractTradePageState
         ),
       );
 
-  Future<void> _showDepositSheet() async {
+  Future<void> _showDepositSheet({bool withdraw = false}) async {
     if (!mounted) return;
     await showCupertinoModalPopup<void>(
       context: context,
       builder: (_) => _HyperliquidUsdcDepositSheet(
         palette: _palette,
-        contractAvailable: _available,
+        contractAvailable: _account?.withdrawable ?? 0,
         walletIdentity: widget.walletIdentity,
         defaultNetwork: widget.defaultNetwork,
         onCompleted: () => unawaited(_loadAccount(showLoading: false)),
-        rechargeOnly: true,
+        initialWithdraw: withdraw,
       ),
     );
   }
@@ -778,6 +806,7 @@ class _HyperliquidContractTradePageState
       _TradeTextField(
         palette: _palette,
         controller: _amountController,
+        focusNode: _amountFocusNode,
         placeholder: '金额',
         suffix: 'USDC',
         height: 40,
@@ -913,6 +942,8 @@ class _HyperliquidContractTradePageState
     account: _account,
     available: _available,
     loading: _loadingAccount,
+    onDeposit: () => _showDepositSheet(),
+    onWithdraw: () => _showDepositSheet(withdraw: true),
   );
 
   Widget _buildPositionsTab() {
@@ -1629,6 +1660,7 @@ class _TradeTextField extends StatelessWidget {
     required this.placeholder,
     required this.suffix,
     this.onChanged,
+    this.focusNode,
     this.height = 44,
     this.horizontalPadding = 10,
     this.borderRadius = 10,
@@ -1639,6 +1671,7 @@ class _TradeTextField extends StatelessWidget {
   final String placeholder;
   final String suffix;
   final ValueChanged<String>? onChanged;
+  final FocusNode? focusNode;
   final double height;
   final double horizontalPadding;
   final double borderRadius;
@@ -1656,6 +1689,7 @@ class _TradeTextField extends StatelessWidget {
         Expanded(
           child: CupertinoTextField(
             controller: controller,
+            focusNode: focusNode,
             autofocus: false,
             padding: EdgeInsets.zero,
             decoration: null,
@@ -1886,7 +1920,7 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
     required this.walletIdentity,
     required this.defaultNetwork,
     required this.onCompleted,
-    this.rechargeOnly = false,
+    this.initialWithdraw = false,
   });
 
   final AcoPalette palette;
@@ -1894,7 +1928,7 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
   final WalletIdentity? walletIdentity;
   final WalletNetwork defaultNetwork;
   final VoidCallback onCompleted;
-  final bool rechargeOnly;
+  final bool initialWithdraw;
 
   @override
   State<_HyperliquidUsdcDepositSheet> createState() =>
@@ -1920,14 +1954,13 @@ class _HyperliquidUsdcDepositSheetState
   bool _showKeypad = true;
   _ContractTransferAsset _asset = _assets[4];
   bool _submitting = false;
+  String? _progressLabel;
   WalletBalance? _walletBalance;
   HyperliquidSpotBalance? _spotBalance;
   bool _walletBalanceLoading = false;
   int _walletBalanceRequestId = 0;
   final _hyperliquidClient = HyperliquidApiClient();
   final _exchange = HyperliquidExchangeClient();
-  final _tradeFeeClient = TradeFeeConfigClient();
-  TradeFeeConfig? _tradeFeeConfig;
 
   AcoPalette get palette => widget.palette;
 
@@ -1954,30 +1987,15 @@ class _HyperliquidUsdcDepositSheetState
   @override
   void initState() {
     super.initState();
+    _cashToContract = !widget.initialWithdraw;
     unawaited(_loadWalletBalance());
-    unawaited(_loadTradeFeeConfig());
   }
 
   @override
   void dispose() {
     _hyperliquidClient.close();
     _exchange.close();
-    _tradeFeeClient.close();
     super.dispose();
-  }
-
-  Future<TradeFeeConfig?> _loadTradeFeeConfig() async {
-    try {
-      final config = await _tradeFeeClient.load();
-      if (mounted) setState(() => _tradeFeeConfig = config);
-      return config;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<TradeFeeConfig?> _ensureTradeFeeConfig() async {
-    return _tradeFeeConfig ?? await _loadTradeFeeConfig();
   }
 
   Future<void> _loadWalletBalance() async {
@@ -2086,14 +2104,6 @@ class _HyperliquidUsdcDepositSheetState
     });
   }
 
-  void _swapDirection() {
-    if (widget.rechargeOnly) return;
-    setState(() {
-      _cashToContract = !_cashToContract;
-      _amount = '';
-    });
-  }
-
   Future<void> _pickAsset() async {
     final selected = await showCupertinoModalPopup<_ContractTransferAsset>(
       context: context,
@@ -2104,11 +2114,30 @@ class _HyperliquidUsdcDepositSheetState
       ),
     );
     if (selected == null || !mounted) return;
+    if (selected.mayanNetwork == WalletNetwork.solana &&
+        !await _hasSolanaAddress()) {
+      if (mounted) {
+        await _showNotice('当前钱包没有 Solana 地址，请先导入或创建 Solana 钱包后再充值');
+      }
+      return;
+    }
+    if (!mounted) return;
     setState(() {
       _asset = selected;
       _amount = '';
     });
     unawaited(_loadWalletBalance());
+  }
+
+  Future<bool> _hasSolanaAddress() async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return false;
+    try {
+      final addresses = await WalletPreferences.derivedAddresses(identity);
+      return addresses['solana']?.isNotEmpty ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> _showNotice(String message) => showCupertinoDialog<void>(
@@ -2157,7 +2186,7 @@ class _HyperliquidUsdcDepositSheetState
     final requiredAmount = BigInt.parse(
       LifiApiClient.toBaseUnits(
         _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
-        selectedBalance.decimals,
+        _asset.decimals,
       ),
     );
     if (selectedBalance.balance! < requiredAmount) {
@@ -2180,7 +2209,10 @@ class _HyperliquidUsdcDepositSheetState
       await _showNotice('请输入有效的划转金额');
       return;
     }
-    setState(() => _submitting = true);
+    setState(() {
+      _submitting = true;
+      _progressLabel = '正在准备交易，请稍候…';
+    });
     try {
       if (_cashToContract && !await _hasSufficientWalletBalance()) return;
       if (!mounted) return;
@@ -2189,11 +2221,11 @@ class _HyperliquidUsdcDepositSheetState
         return;
       }
       if (!_cashToContract) {
-        await _submitMayanWithdrawal(identity);
+        await _submitHyperliquidWithdrawal(identity);
         return;
       }
-      await _submitMayanDeposit(identity);
-    } on MayanHyperCoreDepositException catch (error) {
+      await _submitLifiDeposit(identity);
+    } on LifiException catch (error) {
       if (mounted) await _showNotice(error.message);
     } on HyperliquidExchangeException catch (error) {
       if (error.isUnifiedAccountActive) {
@@ -2210,7 +2242,12 @@ class _HyperliquidUsdcDepositSheetState
         await _showNotice(detail.isEmpty ? '获取资金划转路由失败，请稍后重试' : detail);
       }
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _progressLabel = null;
+        });
+      }
     }
   }
 
@@ -2252,68 +2289,150 @@ class _HyperliquidUsdcDepositSheetState
     if (mounted) Navigator.pop(context);
   }
 
-  Future<void> _submitMayanDeposit(WalletIdentity identity) async {
-    final token = _asset.mayanTokenAddress;
+  Future<void> _submitLifiDeposit(WalletIdentity identity) async {
+    final token = _asset.lifiTokenAddress;
     if (token == null) {
-      throw const MayanHyperCoreDepositException('当前资产暂不支持划转');
+      throw const LifiException('当前资产暂不支持划转');
     }
-    if (_asset.mayanNetwork == WalletNetwork.solana ||
-        _asset.mayanNetwork == WalletNetwork.tron) {
-      throw const MayanHyperCoreDepositException(
-        '当前版本的链上充值只支持 EVM 网络 USDC/原生币',
-      );
+    if (_asset.mayanNetwork == WalletNetwork.tron) {
+      throw const LifiException('当前充值只支持 EVM 网络资产');
     }
 
-    final mayanFee = (await _ensureTradeFeeConfig())?.mayan;
-    final quoteOptions = mayanFee?.quoteOptions;
-    final buildOptions = mayanFee?.buildOptions;
-    final mayan = MayanHyperCoreDepositClient(apiKey: mayanFee?.apiKey);
+    final transferNetwork = _asset.mayanNetwork;
+    final decimals = _asset.decimals;
+    final sourceAddress = await _depositSourceAddress(identity);
+    final tokenStore = await SecureAccountTokenStore().read();
+    if (tokenStore == null) {
+      throw const LifiException('请先登录账户后再进行链上充值');
+    }
+    final lifi = LifiApiClient();
     try {
-      final quote = await mayan.quote(
+      _updateProgress('正在获取 LI.FI 充值报价…');
+      final quote = await lifi.hyperCoreDepositQuote(
+        fromNetwork: transferNetwork,
+        fromTokenAddress: token,
         amount: _transferAmount,
-        fromToken: token,
-        fromChain: _asset.mayanChain,
+        decimals: decimals,
+        walletAddress: sourceAddress,
         destinationAddress: identity.address,
-        decimals:
-            _walletBalance?.decimals ?? (_asset.symbol == 'USDC' ? 6 : 18),
-        referrer: quoteOptions?['referrer'] as String?,
-        referrerBps: quoteOptions?['referrerBps'] as int?,
       );
+      final request = quote.transactionRequest;
+      if (quote.fromTokenAddress?.toLowerCase() != token.toLowerCase()) {
+        throw const LifiException('LI.FI 报价源代币与所选代币不一致，充值交易未发送');
+      }
+      if (quote.fromChainId != LifiApiClient.chainId(transferNetwork) ||
+          quote.toChainId != LifiApiClient.hyperCoreChainId ||
+          quote.toTokenAddress?.toLowerCase() !=
+              LifiApiClient.hyperCorePerpsUsdc.toLowerCase() ||
+          request == null ||
+          (request['chainId'] is num &&
+              (request['chainId'] as num).toInt() !=
+                  LifiApiClient.chainId(transferNetwork))) {
+        throw const LifiException('LI.FI 返回了无效的 HyperCore 充值交易');
+      }
+      final transactionData = request['data'];
+      if (transferNetwork != WalletNetwork.solana &&
+          token != '0x0000000000000000000000000000000000000000' &&
+          (transactionData is! String ||
+              !transactionData.toLowerCase().contains(
+                token.substring(2).toLowerCase(),
+              ))) {
+        throw const LifiException('LI.FI 交易参数未使用所选代币，充值交易未发送');
+      }
       if (!mounted) return;
-      final tokenStore = await SecureAccountTokenStore().read();
-      if (tokenStore == null) {
-        throw const MayanHyperCoreDepositException('请先登录账户后再进行链上充值');
-      }
+      if (!await _confirmLifiDeposit(quote)) return;
       final mnemonic = await _authorizeWallet(identity);
-      final built = await mayan.buildEvm(
-        quote: quote,
-        swapperAddress: identity.address,
-        destinationAddress: identity.address,
-        signerChainId: LifiApiClient.chainId(_asset.mayanNetwork),
-        referrerAddresses:
-            buildOptions?['referrerAddresses'] as Map<String, dynamic>?,
-      );
-      final transaction = built['transaction'];
-      if (transaction is! Map) {
-        throw const MayanHyperCoreDepositException('Mayan 交易数据无效');
+      _updateProgress('密码验证成功，正在签名并提交充值交易…');
+      if (transferNetwork == WalletNetwork.solana) {
+        final signerAddress = const SolanaSigningService().addressForMnemonic(
+          mnemonic,
+        );
+        if (signerAddress != sourceAddress) {
+          throw const WalletSecurityException('Solana 地址与当前钱包不一致');
+        }
+        await _broadcastLifiSolanaDeposit(
+          mnemonic: mnemonic,
+          accessToken: tokenStore.accessToken,
+          request: request,
+        );
+        return;
       }
-      final request = Map<String, dynamic>.from(transaction);
-      await _broadcastMayanDeposit(
+      await _broadcastLifiDeposit(
         identity: identity,
         mnemonic: mnemonic,
         accessToken: tokenStore.accessToken,
         request: request,
+        fromToken: token,
+        spender: quote.approvalAddress,
+        decimals: decimals,
       );
     } finally {
-      mayan.close();
+      lifi.close();
     }
   }
 
-  Future<void> _broadcastMayanDeposit({
+  Future<String> _depositSourceAddress(WalletIdentity identity) async {
+    if (_asset.mayanNetwork != WalletNetwork.solana) return identity.address;
+    final address = (await WalletPreferences.derivedAddresses(
+      identity,
+    ))['solana'];
+    if (address == null || address.isEmpty) {
+      throw const LifiException('当前钱包未配置 Solana 地址');
+    }
+    return address;
+  }
+
+  void _updateProgress(String message) {
+    if (mounted) setState(() => _progressLabel = message);
+  }
+
+  Future<bool> _confirmLifiDeposit(LifiQuote quote) async =>
+      await showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('确认充值'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              '充值：$_transferAmount ${_asset.symbol}（${_asset.chain}）\n'
+              '预计到账：${_formatHyperCoreUsdc(quote.toAmount)} USDC\n'
+              '最少到账：${_formatHyperCoreUsdc(quote.toAmountMin)} USDC\n'
+              '预计路由费用：${quote.fee ?? '以报价为准'}',
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('确认充值'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
+
+  String _formatHyperCoreUsdc(String amount) {
+    final baseUnits = BigInt.tryParse(amount);
+    if (baseUnits == null) return amount;
+    final unit = BigInt.from(1000000);
+    final whole = baseUnits ~/ unit;
+    final fraction = (baseUnits % unit).toString().padLeft(6, '0');
+    final trimmedFraction = fraction.replaceFirst(RegExp(r'0+$'), '');
+    return trimmedFraction.isEmpty ? '$whole' : '$whole.$trimmedFraction';
+  }
+
+  Future<void> _broadcastLifiDeposit({
     required WalletIdentity identity,
     required String mnemonic,
     required String accessToken,
     required Map<String, dynamic> request,
+    required String fromToken,
+    required int decimals,
+    String? spender,
   }) async {
     final rpc = WalletRpcClient(
       client: http.Client(),
@@ -2321,26 +2440,42 @@ class _HyperliquidUsdcDepositSheetState
       ownsClient: true,
     );
     try {
-      final fromToken = _asset.mayanTokenAddress;
-      final spender = request['to'] as String?;
-      if (fromToken != null &&
-          fromToken != MayanHyperCoreDepositClient.hyperCorePerpsUsdc &&
-          spender != null &&
-          spender.isNotEmpty) {
-        await const WalletTransferService().ensureErc20AllowanceWithRpc(
+      final requiredAmount = LifiApiClient.toBaseUnits(
+        _transferAmount,
+        decimals,
+      );
+      final approvalSpender = spender ?? request['to'] as String?;
+      if (fromToken != '0x0000000000000000000000000000000000000000' &&
+          approvalSpender != null &&
+          approvalSpender.isNotEmpty) {
+        const transferService = WalletTransferService();
+        _updateProgress('正在检查 ${_asset.symbol} 授权…');
+        final approval = await transferService.ensureErc20AllowanceWithRpc(
           mnemonic: mnemonic,
           from: identity.address,
           network: _asset.mayanNetwork,
           accessToken: accessToken,
           rpc: rpc,
           tokenAddress: fromToken,
-          spender: spender,
-          requiredAmount: LifiApiClient.toBaseUnits(
-            _transferAmount,
-            _walletBalance?.decimals ?? 6,
-          ),
+          spender: approvalSpender,
+          requiredAmount: requiredAmount,
         );
+        _updateProgress(approval == null ? '正在验证现有授权…' : '授权交易已发送，等待链上确认…');
+        final approved = await transferService.waitForErc20AllowanceWithRpc(
+          network: _asset.mayanNetwork,
+          accessToken: accessToken,
+          rpc: rpc,
+          owner: identity.address,
+          tokenAddress: fromToken,
+          spender: approvalSpender,
+          requiredAmount: requiredAmount,
+        );
+        if (!approved) {
+          throw const LifiException('代币授权尚未确认，充值交易未发送，请稍后重试');
+        }
+        _updateProgress('授权已确认，正在提交充值交易…');
       }
+      _updateProgress('正在提交充值交易…');
       final result = await const WalletTransferService()
           .executeTransactionRequestWithRpc(
             mnemonic: mnemonic,
@@ -2352,14 +2487,128 @@ class _HyperliquidUsdcDepositSheetState
           );
       widget.onCompleted();
       if (!mounted) return;
-      await _showNotice('充值交易已提交。\n交易哈希：${result.hash}');
+      await _showDepositSubmitted(result.hash);
       if (mounted) Navigator.pop(context);
     } finally {
       rpc.close();
     }
   }
 
+  Future<void> _broadcastLifiSolanaDeposit({
+    required String mnemonic,
+    required String accessToken,
+    required Map<String, dynamic> request,
+  }) async {
+    final serialized =
+        request['serializedTransaction'] ??
+        request['transaction'] ??
+        request['data'];
+    if (serialized is! String || serialized.isEmpty) {
+      throw const LifiException('LI.FI 未返回可签名的 Solana 充值交易');
+    }
+    _updateProgress('正在签名 Solana 充值交易…');
+    final signed = const SolanaSigningService().signSerializedTransaction(
+      mnemonic: mnemonic,
+      serializedTransaction: serialized,
+    );
+    final rpc = WalletRpcClient(
+      client: http.Client(),
+      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+      ownsClient: true,
+    );
+    try {
+      _updateProgress('正在提交 Solana 充值交易…');
+      final endpoints = await rpc.loadEndpoints(
+        network: WalletNetwork.solana.name,
+        accessToken: accessToken,
+      );
+      final response = await rpc.postJson(endpoints, {
+        'jsonrpc': '2.0',
+        'id': 1,
+        'method': 'sendTransaction',
+        'params': [
+          signed,
+          {'encoding': 'base64', 'skipPreflight': false},
+        ],
+      });
+      final hash = response['result'];
+      if (hash is! String || hash.isEmpty) {
+        throw const LifiException('Solana RPC 未返回交易哈希');
+      }
+      widget.onCompleted();
+      if (!mounted) return;
+      await _showDepositSubmitted(hash);
+      if (mounted) Navigator.pop(context);
+    } finally {
+      rpc.close();
+    }
+  }
+
+  Future<void> _showDepositSubmitted(String hash) => showCupertinoDialog<void>(
+    context: context,
+    builder: (context) {
+      var copied = false;
+      return StatefulBuilder(
+        builder: (context, setDialogState) => CupertinoAlertDialog(
+          title: const Text('充值已提交'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('交易已发送至源链，正在等待网络确认。'),
+                const SizedBox(height: 10),
+                const Text('交易哈希：'),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SelectableText(hash, textAlign: TextAlign.left),
+                    ),
+                    CupertinoButton(
+                      padding: const EdgeInsets.only(left: 8),
+                      minimumSize: Size.zero,
+                      onPressed: () async {
+                        await Clipboard.setData(ClipboardData(text: hash));
+                        setDialogState(() => copied = true);
+                      },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            copied
+                                ? CupertinoIcons.check_mark
+                                : CupertinoIcons.doc_on_doc,
+                            size: 16,
+                            color: widget.palette.accent,
+                          ),
+                          const SizedBox(height: 1),
+                          Text(
+                            copied ? '已复制' : '复制',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+
   Future<String> _authorizeWallet(WalletIdentity identity) async {
+    FocusScope.of(context).unfocus();
+    await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     final store = SecureWalletSecretStore();
     final security = WalletSecurity();
     final biometric = await BiometricAuthentication.availability();
@@ -2422,63 +2671,72 @@ class _HyperliquidUsdcDepositSheetState
 
   String get _transferAmount =>
       _trimTrailingZeros(_parsedAmount.toStringAsFixed(6));
+  String get _displayAssetSymbol =>
+      !AppConfig.hyperliquidTestnet && !_cashToContract
+      ? 'USDC'
+      : _asset.symbol;
 
-  Future<void> _submitMayanWithdrawal(WalletIdentity identity) async {
-    if (_asset.symbol != 'USDC') {
-      throw const MayanHyperCoreDepositException('合约账户提现目前只支持 USDC');
+  Future<void> _submitHyperliquidWithdrawal(WalletIdentity identity) async {
+    const withdrawalFee = 1.0;
+    if (_parsedAmount <= withdrawalFee) {
+      throw const HyperliquidExchangeException('提现金额需大于 1 USDC 手续费');
     }
     if (_parsedAmount > widget.contractAvailable) {
-      throw const MayanHyperCoreDepositException('合约账户可提现余额不足');
+      throw const HyperliquidExchangeException('合约账户 USDC 余额不足');
     }
-    final token = _asset.mayanTokenAddress;
-    if (token == null ||
-        _asset.mayanNetwork == WalletNetwork.solana ||
-        _asset.mayanNetwork == WalletNetwork.tron) {
-      throw const MayanHyperCoreDepositException('当前提现只支持 EVM 网络 USDC');
-    }
-    final mayanFee = (await _ensureTradeFeeConfig())?.mayan;
-    final quoteOptions = mayanFee?.quoteOptions;
-    final buildOptions = mayanFee?.buildOptions;
+    if (!await _confirmHyperliquidWithdrawal()) return;
+    if (!mounted) return;
     final mnemonic = await _authorizeWallet(identity);
-    final mayan = MayanHyperCoreDepositClient(apiKey: mayanFee?.apiKey);
-    try {
-      final quote = await mayan.withdrawalQuote(
-        amount: _trimTrailingZeros(_parsedAmount.toStringAsFixed(6)),
-        toToken: token,
-        toChain: _asset.mayanChain,
-        destinationAddress: identity.address,
-        decimals: 6,
-        referrer: quoteOptions?['referrer'] as String?,
-        referrerBps: quoteOptions?['referrerBps'] as int?,
-      );
-      final built = await mayan.buildEvm(
-        quote: quote,
-        swapperAddress: identity.address,
-        destinationAddress: identity.address,
-        referrerAddresses:
-            buildOptions?['referrerAddresses'] as Map<String, dynamic>?,
-      );
-      final typedData = built['typedData'];
-      if (typedData is! Map<String, dynamic>) {
-        throw const MayanHyperCoreDepositException('Mayan 提现签名数据无效');
-      }
-      final signature = HyperliquidSigner.signTypedData(
-        privateKeyHex: WalletIdentity.privateKeyFromMnemonic(mnemonic),
-        typedData: typedData,
-      );
-      final submitted = await mayan.submitGasless(
-        transaction: built,
-        signature: signature.toHex(),
-      );
-      widget.onCompleted();
-      if (mounted) {
-        await _showNotice('提现已提交。\n订单号：${submitted['orderId'] ?? '-'}');
-        if (mounted) Navigator.pop(context);
-      }
-    } finally {
-      mayan.close();
+    final signedIdentity = WalletIdentity.fromMnemonic(mnemonic);
+    if (signedIdentity.address.toLowerCase() !=
+        identity.address.toLowerCase()) {
+      throw const WalletSecurityException('钱包地址与安全存储中的助记词不一致');
     }
+    _updateProgress('正在提交 Hyperliquid 提现请求…');
+    await _exchange.withdraw(
+      masterPrivateKey: WalletIdentity.privateKeyFromMnemonic(mnemonic),
+      destination: identity.address,
+      amount: _transferAmount,
+      expectedSignerAddress: signedIdentity.address,
+    );
+    widget.onCompleted();
+    if (!mounted) return;
+    await _showNotice(
+      '提现请求已提交，预计约 5 分钟到账 Arbitrum。\n'
+      '提现手续费：1 USDC\n'
+      '收款地址：${identity.address}',
+    );
+    if (mounted) Navigator.pop(context);
   }
+
+  Future<bool> _confirmHyperliquidWithdrawal() async =>
+      await showCupertinoDialog<bool>(
+        context: context,
+        builder: (dialogContext) => CupertinoAlertDialog(
+          title: const Text('确认提现'),
+          content: Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              '提现：$_transferAmount USDC\n'
+              '预计到账：${_trimTrailingZeros((_parsedAmount - 1).toStringAsFixed(6))} USDC\n'
+              '到账网络：Arbitrum\n'
+              '提现手续费：1 USDC',
+            ),
+          ),
+          actions: [
+            CupertinoDialogAction(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('取消'),
+            ),
+            CupertinoDialogAction(
+              isDefaultAction: true,
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('确认提现'),
+            ),
+          ],
+        ),
+      ) ??
+      false;
 
   @override
   Widget build(BuildContext context) {
@@ -2486,34 +2744,21 @@ class _HyperliquidUsdcDepositSheetState
         ? const Color(0xFF1B1B1B)
         : const Color(0xFFF5F5F5);
     final spotLabel = AppConfig.hyperliquidTestnet ? 'Spot' : '现金';
-    late final String sourceLabel;
     late final String destination;
     late final String transferTitle;
-    late final String historyMessage;
     late final String amountPlaceholder;
-    if (widget.rechargeOnly) {
-      sourceLabel = AppConfig.hyperliquidTestnet ? 'Spot' : '钱包';
+    if (_cashToContract) {
       destination = '合约';
-      transferTitle = '充值';
-      historyMessage = '暂无充值记录';
-      amountPlaceholder = '输入充值金额';
-    } else if (_cashToContract) {
-      sourceLabel = spotLabel;
-      destination = '合约';
-      transferTitle = '划转';
-      historyMessage = '暂无划转记录';
-      amountPlaceholder = '输入划转金额';
+      transferTitle = AppConfig.hyperliquidTestnet ? '划转' : '充值';
+      amountPlaceholder = AppConfig.hyperliquidTestnet ? '输入划转金额' : '输入充值金额';
     } else {
-      sourceLabel = '合约';
-      destination = spotLabel;
+      destination = AppConfig.hyperliquidTestnet ? spotLabel : 'Arbitrum';
       transferTitle = '提现';
-      historyMessage = '暂无划转记录';
       amountPlaceholder = '输入划转金额';
     }
     return CupertinoPopupSurface(
       isSurfacePainted: false,
       child: Container(
-        height: MediaQuery.sizeOf(context).height * .68,
         decoration: BoxDecoration(
           color: palette.background,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
@@ -2523,6 +2768,7 @@ class _HyperliquidUsdcDepositSheetState
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 10, 18, 8),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
                   width: 44,
@@ -2544,7 +2790,7 @@ class _HyperliquidUsdcDepositSheetState
                       ),
                     ),
                     const SizedBox(width: 8),
-                    _WalletAssetIcon(symbol: _asset.symbol, size: 25),
+                    _WalletAssetIcon(symbol: _displayAssetSymbol, size: 25),
                     const SizedBox(width: 7),
                     Text(
                       '至 $destination',
@@ -2552,61 +2798,6 @@ class _HyperliquidUsdcDepositSheetState
                         color: palette.primaryText,
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    CupertinoButton(
-                      key: const Key('contract-transfer-history'),
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(36, 36),
-                      onPressed: () => _showNotice(historyMessage),
-                      child: Icon(
-                        Icons.history,
-                        size: 24,
-                        color: palette.primaryText,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _TransferAccountPill(
-                        palette: palette,
-                        color: controlColor,
-                        label: sourceLabel,
-                      ),
-                    ),
-                    if (widget.rechargeOnly)
-                      SizedBox(
-                        width: 48,
-                        child: Icon(
-                          Icons.arrow_forward,
-                          size: 24,
-                          color: palette.mutedText,
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        width: 48,
-                        child: CupertinoButton(
-                          key: const Key('contract-transfer-swap'),
-                          padding: EdgeInsets.zero,
-                          minimumSize: const Size(40, 40),
-                          onPressed: _swapDirection,
-                          child: Icon(
-                            Icons.swap_horiz,
-                            size: 28,
-                            color: palette.primaryText,
-                          ),
-                        ),
-                      ),
-                    Expanded(
-                      child: _TransferAccountPill(
-                        palette: palette,
-                        color: controlColor,
-                        label: destination,
                       ),
                     ),
                   ],
@@ -2634,48 +2825,72 @@ class _HyperliquidUsdcDepositSheetState
                         ),
                       ),
                     ),
-                    CupertinoButton(
-                      key: const Key('contract-transfer-asset-picker'),
-                      padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
-                      minimumSize: Size.zero,
-                      color: controlColor,
-                      borderRadius: BorderRadius.circular(19),
-                      onPressed: AppConfig.hyperliquidTestnet
-                          ? () => _showNotice('测试网仅支持 Hyperliquid Spot USDC')
-                          : _pickAsset,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _ContractTransferAssetIcon(
-                            asset: _asset,
-                            tokenSize: 21,
-                            chainSize: 10,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            _asset.symbol,
-                            style: TextStyle(
-                              color: palette.primaryText,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
+                    if (!AppConfig.hyperliquidTestnet && !_cashToContract)
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
+                        decoration: BoxDecoration(
+                          color: controlColor,
+                          borderRadius: BorderRadius.circular(19),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _WalletAssetIcon(symbol: 'USDC', size: 21),
+                            const SizedBox(width: 5),
+                            Text(
+                              'USDC',
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 5),
-                          Icon(
-                            CupertinoIcons.chevron_down,
-                            color: palette.mutedText,
-                            size: 14,
-                          ),
-                        ],
+                          ],
+                        ),
+                      )
+                    else
+                      CupertinoButton(
+                        key: const Key('contract-transfer-asset-picker'),
+                        padding: const EdgeInsets.fromLTRB(7, 5, 9, 5),
+                        minimumSize: Size.zero,
+                        color: controlColor,
+                        borderRadius: BorderRadius.circular(19),
+                        onPressed: AppConfig.hyperliquidTestnet
+                            ? () => _showNotice('测试网仅支持 Hyperliquid Spot USDC')
+                            : _pickAsset,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _ContractTransferAssetIcon(
+                              asset: _asset,
+                              tokenSize: 21,
+                              chainSize: 10,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              _asset.symbol,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Icon(
+                              CupertinoIcons.chevron_down,
+                              color: palette.mutedText,
+                              size: 14,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
                     Text(
-                      '可用 ${_walletBalanceLoading ? '--' : _formatMoney(_available)} ${_asset.symbol}',
+                      '可用 ${_walletBalanceLoading ? '--' : _formatMoney(_available)} $_displayAssetSymbol',
                       style: TextStyle(color: palette.mutedText, fontSize: 15),
                     ),
                     const SizedBox(width: 9),
@@ -2731,7 +2946,28 @@ class _HyperliquidUsdcDepositSheetState
                   ],
                 ),
                 const SizedBox(height: 8),
-                if (_showKeypad)
+                if (_progressLabel case final progress?)
+                  SizedBox(
+                    height: 220,
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const CupertinoActivityIndicator(radius: 13),
+                          const SizedBox(height: 12),
+                          Text(
+                            progress,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: palette.mutedText,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (_showKeypad)
                   SizedBox(
                     height: 220,
                     child: _TransferNumberPad(
@@ -2778,36 +3014,6 @@ class _HyperliquidUsdcDepositSheetState
   }
 }
 
-class _TransferAccountPill extends StatelessWidget {
-  const _TransferAccountPill({
-    required this.palette,
-    required this.color,
-    required this.label,
-  });
-
-  final AcoPalette palette;
-  final Color color;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 44,
-    alignment: Alignment.center,
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(22),
-    ),
-    child: Text(
-      label,
-      style: TextStyle(
-        color: palette.primaryText,
-        fontSize: 16,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
-}
-
 class _ContractTransferAsset {
   const _ContractTransferAsset({required this.chain, required this.symbol});
 
@@ -2847,6 +3053,29 @@ class _ContractTransferAsset {
     'Solana' => 'solana',
     _ => chain.toLowerCase(),
   };
+
+  String? get lifiTokenAddress {
+    if (symbol == 'SOL') {
+      return LifiApiClient.tokenAddress(WalletNetwork.solana, 'SOL');
+    }
+    return mayanTokenAddress;
+  }
+
+  int get decimals {
+    if (symbol == 'SOL') return 9;
+    if (symbol == 'BNB' || symbol == 'ETH') return 18;
+    if (mayanNetwork == WalletNetwork.solana) {
+      return symbol == 'USDC'
+          ? WalletChainRegistry.solanaUsdc.decimals
+          : WalletChainRegistry.solanaUsdt.decimals;
+    }
+    final definition = WalletChainRegistry.chains[mayanNetwork];
+    return switch (symbol) {
+      'USDC' => definition?.usdc?.decimals ?? 6,
+      'USDT' => definition?.usdt?.decimals ?? 6,
+      _ => 18,
+    };
+  }
 
   String? get mayanTokenAddress {
     if (symbol == 'BNB' || symbol == 'ETH') {
@@ -3231,12 +3460,16 @@ class _AccountBalanceCard extends StatelessWidget {
     required this.account,
     required this.available,
     required this.loading,
+    required this.onDeposit,
+    required this.onWithdraw,
   });
 
   final AcoPalette palette;
   final HyperliquidAccountState? account;
   final double available;
   final bool loading;
+  final VoidCallback onDeposit;
+  final VoidCallback onWithdraw;
 
   @override
   Widget build(BuildContext context) {
@@ -3261,6 +3494,38 @@ class _AccountBalanceCard extends StatelessWidget {
                 color: palette.primaryText,
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            CupertinoButton(
+              key: const Key('hyperliquid-balance-deposit'),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              minimumSize: Size.zero,
+              color: palette.accent,
+              onPressed: onDeposit,
+              child: Text(
+                '充值',
+                style: TextStyle(
+                  color: palette.dark ? Colors.black : Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            CupertinoButton(
+              key: const Key('hyperliquid-balance-withdraw'),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              minimumSize: Size.zero,
+              color: palette.surfaceRaised,
+              onPressed: onWithdraw,
+              child: Text(
+                '提现',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ],
