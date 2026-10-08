@@ -5,6 +5,7 @@ class _WalletSetupFlow extends StatefulWidget {
     required this.dark,
     required this.mode,
     required this.requireSecuritySetup,
+    this.passwordWalletIdentity,
     required this.onBack,
     required this.onComplete,
   });
@@ -12,6 +13,7 @@ class _WalletSetupFlow extends StatefulWidget {
   final bool dark;
   final _WalletSetupMode mode;
   final bool requireSecuritySetup;
+  final WalletIdentity? passwordWalletIdentity;
   final VoidCallback onBack;
   final Future<void> Function(WalletIdentity, String) onComplete;
 
@@ -106,7 +108,11 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                       if (_isCreating && _step == 1) _backupWords(palette),
                       if (_isVerificationStep) _verifyWords(palette),
                       if (!_isCreating && _step == 0) _importField(palette),
-                      if (_isSecurityStep) _securityFields(palette),
+                      if (_isSecurityStep)
+                        _securityFields(
+                          palette,
+                          verifyExisting: widget.passwordWalletIdentity != null,
+                        ),
                     ],
                   ),
                 ),
@@ -320,42 +326,44 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     ),
   );
 
-  Widget _securityFields(AcoPalette palette) => Column(
-    children: [
-      CupertinoTextField(
-        key: const Key('wallet-password-field'),
-        controller: _passwordController,
-        obscureText: true,
-        textInputAction: TextInputAction.next,
-        onChanged: (_) => setState(() {}),
-        onTapOutside: (_) => _dismissKeyboard(),
-        placeholder: '设置钱包密码（至少 8 位）',
-        style: TextStyle(color: palette.primaryText),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: palette.inputSurface,
-          borderRadius: BorderRadius.circular(14),
-        ),
-      ),
-      const SizedBox(height: 12),
-      CupertinoTextField(
-        key: const Key('wallet-password-confirm-field'),
-        controller: _confirmPasswordController,
-        obscureText: true,
-        textInputAction: TextInputAction.done,
-        onChanged: (_) => setState(() {}),
-        onSubmitted: (_) => _dismissKeyboard(),
-        onTapOutside: (_) => _dismissKeyboard(),
-        placeholder: '再次输入钱包密码',
-        style: TextStyle(color: palette.primaryText),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: palette.inputSurface,
-          borderRadius: BorderRadius.circular(14),
-        ),
-      ),
-    ],
-  );
+  Widget _securityFields(AcoPalette palette, {required bool verifyExisting}) =>
+      Column(
+        children: [
+          CupertinoTextField(
+            key: const Key('wallet-password-field'),
+            controller: _passwordController,
+            obscureText: true,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => setState(() {}),
+            onTapOutside: (_) => _dismissKeyboard(),
+            placeholder: verifyExisting ? '输入当前钱包密码' : '设置钱包密码（至少 8 位）',
+            style: TextStyle(color: palette.primaryText),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: palette.inputSurface,
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+          if (!verifyExisting) const SizedBox(height: 12),
+          if (!verifyExisting)
+            CupertinoTextField(
+              key: const Key('wallet-password-confirm-field'),
+              controller: _confirmPasswordController,
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _dismissKeyboard(),
+              onTapOutside: (_) => _dismissKeyboard(),
+              placeholder: '再次输入钱包密码',
+              style: TextStyle(color: palette.primaryText),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: palette.inputSurface,
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+        ],
+      );
 
   bool get _hasValidPhrase {
     return _walletSecurity.isValidMnemonic(_phraseController.text);
@@ -365,6 +373,8 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       _passwordController.text.length >= 8 &&
       _passwordController.text == _confirmPasswordController.text;
 
+  bool get _hasPassword => _passwordController.text.length >= 8;
+
   bool get _hasSelectedAllVerificationWords =>
       _selectedVerificationIndexes.length == _verificationIndexes.length;
 
@@ -372,15 +382,18 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   bool get _isVerificationStep => _isCreating && _step == 2;
 
-  bool get _isSecurityStep =>
-      widget.requireSecuritySetup && _step == _securityStep;
+  bool get _needsSecurityStep =>
+      widget.requireSecuritySetup || widget.passwordWalletIdentity != null;
 
-  int get _securityStep => widget.requireSecuritySetup
-      ? (_isCreating ? 3 : 1)
-      : (_isCreating ? 2 : 0);
+  bool get _isSecurityStep => _needsSecurityStep && _step == _securityStep;
+
+  int get _securityStep =>
+      _needsSecurityStep ? (_isCreating ? 3 : 1) : (_isCreating ? 2 : 0);
 
   String get _continueLabel {
-    if (_isSecurityStep) return '完成并进入钱包';
+    if (_isSecurityStep) {
+      return widget.passwordWalletIdentity != null ? '确认添加钱包' : '完成并进入钱包';
+    }
     if (!_isCreating) return '导入钱包';
 
     return switch (_step) {
@@ -391,7 +404,10 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   bool get _canContinue {
     if (_isSecurityStep) {
-      return _passwordsMatch && !_isCompletingWalletSetup;
+      final valid = widget.passwordWalletIdentity != null
+          ? _hasPassword
+          : _passwordsMatch;
+      return valid && !_isCompletingWalletSetup;
     }
     if (!_isCreating) return _hasValidPhrase;
 
@@ -442,13 +458,19 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   }
 
   String get _title {
-    if (_isSecurityStep) return '保护你的钱包';
+    if (_isSecurityStep) {
+      return widget.passwordWalletIdentity != null ? '验证钱包密码' : '保护你的钱包';
+    }
     if (!_isCreating) return '导入已有钱包';
     return _step == 1 ? '备份助记词' : '验证助记词';
   }
 
   String get _description {
-    if (_isSecurityStep) return '设置钱包密码，并使用设备验证以完成操作。';
+    if (_isSecurityStep) {
+      return widget.passwordWalletIdentity != null
+          ? '输入当前钱包密码以确认身份，新钱包将使用相同密码保护。'
+          : '设置钱包密码，并使用设备验证以完成操作。';
+    }
     if (!_isCreating) return '输入 12 或 24 个助记词，单词之间用空格分隔。';
     if (_isVerificationStep) return '确认你已妥善备份。请从词库中按顺序选择指定单词。';
     return '请按顺序安全备份这些助记词，任何人索取它们都是诈骗。';
@@ -499,6 +521,15 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         }
       }
 
+      final existingWallet = widget.passwordWalletIdentity;
+      if (existingWallet != null) {
+        await _walletSecurity.unlockMnemonic(
+          store: _secretStore,
+          walletAddress: existingWallet.address,
+          password: _passwordController.text,
+        );
+      }
+
       await SensitiveScreenProtection.setEnabled(false);
       _setCompletionStatus('正在生成钱包...');
       final mnemonic = _isCreating
@@ -511,7 +542,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               mnemonic,
             ).timeout(const Duration(seconds: 60));
       _setCompletionStatus('正在加密保存...');
-      final saveMnemonic = widget.requireSecuritySetup
+      final saveMnemonic = widget.requireSecuritySetup || existingWallet != null
           ? _walletSecurity.saveMnemonic(
               store: _secretStore,
               walletAddress: identity.address,
@@ -530,6 +561,8 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
           .timeout(const Duration(seconds: 15));
       // Non-EVM address derivation allocates a large native crypto workspace.
       // Derive those addresses lazily when their respective chain is opened.
+    } on WalletSecurityException catch (error) {
+      _showCompletionError(error.message);
     } on TimeoutException {
       _showCompletionError('创建超时，请重试');
     } catch (error) {
