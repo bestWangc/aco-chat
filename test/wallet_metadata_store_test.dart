@@ -28,4 +28,34 @@ void main() {
     expect(saved.single.symbol, token.symbol);
     expect(saved.single.decimals, token.decimals);
   });
+
+  test('removes only the matching custom token', () async {
+    const identity = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000001',
+    );
+    const otherWallet = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000002',
+    );
+    const token = CustomTokenDefinition(
+      network: 'bsc',
+      address: '0xToken',
+      symbol: 'ALD',
+      decimals: 18,
+    );
+    const otherNetwork = CustomTokenDefinition(
+      network: 'ethereum',
+      address: '0xToken',
+      symbol: 'ALD',
+      decimals: 18,
+    );
+    final store = WalletMetadataStore();
+    await store.saveCustomToken(identity, token);
+    await store.saveCustomToken(identity, otherNetwork);
+    await store.saveCustomToken(otherWallet, token);
+
+    await store.removeCustomToken(identity, 'bsc', '0xtoken');
+
+    expect((await store.customTokens(identity)).single.network, 'ethereum');
+    expect(await store.customTokens(otherWallet), hasLength(1));
+  });
 }

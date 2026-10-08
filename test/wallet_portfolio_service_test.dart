@@ -230,6 +230,39 @@ void main() {
     expect(balances.single.balance, BigInt.zero);
     expect(balances.single.error, isA<TimeoutException>());
   });
+
+  test('uses on-chain decimals for an existing custom token', () async {
+    final service = _service(_CustomTokenRpcClient());
+    const identity = WalletIdentity(
+      address: '0x0000000000000000000000000000000000000001',
+    );
+    const asset = WalletAsset(
+      network: WalletNetwork.bsc,
+      symbol: 'ALD',
+      name: 'ALD',
+      decimals: 0,
+      isNative: false,
+      tokenAddress: '0x0000000000000000000000000000000000000002',
+      resolveDecimals: true,
+    );
+
+    final balance =
+        (await service
+                .loadAssetBalances(
+                  network: WalletNetwork.bsc,
+                  identity: identity,
+                  accessToken: 'test-access-token',
+                  assets: [asset],
+                )
+                .toList())
+            .single;
+
+    expect(balance.decimals, 18);
+    expect(
+      formatChainAmount(balance.balance!, decimals: balance.decimals),
+      '100',
+    );
+  });
 }
 
 String? _erc20ContractAddress(Map body) {
@@ -305,6 +338,24 @@ class _RpcClient extends http.BaseClient {
       _ => {'result': '0x1'},
     };
     return _response(response);
+  }
+}
+
+class _CustomTokenRpcClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    if (request.method == 'GET') {
+      return _response({
+        'data': ['https://bsc.rpc.test'],
+      });
+    }
+    final body = jsonDecode(await request.finalize().bytesToString()) as Map;
+    final data = (body['params'] as List).first['data'];
+    return _response({
+      'result': data == '0x313ce567'
+          ? '0x12'
+          : '0x${(BigInt.from(100) * BigInt.from(10).pow(18)).toRadixString(16)}',
+    });
   }
 }
 

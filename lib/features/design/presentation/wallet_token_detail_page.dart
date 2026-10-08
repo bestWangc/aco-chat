@@ -7,6 +7,7 @@ class _TokenDetailPage extends StatefulWidget {
   const _TokenDetailPage({
     required this.palette,
     required this.balance,
+    this.walletIdentity,
     required this.selectedChain,
     required this.onOpen,
     this.transactionService,
@@ -15,6 +16,7 @@ class _TokenDetailPage extends StatefulWidget {
 
   final AcoPalette palette;
   final WalletBalance balance;
+  final WalletIdentity? walletIdentity;
   final _WalletChain selectedChain;
   final ValueChanged<AcoScreen> onOpen;
   final WalletTransactionService? transactionService;
@@ -28,6 +30,8 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
   static const _transactionPageSize = 20;
 
   int _selectedTab = 0;
+  bool _isCustomToken = false;
+  bool _removingToken = false;
   final _transactionBuckets =
       <WalletTransactionDirection, _TransactionBucket>{};
   late final ScrollController _transactionScrollController;
@@ -53,6 +57,7 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadCustomToken());
     _transactionScrollController = ScrollController()
       ..addListener(_loadMoreTransactionsIfNeeded);
     if (widget.transactionService != null) {
@@ -75,11 +80,72 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
         oldWidget.balance.address != widget.balance.address ||
         oldWidget.balance.tokenAddress != widget.balance.tokenAddress ||
         oldWidget.balance.symbol != widget.balance.symbol ||
+        oldWidget.walletIdentity != widget.walletIdentity ||
         oldWidget.selectedChain.network != widget.selectedChain.network;
     if (assetChanged) {
+      _isCustomToken = false;
+      unawaited(_loadCustomToken());
       _transactionBuckets.clear();
       if (widget.transactionService != null) {
         unawaited(_loadTransactions(_selectedDirection, reset: true));
+      }
+    }
+  }
+
+  Future<void> _loadCustomToken() async {
+    final identity = widget.walletIdentity;
+    final address = widget.balance.tokenAddress;
+    if (identity == null || address == null) return;
+    final tokens = await WalletMetadataStore().customTokens(identity);
+    if (!mounted ||
+        widget.balance.tokenAddress != address ||
+        widget.walletIdentity != identity) {
+      return;
+    }
+    setState(() {
+      _isCustomToken = tokens.any(
+        (token) =>
+            token.network == widget.selectedChain.network.name &&
+            token.address.toLowerCase() == address.toLowerCase(),
+      );
+    });
+  }
+
+  Future<void> _removeToken() async {
+    final identity = widget.walletIdentity;
+    final address = widget.balance.tokenAddress;
+    if (_removingToken || identity == null || address == null) return;
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('移除代币'),
+        content: const Text('仅从资产列表移除，不会影响链上资产。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('移除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _removingToken = true);
+    try {
+      await WalletMetadataStore().removeCustomToken(
+        identity,
+        widget.selectedChain.network.name,
+        address,
+      );
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _removingToken = false);
+        _showNotice(context, '移除失败', '请稍后重试。');
       }
     }
   }
@@ -317,6 +383,7 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             palette: widget.palette,
             onSend: _sendToken,
             onReceive: () => widget.onOpen(AcoScreen.receive),
+            onRemove: _isCustomToken && !_removingToken ? _removeToken : null,
           ),
         ],
       ),
@@ -670,11 +737,13 @@ class _TokenDetailActions extends StatelessWidget {
     required this.palette,
     required this.onSend,
     required this.onReceive,
+    this.onRemove,
   });
 
   final AcoPalette palette;
   final VoidCallback onSend;
   final VoidCallback onReceive;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -688,7 +757,6 @@ class _TokenDetailActions extends StatelessWidget {
           return Row(
             children: [
               Expanded(
-                flex: 6,
                 child: _TokenActionButton(
                   label: '转账',
                   icon: CupertinoIcons.arrow_up,
@@ -700,7 +768,6 @@ class _TokenDetailActions extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Expanded(
-                flex: 6,
                 child: _TokenActionButton(
                   label: '收款',
                   icon: CupertinoIcons.arrow_down,
@@ -711,6 +778,20 @@ class _TokenDetailActions extends StatelessWidget {
                   onPressed: onReceive,
                 ),
               ),
+              if (onRemove != null) ...[
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _TokenActionButton(
+                    key: const Key('remove-custom-token'),
+                    label: '移除',
+                    background: receiveBackground,
+                    foreground: _danger,
+                    borderColor: _danger,
+                    compact: compact,
+                    onPressed: onRemove!,
+                  ),
+                ),
+              ],
             ],
           );
         },
@@ -721,8 +802,9 @@ class _TokenDetailActions extends StatelessWidget {
 
 class _TokenActionButton extends StatelessWidget {
   const _TokenActionButton({
+    super.key,
     required this.label,
-    required this.icon,
+    this.icon,
     required this.background,
     required this.foreground,
     required this.onPressed,
@@ -731,7 +813,7 @@ class _TokenActionButton extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final IconData? icon;
   final Color background;
   final Color foreground;
   final Color? borderColor;
@@ -761,8 +843,10 @@ class _TokenActionButton extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, color: foreground, size: compact ? 18 : 20),
-              SizedBox(width: compact ? 4 : 6),
+              if (icon != null) ...[
+                Icon(icon, color: foreground, size: compact ? 18 : 20),
+                SizedBox(width: compact ? 4 : 6),
+              ],
               Text(
                 label,
                 style: TextStyle(

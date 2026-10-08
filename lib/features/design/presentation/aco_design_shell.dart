@@ -51,6 +51,7 @@ import 'package:aco_chat/services/tron_signing_service.dart';
 import 'package:aco_chat/services/tron_transfer_service.dart';
 import 'package:aco_chat/services/solana_transfer_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
+import 'package:aco_chat/services/wallet_token_metadata_reader.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_chen_kchart/k_chart.dart';
@@ -603,7 +604,9 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
           ),
         )
         .then((created) async {
-          if (screen == AcoScreen.addTokenV2 && mounted) {
+          if ((screen == AcoScreen.addTokenV2 ||
+                  screen == AcoScreen.tokenDetail && created == true) &&
+              mounted) {
             setState(() => _walletAssetRevision++);
           }
           if (screen != AcoScreen.createLive || !mounted) return;

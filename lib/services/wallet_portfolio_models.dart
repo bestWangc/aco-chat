@@ -19,6 +19,7 @@ class WalletAsset {
     required this.decimals,
     required this.isNative,
     this.tokenAddress,
+    this.resolveDecimals = false,
   });
 
   final WalletNetwork network;
@@ -27,6 +28,7 @@ class WalletAsset {
   final int decimals;
   final bool isNative;
   final String? tokenAddress;
+  final bool resolveDecimals;
 
   String get id =>
       '${network.name}:${tokenAddress?.toLowerCase() ?? symbol.toUpperCase()}';
@@ -100,16 +102,20 @@ Future<WalletBalance> loadWalletBalance({
   required String address,
   required int decimals,
   String? tokenAddress,
+  Future<int> Function()? decimalsRequest,
   required Future<BigInt> Function() request,
 }) async {
   try {
+    final resolvedDecimals = decimalsRequest == null
+        ? decimals
+        : await decimalsRequest();
     return WalletBalance(
       chain: chain,
       symbol: symbol,
       assetName: assetName,
       isNative: isNative,
       address: address,
-      decimals: decimals,
+      decimals: resolvedDecimals,
       tokenAddress: tokenAddress,
       balance: await request(),
     );

@@ -194,6 +194,7 @@ class AcoScreenPage extends StatelessWidget {
             : _TokenDetailPage(
                 palette: palette,
                 balance: selectedAsset!,
+                walletIdentity: walletIdentity,
                 selectedChain: _supportedWalletChains[walletChainIndex],
                 onOpen: onOpen,
                 transactionService: walletTransactionService,

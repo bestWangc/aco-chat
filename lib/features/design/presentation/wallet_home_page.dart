@@ -192,6 +192,7 @@ class _WalletHomeState extends State<_WalletHome> {
             decimals: token.decimals,
             isNative: false,
             tokenAddress: token.address,
+            resolveDecimals: true,
           ),
         );
       }

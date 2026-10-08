@@ -53,6 +53,24 @@ class WalletMetadataStore {
     );
   }
 
+  Future<void> removeCustomToken(
+    WalletIdentity identity,
+    String network,
+    String address,
+  ) async {
+    final preferences = await SharedPreferences.getInstance();
+    final tokens = await customTokens(identity);
+    tokens.removeWhere(
+      (token) =>
+          token.network == network &&
+          token.address.toLowerCase() == address.toLowerCase(),
+    );
+    await preferences.setString(
+      _customTokensKey(identity),
+      jsonEncode(tokens.map((item) => item.toJson()).toList()),
+    );
+  }
+
   Future<String> walletName(
     WalletIdentity identity, {
     String fallback = 'Wallet1',

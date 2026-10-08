@@ -6,14 +6,19 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart' show ListTile, MaterialApp;
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
+import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/main.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
+import 'package:aco_chat/services/wallet_metadata_store.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:aco_chat/services/wallet_security.dart';
@@ -891,12 +896,215 @@ void main() {
     expect(find.bySemanticsLabel('转账'), findsOneWidget);
     expect(find.bySemanticsLabel('收款'), findsOneWidget);
     expect(find.bySemanticsLabel('闪兑'), findsNothing);
+    expect(find.byKey(const Key('remove-custom-token')), findsNothing);
     expect(tester.getSize(find.bySemanticsLabel('转账')).height, 50);
 
     final browserLink = find.bySemanticsLabel('查看浏览器');
     await tester.ensureVisible(browserLink);
     await tester.tap(browserLink);
     expect(openedScreen, AcoScreen.browserDiscover);
+  });
+
+  testWidgets('removes a custom token from its detail page', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    const identity = WalletIdentity(address: '0x1234');
+    const token = CustomTokenDefinition(
+      network: 'bsc',
+      address: '0xToken',
+      symbol: 'ALD',
+      decimals: 18,
+    );
+    final store = WalletMetadataStore();
+    await store.saveCustomToken(identity, token);
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: Builder(
+          builder: (context) => CupertinoButton(
+            child: const Text('详情'),
+            onPressed: () => Navigator.of(context).push(
+              CupertinoPageRoute<void>(
+                builder: (_) => AcoScreenPage(
+                  screen: AcoScreen.tokenDetail,
+                  dark: false,
+                  isRoot: false,
+                  walletIdentity: identity,
+                  walletChainIndex: 1,
+                  onOpen: (_) {},
+                  onThemeToggle: () {},
+                  selectedAsset: WalletBalance(
+                    chain: 'BNB Smart Chain',
+                    symbol: 'ALD',
+                    assetName: 'ALD',
+                    isNative: false,
+                    address: identity.address,
+                    decimals: 18,
+                    tokenAddress: token.address,
+                    balance: BigInt.zero,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('详情'));
+    await tester.pumpAndSettle();
+    final removeButton = find.byKey(const Key('remove-custom-token'));
+    expect(
+      tester.getTopLeft(removeButton).dy,
+      tester.getTopLeft(find.bySemanticsLabel('转账')).dy,
+    );
+    expect(
+      find.descendant(of: removeButton, matching: find.byType(Icon)),
+      findsNothing,
+    );
+    await tester.tap(removeButton);
+    await tester.pumpAndSettle();
+    expect(find.text('仅从资产列表移除，不会影响链上资产。'), findsOneWidget);
+    await tester.tap(find.widgetWithText(CupertinoDialogAction, '移除'));
+    await tester.pumpAndSettle();
+
+    expect(await store.customTokens(identity), isEmpty);
+    expect(find.text('详情'), findsOneWidget);
+  });
+
+  testWidgets('custom token symbol and decimals cannot be entered manually', (
+    WidgetTester tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.addTokenV2,
+          dark: false,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+        ),
+      ),
+    );
+    await tester.tap(find.text('自定义代币'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(
+      tester
+          .widget<CupertinoTextField>(
+            find.byKey(const Key('custom-token-symbol-field')),
+          )
+          .readOnly,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<CupertinoTextField>(
+            find.byKey(const Key('custom-token-decimals-field')),
+          )
+          .readOnly,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<CupertinoButton>(
+            find.byKey(const Key('custom-token-confirm-button')),
+          )
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.byKey(const Key('custom-token-contract-field')),
+      '0x0000000000000000000000000000000000000001',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(
+      tester
+          .widget<CupertinoButton>(
+            find.byKey(const Key('custom-token-confirm-button')),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('adds a hot token with decimals read from its contract', (
+    WidgetTester tester,
+  ) async {
+    const identity = WalletIdentity(address: '0x1234');
+    const address = '0x9811ea1264592cdD442Ca4216808DC81C645ac7B';
+    final now = DateTime.now();
+    final today =
+        '${now.year.toString().padLeft(4, '0')}-'
+        '${now.month.toString().padLeft(2, '0')}-'
+        '${now.day.toString().padLeft(2, '0')}';
+    SharedPreferences.setMockInitialValues({
+      'wallet.hot-tokens.v3.bsc.$today': jsonEncode([
+        {
+          'symbol': 'BIBI',
+          'name': 'Binance Bibi',
+          'address': address,
+          'decimals': 0,
+        },
+      ]),
+    });
+    FlutterSecureStorage.setMockInitialValues({});
+    addTearDown(() => FlutterSecureStorage.setMockInitialValues({}));
+    await SecureAccountTokenStore().write(
+      const AccountTokens(accessToken: 'test-token', refreshToken: 'test'),
+    );
+
+    await http.runWithClient(
+      () async {
+        await tester.pumpWidget(
+          CupertinoApp(
+            home: AcoScreenPage(
+              screen: AcoScreen.addTokenV2,
+              dark: true,
+              isRoot: false,
+              walletIdentity: identity,
+              walletChainIndex: 1,
+              onOpen: (_) {},
+              onThemeToggle: () {},
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('BIBI'));
+        await tester.pumpAndSettle();
+
+        final saved = await WalletMetadataStore().customTokens(identity);
+        expect(saved, hasLength(1));
+        expect(saved.single.address, address);
+        expect(saved.single.symbol, 'BIBI');
+        expect(saved.single.decimals, 18);
+        expect(find.text('添加成功'), findsOneWidget);
+      },
+      () => MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/wallets/rpc/bsc')) {
+          return http.Response(
+            jsonEncode({
+              'data': ['https://rpc.test'],
+            }),
+            200,
+          );
+        }
+        final body = jsonDecode(request.body) as Map;
+        final selector = (body['params'] as List).first['data'];
+        return http.Response(
+          jsonEncode({
+            'result': selector == '0x95d89b41'
+                ? '0x${utf8.encode('BIBI').map((byte) => byte.toRadixString(16).padLeft(2, '0')).join().padRight(64, '0')}'
+                : '0x12',
+          }),
+          200,
+        );
+      }),
+    );
   });
 
   testWidgets('opens wallet list from the network selector', (

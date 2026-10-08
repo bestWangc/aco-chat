@@ -36,6 +36,9 @@ class EvmBalanceReader {
     address: address,
     decimals: asset.decimals,
     tokenAddress: asset.tokenAddress,
+    decimalsRequest: asset.resolveDecimals
+        ? () => _tokenDecimals(asset.tokenAddress!, rpcEndpoints)
+        : null,
     request: () => asset.isNative
         ? _nativeBalance(address, rpcEndpoints)
         : _erc20Balance(asset.tokenAddress!, address, rpcEndpoints),
@@ -106,6 +109,28 @@ class EvmBalanceReader {
       ],
     });
     return _hexBalance(body);
+  }
+
+  Future<int> _tokenDecimals(
+    String tokenAddress,
+    List<Uri> rpcEndpoints,
+  ) async {
+    final body = await _rpcClient.postJson(rpcEndpoints, {
+      'jsonrpc': '2.0',
+      'id': 3,
+      'method': 'eth_call',
+      'params': [
+        {'to': tokenAddress, 'data': '0x313ce567'},
+        'latest',
+      ],
+    });
+    final result = body['result'];
+    if (result is! String || !RegExp(r'^0x[0-9a-fA-F]+$').hasMatch(result)) {
+      throw const FormatException('Missing token decimals');
+    }
+    final decimals = int.parse(result.substring(2), radix: 16);
+    if (decimals > 36) throw const FormatException('Invalid token decimals');
+    return decimals;
   }
 
   BigInt _hexBalance(Map<String, dynamic> body) {

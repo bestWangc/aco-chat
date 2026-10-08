@@ -1,5 +1,37 @@
 part of 'aco_design_shell.dart';
 
+Future<({String symbol, int decimals})> _readTokenMetadata({
+  required WalletNetwork network,
+  required String address,
+  WalletIdentity? identity,
+}) async {
+  final tokens = await SecureAccountTokenStore().read();
+  if (tokens == null) throw StateError('未登录');
+
+  final rpc = WalletRpcClient(
+    client: http.Client(),
+    directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
+    ownsClient: true,
+  );
+  try {
+    final endpoints = await rpc.loadEndpoints(
+      network: network.name,
+      accessToken: tokens.accessToken,
+    );
+    final owner = network == WalletNetwork.tron && identity != null
+        ? (await WalletPreferences.derivedAddresses(identity))['tron']
+        : null;
+    return await WalletTokenMetadataReader(rpc).load(
+      network: network,
+      address: address,
+      endpoints: endpoints,
+      ownerAddress: owner,
+    );
+  } finally {
+    rpc.close();
+  }
+}
+
 class _ReceivePage extends StatefulWidget {
   const _ReceivePage({
     required this.palette,
@@ -619,12 +651,15 @@ class _AddTokenPageState extends State<_AddTokenPage> {
   late List<WalletBalance> _tokens = _defaultTokens();
   late Future<List<WalletHotToken>> _hotTokensFuture;
   final Set<String> _removed = {};
+  final Set<String> _addedAddresses = {};
+  final Set<String> _addingAddresses = {};
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _hotTokensFuture = _hotTokenService.load(widget.selectedChain.network.name);
+    unawaited(_loadAddedTokens());
     final identity = widget.walletIdentity;
     if (identity != null) {
       _metadataStore
@@ -642,10 +677,118 @@ class _AddTokenPageState extends State<_AddTokenPage> {
       setState(() {
         _tokens = _defaultTokens();
         _searchQuery = '';
+        _addedAddresses.clear();
+        _addingAddresses.clear();
         _hotTokensFuture = _hotTokenService.load(
           widget.selectedChain.network.name,
         );
       });
+      unawaited(_loadAddedTokens());
+    }
+  }
+
+  Future<void> _loadAddedTokens() async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return;
+    final network = widget.selectedChain.network.name;
+    final tokens = await _metadataStore.customTokens(identity);
+    if (!mounted || widget.selectedChain.network.name != network) return;
+    setState(() {
+      _addedAddresses.addAll(
+        tokens
+            .where((token) => token.network == network)
+            .map((token) => token.address.toLowerCase()),
+      );
+    });
+  }
+
+  Widget _hotTokenRow(WalletHotToken token) => _AddTokenHotRow(
+    token: token,
+    palette: widget.palette,
+    added: _isAdded(token),
+    loading: _addingAddresses.contains(token.address.toLowerCase()),
+    onPressed: () => _addHotToken(token),
+  );
+
+  bool _isAdded(WalletHotToken token) {
+    final address = token.address.toLowerCase();
+    if (_addedAddresses.contains(address)) return true;
+    return _tokens.any(
+      (asset) =>
+          asset.tokenAddress?.toLowerCase() == address &&
+          !_removed.contains(address) &&
+          !_removed.contains(asset.symbol),
+    );
+  }
+
+  Future<void> _addHotToken(WalletHotToken token) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) {
+      _showNotice(context, '添加失败', '请先创建或导入钱包。');
+      return;
+    }
+    final network = widget.selectedChain.network;
+    final address = token.address.trim();
+    final key = address.toLowerCase();
+    if (_addingAddresses.contains(key)) return;
+    if (_isAdded(token)) {
+      _showNotice(context, '已添加', '${token.symbol} 已在资产列表中。');
+      return;
+    }
+    if (!WalletTokenMetadataReader.validAddress(network, address)) {
+      _showNotice(context, '添加失败', '代币地址无效。');
+      return;
+    }
+    setState(() => _addingAddresses.add(key));
+    try {
+      final builtIn = _tokens.where(
+        (asset) => asset.tokenAddress?.toLowerCase() == key,
+      );
+      if (builtIn.isNotEmpty) {
+        await _metadataStore.setTokenHidden(
+          identity,
+          network.name,
+          builtIn.first.symbol,
+          false,
+          tokenAddress: address,
+        );
+        await _metadataStore.setTokenHidden(
+          identity,
+          network.name,
+          builtIn.first.symbol,
+          false,
+        );
+        if (mounted && widget.selectedChain.network == network) {
+          setState(() => _removed.removeAll({key, builtIn.first.symbol}));
+        }
+      } else {
+        final metadata = await _readTokenMetadata(
+          network: network,
+          address: address,
+          identity: identity,
+        );
+        await _metadataStore.saveCustomToken(
+          identity,
+          CustomTokenDefinition(
+            network: network.name,
+            address: address,
+            symbol: metadata.symbol.toUpperCase(),
+            decimals: metadata.decimals,
+          ),
+        );
+        if (mounted && widget.selectedChain.network == network) {
+          setState(() => _addedAddresses.add(key));
+        }
+      }
+      if (mounted) {
+        _showNotice(context, '添加成功', '${token.symbol} 已添加至资产列表。');
+      }
+    } catch (_) {
+      if (mounted) {
+        _showNotice(context, '添加失败', '无法读取代币信息，请稍后重试。');
+      }
+    } finally {
+      if (mounted) setState(() => _addingAddresses.remove(key));
     }
   }
 
@@ -699,14 +842,13 @@ class _AddTokenPageState extends State<_AddTokenPage> {
         const SizedBox(height: 30),
         if (_searchQuery.isNotEmpty) ...[
           for (final token in _tokens.where(_matchesToken))
-            _AddTokenHotRow(
-              token: WalletHotToken(
+            _hotTokenRow(
+              WalletHotToken(
                 symbol: token.symbol,
                 name: token.assetName,
                 address: token.tokenAddress ?? '',
                 decimals: token.decimals,
               ),
-              palette: widget.palette,
             ),
           if (!_tokens.any(_matchesToken))
             Padding(
@@ -747,6 +889,8 @@ class _AddTokenPageState extends State<_AddTokenPage> {
               ),
             );
             if (added == true && context.mounted) {
+              await _loadAddedTokens();
+              if (!context.mounted) return;
               _showNotice(context, '添加成功', '自定义代币已添加至资产列表。');
             }
           },
@@ -779,10 +923,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
               return token.address.toLowerCase() == query;
             });
             return Column(
-              children: [
-                for (final token in tokens)
-                  _AddTokenHotRow(token: token, palette: widget.palette),
-              ],
+              children: [for (final token in tokens) _hotTokenRow(token)],
             );
           },
         ),
@@ -798,7 +939,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
   Future<void> _searchContract() async {
     final address = _searchQuery.trim();
     if (address.isEmpty) return;
-    await Navigator.of(context).push<bool>(
+    final added = await Navigator.of(context).push<bool>(
       _AcoPageRoute(
         builder: (_) => _CustomTokenPage(
           palette: widget.palette,
@@ -808,6 +949,7 @@ class _AddTokenPageState extends State<_AddTokenPage> {
         ),
       ),
     );
+    if (added == true && mounted) await _loadAddedTokens();
   }
 
   Future<void> _removeToken(WalletBalance token) async {
@@ -845,20 +987,23 @@ class _CustomTokenPage extends StatefulWidget {
 }
 
 class _CustomTokenPageState extends State<_CustomTokenPage> {
-  static const _symbolSelector = '0x95d89b41';
-  static const _decimalsSelector = '0x313ce567';
   final _contractController = TextEditingController();
   final _symbolController = TextEditingController();
   final _decimalsController = TextEditingController();
   final _contractFocus = FocusNode();
-  final _symbolFocus = FocusNode();
-  final _decimalsFocus = FocusNode();
+  Timer? _lookupDebounce;
+  int _lookupGeneration = 0;
+  String _lastContract = '';
+  String? _resolvedAddress;
+  String? _lookupError;
   bool _saving = false;
   bool _loadingMetadata = false;
 
   bool get _canSubmit {
     final decimals = int.tryParse(_decimalsController.text.trim());
-    return _contractController.text.trim().isNotEmpty &&
+    return !_saving &&
+        !_loadingMetadata &&
+        _resolvedAddress == _contractController.text.trim() &&
         _symbolController.text.trim().isNotEmpty &&
         decimals != null &&
         decimals >= 0 &&
@@ -868,115 +1013,71 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
   @override
   void initState() {
     super.initState();
+    _contractController.addListener(_contractChanged);
     final initialContract = widget.initialContract;
     if (initialContract != null && initialContract.isNotEmpty) {
       _contractController.text = initialContract;
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => _lookupTokenMetadata(),
-      );
-    }
-    for (final controller in [
-      _contractController,
-      _symbolController,
-      _decimalsController,
-    ]) {
-      controller.addListener(_changed);
     }
   }
 
-  Future<void> _lookupTokenMetadata() async {
-    if (_loadingMetadata || !_contractController.text.trim().isNotEmpty) return;
-    final chain = WalletChainRegistry.chains[widget.selectedChain.network];
-    if (chain == null || !chain.isEvm) return;
-    final tokens = await SecureAccountTokenStore().read();
-    if (tokens == null) return;
-    final rpc = WalletRpcClient(
-      client: http.Client(),
-      directoryBaseUri: Uri.parse(const AppConfig().apiBaseUrl),
-      ownsClient: true,
-    );
+  void _contractChanged() {
+    final address = _contractController.text.trim();
+    if (address == _lastContract) return;
+    _lastContract = address;
+    final generation = ++_lookupGeneration;
+    _lookupDebounce?.cancel();
+    _symbolController.clear();
+    _decimalsController.clear();
+    setState(() {
+      _resolvedAddress = null;
+      _lookupError = null;
+      _loadingMetadata = false;
+    });
+    if (WalletTokenMetadataReader.validAddress(
+      widget.selectedChain.network,
+      address,
+    )) {
+      _lookupDebounce = Timer(
+        const Duration(milliseconds: 350),
+        () => _lookupTokenMetadata(address, generation),
+      );
+    }
+  }
+
+  Future<void> _lookupTokenMetadata(String address, int generation) async {
+    if (generation != _lookupGeneration) {
+      return;
+    }
     setState(() => _loadingMetadata = true);
     try {
-      final endpoints = await rpc.loadEndpoints(
-        network: widget.selectedChain.network.name,
-        accessToken: tokens.accessToken,
+      final metadata = await _readTokenMetadata(
+        network: widget.selectedChain.network,
+        address: address,
+        identity: widget.walletIdentity,
       );
-      final address = _contractController.text.trim();
-      final symbolResult = await _ethCall(
-        rpc,
-        endpoints,
-        _symbolSelector,
-        address,
-        1,
-      );
-      final decimalsResult = await _ethCall(
-        rpc,
-        endpoints,
-        _decimalsSelector,
-        address,
-        2,
-      );
-      final decodedSymbol = _decodeAbiString(symbolResult);
-      final decodedDecimals = _decodeHexInt(decimalsResult);
-      if (mounted && decodedSymbol != null && decodedDecimals != null) {
-        _symbolController.text = decodedSymbol;
-        _decimalsController.text = decodedDecimals.toString();
+      if (mounted && generation == _lookupGeneration) {
+        _symbolController.text = metadata.symbol;
+        _decimalsController.text = metadata.decimals.toString();
+        setState(() => _resolvedAddress = address);
       }
     } catch (_) {
-      // Keep manual entry available when the node cannot read token metadata.
+      if (mounted && generation == _lookupGeneration) {
+        setState(() => _lookupError = '无法获取代币信息，请检查合约地址后重试');
+      }
     } finally {
-      rpc.close();
-      if (mounted) setState(() => _loadingMetadata = false);
+      if (mounted && generation == _lookupGeneration) {
+        setState(() => _loadingMetadata = false);
+      }
     }
   }
-
-  Future<String?> _ethCall(
-    WalletRpcClient rpc,
-    List<Uri> endpoints,
-    String selector,
-    String address,
-    int id,
-  ) async {
-    final result = await rpc.postJson(endpoints, {
-      'jsonrpc': '2.0',
-      'id': id,
-      'method': 'eth_call',
-      'params': [
-        {'to': address, 'data': selector},
-        'latest',
-      ],
-    });
-    return result['result'] as String?;
-  }
-
-  int? _decodeHexInt(String? value) => value == null
-      ? null
-      : int.tryParse(value.replaceFirst('0x', ''), radix: 16);
-
-  String? _decodeAbiString(String? value) {
-    if (value == null || !value.startsWith('0x')) return null;
-    final hex = value.substring(2);
-    if (hex.length < 128) return null;
-    final length = int.tryParse(hex.substring(64, 128), radix: 16);
-    if (length == null || length <= 0 || hex.length < 128 + length * 2)
-      return null;
-    final bytes = <int>[];
-    for (var i = 0; i < length; i++) {
-      bytes.add(int.parse(hex.substring(128 + i * 2, 130 + i * 2), radix: 16));
-    }
-    return String.fromCharCodes(bytes);
-  }
-
-  void _changed() => setState(() {});
 
   @override
   void dispose() {
+    _lookupDebounce?.cancel();
     _contractController.dispose();
     _symbolController.dispose();
     _decimalsController.dispose();
     _contractFocus.dispose();
-    _symbolFocus.dispose();
-    _decimalsFocus.dispose();
     super.dispose();
   }
 
@@ -1000,14 +1101,28 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
     Navigator.of(context).pop(true);
   }
 
+  void _retryLookup() {
+    if (_loadingMetadata) return;
+    final address = _contractController.text.trim();
+    _lookupDebounce?.cancel();
+    final generation = ++_lookupGeneration;
+    if (WalletTokenMetadataReader.validAddress(
+      widget.selectedChain.network,
+      address,
+    )) {
+      setState(() => _lookupError = null);
+      unawaited(_lookupTokenMetadata(address, generation));
+    }
+  }
+
   Widget _field({
     required String label,
     required String placeholder,
     required TextEditingController controller,
-    required FocusNode focusNode,
-    TextInputType? keyboardType,
+    FocusNode? focusNode,
+    bool readOnly = false,
     TextInputAction? textInputAction,
-    Widget? suffix,
+    VoidCallback? onSubmitted,
     Key? key,
   }) => LayoutBuilder(
     builder: (context, constraints) {
@@ -1035,6 +1150,8 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
                     key: key,
                     controller: controller,
                     focusNode: focusNode,
+                    readOnly: readOnly,
+                    enableInteractiveSelection: !readOnly,
                     padding: EdgeInsets.zero,
                     decoration: const BoxDecoration(color: _transparent),
                     placeholder: placeholder,
@@ -1046,16 +1163,12 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
                       color: widget.palette.primaryText,
                       fontSize: 16,
                     ),
-                    keyboardType: keyboardType,
                     textInputAction: textInputAction,
-                    onSubmitted: (_) async {
-                      if (focusNode == _contractFocus)
-                        await _lookupTokenMetadata();
-                      _nextFocus(focusNode);
-                    },
+                    onSubmitted: onSubmitted == null
+                        ? null
+                        : (_) => onSubmitted(),
                   ),
                 ),
-                ?suffix,
               ],
             ),
           ),
@@ -1063,14 +1176,6 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
       );
     },
   );
-
-  void _nextFocus(FocusNode node) {
-    if (node == _contractFocus) {
-      _symbolFocus.requestFocus();
-    } else if (node == _symbolFocus) {
-      _decimalsFocus.requestFocus();
-    }
-  }
 
   @override
   Widget build(BuildContext context) => ColoredBox(
@@ -1099,26 +1204,43 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
                   controller: _contractController,
                   focusNode: _contractFocus,
                   key: const Key('custom-token-contract-field'),
-                  textInputAction: TextInputAction.next,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: _retryLookup,
                 ),
+                if (_loadingMetadata || _lookupError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _loadingMetadata ? '正在获取代币信息...' : _lookupError!,
+                    style: TextStyle(
+                      color: _lookupError == null
+                          ? widget.palette.mutedText
+                          : _danger,
+                      fontSize: 13,
+                    ),
+                  ),
+                  if (_lookupError != null)
+                    CupertinoButton(
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft,
+                      onPressed: _retryLookup,
+                      child: const Text('重新获取'),
+                    ),
+                ],
                 const SizedBox(height: 20),
                 _field(
                   label: '代币符号',
-                  placeholder: '请输入代币符号',
+                  placeholder: '自动获取代币符号',
                   controller: _symbolController,
-                  focusNode: _symbolFocus,
+                  readOnly: true,
                   key: const Key('custom-token-symbol-field'),
-                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: 20),
                 _field(
                   label: '代币精度',
-                  placeholder: '请输入代币精度',
+                  placeholder: '自动获取代币精度',
                   controller: _decimalsController,
-                  focusNode: _decimalsFocus,
+                  readOnly: true,
                   key: const Key('custom-token-decimals-field'),
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
                 ),
               ],
             ),
@@ -1373,18 +1495,23 @@ class _AddTokenEntry extends StatelessWidget {
 }
 
 class _AddTokenHotRow extends StatelessWidget {
-  const _AddTokenHotRow({required this.token, required this.palette});
+  const _AddTokenHotRow({
+    required this.token,
+    required this.palette,
+    required this.onPressed,
+    this.added = false,
+    this.loading = false,
+  });
   final WalletHotToken token;
   final AcoPalette palette;
+  final VoidCallback onPressed;
+  final bool added;
+  final bool loading;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: const EdgeInsets.symmetric(vertical: 12),
-    onPressed: () => _showNotice(
-      context,
-      '已添加 ${token.symbol}',
-      '${token.symbol} 已添加至资产列表。',
-    ),
+    onPressed: loading ? null : onPressed,
     child: Container(
       padding: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1432,7 +1559,16 @@ class _AddTokenHotRow extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(CupertinoIcons.add_circled, color: _lime, size: 24),
+          if (loading)
+            const CupertinoActivityIndicator()
+          else
+            Icon(
+              added
+                  ? CupertinoIcons.check_mark_circled
+                  : CupertinoIcons.add_circled,
+              color: _lime,
+              size: 24,
+            ),
         ],
       ),
     ),
