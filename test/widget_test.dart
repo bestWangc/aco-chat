@@ -90,6 +90,38 @@ void main() {
     ]);
   });
 
+  test('removes a wallet and selects the remaining one', () async {
+    const first = WalletIdentity(
+      address: '0x1111111111111111111111111111111111111111',
+    );
+    const second = WalletIdentity(
+      address: '0x2222222222222222222222222222222222222222',
+    );
+    SharedPreferences.setMockInitialValues({
+      WalletPreferences.configuredKey: true,
+    });
+    await WalletPreferences.saveWalletIdentity(first);
+    await WalletPreferences.saveWalletIdentity(second);
+
+    final remaining = await WalletPreferences.removeWalletIdentity(second);
+
+    expect(remaining.map((identity) => identity.address), [first.address]);
+    expect((await WalletPreferences.walletIdentity())?.address, first.address);
+    expect(await WalletPreferences.load(), isTrue);
+  });
+
+  test('clears wallet setup when deleting the last wallet', () async {
+    const identity = WalletIdentity(
+      address: '0x1111111111111111111111111111111111111111',
+    );
+    SharedPreferences.setMockInitialValues({});
+    await WalletPreferences.saveWalletIdentity(identity);
+
+    expect(await WalletPreferences.removeWalletIdentity(identity), isEmpty);
+    expect(await WalletPreferences.walletIdentity(), isNull);
+    expect(await WalletPreferences.load(), isFalse);
+  });
+
   test('removes legacy placeholder wallet data', () async {
     SharedPreferences.setMockInitialValues({
       'wallet.address': 'aco_123456',

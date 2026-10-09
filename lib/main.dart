@@ -10,6 +10,7 @@ import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
+import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/android_chat_background_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -459,6 +460,26 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
     if (mounted) setState(() => _walletIdentity = identity);
   }
 
+  Future<void> _deleteWallet(WalletIdentity identity) async {
+    final wallets = await WalletPreferences.walletIdentities();
+    if (wallets.length <= 1) {
+      throw const WalletSecurityException('至少保留一个钱包地址，请先添加或导入另一个钱包。');
+    }
+    await WalletSecurity().deleteMnemonic(
+      store: SecureWalletSecretStore(),
+      walletAddress: identity.address,
+    );
+    final remaining = await WalletPreferences.removeWalletIdentity(identity);
+    if (!mounted) return;
+    setState(() {
+      _walletIdentity = remaining.isEmpty ? null : remaining.first;
+      _walletConfigured = remaining.isNotEmpty;
+      _accountProfile = null;
+      _walletLoginFuture = null;
+    });
+    widget.onWalletConfigured?.call(remaining.isNotEmpty);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -509,6 +530,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
                   onThemeChanged: _onThemeChanged,
                   onWalletReady: _completeWalletSetup,
                   onWalletSelected: _selectWallet,
+                  onWalletDeleted: _deleteWallet,
                   accountProfile: _accountProfile,
                   walletLoginFuture: _walletLoginFuture,
                   walletIdentity: _walletIdentity,

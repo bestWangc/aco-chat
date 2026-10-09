@@ -8,6 +8,7 @@ class _AssetDetail extends StatefulWidget {
     required this.walletName,
     required this.onOpen,
     this.onWalletNameChanged,
+    this.onWalletDeleted,
   });
 
   final AcoPalette palette;
@@ -16,6 +17,7 @@ class _AssetDetail extends StatefulWidget {
   final String walletName;
   final ValueChanged<AcoScreen> onOpen;
   final Future<void> Function(String name)? onWalletNameChanged;
+  final Future<void> Function(WalletIdentity identity)? onWalletDeleted;
 
   @override
   State<_AssetDetail> createState() => _AssetDetailState();
@@ -104,28 +106,116 @@ class _AssetDetailState extends State<_AssetDetail> {
     await widget.onWalletNameChanged!(savedName);
   }
 
-  void _confirmDeleteWallet() {
-    showCupertinoModalPopup<void>(
+  Future<void> _confirmDeleteWallet() async {
+    final identity = widget.walletIdentity;
+    final onWalletDeleted = widget.onWalletDeleted;
+    if (identity == null || onWalletDeleted == null) return;
+    final wallets = await WalletPreferences.walletIdentities(
+      fallback: identity,
+    );
+    if (!mounted) return;
+    if (wallets.length <= 1) {
+      _showNotice(context, '无法删除钱包', '至少保留一个钱包地址。请先添加或导入另一个钱包。');
+      return;
+    }
+    final confirmed = await showCupertinoModalPopup<bool>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
         title: const Text('删除钱包'),
-        message: const Text('删除后需要通过助记词或私钥重新导入。'),
+        message: const Text('删除后将从此设备移除钱包及本地安全数据，且无法撤销。请确认已备份助记词或私钥。'),
         actions: [
           CupertinoActionSheetAction(
             isDestructiveAction: true,
             onPressed: () {
-              Navigator.of(sheetContext).pop();
-              _showNotice(context, '删除钱包', '钱包删除功能即将开放。');
+              Navigator.of(sheetContext).pop(true);
             },
-            child: const Text('确认删除'),
+            child: const Text('确认删除', style: TextStyle(fontSize: 16)),
           ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
-          child: const Text('取消'),
+          child: const Text('取消', style: TextStyle(fontSize: 16)),
         ),
       ),
     );
+    if (confirmed != true || !mounted) return;
+
+    final controller = TextEditingController();
+    var password = '';
+    var error = '';
+    final verified = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> verify() async {
+            try {
+              await WalletSecurity().unlockMnemonic(
+                store: SecureWalletSecretStore(),
+                walletAddress: identity.address,
+                password: password,
+              );
+              if (dialogContext.mounted) Navigator.of(dialogContext).pop(true);
+            } on WalletSecurityException catch (exception) {
+              setDialogState(() => error = exception.message);
+            } catch (_) {
+              setDialogState(() => error = '验证失败，请重试。');
+            }
+          }
+
+          return CupertinoAlertDialog(
+            title: const Text('验证钱包密码'),
+            content: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Column(
+                children: [
+                  const Text('输入钱包密码后删除钱包。'),
+                  const SizedBox(height: 12),
+                  CupertinoTextField(
+                    key: const Key('delete-wallet-password'),
+                    controller: controller,
+                    autofocus: true,
+                    obscureText: true,
+                    textInputAction: TextInputAction.done,
+                    placeholder: '钱包密码',
+                    onChanged: (value) =>
+                        setDialogState(() => password = value),
+                    onSubmitted: (_) => verify(),
+                  ),
+                  if (error.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      error,
+                      style: const TextStyle(color: CupertinoColors.systemRed),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDestructiveAction: true,
+                onPressed: password.isEmpty ? null : verify,
+                child: const Text('验证并删除'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+    if (verified != true || !mounted) return;
+    try {
+      await onWalletDeleted(identity);
+      widget.onOpen(AcoScreen.walletHome);
+    } on WalletSecurityException catch (exception) {
+      if (mounted) _showNotice(context, '删除失败', exception.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '删除失败', '请稍后重试。');
+    }
   }
 
   @override

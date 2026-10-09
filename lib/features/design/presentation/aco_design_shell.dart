@@ -245,6 +245,7 @@ class AcoDesignShell extends StatefulWidget {
     this.onThemeChanged,
     this.onWalletReady,
     this.onWalletSelected,
+    this.onWalletDeleted,
     this.walletIdentity,
     this.accountProfile,
     this.walletLoginFuture,
@@ -256,6 +257,7 @@ class AcoDesignShell extends StatefulWidget {
   final ValueChanged<bool>? onThemeChanged;
   final Future<void> Function(WalletIdentity, String)? onWalletReady;
   final Future<void> Function(WalletIdentity)? onWalletSelected;
+  final Future<void> Function(WalletIdentity)? onWalletDeleted;
   final WalletIdentity? walletIdentity;
   final AccountProfile? accountProfile;
   final Future<AccountProfile?>? walletLoginFuture;
@@ -667,6 +669,7 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         onThemeToggle: _toggleTheme,
         onWalletReady: _completeAddedWallet,
         onWalletSelected: _selectWallet,
+        onWalletDeleted: widget.onWalletDeleted,
         onWalletTotalChanged: (total) =>
             _cacheWalletTotal(widget.walletIdentity, selectedNetwork, total),
         walletIdentity: widget.walletIdentity,

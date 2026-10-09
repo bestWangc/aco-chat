@@ -52,6 +52,31 @@ class WalletIdentityStore {
     );
   }
 
+  Future<List<WalletIdentity>> removeIdentity(WalletIdentity identity) async {
+    final preferences = await SharedPreferences.getInstance();
+    final identities = _readIdentities(preferences)
+      ..removeWhere((item) => sameAddress(item, identity));
+    if (identities.isEmpty) {
+      await preferences.remove(walletIdentitiesKey);
+      await preferences.remove(walletIdentityKey);
+      await preferences.setBool(configuredKey, false);
+      return identities;
+    }
+
+    await preferences.setString(
+      walletIdentitiesKey,
+      jsonEncode(identities.map((item) => item.toJson()).toList()),
+    );
+    final active = _readActiveIdentity(preferences);
+    if (active != null && sameAddress(active, identity)) {
+      await preferences.setString(
+        walletIdentityKey,
+        jsonEncode(identities.first.toJson()),
+      );
+    }
+    return identities;
+  }
+
   Future<void> removeLegacyPlaceholderData() async {
     final preferences = await SharedPreferences.getInstance();
     if (preferences.getString(walletIdentityKey) != null ||

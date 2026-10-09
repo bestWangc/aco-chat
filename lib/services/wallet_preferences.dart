@@ -57,6 +57,10 @@ class WalletPreferences {
   static Future<void> saveWalletIdentity(WalletIdentity identity) =>
       _identityStore.saveIdentity(identity);
 
+  static Future<List<WalletIdentity>> removeWalletIdentity(
+    WalletIdentity identity,
+  ) => _identityStore.removeIdentity(identity);
+
   static Future<WalletNetwork?> selectedWalletNetwork() async {
     final preferences = await SharedPreferences.getInstance();
     final value = preferences.getString(selectedWalletNetworkKey);

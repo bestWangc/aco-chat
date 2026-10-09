@@ -35,6 +35,7 @@ class AcoScreenPage extends StatelessWidget {
     required this.onThemeToggle,
     this.onWalletReady,
     this.onWalletSelected,
+    this.onWalletDeleted,
     this.onWalletTotalChanged,
     this.displayName,
     this.accountId,
@@ -81,6 +82,7 @@ class AcoScreenPage extends StatelessWidget {
   final VoidCallback onThemeToggle;
   final Future<void> Function(WalletIdentity, String)? onWalletReady;
   final Future<void> Function(WalletIdentity)? onWalletSelected;
+  final Future<void> Function(WalletIdentity)? onWalletDeleted;
   final ValueChanged<double>? onWalletTotalChanged;
   final String? displayName;
   final String? accountId;
@@ -188,6 +190,7 @@ class AcoScreenPage extends StatelessWidget {
         selectedChain: _supportedWalletChains[walletChainIndex],
         walletName: walletName,
         onWalletNameChanged: onWalletNameChanged,
+        onWalletDeleted: onWalletDeleted,
         onOpen: onOpen,
       ),
       AcoScreen.tokenDetail =>
