@@ -191,6 +191,37 @@ void main() {
     expect(balances.single.available, 23);
   });
 
+  test('uses unified USDC balance as withdrawable balance', () async {
+    final client = _HyperliquidTestClient([
+      'unifiedAccount',
+      {
+        'balances': [
+          {'coin': 'USDC', 'total': '100.45', 'hold': '0'},
+          {'coin': 'HYPE', 'total': '2', 'hold': '0'},
+        ],
+      },
+    ]);
+    final api = HyperliquidApiClient(client: client);
+
+    final balance = await api.loadWithdrawableUsdcBalance('0xabc');
+
+    expect(balance, 100.45);
+    expect(client.calls, 2);
+  });
+
+  test('uses perps withdrawable balance for standard accounts', () async {
+    final client = _HyperliquidTestClient([
+      'default',
+      {'withdrawable': '12.5'},
+    ]);
+    final api = HyperliquidApiClient(client: client);
+
+    final balance = await api.loadWithdrawableUsdcBalance('0xabc');
+
+    expect(balance, 12.5);
+    expect(client.calls, 2);
+  });
+
   test('parses Hyperliquid websocket market updates', () {
     final bookUpdate = parseHyperliquidRealtimeMessage(
       jsonEncode({

@@ -113,6 +113,25 @@ class HyperliquidApiClient {
     return HyperliquidAccountState.fromJson(payload);
   }
 
+  Future<String> loadUserAbstraction(String address) async {
+    final payload = await _post({'type': 'userAbstraction', 'user': address});
+    if (payload is! String) {
+      throw const FormatException('Hyperliquid 返回的账户模式无效');
+    }
+    return payload;
+  }
+
+  Future<double> loadWithdrawableUsdcBalance(String address) async {
+    final mode = await loadUserAbstraction(address);
+    if (mode == 'unifiedAccount' || mode == 'portfolioMargin') {
+      final balances = await loadSpotBalances(address);
+      return balances
+          .where((balance) => balance.coin.toUpperCase() == 'USDC')
+          .fold<double>(0, (total, balance) => total + balance.available);
+    }
+    return (await loadAccountState(address)).withdrawable;
+  }
+
   Future<List<HyperliquidOpenOrder>> loadOpenOrders(String address) async {
     final payload = await _post({'type': 'openOrders', 'user': address});
     if (payload is! List) {

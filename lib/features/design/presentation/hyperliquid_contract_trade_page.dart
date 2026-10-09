@@ -728,7 +728,7 @@ class _HyperliquidContractTradePageState
             const CupertinoActivityIndicator(radius: 7)
           else
             Text(
-              '\$${_formatMoney(_available)} USDC',
+              '\$${_formatUsdcBalance(_available)} USDC',
               style: TextStyle(
                 color: _palette.primaryText,
                 fontSize: 13,
@@ -2060,10 +2060,13 @@ class _HyperliquidUsdcDepositSheetState
 
     var available = widget.contractAvailable;
     try {
-      final account = await _hyperliquidClient.loadAccountState(
-        identity.address,
-      );
-      available = account.withdrawable;
+      available = AppConfig.hyperliquidTestnet
+          ? (await _hyperliquidClient.loadAccountState(
+              identity.address,
+            )).withdrawable
+          : await _hyperliquidClient.loadWithdrawableUsdcBalance(
+              identity.address,
+            );
     } catch (_) {
       // Keep the supplied balance as a fallback when the request fails.
     }
@@ -2806,7 +2809,7 @@ class _HyperliquidUsdcDepositSheetState
                 Row(
                   children: [
                     Text(
-                      '可用 ${_availableLoading ? '--' : _formatMoney(_available)} $_displayAssetSymbol',
+                      '可用 ${_availableLoading ? '--' : _formatUsdcBalance(_available)} $_displayAssetSymbol',
                       style: TextStyle(color: palette.mutedText, fontSize: 15),
                     ),
                     const SizedBox(width: 9),
@@ -3469,9 +3472,10 @@ class _AccountBalanceCard extends StatelessWidget {
               child: _metric(
                 '总余额',
                 math.max(account?.accountValue ?? 0, available),
+                isBalance: true,
               ),
             ),
-            Expanded(child: _metric('可用余额', available)),
+            Expanded(child: _metric('可用余额', available, isBalance: true)),
           ],
         ),
         const SizedBox(height: 16),
@@ -3480,21 +3484,22 @@ class _AccountBalanceCard extends StatelessWidget {
     );
   }
 
-  Widget _metric(String label, double value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: TextStyle(color: palette.mutedText, fontSize: 12)),
-      const SizedBox(height: 5),
-      Text(
-        '\$${_formatMoney(value)}',
-        style: TextStyle(
-          color: palette.primaryText,
-          fontSize: 18,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    ],
-  );
+  Widget _metric(String label, double value, {bool isBalance = false}) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(color: palette.mutedText, fontSize: 12)),
+          const SizedBox(height: 5),
+          Text(
+            '\$${isBalance ? _formatUsdcBalance(value) : _formatMoney(value)}',
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      );
 }
 
 class _PositionRow extends StatelessWidget {
@@ -4040,6 +4045,8 @@ String _formatQuantity(double? value) {
 
 String _formatMoney(double value) =>
     value == 0 ? '0' : _trimTrailingZeros(value.toStringAsFixed(2));
+
+String _formatUsdcBalance(double value) => value.toStringAsFixed(6);
 
 String _formatOrderTime(int timestamp) {
   if (timestamp <= 0) return '--';
