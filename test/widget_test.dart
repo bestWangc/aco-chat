@@ -223,7 +223,7 @@ void main() {
         .setMockMethodCallHandler(_sensitiveScreenChannel, null);
   });
 
-  testWidgets('does not offer password for a legacy device-only wallet', (
+  testWidgets('offers password fallback for a legacy device-only wallet', (
     WidgetTester tester,
   ) async {
     const identity = WalletIdentity(address: '0x5678');
@@ -259,8 +259,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('使用指纹或面容继续'), findsOneWidget);
-    expect(find.text('使用密码'), findsNothing);
+    expect(find.text('使用密码'), findsOneWidget);
     expect(find.byKey(const Key('export-mnemonic-password')), findsNothing);
+    await tester.tap(find.text('使用密码'));
+    await tester.pumpAndSettle();
+    expect(find.text('输入钱包密码'), findsOneWidget);
+    expect(find.byKey(const Key('export-mnemonic-password')), findsOneWidget);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_sensitiveScreenChannel, null);
   });

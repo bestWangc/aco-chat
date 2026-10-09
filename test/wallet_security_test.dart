@@ -85,6 +85,18 @@ void main() {
         walletAddress: address,
         mnemonic: phrase,
       );
+      final deviceRecord =
+          jsonDecode(
+                (await store.read(
+                  'wallet.device-vault.${address.toLowerCase()}',
+                ))!,
+              )
+              as Map<String, dynamic>;
+      expect(deviceRecord['format'], 'aco-device-vault-v1');
+      expect(
+        await store.read('wallet.device-password.${address.toLowerCase()}'),
+        isNull,
+      );
 
       expect(
         await security.hasDeviceProtection(
@@ -133,8 +145,15 @@ void main() {
           walletAddress: address,
           mnemonic: phrase,
         );
+        final deviceRecord =
+            jsonDecode((await store.read(deviceVaultKey))!)
+                as Map<String, dynamic>;
         // Older app versions stored the device-encrypted vault in wallet.vault.
-        await store.write(vaultKey, (await store.read(deviceVaultKey))!);
+        await store.write(vaultKey, deviceRecord['record'] as String);
+        await store.write(
+          'wallet.device-password.${address.toLowerCase()}',
+          deviceRecord['password'] as String,
+        );
         await store.delete(deviceVaultKey);
 
         expect(
@@ -160,6 +179,110 @@ void main() {
         );
       },
     );
+
+    test('reports mismatched legacy device key and vault clearly', () async {
+      final security = WalletSecurity();
+      final store = InMemoryWalletSecretStore();
+      const phrase =
+          'abandon abandon abandon abandon abandon abandon abandon abandon '
+          'abandon abandon abandon about';
+      final deviceVaultKey = 'wallet.device-vault.${address.toLowerCase()}';
+      final devicePasswordKey =
+          'wallet.device-password.${address.toLowerCase()}';
+
+      await security.saveMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: address,
+        mnemonic: phrase,
+      );
+      final oldDeviceRecord =
+          jsonDecode((await store.read(deviceVaultKey))!)
+              as Map<String, dynamic>;
+      await security.saveMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: address,
+        mnemonic: phrase,
+      );
+      final newDeviceRecord =
+          jsonDecode((await store.read(deviceVaultKey))!)
+              as Map<String, dynamic>;
+      await store.write(deviceVaultKey, newDeviceRecord['record'] as String);
+      await store.write(
+        devicePasswordKey,
+        oldDeviceRecord['password'] as String,
+      );
+
+      await expectLater(
+        security.unlockMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: address,
+        ),
+        throwsA(
+          isA<WalletSecurityException>().having(
+            (error) => error.message,
+            'message',
+            contains('设备加密数据与密钥不匹配'),
+          ),
+        ),
+      );
+    });
+
+    test('adds password access to a legacy device-protected wallet', () async {
+      final security = WalletSecurity();
+      final store = InMemoryWalletSecretStore();
+      const phrase =
+          'abandon abandon abandon abandon abandon abandon abandon abandon '
+          'abandon abandon abandon about';
+      final deviceVaultKey = 'wallet.device-vault.${address.toLowerCase()}';
+
+      await security.saveMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: address,
+        mnemonic: phrase,
+      );
+      final deviceRecord =
+          jsonDecode((await store.read(deviceVaultKey))!)
+              as Map<String, dynamic>;
+      final legacyVault = deviceRecord['record'] as String;
+      await store.write('wallet.vault.${address.toLowerCase()}', legacyVault);
+      await store.write(
+        'wallet.device-password.${address.toLowerCase()}',
+        deviceRecord['password'] as String,
+      );
+      await store.delete(deviceVaultKey);
+
+      final unlocked = await security.unlockMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: address,
+      );
+      await security.saveMnemonic(
+        store: store,
+        walletAddress: address,
+        mnemonic: unlocked,
+        password: password,
+      );
+      await security.saveMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: address,
+        mnemonic: unlocked,
+      );
+
+      expect(
+        await security.unlockMnemonic(
+          store: store,
+          walletAddress: address,
+          password: password,
+        ),
+        phrase,
+      );
+      expect(
+        await security.unlockMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: address,
+        ),
+        phrase,
+      );
+    });
 
     test('rejects invalid phrases and short passwords', () async {
       final security = WalletSecurity();

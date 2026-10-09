@@ -14,10 +14,6 @@ Future<String?> showWalletUnlockDialog({
     store: store,
     walletAddress: walletAddress,
   );
-  final hasPasswordProtection = await security.hasPasswordProtection(
-    store: store,
-    walletAddress: walletAddress,
-  );
   if (!context.mounted) return null;
 
   return showCupertinoModalPopup<String>(
@@ -39,7 +35,6 @@ Future<String?> showWalletUnlockDialog({
             store: store,
             walletAddress: walletAddress,
             hasDeviceProtection: hasDeviceProtection,
-            hasPasswordProtection: hasPasswordProtection,
             passwordFieldKey: passwordFieldKey,
           ),
         ),
@@ -54,7 +49,6 @@ class _WalletUnlockDialog extends StatefulWidget {
     required this.store,
     required this.walletAddress,
     required this.hasDeviceProtection,
-    required this.hasPasswordProtection,
     this.passwordFieldKey,
   });
 
@@ -62,7 +56,6 @@ class _WalletUnlockDialog extends StatefulWidget {
   final WalletSecretStore store;
   final String walletAddress;
   final bool hasDeviceProtection;
-  final bool hasPasswordProtection;
   final Key? passwordFieldKey;
 
   @override
@@ -189,8 +182,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                         ),
                       ),
                     ),
-                    if (widget.hasDeviceProtection &&
-                        widget.hasPasswordProtection)
+                    if (widget.hasDeviceProtection)
                       CupertinoButton(
                         minimumSize: const Size(44, 44),
                         padding: const EdgeInsets.symmetric(horizontal: 8),

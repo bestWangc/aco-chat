@@ -150,7 +150,6 @@ class WalletSecurity {
     required String password,
   }) async {
     _validateWalletAddress(walletAddress);
-    _validatePassword(password);
     final key = _vaultKey(walletAddress);
     await _saveMnemonicRecord(
       store: store,
@@ -173,13 +172,26 @@ class WalletSecurity {
       List<int>.generate(32, (_) => _random.nextInt(256)),
     );
     _validateWalletAddress(walletAddress);
-    await _saveMnemonicRecord(
-      store: store,
-      key: _deviceVaultKey(walletAddress),
+    final encodedRecord = await _encryptMnemonicRecord(
       mnemonic: mnemonic,
       password: devicePassword,
     );
-    await store.write(_devicePasswordKey(walletAddress), devicePassword);
+    await store.write(
+      _deviceVaultKey(walletAddress),
+      jsonEncode({
+        'format': 'aco-device-vault-v1',
+        'password': devicePassword,
+        'record': encodedRecord,
+      }),
+    );
+    final savedMnemonic = await unlockMnemonicWithDeviceProtection(
+      store: store,
+      walletAddress: walletAddress,
+    );
+    if (savedMnemonic != normalizeMnemonic(mnemonic)) {
+      throw const WalletSecurityException('设备保护数据写入校验失败');
+    }
+    await store.delete(_devicePasswordKey(walletAddress));
   }
 
   Future<String> unlockMnemonic({
@@ -200,8 +212,10 @@ class WalletSecurity {
     required WalletSecretStore store,
     required String key,
     required String password,
+    String? encodedRecord,
+    String passwordError = '钱包密码错误或安全数据已损坏',
   }) async {
-    final encoded = await store.read(key);
+    final encoded = encodedRecord ?? await store.read(key);
     if (encoded == null) {
       if (kDebugMode) debugPrint('[WalletVault] read key=$key record=missing');
       throw const WalletSecurityException('未找到该钱包的本地安全数据');
@@ -220,7 +234,7 @@ class WalletSecurity {
       );
       return utf8.decode(clearText);
     } on SecretBoxAuthenticationError {
-      throw const WalletSecurityException('钱包密码错误或安全数据已损坏');
+      throw WalletSecurityException(passwordError);
     } on FormatException {
       throw const WalletSecurityException('钱包安全数据已损坏');
     } on TypeError {
@@ -232,15 +246,38 @@ class WalletSecurity {
     required WalletSecretStore store,
     required String walletAddress,
   }) async {
+    _validateWalletAddress(walletAddress);
+    final deviceVaultKey = _deviceVaultKey(walletAddress);
+    final deviceVault = await store.read(deviceVaultKey);
+    if (deviceVault != null) {
+      try {
+        final json = jsonDecode(deviceVault);
+        if (json is Map<String, dynamic> &&
+            json['format'] == 'aco-device-vault-v1') {
+          final password = json['password'];
+          final record = json['record'];
+          if (password is! String || record is! String) {
+            throw const WalletSecurityException('设备加密数据已损坏');
+          }
+          return _unlockMnemonicFromKey(
+            store: store,
+            key: deviceVaultKey,
+            password: password,
+            encodedRecord: record,
+            passwordError: '设备加密数据与密钥不匹配或已损坏',
+          );
+        }
+      } on FormatException {
+        throw const WalletSecurityException('设备加密数据已损坏');
+      }
+    }
     final password = await store.read(_devicePasswordKey(walletAddress));
     if (password == null) throw const WalletSecurityException('未配置设备保护');
-    _validateWalletAddress(walletAddress);
     return _unlockMnemonicFromKey(
       store: store,
-      key: await store.read(_deviceVaultKey(walletAddress)) == null
-          ? _vaultKey(walletAddress)
-          : _deviceVaultKey(walletAddress),
+      key: deviceVault == null ? _vaultKey(walletAddress) : deviceVaultKey,
       password: password,
+      passwordError: '设备加密数据与密钥不匹配或已损坏',
     );
   }
 
@@ -248,9 +285,10 @@ class WalletSecurity {
     required WalletSecretStore store,
     required String walletAddress,
   }) async {
+    final encoded = await store.read(_deviceVaultKey(walletAddress));
+    if (_isCombinedDeviceVault(encoded)) return true;
     final devicePassword = await store.read(_devicePasswordKey(walletAddress));
     if (devicePassword == null) return false;
-    final encoded = await store.read(_deviceVaultKey(walletAddress));
     if (encoded != null) return true;
     // Older device-protected wallets stored their device-encrypted record in
     // the password vault slot.
@@ -288,6 +326,26 @@ class WalletSecurity {
     required String mnemonic,
     required String password,
   }) async {
+    final encoded = await _encryptMnemonicRecord(
+      mnemonic: mnemonic,
+      password: password,
+    );
+    await store.write(key, encoded);
+    await _debugRecordFingerprint('write', key, encoded);
+    final savedMnemonic = await _unlockMnemonicFromKey(
+      store: store,
+      key: key,
+      password: password,
+    );
+    if (savedMnemonic != normalizeMnemonic(mnemonic)) {
+      throw const WalletSecurityException('钱包密码数据写入校验失败');
+    }
+  }
+
+  Future<String> _encryptMnemonicRecord({
+    required String mnemonic,
+    required String password,
+  }) async {
     _validatePassword(password);
     final normalized = normalizeMnemonic(mnemonic);
     if (!isValidMnemonic(normalized)) {
@@ -301,9 +359,17 @@ class WalletSecurity {
     final record = kIsWeb
         ? await _encryptVault(request)
         : await compute(_encryptVault, request);
-    final encoded = jsonEncode(record.toJson());
-    await store.write(key, encoded);
-    await _debugRecordFingerprint('write', key, encoded);
+    return jsonEncode(record.toJson());
+  }
+
+  bool _isCombinedDeviceVault(String? encoded) {
+    if (encoded == null) return false;
+    try {
+      return (jsonDecode(encoded) as Map<String, dynamic>)['format'] ==
+          'aco-device-vault-v1';
+    } on Object {
+      return false;
+    }
   }
 
   Future<void> _debugRecordFingerprint(
