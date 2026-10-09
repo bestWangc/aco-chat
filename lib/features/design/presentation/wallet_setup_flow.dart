@@ -39,6 +39,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       _createVerificationChoiceIndexes();
   final List<int> _selectedVerificationIndexes = [];
   var _verificationError = false;
+  bool? _existingWalletHasPassword;
 
   @override
   void initState() {
@@ -47,6 +48,18 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       _step = 1;
       SensitiveScreenProtection.setEnabled(true);
     }
+    final existingWallet = widget.passwordWalletIdentity;
+    if (existingWallet != null) {
+      _loadExistingWalletProtection(existingWallet);
+    }
+  }
+
+  Future<void> _loadExistingWalletProtection(WalletIdentity identity) async {
+    final hasPassword = await _walletSecurity.hasPasswordProtection(
+      store: _secretStore,
+      walletAddress: identity.address,
+    );
+    if (mounted) setState(() => _existingWalletHasPassword = hasPassword);
   }
 
   @override
@@ -111,7 +124,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                       if (_isSecurityStep)
                         _securityFields(
                           palette,
-                          verifyExisting: widget.passwordWalletIdentity != null,
+                          verifyExisting: _requiresExistingWalletPassword,
                         ),
                     ],
                   ),
@@ -385,6 +398,10 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   bool get _needsSecurityStep =>
       widget.requireSecuritySetup || widget.passwordWalletIdentity != null;
 
+  bool get _requiresExistingWalletPassword =>
+      widget.passwordWalletIdentity != null &&
+      _existingWalletHasPassword != false;
+
   bool get _isSecurityStep => _needsSecurityStep && _step == _securityStep;
 
   int get _securityStep =>
@@ -404,7 +421,11 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   bool get _canContinue {
     if (_isSecurityStep) {
-      final valid = widget.passwordWalletIdentity != null
+      if (widget.passwordWalletIdentity != null &&
+          _existingWalletHasPassword == null) {
+        return false;
+      }
+      final valid = _requiresExistingWalletPassword
           ? _hasPassword
           : _passwordsMatch;
       return valid && !_isCompletingWalletSetup;
@@ -459,6 +480,10 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   String get _title {
     if (_isSecurityStep) {
+      if (widget.passwordWalletIdentity != null &&
+          _existingWalletHasPassword == false) {
+        return '设置统一钱包密码';
+      }
       return widget.passwordWalletIdentity != null ? '验证钱包密码' : '保护你的钱包';
     }
     if (!_isCreating) return '导入已有钱包';
@@ -467,8 +492,12 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
   String get _description {
     if (_isSecurityStep) {
+      if (widget.passwordWalletIdentity != null &&
+          _existingWalletHasPassword == false) {
+        return '当前钱包仅启用设备保护。通过设备验证后，可为当前钱包和新钱包设置相同密码。';
+      }
       return widget.passwordWalletIdentity != null
-          ? '输入当前钱包密码以确认身份，新钱包将使用相同密码保护。'
+          ? '输入当前已选钱包的密码以确认身份，新钱包将使用相同密码保护。'
           : '设置钱包密码，并使用设备验证以完成操作。';
     }
     if (!_isCreating) return '输入 12 或 24 个助记词，单词之间用空格分隔。';
@@ -527,11 +556,45 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
 
       final existingWallet = widget.passwordWalletIdentity;
       if (existingWallet != null) {
-        await _walletSecurity.unlockMnemonic(
-          store: _secretStore,
-          walletAddress: existingWallet.address,
-          password: _passwordController.text,
-        );
+        if (_requiresExistingWalletPassword) {
+          await _walletSecurity.unlockMnemonic(
+            store: _secretStore,
+            walletAddress: existingWallet.address,
+            password: _passwordController.text,
+          );
+        } else {
+          final hadDeviceProtection = await _walletSecurity.hasDeviceProtection(
+            store: _secretStore,
+            walletAddress: existingWallet.address,
+          );
+          if (!mounted) return;
+          if (!hadDeviceProtection) {
+            throw const WalletSecurityException('当前钱包没有可用的密码或设备保护，无法验证身份。');
+          }
+          final existingMnemonic = await showWalletUnlockDialog(
+            context: context,
+            store: _secretStore,
+            walletAddress: existingWallet.address,
+          );
+          if (!mounted) return;
+          if (existingMnemonic == null) {
+            _showCompletionError('设备验证已取消，请重试。');
+            return;
+          }
+          await _walletSecurity.saveMnemonic(
+            store: _secretStore,
+            walletAddress: existingWallet.address,
+            mnemonic: existingMnemonic,
+            password: _passwordController.text,
+          );
+          if (hadDeviceProtection) {
+            await _walletSecurity.saveMnemonicWithDeviceProtection(
+              store: _secretStore,
+              walletAddress: existingWallet.address,
+              mnemonic: existingMnemonic,
+            );
+          }
+        }
       }
 
       await SensitiveScreenProtection.setEnabled(false);
