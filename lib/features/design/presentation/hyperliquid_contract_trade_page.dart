@@ -43,6 +43,9 @@ class _HyperliquidContractTradePageState
   HyperliquidAccountState? _account;
   List<HyperliquidOpenOrder> _openOrders = const [];
   List<HyperliquidUserFill> _userFills = const [];
+  Map<String, String> _spotTokenSymbols = const {};
+  var _spotTokenMetadataLoading = false;
+  var _spotTokenMetadataLoaded = false;
   StreamSubscription<HyperliquidRealtimeUpdate>? _realtimeSubscription;
   Timer? _fallbackTimer;
   HyperliquidAgent? _agent;
@@ -190,6 +193,7 @@ class _HyperliquidContractTradePageState
         _client.loadUserFills(address),
       ]);
       if (!mounted) return;
+      final userFills = results[3] as List<HyperliquidUserFill>;
       setState(() {
         _account = results[0] as HyperliquidAccountState;
         _openOrders = results[1] as List<HyperliquidOpenOrder>;
@@ -197,12 +201,29 @@ class _HyperliquidContractTradePageState
         _spotUsdcAvailable = spotBalances
             .where((balance) => balance.coin.toUpperCase() == 'USDC')
             .fold<double>(0, (total, balance) => total + balance.available);
-        _userFills = results[3] as List<HyperliquidUserFill>;
+        _userFills = userFills;
       });
+      if (userFills.any((fill) => fill.coin.startsWith('@'))) {
+        unawaited(_loadSpotTokenSymbols());
+      }
     } catch (_) {
       // Empty account data is a valid degraded state for the trading page.
     } finally {
       if (mounted && showLoading) setState(() => _loadingAccount = false);
+    }
+  }
+
+  Future<void> _loadSpotTokenSymbols() async {
+    if (_spotTokenMetadataLoaded || _spotTokenMetadataLoading) return;
+    _spotTokenMetadataLoading = true;
+    try {
+      final symbols = await _client.loadSpotTokenSymbols();
+      if (mounted) setState(() => _spotTokenSymbols = symbols);
+    } catch (_) {
+      // Keep the fill list usable when spot metadata is unavailable.
+    } finally {
+      _spotTokenMetadataLoaded = true;
+      _spotTokenMetadataLoading = false;
     }
   }
 
@@ -930,7 +951,11 @@ class _HyperliquidContractTradePageState
     return Column(
       children: [
         for (final fill in _userFills)
-          _UserFillRow(palette: _palette, fill: fill),
+          _UserFillRow(
+            palette: _palette,
+            fill: fill,
+            spotTokenSymbols: _spotTokenSymbols,
+          ),
       ],
     );
   }
@@ -1871,6 +1896,8 @@ class _HyperliquidUsdcDepositSheet extends StatefulWidget {
 
 class _HyperliquidUsdcDepositSheetState
     extends State<_HyperliquidUsdcDepositSheet> {
+  static const _withdrawalFee = 0.2;
+
   static const _assets = [
     _ContractTransferAsset(chain: 'BNB Chain', symbol: 'BNB'),
     _ContractTransferAsset(chain: 'BNB Chain', symbol: 'USDC'),
@@ -1891,8 +1918,11 @@ class _HyperliquidUsdcDepositSheetState
   String? _progressLabel;
   WalletBalance? _walletBalance;
   HyperliquidSpotBalance? _spotBalance;
+  double? _hyperliquidAvailable;
   bool _walletBalanceLoading = false;
+  bool _hyperliquidBalanceLoading = false;
   int _walletBalanceRequestId = 0;
+  int _hyperliquidBalanceRequestId = 0;
   final _hyperliquidClient = HyperliquidApiClient();
   final _exchange = HyperliquidExchangeClient();
 
@@ -1900,8 +1930,11 @@ class _HyperliquidUsdcDepositSheetState
 
   double get _available {
     if (_cashToContract) return _walletBalanceAmount;
-    return widget.contractAvailable;
+    return _hyperliquidAvailable ?? widget.contractAvailable;
   }
+
+  bool get _availableLoading =>
+      _cashToContract ? _walletBalanceLoading : _hyperliquidBalanceLoading;
 
   double get _walletBalanceAmount {
     if (AppConfig.hyperliquidTestnet) {
@@ -1916,13 +1949,14 @@ class _HyperliquidUsdcDepositSheetState
   }
 
   double get _parsedAmount => double.tryParse(_amount) ?? 0;
-  bool get _canConfirm => !_submitting && _parsedAmount > 0;
+  bool get _canConfirm =>
+      !_submitting && !_availableLoading && _parsedAmount > 0;
 
   @override
   void initState() {
     super.initState();
     _cashToContract = !widget.initialWithdraw;
-    unawaited(_loadWalletBalance());
+    _reloadAvailableBalance();
   }
 
   @override
@@ -2007,6 +2041,37 @@ class _HyperliquidUsdcDepositSheetState
     } finally {
       portfolio.close();
     }
+  }
+
+  void _reloadAvailableBalance() {
+    if (_cashToContract) {
+      unawaited(_loadWalletBalance());
+    } else {
+      unawaited(_loadHyperliquidBalance());
+    }
+  }
+
+  Future<void> _loadHyperliquidBalance() async {
+    final requestId = ++_hyperliquidBalanceRequestId;
+    final identity = widget.walletIdentity;
+    if (!mounted) return;
+    setState(() => _hyperliquidBalanceLoading = identity != null);
+    if (identity == null) return;
+
+    var available = widget.contractAvailable;
+    try {
+      final account = await _hyperliquidClient.loadAccountState(
+        identity.address,
+      );
+      available = account.withdrawable;
+    } catch (_) {
+      // Keep the supplied balance as a fallback when the request fails.
+    }
+    if (!mounted || requestId != _hyperliquidBalanceRequestId) return;
+    setState(() {
+      _hyperliquidAvailable = available;
+      _hyperliquidBalanceLoading = false;
+    });
   }
 
   void _append(String value) {
@@ -2196,7 +2261,7 @@ class _HyperliquidUsdcDepositSheetState
       await _showNotice('当前页面仍绑定旧钱包地址，请返回后重新进入合约交易页面');
       return;
     }
-    if (!_cashToContract && _parsedAmount > widget.contractAvailable) {
+    if (!_cashToContract && _parsedAmount > _available) {
       await _showNotice('合约账户 USDC 余额不足');
       return;
     }
@@ -2546,11 +2611,10 @@ class _HyperliquidUsdcDepositSheetState
       : _asset.symbol;
 
   Future<void> _submitHyperliquidWithdrawal(WalletIdentity identity) async {
-    const withdrawalFee = 1.0;
-    if (_parsedAmount <= withdrawalFee) {
-      throw const HyperliquidExchangeException('提现金额需大于 1 USDC 手续费');
+    if (_parsedAmount <= _withdrawalFee) {
+      throw const HyperliquidExchangeException('提现金额需大于 0.2 USDC 手续费');
     }
-    if (_parsedAmount > widget.contractAvailable) {
+    if (_parsedAmount > _available) {
       throw const HyperliquidExchangeException('合约账户 USDC 余额不足');
     }
     if (!await _confirmHyperliquidWithdrawal()) return;
@@ -2572,7 +2636,7 @@ class _HyperliquidUsdcDepositSheetState
     if (!mounted) return;
     await _showNotice(
       '提现请求已提交，预计约 5 分钟到账 Arbitrum。\n'
-      '提现手续费：1 USDC\n'
+      '提现手续费：0.2 USDC\n'
       '收款地址：${identity.address}',
     );
     if (mounted) Navigator.pop(context);
@@ -2583,9 +2647,9 @@ class _HyperliquidUsdcDepositSheetState
     title: '确认提现',
     message:
         '提现：$_transferAmount USDC\n'
-        '预计到账：${_trimTrailingZeros((_parsedAmount - 1).toStringAsFixed(6))} USDC\n'
+        '预计到账：${_trimTrailingZeros((_parsedAmount - _withdrawalFee).toStringAsFixed(6))} USDC\n'
         '到账网络：Arbitrum\n'
-        '提现手续费：1 USDC',
+        '提现手续费：0.2 USDC',
     confirmLabel: '确认提现',
     contentPadding: const EdgeInsets.only(top: 10),
   );
@@ -2742,14 +2806,14 @@ class _HyperliquidUsdcDepositSheetState
                 Row(
                   children: [
                     Text(
-                      '可用 ${_walletBalanceLoading ? '--' : _formatMoney(_available)} $_displayAssetSymbol',
+                      '可用 ${_availableLoading ? '--' : _formatMoney(_available)} $_displayAssetSymbol',
                       style: TextStyle(color: palette.mutedText, fontSize: 15),
                     ),
                     const SizedBox(width: 9),
                     CupertinoButton(
                       padding: EdgeInsets.zero,
                       minimumSize: const Size(28, 28),
-                      onPressed: () => unawaited(_loadWalletBalance()),
+                      onPressed: _reloadAvailableBalance,
                       child: Icon(
                         CupertinoIcons.refresh,
                         size: 15,
@@ -2758,6 +2822,22 @@ class _HyperliquidUsdcDepositSheetState
                     ),
                   ],
                 ),
+                if (!_cashToContract && !AppConfig.hyperliquidTestnet)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'USDC 将通过 Arbitrum 网络发送到您的地址。'
+                        '提现固定扣除 0.2 USDC 手续费，通常在 5 分钟内到账。',
+                        style: TextStyle(
+                          color: palette.mutedText,
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -3781,13 +3861,24 @@ class _OpenOrderRow extends StatelessWidget {
 }
 
 class _UserFillRow extends StatelessWidget {
-  const _UserFillRow({required this.palette, required this.fill});
+  const _UserFillRow({
+    required this.palette,
+    required this.fill,
+    required this.spotTokenSymbols,
+  });
 
   final AcoPalette palette;
   final HyperliquidUserFill fill;
+  final Map<String, String> spotTokenSymbols;
 
   @override
   Widget build(BuildContext context) {
+    final coinLabel = spotTokenSymbols[fill.coin] ?? fill.coin;
+    final directionLabel = fill.isSpotDustConversion
+        ? '自动清理小额现货'
+        : fill.direction.isEmpty
+        ? '成交'
+        : fill.direction;
     final sideColor = fill.isBuy
         ? const Color(0xFF25C26E)
         : const Color(0xFFF14D51);
@@ -3824,7 +3915,7 @@ class _UserFillRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Text(
-                fill.coin,
+                coinLabel,
                 style: TextStyle(
                   color: palette.primaryText,
                   fontSize: 16,
@@ -3834,7 +3925,7 @@ class _UserFillRow extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  fill.direction.isEmpty ? '成交' : fill.direction,
+                  directionLabel,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(color: palette.mutedText, fontSize: 11),
                 ),

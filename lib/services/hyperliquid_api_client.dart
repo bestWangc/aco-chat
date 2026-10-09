@@ -135,6 +135,37 @@ class HyperliquidApiClient {
     ];
   }
 
+  Future<Map<String, String>> loadSpotTokenSymbols() async {
+    final payload = await _post({'type': 'spotMeta'});
+    if (payload is! Map ||
+        payload['tokens'] is! List ||
+        payload['universe'] is! List) {
+      throw const FormatException('Hyperliquid 返回的现货市场数据无效');
+    }
+
+    final tokens = payload['tokens'] as List;
+    final universe = payload['universe'] as List;
+    final symbols = <String, String>{};
+    for (var index = 0; index < universe.length; index++) {
+      final market = universe[index];
+      if (market is! Map || market['tokens'] is! List) continue;
+      final tokenIndices = market['tokens'] as List;
+      if (tokenIndices.isEmpty) continue;
+      final tokenIndex = tokenIndices.first;
+      if (tokenIndex is! num || tokenIndex < 0 || tokenIndex >= tokens.length) {
+        continue;
+      }
+      final token = tokens[tokenIndex.toInt()];
+      if (token is! Map) continue;
+      final symbol = '${token['name'] ?? ''}'.trim();
+      if (symbol.isEmpty) continue;
+
+      final marketName = '${market['name'] ?? ''}'.trim();
+      symbols[marketName.isEmpty ? '@$index' : marketName] = symbol;
+    }
+    return symbols;
+  }
+
   Future<List<HyperliquidSpotBalance>> loadSpotBalances(String address) async {
     final payload = await _post({
       'type': 'spotClearinghouseState',
@@ -738,6 +769,9 @@ class HyperliquidUserFill {
   final double? closedPnl;
   final String direction;
   final int tradeId;
+
+  bool get isSpotDustConversion =>
+      direction.toLowerCase() == 'spot dust conversion';
 
   factory HyperliquidUserFill.fromJson(Map raw) => HyperliquidUserFill(
     coin: '${raw['coin'] ?? ''}',

@@ -422,49 +422,61 @@ class _HyperliquidMarketRow extends StatelessWidget {
           children: [
             Expanded(
               flex: 12,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  Text.rich(
-                    TextSpan(
+                  _HyperliquidTokenIcon(
+                    symbol: market.name,
+                    palette: palette,
+                    size: 44,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        TextSpan(
-                          text: market.name,
-                          style: TextStyle(color: palette.primaryText),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: market.name,
+                                style: TextStyle(color: palette.primaryText),
+                              ),
+                              TextSpan(
+                                text: '-USDC',
+                                style: TextStyle(color: palette.mutedText),
+                              ),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
-                        TextSpan(
-                          text: '-USDC',
-                          style: TextStyle(color: palette.mutedText),
-                        ),
+                        const SizedBox(height: 5),
+                        if (market.maxLeverage > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.surfaceRaised,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '${market.maxLeverage}x',
+                              style: TextStyle(
+                                color: palette.mutedText,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w500,
-                    ),
                   ),
-                  const SizedBox(height: 5),
-                  if (market.maxLeverage > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: palette.surfaceRaised,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        '${market.maxLeverage}x',
-                        style: TextStyle(
-                          color: palette.mutedText,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -582,7 +594,7 @@ String _formatHyperliquidChange(double? value) => value == null
     ? '--'
     : '${value >= 0 ? '+' : ''}${value.toStringAsFixed(2)}%';
 
-class _HyperliquidTokenIcon extends StatelessWidget {
+class _HyperliquidTokenIcon extends StatefulWidget {
   const _HyperliquidTokenIcon({
     required this.symbol,
     required this.palette,
@@ -594,45 +606,138 @@ class _HyperliquidTokenIcon extends StatelessWidget {
   final double size;
 
   @override
+  State<_HyperliquidTokenIcon> createState() => _HyperliquidTokenIconState();
+}
+
+class _HyperliquidTokenIconState extends State<_HyperliquidTokenIcon> {
+  static final _svgRequests = <String, Future<String>>{};
+  late Future<String> _svg;
+
+  @override
+  void initState() {
+    super.initState();
+    _svg = _loadSvg(widget.symbol);
+  }
+
+  @override
+  void didUpdateWidget(covariant _HyperliquidTokenIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.symbol != widget.symbol) _svg = _loadSvg(widget.symbol);
+  }
+
+  Future<String> _loadSvg(String symbol) {
+    final originalUrl =
+        'https://app.hyperliquid.xyz/coins/${Uri.encodeComponent(symbol)}.svg';
+    final url =
+        'https://img2.ant.fun/md/${base64Url.encode(utf8.encode(originalUrl))}';
+    final request = _svgRequests.putIfAbsent(url, () async {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200) {
+        throw StateError('Token icon request failed: ${response.statusCode}');
+      }
+      return _inlineSvgClassStyles(response.body);
+    });
+    return request.catchError((Object error) {
+      _svgRequests.remove(url);
+      throw error;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final normalized = symbol.toLowerCase();
-    const localSymbols = {
-      'atom',
-      'avax',
-      'bnb',
-      'btc',
-      'doge',
-      'dot',
-      'eth',
-      'ltc',
-      'matic',
-      'sol',
-      'trx',
-      'xrp',
-    };
     final fallback = _HyperliquidTokenFallback(
-      symbol: symbol,
-      palette: palette,
-      size: size,
+      symbol: widget.symbol,
+      palette: widget.palette,
+      size: widget.size,
     );
-    if (localSymbols.contains(normalized)) {
-      return SizedBox(
-        width: size,
-        height: size,
-        child: SvgPicture.asset('assets/icons/crypto/tokens/$normalized.svg'),
-      );
-    }
     return SizedBox(
-      width: size,
-      height: size,
-      child: SvgPicture.network(
-        'https://app.hyperliquid.xyz/coins/${Uri.encodeComponent(symbol)}.svg',
-        fit: BoxFit.contain,
-        placeholderBuilder: (_) => fallback,
-        errorBuilder: (_, _, _) => fallback,
+      width: widget.size,
+      height: widget.size,
+      child: FutureBuilder<String>(
+        future: _svg,
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return fallback;
+          return SvgPicture.string(
+            snapshot.data!,
+            fit: BoxFit.contain,
+            colorFilter: _usesDefaultBlackPaint(snapshot.data!)
+                ? ColorFilter.mode(widget.palette.primaryText, BlendMode.srcIn)
+                : null,
+            placeholderBuilder: (_) => fallback,
+            errorBuilder: (_, _, _) => fallback,
+          );
+        },
       ),
     );
   }
+}
+
+bool _usesDefaultBlackPaint(String svg) {
+  final paints = RegExp(
+    r'''(?:fill|stroke)\s*(?:=|:)\s*["']?([^;"'\s>]+)''',
+    caseSensitive: false,
+  ).allMatches(svg).map((match) => match[1]!.toLowerCase());
+  const blackPaints = {
+    'black',
+    'currentcolor',
+    '#000',
+    '#000000',
+    '#000000ff',
+    'rgb(0,0,0)',
+    'rgba(0,0,0,1)',
+    'none',
+  };
+  return paints.every(blackPaints.contains);
+}
+
+String _inlineSvgClassStyles(String svg) {
+  final classStyles = <String, Map<String, String>>{};
+  final styleTag = RegExp(
+    r'<style\b[^>]*>([\s\S]*?)</style>',
+    caseSensitive: false,
+  );
+  for (final match in styleTag.allMatches(svg)) {
+    for (final rule in match[1]!.split('}')) {
+      final brace = rule.indexOf('{');
+      if (brace < 0) continue;
+      final declarations = <String, String>{};
+      for (final declaration in rule.substring(brace + 1).split(';')) {
+        final colon = declaration.indexOf(':');
+        if (colon > 0) {
+          declarations[declaration.substring(0, colon).trim()] = declaration
+              .substring(colon + 1)
+              .trim();
+        }
+      }
+      for (final selector in rule.substring(0, brace).split(',')) {
+        final className = RegExp(r'^\.([\w-]+)$').firstMatch(selector.trim());
+        if (className != null) {
+          classStyles.putIfAbsent(className[1]!, () => {}).addAll(declarations);
+        }
+      }
+    }
+  }
+
+  final withoutStyleTags = svg
+      .replaceAll(styleTag, '')
+      .replaceAll(RegExp(r'<style\b[^>]*/>', caseSensitive: false), '');
+  return withoutStyleTags.replaceAllMapped(
+    RegExp(r'<([\w:-]+)([^<>]*\bclass="([^"]+)"[^<>]*)>'),
+    (match) {
+      final declarations = <String, String>{};
+      for (final name in match[3]!.split(RegExp(r'\s+'))) {
+        declarations.addAll(classStyles[name] ?? const {});
+      }
+      if (declarations.isEmpty) return match[0]!;
+      final attributes = match[2]!
+          .replaceFirst(RegExp(r'\bclass="[^"]+"'), '')
+          .trimRight();
+      final presentationAttributes = declarations.entries
+          .map((entry) => '${entry.key}="${entry.value}"')
+          .join(' ');
+      return '<${match[1]}$attributes $presentationAttributes>';
+    },
+  );
 }
 
 class _HyperliquidTokenFallback extends StatelessWidget {

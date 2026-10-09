@@ -35,7 +35,6 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   cached_network_image: ^3.4.1
-  emoji_picker_flutter: ^4.3.0
   flutter_svg: ^2.3.0
   image_picker: ^1.1.2
   file_picker: ^12.3.0
