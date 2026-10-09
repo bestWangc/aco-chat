@@ -284,6 +284,128 @@ void main() {
       );
     });
 
+    test(
+      'migrates legacy device protection without losing either unlock',
+      () async {
+        final security = WalletSecurity();
+        final store = InMemoryWalletSecretStore();
+        const phrase =
+            'abandon abandon abandon abandon abandon abandon abandon abandon '
+            'abandon abandon abandon about';
+
+        await security.saveMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: address,
+          mnemonic: phrase,
+        );
+        final legacyDeviceVault =
+            jsonDecode(
+                  (await store.read(
+                    'wallet.device-vault.${address.toLowerCase()}',
+                  ))!,
+                )
+                as Map<String, dynamic>;
+        await store.write(
+          'wallet.vault.${address.toLowerCase()}',
+          legacyDeviceVault['record'] as String,
+        );
+        await store.write(
+          'wallet.device-password.${address.toLowerCase()}',
+          legacyDeviceVault['password'] as String,
+        );
+        await store.delete('wallet.device-vault.${address.toLowerCase()}');
+
+        await security.saveMnemonic(
+          store: store,
+          walletAddress: address,
+          mnemonic: phrase,
+          password: password,
+        );
+
+        expect(
+          await security.unlockMnemonic(
+            store: store,
+            walletAddress: address,
+            password: password,
+          ),
+          phrase,
+        );
+        expect(
+          await security.unlockMnemonicWithDeviceProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          phrase,
+        );
+        expect(
+          await security.hasPasswordProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'restores legacy device unlock if password migration write fails',
+      () async {
+        final security = WalletSecurity();
+        final store = _FailVaultWriteStore(
+          'wallet.vault.${address.toLowerCase()}',
+        );
+        const phrase =
+            'abandon abandon abandon abandon abandon abandon abandon abandon '
+            'abandon abandon abandon about';
+        await security.saveMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: address,
+          mnemonic: phrase,
+        );
+        final deviceRecord =
+            jsonDecode(
+                  (await store.read(
+                    'wallet.device-vault.${address.toLowerCase()}',
+                  ))!,
+                )
+                as Map<String, dynamic>;
+        await store.write(
+          'wallet.vault.${address.toLowerCase()}',
+          deviceRecord['record'] as String,
+        );
+        await store.write(
+          'wallet.device-password.${address.toLowerCase()}',
+          deviceRecord['password'] as String,
+        );
+        await store.delete('wallet.device-vault.${address.toLowerCase()}');
+        store.failNextVaultWrite = true;
+
+        await expectLater(
+          security.saveMnemonic(
+            store: store,
+            walletAddress: address,
+            mnemonic: phrase,
+            password: password,
+          ),
+          throwsStateError,
+        );
+        expect(
+          await security.unlockMnemonicWithDeviceProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          phrase,
+        );
+        expect(
+          await security.hasPasswordProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          isFalse,
+        );
+      },
+    );
+
     test('rejects invalid phrases and short passwords', () async {
       final security = WalletSecurity();
       final store = InMemoryWalletSecretStore();
@@ -310,4 +432,20 @@ void main() {
       );
     });
   });
+}
+
+class _FailVaultWriteStore extends InMemoryWalletSecretStore {
+  _FailVaultWriteStore(this.failedKey);
+
+  final String failedKey;
+  bool failNextVaultWrite = false;
+
+  @override
+  Future<void> write(String key, String value) async {
+    await super.write(key, value);
+    if (key == failedKey && failNextVaultWrite) {
+      failNextVaultWrite = false;
+      throw StateError('simulated secure-store write failure');
+    }
+  }
 }

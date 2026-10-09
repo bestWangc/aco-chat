@@ -563,12 +563,12 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             password: _passwordController.text,
           );
         } else {
-          final hadDeviceProtection = await _walletSecurity.hasDeviceProtection(
+          final hasDeviceProtection = await _walletSecurity.hasDeviceProtection(
             store: _secretStore,
             walletAddress: existingWallet.address,
           );
           if (!mounted) return;
-          if (!hadDeviceProtection) {
+          if (!hasDeviceProtection) {
             throw const WalletSecurityException('当前钱包没有可用的密码或设备保护，无法验证身份。');
           }
           final existingMnemonic = await showWalletUnlockDialog(
@@ -587,13 +587,6 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             mnemonic: existingMnemonic,
             password: _passwordController.text,
           );
-          if (hadDeviceProtection) {
-            await _walletSecurity.saveMnemonicWithDeviceProtection(
-              store: _secretStore,
-              walletAddress: existingWallet.address,
-              mnemonic: existingMnemonic,
-            );
-          }
         }
       }
 

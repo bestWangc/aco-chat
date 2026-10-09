@@ -150,15 +150,41 @@ class WalletSecurity {
     required String password,
   }) async {
     _validateWalletAddress(walletAddress);
-    final key = _vaultKey(walletAddress);
-    await _saveMnemonicRecord(
-      store: store,
-      key: key,
-      mnemonic: mnemonic,
-      password: password,
+    final legacyDevicePassword = await store.read(
+      _devicePasswordKey(walletAddress),
     );
-    await store.delete(_deviceVaultKey(walletAddress));
-    await store.delete(_devicePasswordKey(walletAddress));
+    final deviceVaultKey = _deviceVaultKey(walletAddress);
+    final previousDeviceVault = await store.read(deviceVaultKey);
+    final hadSeparateDeviceVault = previousDeviceVault != null;
+    if (legacyDevicePassword != null && !hadSeparateDeviceVault) {
+      // Preserve the legacy biometric unlock before replacing its shared vault.
+      await saveMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: walletAddress,
+        mnemonic: mnemonic,
+      );
+    }
+    final key = _vaultKey(walletAddress);
+    try {
+      await _saveMnemonicRecord(
+        store: store,
+        key: key,
+        mnemonic: mnemonic,
+        password: password,
+      );
+    } catch (_) {
+      if (legacyDevicePassword != null && !hadSeparateDeviceVault) {
+        if (previousDeviceVault == null) {
+          await store.delete(deviceVaultKey);
+        } else {
+          await store.write(deviceVaultKey, previousDeviceVault);
+        }
+      }
+      rethrow;
+    }
+    if (legacyDevicePassword != null) {
+      await store.delete(_devicePasswordKey(walletAddress));
+    }
   }
 
   /// Adds a device-protected copy without replacing the password-protected
@@ -176,22 +202,32 @@ class WalletSecurity {
       mnemonic: mnemonic,
       password: devicePassword,
     );
-    await store.write(
-      _deviceVaultKey(walletAddress),
-      jsonEncode({
-        'format': 'aco-device-vault-v1',
-        'password': devicePassword,
-        'record': encodedRecord,
-      }),
-    );
-    final savedMnemonic = await unlockMnemonicWithDeviceProtection(
-      store: store,
-      walletAddress: walletAddress,
-    );
-    if (savedMnemonic != normalizeMnemonic(mnemonic)) {
-      throw const WalletSecurityException('设备保护数据写入校验失败');
+    final key = _deviceVaultKey(walletAddress);
+    final previousRecord = await store.read(key);
+    try {
+      await store.write(
+        key,
+        jsonEncode({
+          'format': 'aco-device-vault-v1',
+          'password': devicePassword,
+          'record': encodedRecord,
+        }),
+      );
+      final savedMnemonic = await unlockMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: walletAddress,
+      );
+      if (savedMnemonic != normalizeMnemonic(mnemonic)) {
+        throw const WalletSecurityException('设备保护数据写入校验失败');
+      }
+    } catch (_) {
+      if (previousRecord == null) {
+        await store.delete(key);
+      } else {
+        await store.write(key, previousRecord);
+      }
+      rethrow;
     }
-    await store.delete(_devicePasswordKey(walletAddress));
   }
 
   Future<String> unlockMnemonic({
@@ -303,9 +339,19 @@ class WalletSecurity {
     if (passwordVault == null) return false;
     final devicePassword = await store.read(_devicePasswordKey(walletAddress));
     if (devicePassword == null) return true;
-    // Legacy device-protected wallets stored their random-key vault in the
-    // password slot. A separate device vault means the password vault is real.
-    return await store.read(_deviceVaultKey(walletAddress)) != null;
+    if (await store.read(_deviceVaultKey(walletAddress)) == null) return false;
+    // During legacy migration, both the old shared vault and the new device
+    // vault can exist briefly. Detect the old vault by its device password.
+    try {
+      await _unlockMnemonicFromKey(
+        store: store,
+        key: _vaultKey(walletAddress),
+        password: devicePassword,
+      );
+      return false;
+    } on WalletSecurityException {
+      return true;
+    }
   }
 
   Future<void> deleteMnemonic({
@@ -330,15 +376,25 @@ class WalletSecurity {
       mnemonic: mnemonic,
       password: password,
     );
-    await store.write(key, encoded);
-    await _debugRecordFingerprint('write', key, encoded);
-    final savedMnemonic = await _unlockMnemonicFromKey(
-      store: store,
-      key: key,
-      password: password,
-    );
-    if (savedMnemonic != normalizeMnemonic(mnemonic)) {
-      throw const WalletSecurityException('钱包密码数据写入校验失败');
+    final previousRecord = await store.read(key);
+    try {
+      await store.write(key, encoded);
+      await _debugRecordFingerprint('write', key, encoded);
+      final savedMnemonic = await _unlockMnemonicFromKey(
+        store: store,
+        key: key,
+        password: password,
+      );
+      if (savedMnemonic != normalizeMnemonic(mnemonic)) {
+        throw const WalletSecurityException('钱包密码数据写入校验失败');
+      }
+    } catch (_) {
+      if (previousRecord == null) {
+        await store.delete(key);
+      } else {
+        await store.write(key, previousRecord);
+      }
+      rethrow;
     }
   }
 
