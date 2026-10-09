@@ -914,48 +914,21 @@ class _DexSwapContentState extends State<_DexSwapContent> {
     }
   }
 
-  Future<bool> _confirmSwap(BuildContext context) async {
-    final result = await showCupertinoDialog<bool>(
+  Future<bool> _confirmSwap(BuildContext context) {
+    return showAcoConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('确认兑换'),
-        content: const Text('确认提交本次兑换？'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('确认'),
-          ),
-        ],
-      ),
+      title: '确认兑换',
+      message: '确认提交本次兑换？',
     );
-    return result == true;
   }
 
-  Future<bool> _confirmApproval(BuildContext context, String symbol) async {
-    final result = await showCupertinoDialog<bool>(
+  Future<bool> _confirmApproval(BuildContext context, String symbol) {
+    return showAcoConfirmDialog(
       context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: const Text('需要代币授权'),
-        content: Text('首次使用 $symbol 兑换需要授权 LI.FI 使用代币，是否继续？'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('授权并继续'),
-          ),
-        ],
-      ),
+      title: '需要代币授权',
+      message: '首次使用 $symbol 兑换需要授权 LI.FI 使用代币，是否继续？',
+      confirmLabel: '授权并继续',
     );
-    return result == true;
   }
 
   @override

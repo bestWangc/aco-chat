@@ -19,6 +19,7 @@ import 'package:aco_chat/features/legal/presentation/legal_document_page.dart';
 import 'package:aco_chat/features/live/domain/live_chat_state.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_event.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_client.dart';
+import 'package:aco_chat/shared/widgets/aco_confirm_dialog.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
 import 'package:aco_chat/shared/widgets/aco_refresh_indicator.dart';
 import 'package:aco_chat/shared/widgets/aco_network_image.dart';

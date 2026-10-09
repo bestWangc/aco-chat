@@ -115,25 +115,15 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
     final identity = widget.walletIdentity;
     final address = widget.balance.tokenAddress;
     if (_removingToken || identity == null || address == null) return;
-    final confirmed = await showCupertinoDialog<bool>(
+    final confirmed = await showAcoConfirmDialog(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('移除代币'),
-        content: const Text('仅从资产列表移除，不会影响链上资产。'),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('移除'),
-          ),
-        ],
-      ),
+      title: '移除代币',
+      message: '仅从资产列表移除，不会影响链上资产。',
+      confirmLabel: '移除',
+      isDestructive: true,
+      isDefaultAction: false,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     setState(() => _removingToken = true);
     try {
       await WalletMetadataStore().removeCustomToken(

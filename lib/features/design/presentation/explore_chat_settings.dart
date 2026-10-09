@@ -409,26 +409,14 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
     required String content,
     required String action,
     required bool destructive,
-  }) async =>
-      await showCupertinoDialog<bool>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: Text(title),
-          content: Text(content),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.of(dialogContext).pop(false),
-              child: const Text('取消'),
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: destructive,
-              onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: Text(action),
-            ),
-          ],
-        ),
-      ) ??
-      false;
+  }) => showAcoConfirmDialog(
+    context: context,
+    title: title,
+    message: content,
+    confirmLabel: action,
+    isDestructive: destructive,
+    isDefaultAction: false,
+  );
 
   Future<void> _editGroupName() async {
     final groupID = widget.groupID;

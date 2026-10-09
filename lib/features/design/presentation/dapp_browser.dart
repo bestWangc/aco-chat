@@ -1035,30 +1035,13 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     required String title,
     required String message,
     required String action,
-  }) async {
-    final approved = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: Text(message),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(action),
-          ),
-        ],
-      ),
-    );
-    return approved ?? false;
-  }
+  }) => showAcoConfirmDialog(
+    context: context,
+    title: title,
+    message: message,
+    confirmLabel: action,
+    contentPadding: const EdgeInsets.only(top: 12),
+  );
 }
 
 Uri _normalizeDappUri(String value) {

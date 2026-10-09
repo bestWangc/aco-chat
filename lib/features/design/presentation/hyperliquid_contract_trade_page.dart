@@ -554,30 +554,12 @@ class _HyperliquidContractTradePageState
   Future<bool> _confirmOrder({
     required String title,
     required String message,
-  }) async {
-    final result = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (context) => CupertinoAlertDialog(
-        title: Text(title),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(message),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('确认'),
-          ),
-        ],
-      ),
-    );
-    return result == true;
-  }
+  }) => showAcoConfirmDialog(
+    context: context,
+    title: title,
+    message: message,
+    contentPadding: const EdgeInsets.only(top: 8),
+  );
 
   String _formatSize(double value) =>
       _trimTrailingZeros(value.toStringAsFixed(_market.szDecimals));
@@ -2338,34 +2320,17 @@ class _HyperliquidUsdcDepositSheetState
     if (mounted) setState(() => _progressLabel = message);
   }
 
-  Future<bool> _confirmLifiDeposit(LifiQuote quote) async =>
-      await showCupertinoDialog<bool>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('确认充值'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              '充值：$_transferAmount ${_asset.symbol}（${_asset.chain}）\n'
-              '预计到账：${_formatHyperCoreUsdc(quote.toAmount)} USDC\n'
-              '最少到账：${_formatHyperCoreUsdc(quote.toAmountMin)} USDC\n'
-              '预计路由费用：${quote.fee ?? '以报价为准'}',
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('确认充值'),
-            ),
-          ],
-        ),
-      ) ??
-      false;
+  Future<bool> _confirmLifiDeposit(LifiQuote quote) => showAcoConfirmDialog(
+    context: context,
+    title: '确认充值',
+    message:
+        '充值：$_transferAmount ${_asset.symbol}（${_asset.chain}）\n'
+        '预计到账：${_formatHyperCoreUsdc(quote.toAmount)} USDC\n'
+        '最少到账：${_formatHyperCoreUsdc(quote.toAmountMin)} USDC\n'
+        '预计路由费用：${quote.fee ?? '以报价为准'}',
+    confirmLabel: '确认充值',
+    contentPadding: const EdgeInsets.only(top: 10),
+  );
 
   String _formatHyperCoreUsdc(String amount) {
     final baseUnits = BigInt.tryParse(amount);
@@ -2613,34 +2578,17 @@ class _HyperliquidUsdcDepositSheetState
     if (mounted) Navigator.pop(context);
   }
 
-  Future<bool> _confirmHyperliquidWithdrawal() async =>
-      await showCupertinoDialog<bool>(
-        context: context,
-        builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('确认提现'),
-          content: Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              '提现：$_transferAmount USDC\n'
-              '预计到账：${_trimTrailingZeros((_parsedAmount - 1).toStringAsFixed(6))} USDC\n'
-              '到账网络：Arbitrum\n'
-              '提现手续费：1 USDC',
-            ),
-          ),
-          actions: [
-            CupertinoDialogAction(
-              onPressed: () => Navigator.pop(dialogContext, false),
-              child: const Text('取消'),
-            ),
-            CupertinoDialogAction(
-              isDefaultAction: true,
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('确认提现'),
-            ),
-          ],
-        ),
-      ) ??
-      false;
+  Future<bool> _confirmHyperliquidWithdrawal() => showAcoConfirmDialog(
+    context: context,
+    title: '确认提现',
+    message:
+        '提现：$_transferAmount USDC\n'
+        '预计到账：${_trimTrailingZeros((_parsedAmount - 1).toStringAsFixed(6))} USDC\n'
+        '到账网络：Arbitrum\n'
+        '提现手续费：1 USDC',
+    confirmLabel: '确认提现',
+    contentPadding: const EdgeInsets.only(top: 10),
+  );
 
   @override
   Widget build(BuildContext context) {

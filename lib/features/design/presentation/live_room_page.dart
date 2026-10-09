@@ -980,31 +980,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _confirmEndLive() async {
     _dismissKeyboard();
-    final shouldEnd = await showCupertinoDialog<bool>(
+    final shouldEnd = await showAcoConfirmDialog(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('结束会议'),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('确定要结束这场会议吗？'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            textStyle: TextStyle(color: widget.palette.accent),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('结束会议'),
-          ),
-        ],
-      ),
+      title: '结束会议',
+      message: '确定要结束这场会议吗？',
+      confirmLabel: '结束会议',
+      isDestructive: true,
+      isDefaultAction: false,
+      contentPadding: const EdgeInsets.only(top: 8),
+      cancelTextStyle: TextStyle(color: widget.palette.accent),
     );
     if (!mounted) return;
     _dismissKeyboard();
-    if (shouldEnd == true) {
+    if (shouldEnd) {
       await _endLive();
     }
   }
@@ -1196,31 +1184,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _showSpeakerInviteDialog() async {
     final live = widget.live;
     if (live == null) return;
-    final accepted = await showCupertinoDialog<bool>(
+    final accepted = await showAcoConfirmDialog(
       context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('主持人邀请你上麦'),
-        content: const Padding(
-          padding: EdgeInsets.only(top: 8),
-          child: Text('同意后将连接麦克风并成为发言人。'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('拒绝'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('同意'),
-          ),
-        ],
-      ),
+      title: '主持人邀请你上麦',
+      message: '同意后将连接麦克风并成为发言人。',
+      cancelLabel: '拒绝',
+      confirmLabel: '同意',
+      contentPadding: const EdgeInsets.only(top: 8),
     );
     _speakerInviteDialogVisible = false;
     if (!mounted) return;
     try {
-      if (accepted == true) {
+      if (accepted) {
         await _accountSession.acceptLiveSpeakerInvite(live.id);
       } else {
         await _accountSession.declineLiveSpeakerInvite(live.id);
@@ -1231,30 +1206,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
-  Future<bool> _confirmKickMember(LiveParticipant member) async {
-    final shouldKick = await showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('踢出成员'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text('确定要将 ${member.nickname} 移出本场会议吗？'),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('踢出'),
-          ),
-        ],
-      ),
-    );
-    return shouldKick == true;
-  }
+  Future<bool> _confirmKickMember(LiveParticipant member) =>
+      showAcoConfirmDialog(
+        context: context,
+        title: '踢出成员',
+        message: '确定要将 ${member.nickname} 移出本场会议吗？',
+        confirmLabel: '踢出',
+        isDestructive: true,
+        isDefaultAction: false,
+        contentPadding: const EdgeInsets.only(top: 8),
+      );
 
   Future<void> _setChatMute(bool muted) async {
     final live = widget.live;
