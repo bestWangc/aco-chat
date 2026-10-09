@@ -37,7 +37,10 @@ class MainActivity : FlutterFragmentActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "availability" -> result.success(biometricAvailability())
-                    "authenticate" -> authenticateWithBiometrics(result)
+                    "authenticate" -> authenticateWithBiometrics(
+                        call.argument<String>("reason") ?: "使用指纹或人脸完成钱包创建",
+                        result,
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -262,7 +265,10 @@ class MainActivity : FlutterFragmentActivity() {
         }
 
 
-    private fun authenticateWithBiometrics(result: MethodChannel.Result) {
+    private fun authenticateWithBiometrics(
+        reason: String,
+        result: MethodChannel.Result,
+    ) {
         if (biometricAvailability() != "enrolled") {
             result.success(false)
             return
@@ -284,7 +290,7 @@ class MainActivity : FlutterFragmentActivity() {
         )
         val promptInfo = BiometricPrompt.PromptInfo.Builder()
             .setTitle("验证身份")
-            .setSubtitle("使用指纹或人脸完成钱包创建")
+            .setSubtitle(reason)
             // Android requires a non-empty negative action when the prompt is
             // configured without device-credential fallback.
             .setNegativeButtonText("取消")

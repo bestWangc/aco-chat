@@ -102,7 +102,9 @@ import Photos
       case "availability":
         result(self.biometricAvailability())
       case "authenticate":
-        self.authenticateWithBiometrics(result: result)
+        let arguments = call.arguments as? [String: Any]
+        let reason = arguments?["reason"] as? String ?? "使用指纹或人脸完成钱包创建"
+        self.authenticateWithBiometrics(reason: reason, result: result)
       default:
         result(FlutterMethodNotImplemented)
       }
@@ -165,7 +167,10 @@ import Photos
     return "unavailable"
   }
 
-  private func authenticateWithBiometrics(result: @escaping FlutterResult) {
+  private func authenticateWithBiometrics(
+    reason: String,
+    result: @escaping FlutterResult
+  ) {
     let context = LAContext()
     var error: NSError?
     guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) else {
@@ -174,7 +179,7 @@ import Photos
     }
     context.evaluatePolicy(
       .deviceOwnerAuthenticationWithBiometrics,
-      localizedReason: "验证身份以保护你的钱包"
+      localizedReason: reason
     ) { success, _ in
       DispatchQueue.main.async {
         result(success)

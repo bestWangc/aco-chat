@@ -511,8 +511,12 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
 
+    var enableDeviceUnlock = false;
     try {
       if (widget.requireSecuritySetup) {
+        enableDeviceUnlock =
+            await BiometricAuthentication.availability() ==
+            BiometricAvailability.enrolled;
         final authenticated = await BiometricAuthentication.authenticateOrSkip()
             .timeout(const Duration(seconds: 30), onTimeout: () => false);
         if (!authenticated) {
@@ -555,6 +559,15 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               mnemonic: mnemonic,
             );
       await saveMnemonic.timeout(const Duration(seconds: 20));
+      if (enableDeviceUnlock) {
+        await _walletSecurity
+            .saveMnemonicWithDeviceProtection(
+              store: _secretStore,
+              walletAddress: identity.address,
+              mnemonic: mnemonic,
+            )
+            .timeout(const Duration(seconds: 20));
+      }
       _setCompletionStatus('正在同步账户登录...');
       await widget
           .onComplete(identity, mnemonic)

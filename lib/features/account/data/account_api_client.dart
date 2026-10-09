@@ -1290,8 +1290,7 @@ class AccountApiClient {
       '${response.request?.url ?? '<unknown URL>'} '
       'status=${response.statusCode} '
       'duration=${lastRequestDurationMilliseconds ?? 0}ms '
-      '${serverTiming == null ? '' : 'server_timing=[$serverTiming] '}'
-      'body=$diagnosticBody',
+      '${serverTiming == null ? '' : 'server_timing=[$serverTiming]'}',
     );
     final decoded = response.body.isEmpty
         ? <String, dynamic>{}

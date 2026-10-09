@@ -40,7 +40,8 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
               ),
             ],
           )
-        : RefreshIndicator(
+        : AcoRefreshIndicator(
+            palette: widget.palette,
             onRefresh: () =>
                 Future<void>.delayed(const Duration(milliseconds: 650)),
             child: CustomScrollView(
@@ -699,10 +700,13 @@ class _ContactsPageState extends State<_ContactsPage> {
           ..addEntries(letters.map((letter) => MapEntry(letter, GlobalKey())));
         return Stack(
           children: [
-            RefreshIndicator(
+            AcoRefreshIndicator(
+              palette: widget.palette,
               onRefresh: _refresh,
               child: ListView(
-                physics: const ClampingScrollPhysics(),
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
                 padding: EdgeInsets.zero,
                 children: [
                   const SizedBox(height: 8),

@@ -22,7 +22,6 @@ class _BackupMnemonicFlow extends StatefulWidget {
 }
 
 class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
-  final _walletSecurity = WalletSecurity();
   var _step = _SensitiveExportStep.warning;
   String? _exportValue;
   var _exportValueVisible = false;
@@ -58,115 +57,32 @@ class _BackupMnemonicFlowState extends State<_BackupMnemonicFlow> {
   Future<void> _showPasswordPrompt() async {
     final identity = widget.walletIdentity;
     if (identity == null) return;
-    final controller = TextEditingController();
-    var password = '';
-    var isVerifying = false;
-    String? errorMessage;
-
-    await showCupertinoDialog<void>(
+    final mnemonic = await showWalletUnlockDialog(
       context: context,
-      builder: (dialogContext) => CupertinoTheme(
-        data: CupertinoThemeData(
-          brightness: widget.palette.dark ? Brightness.dark : Brightness.light,
-          primaryColor: _lime,
-        ),
-        child: StatefulBuilder(
-          builder: (context, setDialogState) => CupertinoAlertDialog(
-            title: const Text('验证钱包密码'),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: Column(
-                children: [
-                  CupertinoTextField(
-                    key: Key(
-                      _isMnemonicExport
-                          ? 'export-mnemonic-password'
-                          : 'export-private-key-password',
-                    ),
-                    controller: controller,
-                    autofocus: true,
-                    obscureText: true,
-                    textInputAction: TextInputAction.done,
-                    onSubmitted: (_) => _dismissKeyboard(),
-                    onTapOutside: (_) => _dismissKeyboard(),
-                    onChanged: (value) => setDialogState(() {
-                      password = value;
-                      errorMessage = null;
-                    }),
-                    placeholder: '请输入钱包密码',
-                  ),
-                  if (errorMessage != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      errorMessage!,
-                      style: const TextStyle(
-                        color: _danger,
-                        fontSize: AcoTypography.bodySmall,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: isVerifying
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: password.length < 8 || isVerifying
-                    ? null
-                    : () async {
-                        setDialogState(() => isVerifying = true);
-                        try {
-                          await Future<void>.delayed(Duration.zero);
-                          final mnemonic = await _walletSecurity.unlockMnemonic(
-                            store: widget.secretStore,
-                            walletAddress: identity.address,
-                            password: password,
-                          );
-                          final exportValue = _isMnemonicExport
-                              ? mnemonic
-                              : await compute(
-                                  WalletIdentity.privateKeyFromMnemonic,
-                                  mnemonic,
-                                );
-                          if (!dialogContext.mounted || !mounted) return;
-                          Navigator.of(dialogContext).pop();
-                          setState(() {
-                            _exportValue = exportValue;
-                            _step = _SensitiveExportStep.value;
-                            _exportValueVisible = false;
-                            _exportValueCopied = false;
-                          });
-                          await SensitiveScreenProtection.setEnabled(true);
-                        } on WalletSecurityException catch (error) {
-                          if (dialogContext.mounted) {
-                            setDialogState(() {
-                              errorMessage = error.message;
-                              isVerifying = false;
-                            });
-                          }
-                        } catch (_) {
-                          if (dialogContext.mounted) {
-                            setDialogState(() {
-                              errorMessage = '验证失败，请稍后重试。';
-                              isVerifying = false;
-                            });
-                          }
-                        }
-                      },
-                child: Text(isVerifying ? '验证中...' : '确认'),
-              ),
-            ],
-          ),
-        ),
+      store: widget.secretStore,
+      walletAddress: identity.address,
+      passwordFieldKey: Key(
+        _isMnemonicExport
+            ? 'export-mnemonic-password'
+            : 'export-private-key-password',
       ),
     );
-    controller.dispose();
+    if (mnemonic == null || !mounted) return;
+    await _completeExport(mnemonic);
+  }
+
+  Future<void> _completeExport(String mnemonic) async {
+    final exportValue = _isMnemonicExport
+        ? mnemonic
+        : await compute(WalletIdentity.privateKeyFromMnemonic, mnemonic);
+    if (!mounted) return;
+    setState(() {
+      _exportValue = exportValue;
+      _step = _SensitiveExportStep.value;
+      _exportValueVisible = false;
+      _exportValueCopied = false;
+    });
+    await SensitiveScreenProtection.setEnabled(true);
   }
 
   Future<void> _copyExportValue() async {

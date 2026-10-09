@@ -900,29 +900,10 @@ class _DexSwapContentState extends State<_DexSwapContent> {
   ) async {
     final store = SecureWalletSecretStore();
     try {
-      final biometric = await BiometricAuthentication.availability();
-      if (biometric == BiometricAvailability.enrolled) {
-        if (!await BiometricAuthentication.authenticateOrSkip()) {
-          throw const WalletSecurityException('生物识别验证失败');
-        }
-        try {
-          return await WalletSecurity().unlockMnemonicWithDeviceProtection(
-            store: store,
-            walletAddress: identity.address,
-          );
-        } on WalletSecurityException catch (error) {
-          if (error.message != '未配置设备保护') rethrow;
-          // Wallets created with a password-only flow do not have a device
-          // password, so continue with the wallet password below.
-        }
-      }
-      if (!context.mounted) return null;
-      final password = await _requestWalletPassword(context);
-      if (password == null) return null;
-      return await WalletSecurity().unlockMnemonic(
+      return await showWalletUnlockDialog(
+        context: context,
         store: store,
         walletAddress: identity.address,
-        password: password,
       );
     } on WalletSecurityException catch (error) {
       if (context.mounted) _showNotice(context, '兑换失败', error.message);
@@ -932,41 +913,6 @@ class _DexSwapContentState extends State<_DexSwapContent> {
       return null;
     }
   }
-
-  Future<String?> _requestWalletPassword(BuildContext context) =>
-      showCupertinoDialog<String>(
-        context: context,
-        builder: (dialogContext) {
-          var password = '';
-          return StatefulBuilder(
-            builder: (context, setState) => CupertinoAlertDialog(
-              title: const Text('验证钱包密码'),
-              content: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: CupertinoTextField(
-                  obscureText: true,
-                  autofocus: true,
-                  placeholder: '输入钱包密码',
-                  onChanged: (value) => setState(() => password = value),
-                ),
-              ),
-              actions: [
-                CupertinoDialogAction(
-                  onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('取消'),
-                ),
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  onPressed: password.length < 8
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(password),
-                  child: const Text('确认'),
-                ),
-              ],
-            ),
-          );
-        },
-      );
 
   Future<bool> _confirmSwap(BuildContext context) async {
     final result = await showCupertinoDialog<bool>(

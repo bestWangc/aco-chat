@@ -404,25 +404,13 @@ class _SendTransferPageState extends State<_SendTransferPage> {
     if (identity == null || _submitting) return;
     setState(() => _submitting = true);
     try {
-      final biometric = await BiometricAuthentication.availability();
-      String? mnemonic;
-      if (biometric == BiometricAvailability.enrolled) {
-        if (!await BiometricAuthentication.authenticateOrSkip()) {
-          throw const WalletSecurityException('生物识别验证失败');
-        }
-        mnemonic = await WalletSecurity().unlockMnemonicWithDeviceProtection(
-          store: widget.secretStore,
-          walletAddress: identity.address,
-        );
-      } else {
-        final password = await _requestPassword();
-        if (password == null) return;
-        mnemonic = await WalletSecurity().unlockMnemonic(
-          store: widget.secretStore,
-          walletAddress: identity.address,
-          password: password,
-        );
-      }
+      final mnemonic = await showWalletUnlockDialog(
+        context: context,
+        store: widget.secretStore,
+        walletAddress: identity.address,
+        passwordFieldKey: const Key('transfer-password-field'),
+      );
+      if (mnemonic == null) return;
       final tokens = await SecureAccountTokenStore().read();
       final rpc = WalletRpcClient(
         client: http.Client(),
@@ -524,37 +512,6 @@ class _SendTransferPageState extends State<_SendTransferPage> {
       transactionService.close();
     }
   }
-
-  Future<String?> _requestPassword() => showCupertinoDialog<String>(
-    context: context,
-    builder: (dialogContext) {
-      var value = '';
-      return CupertinoAlertDialog(
-        title: const Text('验证钱包密码'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
-            obscureText: true,
-            autofocus: true,
-            key: const Key('transfer-password-field'),
-            onChanged: (v) => value = v,
-            placeholder: '输入钱包密码',
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.pop(dialogContext, value),
-            child: const Text('确认'),
-          ),
-        ],
-      );
-    },
-  );
 
   @override
   Widget build(BuildContext context) => _DetailScaffold(

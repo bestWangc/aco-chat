@@ -199,17 +199,10 @@ class _DappBrowserMenuAction extends StatelessWidget {
 }
 
 class _DappBrowserPageState extends State<_DappBrowserPage> {
-  static final _keepAliveByDapp = <String, InAppWebViewKeepAlive>{};
   static final _connectedPermissionKeys = <String>{};
 
   final _sessionConnectedOrigins = <String>{};
-  late final bool _restoringWebView = _keepAliveByDapp.containsKey(
-    widget.dappId,
-  );
-  late final InAppWebViewKeepAlive _keepAlive = _keepAliveByDapp.putIfAbsent(
-    widget.dappId,
-    InAppWebViewKeepAlive.new,
-  );
+  var _reloadedAfterLayout = false;
   InAppWebViewController? _controller;
   late Uri _currentUri;
   late _WalletChain _activeChain;
@@ -251,17 +244,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     super.initState();
     _activeChain = widget.selectedChain;
     _currentUri = _normalizeDappUri(widget.initialUrl);
-    if (_restoringWebView) _isLoading = false;
     unawaited(_restoreConnectedPermissions());
-  }
-
-  @override
-  void dispose() {
-    final keepAlive = _keepAliveByDapp.remove(widget.dappId);
-    if (keepAlive != null) {
-      unawaited(InAppWebViewController.disposeKeepAlive(keepAlive));
-    }
-    super.dispose();
   }
 
   @override
@@ -278,18 +261,24 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
             child: Stack(
               children: [
                 InAppWebView(
-                  keepAlive: _keepAlive,
-                  initialUrlRequest: _restoringWebView
-                      ? null
-                      : URLRequest(url: WebUri(_currentUri.toString())),
-                  initialSettings: _restoringWebView ? null : _webViewSettings,
-                  initialUserScripts: _restoringWebView
-                      ? null
-                      : _initialUserScripts,
+                  initialUrlRequest: URLRequest(
+                    url: WebUri(_currentUri.toString()),
+                  ),
+                  initialSettings: _webViewSettings,
+                  initialUserScripts: _initialUserScripts,
                   onWebViewCreated: _onWebViewCreated,
                   onLoadStart: (_, url) => _onLocationChanged(url),
-                  onLoadStop: (_, url) {
+                  onLoadStop: (controller, url) {
                     _onLocationChanged(url);
+                    if (widget.dappId == 'wandering-earth' &&
+                        !_reloadedAfterLayout) {
+                      _reloadedAfterLayout = true;
+                      if (mounted) setState(() => _isLoading = true);
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        if (mounted) unawaited(controller.reload());
+                      });
+                      return;
+                    }
                     if (mounted) setState(() => _isLoading = false);
                   },
                   onProgressChanged: (_, progress) {
@@ -439,10 +428,6 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
 
   void _onWebViewCreated(InAppWebViewController controller) {
     _controller = controller;
-    if (_restoringWebView && mounted) {
-      setState(() => _isLoading = false);
-      unawaited(_syncRestoredUrl(controller));
-    }
     controller.addJavaScriptHandler(
       handlerName: 'acoDappProvider',
       callback: (arguments) => _handleProviderRequest(arguments),
@@ -489,11 +474,6 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       'dapp.connected_permissions',
       _connectedPermissionKeys.toList(growable: false),
     );
-  }
-
-  Future<void> _syncRestoredUrl(InAppWebViewController controller) async {
-    final url = await controller.getUrl();
-    if (url != null) _onLocationChanged(url);
   }
 
   Future<Map<String, String>> _loadDappStorage(List<dynamic> arguments) async {
@@ -1007,48 +987,14 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     return requested.toInt();
   }
 
-  /// Unlocks wallet material for a DApp request with the wallet password.
+  /// Unlocks wallet material for a DApp request.
   Future<String?> _unlockWalletMnemonic(WalletIdentity identity) async {
-    final security = WalletSecurity();
-    final store = SecureWalletSecretStore();
-    final password = await _requestPassword();
-    if (password == null) return null;
-    return security.unlockMnemonic(
-      store: store,
+    return showWalletUnlockDialog(
+      context: context,
+      store: SecureWalletSecretStore(),
       walletAddress: identity.address,
-      password: password,
     );
   }
-
-  Future<String?> _requestPassword() => showCupertinoDialog<String>(
-    context: context,
-    builder: (dialogContext) {
-      var value = '';
-      return CupertinoAlertDialog(
-        title: const Text('验证钱包密码'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 12),
-          child: CupertinoTextField(
-            autofocus: true,
-            obscureText: true,
-            placeholder: '输入钱包密码',
-            onChanged: (text) => value = text,
-          ),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('取消'),
-          ),
-          CupertinoDialogAction(
-            isDefaultAction: true,
-            onPressed: () => Navigator.of(dialogContext).pop(value),
-            child: const Text('确认'),
-          ),
-        ],
-      );
-    },
-  );
 
   Future<Map<String, dynamic>> _accountsForCurrentOrigin() async {
     await _restoreConnectedPermissions();
@@ -1083,15 +1029,6 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       return NavigationActionPolicy.CANCEL;
     }
     return NavigationActionPolicy.ALLOW;
-  }
-
-  Future<void> _goBack() async {
-    final controller = _controller;
-    if (controller != null && await controller.canGoBack()) {
-      await controller.goBack();
-      return;
-    }
-    if (mounted) Navigator.of(context).maybePop();
   }
 
   Future<bool> _confirm({

@@ -134,6 +134,105 @@ void main() {
         .setMockMethodCallHandler(_sensitiveScreenChannel, null);
   });
 
+  testWidgets('prioritizes device unlock and offers password fallback', (
+    WidgetTester tester,
+  ) async {
+    const identity = WalletIdentity(address: '0x1234');
+    final store = InMemoryWalletSecretStore();
+    await store.write(
+      'wallet.device-password.${identity.address.toLowerCase()}',
+      'device-protected',
+    );
+    await store.write(
+      'wallet.device-vault.${identity.address.toLowerCase()}',
+      'encrypted-device-vault',
+    );
+    await store.write(
+      'wallet.vault.${identity.address.toLowerCase()}',
+      'encrypted-password-vault',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          _sensitiveScreenChannel,
+          (_) async => <String, Object?>{},
+        );
+    String? biometricReason;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_biometricChannel, (call) async {
+          if (call.method == 'availability') return 'enrolled';
+          biometricReason = (call.arguments as Map)['reason'] as String?;
+          return false;
+        });
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.backupMnemonic,
+          dark: true,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+          walletIdentity: identity,
+          walletSecretStore: store,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('backup-mnemonic-continue')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('使用指纹或面容继续'), findsOneWidget);
+    expect(find.text('使用密码'), findsOneWidget);
+    await tester.tap(find.text('验证'));
+    await tester.pumpAndSettle();
+    expect(biometricReason, '使用指纹或面容验证钱包操作');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_biometricChannel, null);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_sensitiveScreenChannel, null);
+  });
+
+  testWidgets('does not offer password for a legacy device-only wallet', (
+    WidgetTester tester,
+  ) async {
+    const identity = WalletIdentity(address: '0x5678');
+    final store = InMemoryWalletSecretStore();
+    await store.write(
+      'wallet.device-password.${identity.address.toLowerCase()}',
+      'legacy-device-key',
+    );
+    await store.write(
+      'wallet.vault.${identity.address.toLowerCase()}',
+      'legacy-device-encrypted-vault',
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          _sensitiveScreenChannel,
+          (_) async => <String, Object?>{},
+        );
+    await tester.pumpWidget(
+      CupertinoApp(
+        home: AcoScreenPage(
+          screen: AcoScreen.backupMnemonic,
+          dark: true,
+          isRoot: false,
+          onOpen: (_) {},
+          onThemeToggle: () {},
+          walletIdentity: identity,
+          walletSecretStore: store,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('backup-mnemonic-continue')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('使用指纹或面容继续'), findsOneWidget);
+    expect(find.text('使用密码'), findsNothing);
+    expect(find.byKey(const Key('export-mnemonic-password')), findsNothing);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_sensitiveScreenChannel, null);
+  });
+
   testWidgets('opens the private-key export password prompt', (
     WidgetTester tester,
   ) async {
@@ -893,6 +992,14 @@ void main() {
     expect(find.text('市场价格'), findsNothing);
     expect(find.bySemanticsLabel('筛选交易记录'), findsNothing);
     expect(find.text('没有找到您的交易？'), findsOneWidget);
+    final transactionList = tester.widget<CustomScrollView>(
+      find.byType(CustomScrollView),
+    );
+    expect(transactionList.physics, isA<BouncingScrollPhysics>());
+    expect(
+      transactionList.physics!.parent,
+      isA<AlwaysScrollableScrollPhysics>(),
+    );
     expect(find.bySemanticsLabel('转账'), findsOneWidget);
     expect(find.bySemanticsLabel('收款'), findsOneWidget);
     expect(find.bySemanticsLabel('闪兑'), findsNothing);

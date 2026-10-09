@@ -654,7 +654,8 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
 
     return Stack(
       children: [
-        RefreshIndicator(
+        AcoRefreshIndicator(
+          palette: palette,
           onRefresh: _refreshCurrentTab,
           child: CustomScrollView(
             controller: _postsScrollController,

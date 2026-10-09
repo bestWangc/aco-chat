@@ -67,6 +67,100 @@ void main() {
       },
     );
 
+    test('keeps password and device unlocks independently available', () async {
+      final security = WalletSecurity();
+      final store = InMemoryWalletSecretStore();
+      const phrase =
+          'abandon abandon abandon abandon abandon abandon abandon abandon '
+          'abandon abandon abandon about';
+
+      await security.saveMnemonic(
+        store: store,
+        walletAddress: address,
+        mnemonic: phrase,
+        password: password,
+      );
+      await security.saveMnemonicWithDeviceProtection(
+        store: store,
+        walletAddress: address,
+        mnemonic: phrase,
+      );
+
+      expect(
+        await security.hasDeviceProtection(
+          store: store,
+          walletAddress: address,
+        ),
+        isTrue,
+      );
+      expect(
+        await security.hasPasswordProtection(
+          store: store,
+          walletAddress: address,
+        ),
+        isTrue,
+      );
+      expect(
+        await security.unlockMnemonic(
+          store: store,
+          walletAddress: address,
+          password: password,
+        ),
+        phrase,
+      );
+      expect(
+        await security.unlockMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: address,
+        ),
+        phrase,
+      );
+    });
+
+    test(
+      'unlocks legacy device-protected vaults for mnemonic export',
+      () async {
+        final security = WalletSecurity();
+        final store = InMemoryWalletSecretStore();
+        const phrase =
+            'abandon abandon abandon abandon abandon abandon abandon abandon '
+            'abandon abandon abandon about';
+        final vaultKey = 'wallet.vault.${address.toLowerCase()}';
+        final deviceVaultKey = 'wallet.device-vault.${address.toLowerCase()}';
+
+        await security.saveMnemonicWithDeviceProtection(
+          store: store,
+          walletAddress: address,
+          mnemonic: phrase,
+        );
+        // Older app versions stored the device-encrypted vault in wallet.vault.
+        await store.write(vaultKey, (await store.read(deviceVaultKey))!);
+        await store.delete(deviceVaultKey);
+
+        expect(
+          await security.hasDeviceProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          isTrue,
+        );
+        expect(
+          await security.hasPasswordProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          isFalse,
+        );
+        expect(
+          await security.unlockMnemonicWithDeviceProtection(
+            store: store,
+            walletAddress: address,
+          ),
+          phrase,
+        );
+      },
+    );
+
     test('rejects invalid phrases and short passwords', () async {
       final security = WalletSecurity();
       final store = InMemoryWalletSecretStore();

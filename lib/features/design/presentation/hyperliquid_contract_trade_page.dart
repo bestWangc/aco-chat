@@ -493,64 +493,16 @@ class _HyperliquidContractTradePageState
     FocusScope.of(context).unfocus();
     await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     final store = SecureWalletSecretStore();
-    final security = WalletSecurity();
-    final biometric = await BiometricAuthentication.availability();
-    if (biometric == BiometricAvailability.enrolled) {
-      if (!await BiometricAuthentication.authenticateOrSkip()) {
-        throw const WalletSecurityException('生物识别验证失败');
-      }
-      try {
-        return await security.unlockMnemonicWithDeviceProtection(
-          store: store,
-          walletAddress: identity.address,
-        );
-      } on WalletSecurityException catch (error) {
-        if (error.message != '未配置设备保护') rethrow;
-      }
-    }
-    if (!mounted) throw const WalletSecurityException('钱包授权已取消');
-    final password = await showCupertinoDialog<String>(
+    final mnemonic = await showWalletUnlockDialog(
       context: context,
-      builder: (dialogContext) {
-        var value = '';
-        return StatefulBuilder(
-          builder: (context, setState) => CupertinoAlertDialog(
-            title: const Text('验证钱包密码'),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: CupertinoTextField(
-                obscureText: true,
-                autofocus: true,
-                placeholder: '输入钱包密码',
-                onChanged: (text) => setState(() => value = text),
-              ),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: value.length < 8
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(value),
-                child: const Text('确认'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    await _dismissOrderAmountFocus();
-    if (password == null) {
-      throw const WalletSecurityException('钱包授权已取消');
-    }
-    return security.unlockMnemonic(
       store: store,
       walletAddress: identity.address,
-      password: password,
     );
+    await _dismissOrderAmountFocus();
+    if (mnemonic == null) {
+      throw const WalletSecurityException('钱包授权已取消');
+    }
+    return mnemonic;
   }
 
   Future<void> _ensureBuilderApproval({
@@ -2610,63 +2562,15 @@ class _HyperliquidUsdcDepositSheetState
     FocusScope.of(context).unfocus();
     await SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     final store = SecureWalletSecretStore();
-    final security = WalletSecurity();
-    final biometric = await BiometricAuthentication.availability();
-    if (biometric == BiometricAvailability.enrolled) {
-      if (!await BiometricAuthentication.authenticateOrSkip()) {
-        throw const WalletSecurityException('生物识别验证失败');
-      }
-      try {
-        return await security.unlockMnemonicWithDeviceProtection(
-          store: store,
-          walletAddress: identity.address,
-        );
-      } on WalletSecurityException catch (error) {
-        if (error.message != '未配置设备保护') rethrow;
-      }
-    }
-    if (!mounted) throw const WalletSecurityException('钱包授权已取消');
-    final password = await showCupertinoDialog<String>(
+    final mnemonic = await showWalletUnlockDialog(
       context: context,
-      builder: (dialogContext) {
-        var value = '';
-        return StatefulBuilder(
-          builder: (context, setState) => CupertinoAlertDialog(
-            title: const Text('验证钱包密码'),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: CupertinoTextField(
-                obscureText: true,
-                autofocus: true,
-                placeholder: '输入钱包密码',
-                onChanged: (text) => setState(() => value = text),
-              ),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: value.length < 8
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(value),
-                child: const Text('确认'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (password == null) {
-      throw const WalletSecurityException('钱包授权已取消');
-    }
-    return security.unlockMnemonic(
       store: store,
       walletAddress: identity.address,
-      password: password,
     );
+    if (mnemonic == null) {
+      throw const WalletSecurityException('钱包授权已取消');
+    }
+    return mnemonic;
   }
 
   String get _transferAmount =>

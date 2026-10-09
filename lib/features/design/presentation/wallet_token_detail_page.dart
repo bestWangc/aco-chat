@@ -327,56 +327,64 @@ class _TokenDetailPageState extends State<_TokenDetailPage> {
             ),
           ),
           Expanded(
-            child: CustomScrollView(
-              controller: _transactionScrollController,
-              slivers: [
-                if (widget.transactionService != null)
-                  CupertinoSliverRefreshControl(
-                    onRefresh: () =>
-                        _loadTransactions(_selectedDirection, reset: true),
-                  ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
-                  sliver: SliverToBoxAdapter(
-                    child: _TokenBalanceSummary(
-                      palette: widget.palette,
-                      balance: _amount,
-                      symbol: widget.balance.symbol,
-                      iconSymbol: widget.balance.symbol,
+            child: AcoRefreshIndicator(
+              palette: widget.palette,
+              enabled: widget.transactionService != null,
+              onRefresh: () =>
+                  _loadTransactions(_selectedDirection, reset: true),
+              child: CustomScrollView(
+                controller: _transactionScrollController,
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(22, 24, 22, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: _TokenBalanceSummary(
+                        palette: widget.palette,
+                        balance: _amount,
+                        symbol: widget.balance.symbol,
+                        iconSymbol: widget.balance.symbol,
+                      ),
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  sliver: const SliverToBoxAdapter(child: SizedBox(height: 30)),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  sliver: SliverToBoxAdapter(
-                    child: Row(
-                      children: [
-                        for (var index = 0; index < 3; index++) ...[
-                          _TokenDetailTab(
-                            label: ['全部', '转入', '转出'][index],
-                            selected: _selectedTab == index,
-                            palette: widget.palette,
-                            onPressed: () => _selectTransactionTab(index),
-                          ),
-                          if (index < 2) const SizedBox(width: 12),
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    sliver: const SliverToBoxAdapter(
+                      child: SizedBox(height: 30),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    sliver: SliverToBoxAdapter(
+                      child: Row(
+                        children: [
+                          for (var index = 0; index < 3; index++) ...[
+                            _TokenDetailTab(
+                              label: ['全部', '转入', '转出'][index],
+                              selected: _selectedTab == index,
+                              palette: widget.palette,
+                              onPressed: () => _selectTransactionTab(index),
+                            ),
+                            if (index < 2) const SizedBox(width: 12),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 22),
-                  sliver: const SliverToBoxAdapter(child: SizedBox(height: 3)),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
-                  sliver: _buildTransactionSliver(),
-                ),
-              ],
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 22),
+                    sliver: const SliverToBoxAdapter(
+                      child: SizedBox(height: 3),
+                    ),
+                  ),
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
+                    sliver: _buildTransactionSliver(),
+                  ),
+                ],
+              ),
             ),
           ),
           _TokenDetailActions(

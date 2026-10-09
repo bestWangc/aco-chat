@@ -323,9 +323,13 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
   Widget build(BuildContext context) {
     final palette = widget.palette;
     final markets = _visibleMarkets;
-    return RefreshIndicator(
+    return AcoRefreshIndicator(
+      palette: palette,
       onRefresh: () => _loadMarkets(showLoading: false),
       child: ListView(
+        physics: const BouncingScrollPhysics(
+          parent: AlwaysScrollableScrollPhysics(),
+        ),
         padding: const EdgeInsets.fromLTRB(15, 4, 15, 24),
         children: [
           _DexSectionTabs(
@@ -1323,10 +1327,9 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     );
   }
 
-  Widget _buildTradeActivityRefresh(AcoPalette palette) => RefreshIndicator(
+  Widget _buildTradeActivityRefresh(AcoPalette palette) => AcoRefreshIndicator(
+    palette: palette,
     onRefresh: _refreshDetail,
-    color: palette.accent,
-    backgroundColor: palette.surfaceRaised,
     child: ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(15, 0, 15, 24),
@@ -3498,6 +3501,8 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
       } finally {
         client.close();
       }
+    } on WalletSecurityException catch (error) {
+      if (mounted) _showTradeMessage('交易失败', error.message);
     } catch (error) {
       if (mounted) _showTradeMessage('交易失败', '$error');
     } finally {
@@ -3619,44 +3624,12 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
   }
 
   Future<String?> _unlockTradeMnemonic(WalletIdentity identity) async {
-    final password = await showCupertinoDialog<String>(
+    final store = SecureWalletSecretStore();
+    if (!mounted) return null;
+    return showWalletUnlockDialog(
       context: context,
-      builder: (dialogContext) {
-        var value = '';
-        return StatefulBuilder(
-          builder: (context, setState) => CupertinoAlertDialog(
-            title: const Text('验证钱包密码'),
-            content: Padding(
-              padding: const EdgeInsets.only(top: 12),
-              child: CupertinoTextField(
-                obscureText: true,
-                autofocus: true,
-                placeholder: '输入钱包密码',
-                onChanged: (next) => setState(() => value = next),
-              ),
-            ),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('取消'),
-              ),
-              CupertinoDialogAction(
-                isDefaultAction: true,
-                onPressed: value.length < 8
-                    ? null
-                    : () => Navigator.of(dialogContext).pop(value),
-                child: const Text('确认'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    if (password == null) return null;
-    return WalletSecurity().unlockMnemonic(
-      store: SecureWalletSecretStore(),
+      store: store,
       walletAddress: identity.address,
-      password: password,
     );
   }
 

@@ -20,7 +20,9 @@ import 'package:aco_chat/features/live/domain/live_chat_state.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_event.dart';
 import 'package:aco_chat/features/live/domain/live_realtime_client.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
+import 'package:aco_chat/shared/widgets/aco_refresh_indicator.dart';
 import 'package:aco_chat/shared/widgets/aco_network_image.dart';
+import 'package:aco_chat/shared/widgets/wallet_unlock_dialog.dart';
 import 'package:aco_chat/services/app_update_service.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/sensitive_screen_protection.dart';
@@ -65,7 +67,6 @@ import 'package:flutter/material.dart'
         Material,
         MaterialType,
         Colors,
-        RefreshIndicator,
         SelectableText,
         Theme,
         showGeneralDialog,

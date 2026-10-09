@@ -862,20 +862,6 @@ class _AddTokenPageState extends State<_AddTokenPage> {
           const SizedBox(height: 12),
         ],
         _AddTokenEntry(
-          label: '首页资产',
-          palette: widget.palette,
-          onPressed: () => Navigator.of(context).push(
-            _AcoPageRoute(
-              builder: (_) => _HomeAssetPage(
-                palette: widget.palette,
-                tokens: _tokens,
-                removed: _removed,
-                onRemove: _removeToken,
-              ),
-            ),
-          ),
-        ),
-        _AddTokenEntry(
           label: '自定义代币',
           palette: widget.palette,
           onPressed: () async {
@@ -950,21 +936,6 @@ class _AddTokenPageState extends State<_AddTokenPage> {
       ),
     );
     if (added == true && mounted) await _loadAddedTokens();
-  }
-
-  Future<void> _removeToken(WalletBalance token) async {
-    if (token.isNative) return;
-    setState(() => _removed.add(token.symbol));
-    final identity = widget.walletIdentity;
-    if (identity != null) {
-      await _metadataStore.setTokenHidden(
-        identity,
-        widget.selectedChain.network.name,
-        token.symbol,
-        true,
-        tokenAddress: token.tokenAddress,
-      );
-    }
   }
 }
 
@@ -1281,118 +1252,6 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
       ),
     ),
   );
-}
-
-class _HomeAssetPage extends StatefulWidget {
-  const _HomeAssetPage({
-    required this.palette,
-    required this.tokens,
-    required this.removed,
-    required this.onRemove,
-  });
-  final AcoPalette palette;
-  final List<WalletBalance> tokens;
-  final Set<String> removed;
-  final ValueChanged<WalletBalance> onRemove;
-
-  @override
-  State<_HomeAssetPage> createState() => _HomeAssetPageState();
-}
-
-class _HomeAssetPageState extends State<_HomeAssetPage> {
-  late final Set<String> _removed = {...widget.removed};
-
-  @override
-  Widget build(BuildContext context) => AcoSafeAreaPage(
-    backgroundColor: widget.palette.background,
-    applyTopSafeArea: true,
-    child: Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
-          child: AcoPageHeader(
-            palette: widget.palette,
-            title: '首页资产',
-            backButtonOffset: Offset.zero,
-            onBack: () => Navigator.of(context).maybePop(),
-          ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.only(top: 12, bottom: 26),
-            children: [
-              for (final token in widget.tokens)
-                if (!_isRemoved(token))
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(27, 10, 8, 10),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: _WalletAssetIcon(symbol: token.symbol),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                token.symbol,
-                                style: TextStyle(
-                                  color: widget.palette.primaryText,
-                                ),
-                              ),
-                              Text(
-                                token.assetName,
-                                style: TextStyle(
-                                  color: widget.palette.mutedText,
-                                ),
-                              ),
-                              if (token.tokenAddress != null)
-                                Text(
-                                  _breakAddress(token.tokenAddress!),
-                                  style: TextStyle(
-                                    color: widget.palette.mutedText,
-                                    fontSize: 12,
-                                  ),
-                                  softWrap: true,
-                                ),
-                            ],
-                          ),
-                        ),
-                        CupertinoButton(
-                          padding: EdgeInsets.zero,
-                          onPressed: token.isNative
-                              ? null
-                              : () {
-                                  setState(() => _removed.add(token.symbol));
-                                  widget.onRemove(token);
-                                },
-                          child: Icon(
-                            CupertinoIcons.minus_circle_fill,
-                            color: token.isNative
-                                ? widget.palette.mutedText
-                                : _danger,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  String _breakAddress(String address) =>
-      '地址: ${address.replaceAllMapped(RegExp(r'(.{8})'), (match) => '${match.group(1)}\u200b')}';
-
-  bool _isRemoved(WalletBalance token) =>
-      _removed.contains(token.symbol) ||
-      (token.tokenAddress != null &&
-          _removed.contains(token.tokenAddress!.toLowerCase()));
 }
 
 class _AddTokenSearch extends StatelessWidget {

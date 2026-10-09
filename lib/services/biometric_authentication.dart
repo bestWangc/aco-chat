@@ -35,6 +35,21 @@ class BiometricAuthentication {
     }
   }
 
+  /// Requires an enrolled biometric and a successful device authentication.
+  static Future<bool> authenticate({String reason = '使用指纹或人脸完成钱包创建'}) async {
+    if (await availability() != BiometricAvailability.enrolled) return false;
+    try {
+      return await _channel.invokeMethod<bool>('authenticate', {
+            'reason': reason,
+          }) ??
+          false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// A transaction must always be verified. Callers should prompt for the
   /// wallet password unless biometrics have already been enrolled.
   static Future<bool> transactionRequiresPassword() async =>

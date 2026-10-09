@@ -3,7 +3,8 @@ import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter/foundation.dart' show compute, kIsWeb;
+import 'package:flutter/foundation.dart'
+    show compute, debugPrint, kDebugMode, kIsWeb;
 import 'package:aco_chat/services/bip39_service.dart';
 
 /// Stores encrypted wallet material. Implementations must never expose the
@@ -109,6 +110,7 @@ class WalletSecurity {
   WalletSecurity({Random? random}) : _random = random ?? Random.secure();
 
   static const _vaultPrefix = 'wallet.vault.';
+  static const _deviceVaultPrefix = 'wallet.device-vault.';
   static const _devicePasswordPrefix = 'wallet.device-password.';
   static const _saltLength = 32;
   static const _pbkdf2Iterations = 210000;
@@ -149,24 +151,19 @@ class WalletSecurity {
   }) async {
     _validateWalletAddress(walletAddress);
     _validatePassword(password);
-    final normalized = normalizeMnemonic(mnemonic);
-    if (!isValidMnemonic(normalized)) {
-      throw const WalletSecurityException('助记词无效');
-    }
-    final salt = _randomBytes(_saltLength);
-    final request = _VaultEncryptionRequest(
-      mnemonic: normalized,
+    final key = _vaultKey(walletAddress);
+    await _saveMnemonicRecord(
+      store: store,
+      key: key,
+      mnemonic: mnemonic,
       password: password,
-      salt: salt,
     );
-    final record = kIsWeb
-        ? await _encryptVault(request)
-        : await compute(_encryptVault, request);
-    await store.write(_vaultKey(walletAddress), jsonEncode(record.toJson()));
+    await store.delete(_deviceVaultKey(walletAddress));
+    await store.delete(_devicePasswordKey(walletAddress));
   }
 
-  /// Stores a wallet using a device-protected key when the user has already
-  /// completed the account-level security setup.
+  /// Adds a device-protected copy without replacing the password-protected
+  /// vault, so either configured unlock method can recover the same mnemonic.
   Future<void> saveMnemonicWithDeviceProtection({
     required WalletSecretStore store,
     required String walletAddress,
@@ -175,9 +172,10 @@ class WalletSecurity {
     final devicePassword = base64UrlEncode(
       List<int>.generate(32, (_) => _random.nextInt(256)),
     );
-    await saveMnemonic(
+    _validateWalletAddress(walletAddress);
+    await _saveMnemonicRecord(
       store: store,
-      walletAddress: walletAddress,
+      key: _deviceVaultKey(walletAddress),
       mnemonic: mnemonic,
       password: devicePassword,
     );
@@ -191,10 +189,24 @@ class WalletSecurity {
   }) async {
     _validateWalletAddress(walletAddress);
     _validatePassword(password);
-    final encoded = await store.read(_vaultKey(walletAddress));
+    return _unlockMnemonicFromKey(
+      store: store,
+      key: _vaultKey(walletAddress),
+      password: password,
+    );
+  }
+
+  Future<String> _unlockMnemonicFromKey({
+    required WalletSecretStore store,
+    required String key,
+    required String password,
+  }) async {
+    final encoded = await store.read(key);
     if (encoded == null) {
+      if (kDebugMode) debugPrint('[WalletVault] read key=$key record=missing');
       throw const WalletSecurityException('未找到该钱包的本地安全数据');
     }
+    await _debugRecordFingerprint('read', key, encoded);
     try {
       final json = jsonDecode(encoded) as Map<String, dynamic>;
       final record = WalletVaultRecord.fromJson(json);
@@ -222,9 +234,12 @@ class WalletSecurity {
   }) async {
     final password = await store.read(_devicePasswordKey(walletAddress));
     if (password == null) throw const WalletSecurityException('未配置设备保护');
-    return unlockMnemonic(
+    _validateWalletAddress(walletAddress);
+    return _unlockMnemonicFromKey(
       store: store,
-      walletAddress: walletAddress,
+      key: await store.read(_deviceVaultKey(walletAddress)) == null
+          ? _vaultKey(walletAddress)
+          : _deviceVaultKey(walletAddress),
       password: password,
     );
   }
@@ -232,14 +247,76 @@ class WalletSecurity {
   Future<bool> hasDeviceProtection({
     required WalletSecretStore store,
     required String walletAddress,
-  }) async => (await store.read(_devicePasswordKey(walletAddress))) != null;
+  }) async {
+    final devicePassword = await store.read(_devicePasswordKey(walletAddress));
+    if (devicePassword == null) return false;
+    final encoded = await store.read(_deviceVaultKey(walletAddress));
+    if (encoded != null) return true;
+    // Older device-protected wallets stored their device-encrypted record in
+    // the password vault slot.
+    return (await store.read(_vaultKey(walletAddress))) != null;
+  }
+
+  Future<bool> hasPasswordProtection({
+    required WalletSecretStore store,
+    required String walletAddress,
+  }) async {
+    final passwordVault = await store.read(_vaultKey(walletAddress));
+    if (passwordVault == null) return false;
+    final devicePassword = await store.read(_devicePasswordKey(walletAddress));
+    if (devicePassword == null) return true;
+    // Legacy device-protected wallets stored their random-key vault in the
+    // password slot. A separate device vault means the password vault is real.
+    return await store.read(_deviceVaultKey(walletAddress)) != null;
+  }
 
   Future<void> deleteMnemonic({
     required WalletSecretStore store,
     required String walletAddress,
-  }) {
+  }) async {
     _validateWalletAddress(walletAddress);
-    return store.delete(_vaultKey(walletAddress));
+    await Future.wait([
+      store.delete(_vaultKey(walletAddress)),
+      store.delete(_deviceVaultKey(walletAddress)),
+      store.delete(_devicePasswordKey(walletAddress)),
+    ]);
+  }
+
+  Future<void> _saveMnemonicRecord({
+    required WalletSecretStore store,
+    required String key,
+    required String mnemonic,
+    required String password,
+  }) async {
+    _validatePassword(password);
+    final normalized = normalizeMnemonic(mnemonic);
+    if (!isValidMnemonic(normalized)) {
+      throw const WalletSecurityException('助记词无效');
+    }
+    final request = _VaultEncryptionRequest(
+      mnemonic: normalized,
+      password: password,
+      salt: _randomBytes(_saltLength),
+    );
+    final record = kIsWeb
+        ? await _encryptVault(request)
+        : await compute(_encryptVault, request);
+    final encoded = jsonEncode(record.toJson());
+    await store.write(key, encoded);
+    await _debugRecordFingerprint('write', key, encoded);
+  }
+
+  Future<void> _debugRecordFingerprint(
+    String operation,
+    String key,
+    String encoded,
+  ) async {
+    if (!kDebugMode) return;
+    final digest = await Sha256().hash(utf8.encode(encoded));
+    final fingerprint = digest.bytes
+        .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
+        .join();
+    debugPrint('[WalletVault] $operation key=$key fingerprint=$fingerprint');
   }
 
   Future<SecretKey> _deriveKey(String password, List<int> salt) => Pbkdf2(
@@ -253,6 +330,9 @@ class WalletSecurity {
 
   String _vaultKey(String walletAddress) =>
       '$_vaultPrefix${walletAddress.toLowerCase()}';
+
+  String _deviceVaultKey(String walletAddress) =>
+      '$_deviceVaultPrefix${walletAddress.toLowerCase()}';
 
   String _devicePasswordKey(String walletAddress) =>
       '$_devicePasswordPrefix${walletAddress.toLowerCase()}';
