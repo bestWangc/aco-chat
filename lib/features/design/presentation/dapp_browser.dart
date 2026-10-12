@@ -84,21 +84,27 @@ class _DappBrowserLoading extends StatelessWidget {
 class _DappBrowserMenu extends StatelessWidget {
   const _DappBrowserMenu({
     required this.palette,
+    required this.host,
     required this.onCopy,
     required this.onRefresh,
     required this.onOpenExternal,
+    required this.onShowDiagnostics,
+    required this.onClearDappData,
   });
 
   final AcoPalette palette;
+  final String host;
   final VoidCallback onCopy;
   final VoidCallback onRefresh;
   final VoidCallback onOpenExternal;
+  final VoidCallback onShowDiagnostics;
+  final VoidCallback onClearDappData;
 
   @override
   Widget build(BuildContext context) => SafeArea(
     top: false,
     child: Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
       decoration: BoxDecoration(
         color: palette.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -106,40 +112,97 @@ class _DappBrowserMenu extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Align(
-            alignment: Alignment.centerRight,
-            child: CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(32, 32),
-              onPressed: () => Navigator.of(context).pop(),
-              child: Icon(
-                CupertinoIcons.xmark_circle_fill,
-                color: palette.mutedText,
-              ),
-            ),
-          ),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _DappBrowserMenuAction(
-                icon: CupertinoIcons.doc_on_doc,
-                label: '复制链接',
-                palette: palette,
-                onPressed: onCopy,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '网页工具',
+                      style: TextStyle(
+                        color: palette.primaryText,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      host,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: palette.mutedText, fontSize: 12),
+                    ),
+                  ],
+                ),
               ),
-              _DappBrowserMenuAction(
-                icon: CupertinoIcons.refresh,
-                label: '刷新',
-                palette: palette,
-                onPressed: onRefresh,
-              ),
-              _DappBrowserMenuAction(
-                icon: CupertinoIcons.globe,
-                label: '系统浏览器打开',
-                palette: palette,
-                onPressed: onOpenExternal,
+              CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(44, 44),
+                onPressed: () => Navigator.of(context).pop(),
+                child: Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: palette.surfaceRaised,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    CupertinoIcons.xmark,
+                    color: palette.mutedText,
+                    size: 16,
+                  ),
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 18),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final actions = [
+                _DappBrowserMenuAction(
+                  icon: CupertinoIcons.doc_on_doc,
+                  label: '复制链接',
+                  palette: palette,
+                  onPressed: onCopy,
+                ),
+                _DappBrowserMenuAction(
+                  icon: CupertinoIcons.refresh,
+                  label: '刷新',
+                  palette: palette,
+                  onPressed: onRefresh,
+                ),
+                _DappBrowserMenuAction(
+                  icon: CupertinoIcons.globe,
+                  label: '系统浏览器打开',
+                  palette: palette,
+                  onPressed: onOpenExternal,
+                ),
+                _DappBrowserMenuAction(
+                  icon: CupertinoIcons.doc_text_search,
+                  label: '网页诊断日志',
+                  palette: palette,
+                  onPressed: onShowDiagnostics,
+                ),
+                _DappBrowserMenuAction(
+                  icon: CupertinoIcons.trash,
+                  label: '清除 DApp 缓存',
+                  palette: palette,
+                  onPressed: onClearDappData,
+                  destructive: true,
+                ),
+              ];
+              final itemWidth = (constraints.maxWidth - 24) / 4;
+              return Wrap(
+                alignment: WrapAlignment.start,
+                spacing: 8,
+                runSpacing: 12,
+                children: [
+                  for (final action in actions)
+                    SizedBox(width: itemWidth, child: action),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -153,36 +216,37 @@ class _DappBrowserMenuAction extends StatelessWidget {
     required this.label,
     required this.palette,
     required this.onPressed,
+    this.destructive = false,
   });
 
   final IconData icon;
   final String label;
   final AcoPalette palette;
   final VoidCallback onPressed;
+  final bool destructive;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: EdgeInsets.zero,
     onPressed: onPressed,
-    child: SizedBox(
-      width: 96,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 58,
-            height: 58,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
-              color: palette.background,
+              color: destructive
+                  ? const Color(0x26FF7676)
+                  : palette.accent.withValues(alpha: 0.14),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Center(
-              child: SizedBox.square(
-                dimension: 26,
-                child: FittedBox(
-                  fit: BoxFit.contain,
-                  child: Icon(icon, color: palette.primaryText),
-                ),
-              ),
+            child: Icon(
+              icon,
+              color: destructive ? const Color(0xFFFF7676) : palette.accent,
+              size: 23,
             ),
           ),
           const SizedBox(height: 8),
@@ -190,7 +254,13 @@ class _DappBrowserMenuAction extends StatelessWidget {
             label,
             textAlign: TextAlign.center,
             maxLines: 2,
-            style: TextStyle(color: palette.primaryText, fontSize: 13),
+            style: TextStyle(
+              color: destructive
+                  ? const Color(0xFFFF7676)
+                  : palette.primaryText,
+              fontSize: 12,
+              height: 1.2,
+            ),
           ),
         ],
       ),
@@ -202,12 +272,21 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   static final _connectedPermissionKeys = <String>{};
 
   final _sessionConnectedOrigins = <String>{};
-  var _reloadedAfterLayout = false;
   InAppWebViewController? _controller;
   late Uri _currentUri;
   late _WalletChain _activeChain;
   var _isLoading = true;
   String? _loadError;
+  String _webViewEnvironment = 'WebView 内核信息：正在读取';
+  final _diagnosticEntries = <String>[];
+  var _diagnosticResourceCount = 0;
+  var _resourceLimitReported = false;
+
+  void _recordDiagnostic(String message) {
+    final time = DateTime.now().toIso8601String().substring(11, 23);
+    _diagnosticEntries.add('$time $message');
+    if (_diagnosticEntries.length > 300) _diagnosticEntries.removeAt(0);
+  }
 
   bool get _isEvmChain =>
       WalletChainRegistry.chains[_activeChain.network]?.isEvm ?? false;
@@ -222,6 +301,8 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     incognito: false,
     sharedCookiesEnabled: true,
     thirdPartyCookiesEnabled: true,
+    useOnLoadResource: true,
+    useOnRenderProcessGone: true,
     mediaPlaybackRequiresUserGesture: false,
     allowsInlineMediaPlayback: true,
     useShouldOverrideUrlLoading: true,
@@ -230,7 +311,10 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   );
 
   UnmodifiableListView<UserScript> get _initialUserScripts {
-    final scripts = <UserScript>[_dappStorageUserScript];
+    final scripts = <UserScript>[
+      _dappDiagnosticUserScript,
+      _dappStorageUserScript,
+    ];
     if (_isEvmChain) {
       scripts.add(_evmProviderUserScript);
     } else if (_activeChain.network == WalletNetwork.solana) {
@@ -267,29 +351,75 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
                   initialSettings: _webViewSettings,
                   initialUserScripts: _initialUserScripts,
                   onWebViewCreated: _onWebViewCreated,
-                  onLoadStart: (_, url) => _onLocationChanged(url),
-                  onLoadStop: (controller, url) {
+                  onLoadStart: (_, url) {
                     _onLocationChanged(url);
-                    if (widget.dappId == 'wandering-earth' &&
-                        !_reloadedAfterLayout) {
-                      _reloadedAfterLayout = true;
-                      if (mounted) setState(() => _isLoading = true);
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) unawaited(controller.reload());
-                      });
-                      return;
-                    }
+                    _recordDiagnostic('页面开始加载：${url ?? _currentUri}');
+                    if (mounted) setState(() => _isLoading = true);
+                  },
+                  onLoadStop: (_, url) {
+                    _onLocationChanged(url);
+                    _recordDiagnostic('页面加载完成：${url ?? _currentUri}');
                     if (mounted) setState(() => _isLoading = false);
                   },
                   onProgressChanged: (_, progress) {
                     if (mounted) setState(() => _isLoading = progress < 100);
                   },
                   onReceivedError: (_, request, error) {
-                    if (request.isForMainFrame != true || !mounted) return;
-                    setState(() {
-                      _isLoading = false;
-                      _loadError = '页面加载失败：${error.description}';
-                    });
+                    _recordDiagnostic(
+                      '网络错误 ${request.url}：类型=${error.type} 描述=${error.description}',
+                    );
+                    if (request.isForMainFrame == true && mounted) {
+                      setState(() {
+                        _isLoading = false;
+                        _loadError = '页面加载失败：${error.description}';
+                      });
+                    }
+                  },
+                  onReceivedHttpError: (_, request, response) {
+                    final statusCode = response.statusCode;
+                    if (statusCode == null || statusCode < 400) return;
+                    _recordDiagnostic(
+                      'HTTP $statusCode ${response.reasonPhrase ?? ''} ${request.url}',
+                    );
+                    if (request.isForMainFrame == true && mounted) {
+                      setState(() {
+                        _isLoading = false;
+                        _loadError = '页面请求失败：HTTP $statusCode';
+                      });
+                    }
+                  },
+                  onConsoleMessage: (_, message) => _recordDiagnostic(
+                    'JS ${message.messageLevel}: ${message.message}',
+                  ),
+                  onLoadResource: (_, resource) {
+                    if (_diagnosticResourceCount >= 150) {
+                      if (!_resourceLimitReported) {
+                        _resourceLimitReported = true;
+                        _recordDiagnostic('资源日志达到 150 条上限，后续成功资源已省略');
+                      }
+                      return;
+                    }
+                    _diagnosticResourceCount += 1;
+                    final type = resource.initiatorType ?? 'resource';
+                    final url = resource.url;
+                    if (url != null) {
+                      _recordDiagnostic(
+                        '资源完成 $type duration=${resource.duration}ms：$url',
+                      );
+                    }
+                  },
+                  onRenderProcessGone: (_, detail) {
+                    _recordDiagnostic(
+                      'WebView 渲染进程退出 didCrash=${detail.didCrash} priority=${detail.rendererPriorityAtExit}',
+                    );
+                  },
+                  onRenderProcessUnresponsive: (_, url) async {
+                    _recordDiagnostic('WebView 渲染进程无响应：$url');
+                    return null;
+                  },
+                  onRenderProcessResponsive: (_, url) async {
+                    _recordDiagnostic('WebView 渲染进程恢复响应：$url');
+                    return null;
                   },
                   shouldOverrideUrlLoading: (_, action) =>
                       _allowNavigation(action.request.url),
@@ -404,10 +534,147 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       barrierColor: const Color(0x88000000),
       builder: (menuContext) => _DappBrowserMenu(
         palette: widget.palette,
+        host: _currentUri.host,
         onCopy: () => _copyCurrentUrl(menuContext),
         onRefresh: () => _refreshPage(menuContext),
         onOpenExternal: () => _openInSystemBrowser(menuContext),
+        onShowDiagnostics: () => _showDiagnostics(menuContext),
+        onClearDappData: () => _confirmClearDappData(menuContext),
       ),
+    );
+  }
+
+  Future<void> _confirmClearDappData(BuildContext menuContext) async {
+    Navigator.of(menuContext).pop();
+    final shouldClear = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('清除 DApp 缓存'),
+        content: const Text('将清除此网站的 Cookie 和本地数据，可能需要重新登录。'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+    if (shouldClear == true) await _clearCurrentDappData();
+  }
+
+  Future<void> _clearCurrentDappData() async {
+    final origin = _origin;
+    if (origin == null) return;
+    try {
+      await _controller?.evaluateJavascript(
+        source: '''(function(){
+          try { localStorage.clear(); sessionStorage.clear(); } catch (e) {}
+          try { if (window.caches && caches.keys) caches.keys().then(function(keys) {
+            keys.forEach(function(key) { caches.delete(key); });
+          }); } catch (e) {}
+        })();''',
+      );
+      await CookieManager.instance().deleteCookies(
+        url: WebUri('$origin/'),
+        webViewController: _controller,
+      );
+      if (defaultTargetPlatform == TargetPlatform.android) {
+        await WebStorageManager.instance().deleteOrigin(origin: origin);
+      }
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.remove(_dappStorageKey(origin));
+      _recordDiagnostic('已清理站点数据：$origin');
+      await _controller?.reload();
+    } catch (error) {
+      _recordDiagnostic('清理站点数据失败：$error');
+    }
+  }
+
+  void _showDiagnostics(BuildContext menuContext) {
+    Navigator.of(menuContext).pop();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: widget.palette.surface,
+      builder: (sheetContext) {
+        final entries = List<String>.unmodifiable(_diagnosticEntries);
+        final report = [
+          'URL: ${_currentUri.toString()}',
+          '页面状态: ${_isLoading ? '加载中' : '已停止加载'}',
+          _webViewEnvironment,
+          '平台: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}',
+          '时间: ${DateTime.now().toIso8601String()}',
+          ...entries,
+        ].join('\n');
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.sizeOf(sheetContext).height * .72,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '网页诊断日志 (${entries.length})',
+                          style: TextStyle(
+                            color: widget.palette.primaryText,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      CupertinoButton(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: report));
+                          Navigator.of(sheetContext).pop();
+                        },
+                        child: const Text('复制日志'),
+                      ),
+                      CupertinoButton(
+                        onPressed: () => Navigator.of(sheetContext).pop(),
+                        child: const Text('关闭'),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: entries.isEmpty
+                      ? Center(
+                          child: Text(
+                            '暂无日志，刷新页面后重试',
+                            style: TextStyle(color: widget.palette.mutedText),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: entries.length,
+                          itemBuilder: (_, index) => Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 5,
+                            ),
+                            child: SelectableText(
+                              entries[index],
+                              style: TextStyle(
+                                color: widget.palette.primaryText,
+                                fontSize: 12,
+                                fontFamily: 'monospace',
+                              ),
+                            ),
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -428,6 +695,28 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
 
   void _onWebViewCreated(InAppWebViewController controller) {
     _controller = controller;
+    unawaited(_readWebViewEnvironment());
+    controller.addJavaScriptHandler(
+      handlerName: 'acoDappDiagnostic',
+      callback: (arguments) {
+        if (arguments.isNotEmpty) {
+          final detail = arguments.first;
+          if (detail is Map) {
+            final type = detail['type'] ?? 'javascript-error';
+            final source = detail['source'] ?? detail['url'] ?? '';
+            final line = detail['line'] ?? 0;
+            final column = detail['column'] ?? 0;
+            final message = detail['message'] ?? '';
+            _recordDiagnostic(
+              '网页异常 [$type] $source:$line:$column $message | ${jsonEncode(detail)}',
+            );
+          } else {
+            _recordDiagnostic('网页异常：$detail');
+          }
+        }
+        return true;
+      },
+    );
     controller.addJavaScriptHandler(
       handlerName: 'acoDappProvider',
       callback: (arguments) => _handleProviderRequest(arguments),
@@ -444,6 +733,23 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       handlerName: 'acoDappStorageSet',
       callback: (arguments) => _saveDappStorage(arguments),
     );
+  }
+
+  Future<void> _readWebViewEnvironment() async {
+    try {
+      final package = await InAppWebViewController.getCurrentWebViewPackage();
+      if (!mounted) return;
+      final environment = package == null
+          ? 'WebView 内核：无法读取'
+          : 'WebView 内核：${package.packageName ?? '未知包名'} ${package.versionName ?? '未知版本'}';
+      setState(() {
+        _webViewEnvironment = environment;
+      });
+      _recordDiagnostic(environment);
+    } catch (error) {
+      _webViewEnvironment = 'WebView 内核读取失败：$error';
+      _recordDiagnostic(_webViewEnvironment);
+    }
   }
 
   Future<void> _restoreConnectedPermissions() async {
@@ -1178,6 +1484,83 @@ String _baseUnitsToDecimal(BigInt value, int decimals) {
 }
 
 String _lamportsToSol(BigInt lamports) => _baseUnitsToDecimal(lamports, 9);
+
+final _dappDiagnosticUserScript = UserScript(
+  injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+  forMainFrameOnly: false,
+  source: '''
+(function () {
+  if (window.__acoDappDiagnosticInstalled) return;
+  window.__acoDappDiagnosticInstalled = true;
+  var pending = [];
+  function send(data) {
+    var result = window.flutter_inappwebview.callHandler('acoDappDiagnostic', data);
+    if (result && typeof result.catch === 'function') result.catch(function () {});
+  }
+  function report(data) {
+    try {
+      if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+        send(data);
+        return;
+      }
+    } catch (error) {}
+    pending.push(data);
+    if (pending.length > 100) pending.shift();
+  }
+  function flush() {
+    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return;
+    while (pending.length) {
+      send(pending.shift());
+    }
+  }
+  window.addEventListener('flutterInAppWebViewPlatformReady', flush, false);
+  var retries = 0;
+  var retryTimer = window.setInterval(function () {
+    flush();
+    retries += 1;
+    if (retries >= 100) window.clearInterval(retryTimer);
+  }, 100);
+  window.addEventListener('error', function (event) {
+    var target = event && event.target;
+    var isResourceError = target && target !== window && target !== document;
+    if (isResourceError) {
+      var resourceUrl = target.currentSrc || target.src || target.href || '';
+      report({
+        type: 'resource-error',
+        tag: target.tagName || '',
+        url: resourceUrl,
+        message: '资源加载失败'
+      });
+      return;
+    }
+    report({
+      type: 'javascript-error',
+      message: event && event.message || '未知 JavaScript 错误',
+      source: event && event.filename || '',
+      line: event && event.lineno || 0,
+      column: event && event.colno || 0,
+      stack: event && event.error && event.error.stack || ''
+    });
+  }, true);
+  window.addEventListener('unhandledrejection', function (event) {
+    var reason = event && event.reason;
+    report({
+      type: 'unhandled-rejection',
+      message: reason && reason.message || String(reason || '未知 Promise 错误'),
+      stack: reason && reason.stack || ''
+    });
+  }, false);
+  if (window.top === window) {
+    report({
+      type: 'page-environment',
+      url: window.location.href,
+      userAgent: window.navigator && window.navigator.userAgent || '',
+      language: window.navigator && window.navigator.language || ''
+    });
+  }
+})();
+''',
+);
 
 final _dappStorageUserScript = UserScript(
   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
