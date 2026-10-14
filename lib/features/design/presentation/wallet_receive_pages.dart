@@ -654,6 +654,11 @@ class _AddTokenPageState extends State<_AddTokenPage> {
   final Set<String> _addedAddresses = {};
   final Set<String> _addingAddresses = {};
   String _searchQuery = '';
+  List<WalletHotToken> _searchResults = const [];
+  bool _searching = false;
+  bool _hasSearched = false;
+  String? _searchError;
+  int _searchGeneration = 0;
 
   @override
   void initState() {
@@ -677,6 +682,11 @@ class _AddTokenPageState extends State<_AddTokenPage> {
       setState(() {
         _tokens = _defaultTokens();
         _searchQuery = '';
+        _searchResults = const [];
+        _searching = false;
+        _hasSearched = false;
+        _searchError = null;
+        _searchGeneration++;
         _addedAddresses.clear();
         _addingAddresses.clear();
         _hotTokensFuture = _hotTokenService.load(
@@ -835,22 +845,42 @@ class _AddTokenPageState extends State<_AddTokenPage> {
       children: [
         _AddTokenSearch(
           palette: widget.palette,
-          onChanged: (value) =>
-              setState(() => _searchQuery = value.trim().toLowerCase()),
+          onChanged: (value) => setState(() {
+            _searchQuery = value.trim();
+            _searchResults = const [];
+            _hasSearched = false;
+            _searchError = null;
+            _searching = false;
+            _searchGeneration++;
+          }),
           onSubmit: _searchContract,
         ),
-        const SizedBox(height: 30),
+        SizedBox(height: _searchQuery.isEmpty ? 30 : 12),
         if (_searchQuery.isNotEmpty) ...[
-          for (final token in _tokens.where(_matchesToken))
-            _hotTokenRow(
-              WalletHotToken(
-                symbol: token.symbol,
-                name: token.assetName,
-                address: token.tokenAddress ?? '',
-                decimals: token.decimals,
+          if (_searching)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 18),
+              child: CupertinoActivityIndicator(),
+            )
+          else if (_searchError != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                _searchError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: widget.palette.mutedText),
               ),
-            ),
-          if (!_tokens.any(_matchesToken))
+            )
+          else if (!_hasSearched)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Text(
+                '输入名称、符号或合约地址后搜索',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: widget.palette.mutedText),
+              ),
+            )
+          else if (_searchResults.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 18),
               child: Text(
@@ -858,85 +888,240 @@ class _AddTokenPageState extends State<_AddTokenPage> {
                 textAlign: TextAlign.center,
                 style: TextStyle(color: widget.palette.mutedText),
               ),
-            ),
-          const SizedBox(height: 12),
-        ],
-        _AddTokenEntry(
-          label: '自定义代币',
-          palette: widget.palette,
-          onPressed: () async {
-            final added = await Navigator.of(context).push<bool>(
-              _AcoPageRoute(
-                builder: (_) => _CustomTokenPage(
-                  palette: widget.palette,
-                  selectedChain: widget.selectedChain,
-                  walletIdentity: widget.walletIdentity,
-                ),
+            )
+          else ...[
+            Text(
+              '找到 ${_searchResults.length} 个结果',
+              style: TextStyle(
+                color: widget.palette.mutedText,
+                fontSize: AcoTypography.caption,
               ),
-            );
-            if (added == true && context.mounted) {
-              await _loadAddedTokens();
-              if (!context.mounted) return;
-              _showNotice(context, '添加成功', '自定义代币已添加至资产列表。');
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        Text(
-          '热门代币',
-          style: TextStyle(
-            color: widget.palette.primaryText,
-            fontSize: AcoTypography.bodyEmphasis,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 14),
-        FutureBuilder<List<WalletHotToken>>(
-          key: ValueKey(widget.selectedChain.network),
-          future: _hotTokensFuture,
-          builder: (_, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: CupertinoActivityIndicator(),
+            ),
+            const SizedBox(height: 8),
+            for (final token in _searchResults)
+              _TokenSearchResultRow(
+                token: token,
+                palette: widget.palette,
+                added: _isAdded(token),
+                loading: _addingAddresses.contains(token.address.toLowerCase()),
+                onPressed: () => _addSearchResultToken(token),
+              ),
+          ],
+        ] else ...[
+          _AddTokenEntry(
+            label: '自定义代币',
+            palette: widget.palette,
+            onPressed: () async {
+              final added = await Navigator.of(context).push<bool>(
+                _AcoPageRoute(
+                  builder: (_) => _CustomTokenPage(
+                    palette: widget.palette,
+                    selectedChain: widget.selectedChain,
+                    walletIdentity: widget.walletIdentity,
+                  ),
+                ),
               );
-            }
-            final query = _searchQuery;
-            final tokens = (snapshot.data ?? const <WalletHotToken>[]).where((
-              token,
-            ) {
-              if (query.isEmpty) return true;
-              return token.address.toLowerCase() == query;
-            });
-            return Column(
-              children: [for (final token in tokens) _hotTokenRow(token)],
-            );
-          },
-        ),
+              if (added == true && context.mounted) {
+                await _loadAddedTokens();
+                if (!context.mounted) return;
+                _showNotice(context, '添加成功', '自定义代币已添加至资产列表。');
+              }
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            '热门代币',
+            style: TextStyle(
+              color: widget.palette.primaryText,
+              fontSize: AcoTypography.bodyEmphasis,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          FutureBuilder<List<WalletHotToken>>(
+            key: ValueKey(widget.selectedChain.network),
+            future: _hotTokensFuture,
+            builder: (_, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12),
+                  child: CupertinoActivityIndicator(),
+                );
+              }
+              final tokens = snapshot.data ?? const <WalletHotToken>[];
+              return Column(
+                children: [for (final token in tokens) _hotTokenRow(token)],
+              );
+            },
+          ),
+        ],
       ],
     ),
   );
 
-  bool _matchesToken(WalletBalance token) {
-    final query = _searchQuery;
-    return token.tokenAddress?.toLowerCase() == query;
+  Future<void> _searchContract() async {
+    final query = _searchQuery.trim();
+    if (query.isEmpty || _searching) return;
+    final generation = ++_searchGeneration;
+    setState(() {
+      _searching = true;
+      _hasSearched = false;
+      _searchResults = const [];
+      _searchError = null;
+    });
+    try {
+      final tokens = await _hotTokenService.search(query);
+      if (!mounted || generation != _searchGeneration) return;
+      const supportedChains = {
+        'ethereum',
+        'bsc',
+        'polygon',
+        'arbitrum',
+        'optimism',
+        'base',
+        'tron',
+        'solana',
+      };
+      final selectedChain = widget.selectedChain.network.name.toLowerCase();
+      setState(() {
+        _searchResults = tokens
+            .where(
+              (token) =>
+                  supportedChains.contains(token.chain.toLowerCase()) &&
+                  token.chain.toLowerCase() == selectedChain,
+            )
+            .toList(growable: false);
+        _searching = false;
+        _hasSearched = true;
+      });
+    } catch (error) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        _searching = false;
+        _hasSearched = true;
+        _searchError = error.toString().contains('rate limited')
+            ? '搜索请求太频繁，请稍后再试。'
+            : '搜索失败，请稍后重试。';
+      });
+    }
   }
 
-  Future<void> _searchContract() async {
-    final address = _searchQuery.trim();
-    if (address.isEmpty) return;
-    final added = await Navigator.of(context).push<bool>(
-      _AcoPageRoute(
-        builder: (_) => _CustomTokenPage(
-          palette: widget.palette,
-          selectedChain: widget.selectedChain,
-          walletIdentity: widget.walletIdentity,
-          initialContract: address,
+  Future<void> _addSearchResultToken(WalletHotToken token) async {
+    if (token.chain.toLowerCase() !=
+        widget.selectedChain.network.name.toLowerCase()) {
+      _showNotice(
+        context,
+        '网络不匹配',
+        '请切换至 ${_tokenChainLabel(token.chain)} 网络后再添加。',
+      );
+      return;
+    }
+    await _addHotToken(token);
+  }
+}
+
+String _tokenChainLabel(String chain) => switch (chain.toLowerCase()) {
+  'ethereum' => 'Ethereum',
+  'bsc' => 'BNB Chain',
+  'polygon' => 'Polygon',
+  'arbitrum' => 'Arbitrum',
+  'optimism' => 'Optimism',
+  'base' => 'Base',
+  'tron' => 'TRON',
+  'solana' => 'Solana',
+  _ => chain,
+};
+
+class _TokenSearchResultRow extends StatelessWidget {
+  const _TokenSearchResultRow({
+    required this.token,
+    required this.palette,
+    required this.added,
+    required this.loading,
+    required this.onPressed,
+  });
+
+  final WalletHotToken token;
+  final AcoPalette palette;
+  final bool added;
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: const EdgeInsets.symmetric(vertical: 7),
+    onPressed: loading || added ? null : onPressed,
+    child: Container(
+      padding: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: palette.border.withValues(alpha: .35)),
         ),
       ),
-    );
-    if (added == true && mounted) await _loadAddedTokens();
-  }
+      child: Row(
+        children: [
+          SizedBox(
+            width: 40,
+            height: 40,
+            child: _HotTokenIcon(symbol: token.symbol, logoUrl: token.logoUrl),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  token.symbol,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.bodySmall,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  _tokenChainLabel(token.chain),
+                  style: const TextStyle(color: _lime, fontSize: 10),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  token.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: AcoTypography.caption,
+                  ),
+                ),
+                Text(
+                  '地址: ${_shortTokenAddress(token.address)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: palette.mutedText, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (loading)
+            const CupertinoActivityIndicator()
+          else
+            Icon(
+              added
+                  ? CupertinoIcons.check_mark_circled
+                  : CupertinoIcons.add_circled,
+              color: _lime,
+              size: 24,
+            ),
+        ],
+      ),
+    ),
+  );
+
+  String _shortTokenAddress(String address) => address.length <= 22
+      ? address
+      : '${address.substring(0, 10)}…${address.substring(address.length - 8)}';
 }
 
 /// Form for importing a token that is not included in the default token list.
@@ -945,13 +1130,11 @@ class _CustomTokenPage extends StatefulWidget {
     required this.palette,
     required this.selectedChain,
     this.walletIdentity,
-    this.initialContract,
   });
 
   final AcoPalette palette;
   final _WalletChain selectedChain;
   final WalletIdentity? walletIdentity;
-  final String? initialContract;
 
   @override
   State<_CustomTokenPage> createState() => _CustomTokenPageState();
@@ -985,10 +1168,6 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
   void initState() {
     super.initState();
     _contractController.addListener(_contractChanged);
-    final initialContract = widget.initialContract;
-    if (initialContract != null && initialContract.isNotEmpty) {
-      _contractController.text = initialContract;
-    }
   }
 
   void _contractChanged() {
@@ -1283,7 +1462,7 @@ class _AddTokenSearch extends StatelessWidget {
             padding: EdgeInsets.zero,
             decoration: const BoxDecoration(color: _transparent),
             cursorColor: _lime,
-            placeholder: '通过合约地址进行搜索',
+            placeholder: '搜索代币名称、符号或合约地址',
             placeholderStyle: TextStyle(
               color: palette.mutedText,
               fontSize: AcoTypography.caption,

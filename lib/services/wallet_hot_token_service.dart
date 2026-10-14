@@ -12,6 +12,7 @@ class WalletHotToken {
     required this.address,
     required this.decimals,
     this.logoUrl = '',
+    this.chain = '',
   });
 
   final String symbol;
@@ -19,6 +20,7 @@ class WalletHotToken {
   final String address;
   final int decimals;
   final String logoUrl;
+  final String chain;
 
   factory WalletHotToken.fromJson(Map<String, dynamic> json) => WalletHotToken(
     symbol: json['symbol'] as String? ?? '',
@@ -26,6 +28,7 @@ class WalletHotToken {
     address: json['address'] as String? ?? '',
     decimals: (json['decimals'] as num?)?.toInt() ?? 0,
     logoUrl: json['logo_url'] as String? ?? json['logoUrl'] as String? ?? '',
+    chain: json['chain'] as String? ?? '',
   );
 
   Map<String, dynamic> toJson() => {
@@ -34,6 +37,7 @@ class WalletHotToken {
     'address': address,
     'decimals': decimals,
     'logo_url': logoUrl,
+    'chain': chain,
   };
 }
 
@@ -43,6 +47,29 @@ class WalletHotTokenService {
 
   static const _cachePrefix = 'wallet.hot-tokens.v3.';
   final http.Client _client;
+
+  Future<List<WalletHotToken>> search(String query) async {
+    final base = const AppConfig().apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    final uri = Uri.parse(
+      '$base/wallet/tokens/search',
+    ).replace(queryParameters: {'query': query.trim()});
+    final response = await _client
+        .get(uri, headers: {'x-app-version': AppConfig.appVersion})
+        .timeout(const Duration(seconds: 8));
+    if (response.statusCode != 200) {
+      throw StateError(
+        response.statusCode == 429 ? 'rate limited' : 'token search failed',
+      );
+    }
+    final body = jsonDecode(response.body) as Map<String, dynamic>;
+    final rawTokens = body['tokens'];
+    if (rawTokens is! List) return const [];
+    return rawTokens
+        .whereType<Map<String, dynamic>>()
+        .map(WalletHotToken.fromJson)
+        .where((token) => token.address.isNotEmpty && token.symbol.isNotEmpty)
+        .toList(growable: false);
+  }
 
   Future<List<WalletHotToken>> load(String chain) async {
     final preferences = await SharedPreferences.getInstance();
