@@ -58,6 +58,7 @@ import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:aco_chat/services/wallet_token_metadata_reader.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter_chen_kchart/k_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
@@ -189,7 +190,6 @@ String? _voiceCallRecordTextFromMessage(Message message) {
 }
 
 // Colors and geometry are sampled from 设计图/钱包页-dark.svg.
-const _loginSecondarySurface = Color(0xFF515151);
 // 首页-dark.svg is a 595.28pt-wide artboard. These are its measurements
 // converted once for the app's 400pt logical canvas, rather than scaled at
 // runtime from the screen width.
@@ -199,14 +199,13 @@ const _welcomeDesignWidth = 400.0;
 const _welcomeContentTop = 487.6092;
 const _welcomeContentEstimatedHeight = 240.0;
 const _welcomeContentBottomInset = 56.0;
-const _welcomeButtonHeight = 48.0;
+const _welcomeButtonWidth = 181.0;
+const _welcomeButtonAspectRatio = 545 / 176;
 const _welcomeButtonGap = 12.4513;
 const _welcomeCheckboxSize = 12.0;
 const _welcomeCheckboxTopInset = 3.0;
 const _welcomeAgreementFontSize = 13.0;
-const _welcomeBrandWidth = 215.0;
-const _welcomeBrandHeight = 42.0258;
-const _welcomeTitleFontSize = 26.0;
+const _welcomeBrandWidth = 194.0;
 const _welcomeBrandToTitleGap = 10.0793;
 const _welcomeTitleToAgreementGap = 15.4549;
 const _welcomeAgreementToActionsGap = 23.5184;

@@ -690,8 +690,8 @@ class _WalletSetupButton extends StatelessWidget {
     this.height = 48,
     this.fontSize = AcoTypography.titleLarge,
     this.fontWeight = FontWeight.w600,
-    this.backgroundColor,
-    this.borderColor,
+    this.backgroundImageAsset,
+    this.textColor,
     this.loading = false,
     super.key,
   });
@@ -704,65 +704,78 @@ class _WalletSetupButton extends StatelessWidget {
   final double height;
   final double fontSize;
   final FontWeight fontWeight;
-  final Color? backgroundColor;
-  final Color? borderColor;
+  final String? backgroundImageAsset;
+  final Color? textColor;
   final bool loading;
 
-  Color get _backgroundColor =>
-      backgroundColor ?? (filled ? palette.accent : _transparent);
+  Color get _backgroundColor => filled ? palette.accent : _transparent;
 
-  Color get _borderColor =>
-      borderColor ?? (filled ? palette.accent : palette.mutedText);
+  Color get _borderColor => filled ? palette.accent : palette.mutedText;
+
+  Color get _foregroundColor {
+    if (textColor != null) return textColor!;
+    if (backgroundImageAsset != null) return _black;
+    if (!filled) return palette.primaryText;
+    return palette.dark ? _black : _white;
+  }
 
   @override
-  Widget build(BuildContext context) => Opacity(
-    opacity: enabled || loading ? 1 : .42,
-    child: CupertinoButton(
-      padding: EdgeInsets.zero,
-      minimumSize: Size(double.infinity, height),
-      onPressed: enabled ? onPressed : null,
-      child: Container(
-        width: double.infinity,
-        height: height,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: _backgroundColor,
-          border: Border.all(color: _borderColor),
-          borderRadius: BorderRadius.circular(height / 2),
-        ),
-        child: loading
-            ? Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CupertinoActivityIndicator(
-                    color: filled
-                        ? (palette.dark ? _black : _white)
-                        : palette.primaryText,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: filled
-                          ? (palette.dark ? _black : _white)
-                          : palette.primaryText,
-                      fontSize: fontSize,
-                      fontWeight: fontWeight,
-                    ),
-                  ),
-                ],
-              )
-            : Text(
-                label,
-                style: TextStyle(
-                  color: filled
-                      ? (palette.dark ? _black : _white)
-                      : palette.primaryText,
-                  fontSize: fontSize,
-                  fontWeight: fontWeight,
-                ),
+  Widget build(BuildContext context) {
+    final buttonHeight = backgroundImageAsset == null ? height : null;
+    final content = Container(
+      width: double.infinity,
+      height: buttonHeight,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: backgroundImageAsset == null ? _backgroundColor : null,
+        image: backgroundImageAsset == null
+            ? null
+            : DecorationImage(
+                image: AssetImage(backgroundImageAsset!),
+                fit: BoxFit.fill,
               ),
+        border: backgroundImageAsset == null
+            ? Border.all(color: _borderColor)
+            : null,
+        borderRadius: BorderRadius.circular((buttonHeight ?? height) / 2),
       ),
-    ),
-  );
+      child: loading
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CupertinoActivityIndicator(color: _foregroundColor),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: _foregroundColor,
+                    fontSize: fontSize,
+                    fontWeight: fontWeight,
+                  ),
+                ),
+              ],
+            )
+          : Text(
+              label,
+              style: TextStyle(
+                color: _foregroundColor,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+              ),
+            ),
+    );
+    final buttonContent = backgroundImageAsset == null
+        ? content
+        : AspectRatio(aspectRatio: _welcomeButtonAspectRatio, child: content);
+
+    return Opacity(
+      opacity: enabled || loading ? 1 : .42,
+      child: CupertinoButton(
+        padding: EdgeInsets.zero,
+        minimumSize: Size(double.infinity, buttonHeight ?? 0),
+        onPressed: enabled ? onPressed : null,
+        child: buttonContent,
+      ),
+    );
+  }
 }

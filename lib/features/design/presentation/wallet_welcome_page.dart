@@ -223,18 +223,19 @@ class _WalletWelcomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final widthScale = MediaQuery.sizeOf(context).width / 400.0;
-    final titleFontSize = (_welcomeTitleFontSize * widthScale).clamp(
-      26.0,
-      _welcomeTitleFontSize,
+    final rowWidth = math.min(
+      _welcomeButtonWidth * 2 + _welcomeButtonGap,
+      MediaQuery.sizeOf(context).width,
     );
+    final buttonWidth = (rowWidth - _welcomeButtonGap) / 2;
+    final buttonHeight = buttonWidth / _welcomeButtonAspectRatio;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Image.asset(
           'assets/images/welcome-brand.png',
           width: _welcomeBrandWidth,
-          height: _welcomeBrandHeight,
           filterQuality: FilterQuality.high,
           semanticLabel: 'Aco Chat 品牌标识',
         ),
@@ -250,8 +251,8 @@ class _WalletWelcomeContent extends StatelessWidget {
                 '创建新钱包或导入已有钱包\n开始使用',
                 style: TextStyle(
                   color: palette.primaryText,
-                  fontSize: titleFontSize,
-                  fontWeight: FontWeight.w400,
+                  fontSize: 31,
+                  fontWeight: FontWeight.w500,
                   height: 1.18,
                 ),
               ),
@@ -270,40 +271,53 @@ class _WalletWelcomeContent extends StatelessWidget {
           ),
         ),
         const SizedBox(height: _welcomeAgreementToActionsGap),
-        Row(
-          children: [
-            Expanded(
-              child: _WalletSetupButton(
-                key: const Key('create-wallet-button'),
-                label: '创建钱包',
-                enabled: true,
-                filled: true,
-                palette: palette,
-                backgroundColor: _accentGreen,
-                borderColor: _accentGreen,
-                height: _welcomeButtonHeight,
-                fontSize: _welcomeActionFontSize,
-                fontWeight: FontWeight.w700,
-                onPressed: onCreate,
+        SizedBox(
+          height: buttonHeight,
+          child: OverflowBox(
+            alignment: Alignment.center,
+            fit: OverflowBoxFit.deferToChild,
+            minWidth: rowWidth,
+            maxWidth: rowWidth,
+            child: SizedBox(
+              width: rowWidth,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: buttonWidth,
+                    child: _WalletSetupButton(
+                      key: const Key('create-wallet-button'),
+                      label: '创建钱包',
+                      enabled: true,
+                      filled: true,
+                      palette: palette,
+                      backgroundImageAsset:
+                          'assets/images/welcome-create-button.png',
+                      fontSize: _welcomeActionFontSize,
+                      fontWeight: FontWeight.w700,
+                      onPressed: onCreate,
+                    ),
+                  ),
+                  const SizedBox(width: _welcomeButtonGap),
+                  SizedBox(
+                    width: buttonWidth,
+                    child: _WalletSetupButton(
+                      key: const Key('import-wallet-button'),
+                      label: '导入钱包',
+                      enabled: true,
+                      filled: false,
+                      palette: palette,
+                      backgroundImageAsset:
+                          'assets/images/welcome-import-button.png',
+                      textColor: _white,
+                      fontSize: _welcomeActionFontSize,
+                      fontWeight: FontWeight.w700,
+                      onPressed: onImport,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: _welcomeButtonGap),
-            Expanded(
-              child: _WalletSetupButton(
-                key: const Key('import-wallet-button'),
-                label: '导入钱包',
-                enabled: true,
-                filled: false,
-                palette: palette,
-                backgroundColor: _loginSecondarySurface,
-                borderColor: _loginSecondarySurface,
-                height: _welcomeButtonHeight,
-                fontSize: _welcomeActionFontSize,
-                fontWeight: FontWeight.w700,
-                onPressed: onImport,
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
