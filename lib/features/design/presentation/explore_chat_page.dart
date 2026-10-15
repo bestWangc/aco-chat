@@ -223,6 +223,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     Message message, {
     required bool mine,
     Uint8List? imageBytes,
+    String? localFilePath,
   }) {
     final clientMsgID = message.clientMsgID;
     if (clientMsgID?.isNotEmpty != true ||
@@ -239,6 +240,17 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     );
     final retainedImageBytes = imageBytes ?? existing?.imageBytes;
     var historyMessage = messageFromOpenIM;
+    if (localFilePath != null && messageFromOpenIM.fileUrl != null) {
+      historyMessage = _ChatHistoryMessage.file(
+        mine: mine,
+        clientMsgID: clientMsgID,
+        timestamp: messageFromOpenIM.timestamp,
+        fileName: messageFromOpenIM.fileName ?? '文件',
+        fileUrl: messageFromOpenIM.fileUrl!,
+        fileSize: messageFromOpenIM.fileSize ?? 0,
+        filePath: localFilePath,
+      );
+    }
     if (retainedImageBytes != null && message.pictureElem != null) {
       historyMessage = _ChatHistoryMessage.image(
         mine: mine,
@@ -873,6 +885,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     File? videoFile;
     File? snapshotFile;
     String? outgoingClientMsgID;
+    var sentSuccessfully = false;
     try {
       final picked =
           selected ??
@@ -946,13 +959,14 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       _rememberMessage(sent);
       final added = _upsertDisplayedMessage(sent, mine: true);
       if (added) _scrollToBottom(force: true, animate: false);
+      sentSuccessfully = true;
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
       _removeTrackedMessage(outgoingClientMsgID);
       if (mounted) _showNotice(context, '视频发送失败', '请稍后重试。');
       debugPrint('[OpenIM] video send failed: $error');
     } finally {
-      await _deletePickedImage(videoFile);
+      if (!sentSuccessfully) await _deletePickedImage(videoFile);
       await _deletePickedImage(snapshotFile);
     }
   }
@@ -1075,7 +1089,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       );
       if (!mounted) return;
       _rememberMessage(sent);
-      _upsertDisplayedMessage(sent, mine: true);
+      _upsertDisplayedMessage(sent, mine: true, localFilePath: picked.path);
       _scrollToBottom(force: true, animate: false);
       OpenIMChatRepository.conversationRevision.value++;
     } catch (error) {
@@ -1610,6 +1624,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                     fileName: message.fileName,
                                     fileUrl: message.fileUrl,
                                     fileSize: message.fileSize,
+                                    filePath: message.filePath,
                                     isVoiceCallRecord:
                                         message.isVoiceCallRecord,
                                     sendFailed: message.sendFailed,
@@ -2539,6 +2554,7 @@ class _ChatMessage extends StatelessWidget {
     required this.fileName,
     required this.fileUrl,
     required this.fileSize,
+    required this.filePath,
     required this.isVoiceCallRecord,
     required this.sendFailed,
     required this.mine,
@@ -2566,6 +2582,7 @@ class _ChatMessage extends StatelessWidget {
   final String? fileName;
   final String? fileUrl;
   final int? fileSize;
+  final String? filePath;
   final bool isVoiceCallRecord;
   final bool sendFailed;
   final bool mine;
@@ -2695,11 +2712,15 @@ class _ChatMessage extends StatelessWidget {
     }
 
     if (fileUrl != null) {
-      return _Bubble(
-        palette: palette,
-        text: '📎 ${fileName ?? '文件'}',
-        mine: mine,
-        onTextSelected: (selectedText) => _copyText(context, selectedText),
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: _ChatFileBubble(
+          name: fileName ?? '文件',
+          size: fileSize ?? 0,
+          mine: mine,
+          onOpen: () => _openChatFile(context),
+          onSave: () => _saveChatFile(context),
+        ),
       );
     }
 
@@ -2713,6 +2734,88 @@ class _ChatMessage extends StatelessWidget {
       mine: mine,
       onTextSelected: (selectedText) => _copyText(context, selectedText),
     );
+  }
+
+  Future<void> _openChatFile(BuildContext context) async {
+    final url = fileUrl;
+    if (url == null || url.isEmpty) return;
+    final extension = (fileName ?? '').split('.').last.toLowerCase();
+    if (const {'mp4', 'mov', 'm4v', 'avi', 'webm', 'mkv'}.contains(extension)) {
+      await Navigator.of(context).push<void>(
+        CupertinoPageRoute<void>(
+          builder: (_) => _ChatVideoPlayerPage(
+            videoPath: mine ? filePath : null,
+            videoUrl: _chatFileUrl(url),
+            useLocalFile: mine,
+            fileName: fileName ?? 'video.mp4',
+          ),
+        ),
+      );
+      return;
+    }
+    final uri = Uri.tryParse(_chatFileUrl(url));
+    if (uri == null ||
+        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (context.mounted) _showNotice(context, '文件打开失败', '请稍后重试。');
+    }
+  }
+
+  Future<void> _saveChatFile(BuildContext context) async {
+    final url = fileUrl;
+    if (url == null || url.isEmpty) return;
+    try {
+      final localPath = filePath;
+      File? localFile;
+      if (mine && localPath != null && localPath.isNotEmpty) {
+        final candidate = File(localPath);
+        if (await candidate.exists()) localFile = candidate;
+      }
+      final file =
+          localFile ??
+          await _ChatMediaCache.load(_chatFileUrl(url), kind: 'file');
+      final mimeType = switch ((fileName ?? '').split('.').last.toLowerCase()) {
+        'pdf' => 'application/pdf',
+        'mp4' => 'video/mp4',
+        'mov' => 'video/quicktime',
+        'png' => 'image/png',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'txt' => 'text/plain',
+        _ => 'application/octet-stream',
+      };
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path, name: fileName, mimeType: mimeType)],
+          ),
+        );
+      } else {
+        await const MethodChannel('aco/downloads').invokeMethod<void>(
+          'saveFile',
+          {
+            'path': file.path,
+            'filename': fileName ?? 'attachment',
+            'mimeType': mimeType,
+          },
+        );
+        if (context.mounted) _showNotice(context, '保存成功', '文件已保存到下载目录。');
+      }
+    } on PlatformException catch (error) {
+      debugPrint('[ChatFileSave] ${error.code}: ${error.message}');
+      if (context.mounted) _showNotice(context, '保存失败', '请稍后重试。');
+    } catch (error) {
+      debugPrint('[ChatFileSave] $error');
+      if (context.mounted) _showNotice(context, '保存失败', '请检查文件地址和网络后重试。');
+    }
+  }
+
+  String _chatFileUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    final apiUri = Uri.parse(const AppConfig().apiBaseUrl);
+    final resolved = uri.hasScheme ? uri : apiUri.resolveUri(uri);
+    return resolved.scheme == 'http' && resolved.host == 'im.aco.chat'
+        ? resolved.replace(scheme: 'https').toString()
+        : resolved.toString();
   }
 
   Widget _copyableMessageBody(
@@ -2793,6 +2896,92 @@ class _ChatMessage extends StatelessWidget {
   );
 }
 
+class _ChatFileBubble extends StatelessWidget {
+  const _ChatFileBubble({
+    required this.name,
+    required this.size,
+    required this.mine,
+    required this.onOpen,
+    required this.onSave,
+  });
+
+  final String name;
+  final int size;
+  final bool mine;
+  final VoidCallback onOpen;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = mine ? _black : _white;
+    final secondary = mine ? const Color(0xFF5E5E5E) : const Color(0xFFB5B5B5);
+    final background = mine ? const Color(0xFF28B561) : const Color(0xFF2C2C2C);
+    final icon = name.toLowerCase().endsWith('.pdf')
+        ? CupertinoIcons.doc_text_fill
+        : CupertinoIcons.doc_fill;
+    return Semantics(
+      button: true,
+      hint: '预览 $name',
+      child: GestureDetector(
+        onTap: onOpen,
+        child: CustomPaint(
+          painter: mine
+              ? _MineBubblePainter(color: background)
+              : _OtherBubblePainter(color: background),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              mine ? 12 : 18,
+              10,
+              mine ? 10 : 12,
+              10,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: foreground, size: 30),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(color: foreground, fontSize: 15),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _sizeLabel(size),
+                        style: TextStyle(color: secondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                CupertinoButton(
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: const Size(34, 34),
+                  onPressed: onSave,
+                  child: Icon(
+                    CupertinoIcons.arrow_down_to_line,
+                    color: foreground,
+                    size: 19,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _sizeLabel(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
 class _VoiceCallRecordBubble extends StatelessWidget {
   const _VoiceCallRecordBubble({required this.text, required this.mine});
 
@@ -2864,7 +3053,7 @@ class _ChatVideoBubble extends StatelessWidget {
     final networkSnapshot = snapshotUrl?.isNotEmpty == true
         ? _playbackUrl(snapshotUrl!)
         : null;
-    final hasLocal = localSnapshot != null;
+    final hasLocalSnapshot = localSnapshot?.existsSync() == true;
     final hasNetwork = networkSnapshot != null;
     return Semantics(
       button: true,
@@ -2875,6 +3064,8 @@ class _ChatVideoBubble extends StatelessWidget {
             builder: (_) => _ChatVideoPlayerPage(
               videoPath: videoPath,
               videoUrl: videoUrl == null ? null : _playbackUrl(videoUrl!),
+              useLocalFile: mine,
+              fileName: 'video.mp4',
             ),
           ),
         ),
@@ -2887,10 +3078,10 @@ class _ChatVideoBubble extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                if (hasLocal)
-                  Image.file(localSnapshot, fit: BoxFit.cover)
-                else if (hasNetwork)
+                if (hasNetwork)
                   _CachedChatThumbnail(url: networkSnapshot)
+                else if (hasLocalSnapshot)
+                  Image.file(localSnapshot!, fit: BoxFit.cover)
                 else
                   const _VideoUnavailable(),
                 const Center(
@@ -2962,10 +3153,17 @@ class _VideoUnavailable extends StatelessWidget {
 }
 
 class _ChatVideoPlayerPage extends StatefulWidget {
-  const _ChatVideoPlayerPage({this.videoPath, this.videoUrl});
+  const _ChatVideoPlayerPage({
+    this.videoPath,
+    this.videoUrl,
+    this.useLocalFile = false,
+    this.fileName = 'video.mp4',
+  });
 
   final String? videoPath;
   final String? videoUrl;
+  final bool useLocalFile;
+  final String fileName;
 
   @override
   State<_ChatVideoPlayerPage> createState() => _ChatVideoPlayerPageState();
@@ -2974,6 +3172,7 @@ class _ChatVideoPlayerPage extends StatefulWidget {
 class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
   VideoPlayerController? _controller;
   Object? _error;
+  var _saving = false;
 
   @override
   void initState() {
@@ -2985,11 +3184,18 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
     try {
       final path = widget.videoPath;
       final url = widget.videoUrl;
-      final cachedFile = path?.isNotEmpty != true && url?.isNotEmpty == true
+      final localFile =
+          widget.useLocalFile &&
+              path != null &&
+              path.isNotEmpty &&
+              await File(path).exists()
+          ? File(path)
+          : null;
+      final cachedFile = localFile == null && url?.isNotEmpty == true
           ? await _ChatMediaCache.load(url!, kind: 'video')
           : null;
-      final controller = path?.isNotEmpty == true
-          ? VideoPlayerController.file(File(path!))
+      final controller = localFile != null
+          ? VideoPlayerController.file(localFile)
           : cachedFile != null
           ? VideoPlayerController.file(cachedFile)
           : null;
@@ -3001,8 +3207,13 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
       }
       setState(() => _controller = controller);
       await controller.play();
-      setState(() {});
+      if (mounted) setState(() {});
     } catch (error) {
+      final url = widget.videoUrl;
+      final uri = url == null ? null : Uri.tryParse(url);
+      debugPrint(
+        '[ChatVideo] playback failed: $error; remote=${uri?.host}${uri?.path}',
+      );
       if (mounted) setState(() => _error = error);
     }
   }
@@ -3013,12 +3224,56 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
     super.dispose();
   }
 
+  Future<void> _saveVideo() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final path = widget.videoPath;
+      File? localFile;
+      if (widget.useLocalFile && path != null && path.isNotEmpty) {
+        final candidate = File(path);
+        if (await candidate.exists()) localFile = candidate;
+      }
+      final url = widget.videoUrl;
+      final file =
+          localFile ??
+          (url?.isNotEmpty == true
+              ? await _ChatMediaCache.load(url!, kind: 'video')
+              : throw StateError('视频地址无效'));
+      await const MethodChannel('aco/downloads').invokeMethod<void>(
+        'saveVideo',
+        {'path': file.path, 'filename': widget.fileName},
+      );
+      if (mounted) _showNotice(context, '保存成功', '视频已保存到相册。');
+    } on PlatformException catch (error) {
+      debugPrint('[ChatVideoSave] ${error.code}: ${error.message}');
+      if (mounted) {
+        final message = error.code == 'PERMISSION_DENIED'
+            ? '请在系统设置中允许 Aco Chat 添加视频到相册。'
+            : '保存视频失败，请稍后重试。';
+        _showNotice(context, '保存失败', message);
+      }
+    } catch (error) {
+      debugPrint('[ChatVideoSave] $error');
+      if (mounted) _showNotice(context, '保存失败', '请检查视频地址和网络后重试。');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
     backgroundColor: const Color(0xFF000000),
-    navigationBar: const CupertinoNavigationBar(
-      backgroundColor: Color(0xCC000000),
-      middle: Text('视频', style: TextStyle(color: Color(0xFFFFFFFF))),
+    navigationBar: CupertinoNavigationBar(
+      backgroundColor: const Color(0xCC000000),
+      middle: const Text('视频', style: TextStyle(color: Color(0xFFFFFFFF))),
+      trailing: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: _saving ? null : _saveVideo,
+        child: _saving
+            ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
+            : const Text('保存', style: TextStyle(color: Color(0xFFFFFFFF))),
+      ),
     ),
     child: AcoSafeArea(
       child: Center(

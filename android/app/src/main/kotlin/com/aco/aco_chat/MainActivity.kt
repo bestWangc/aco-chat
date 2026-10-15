@@ -18,7 +18,12 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
-    private var pendingImageSave: Pair<ByteArray, MethodChannel.Result>? = null
+    private data class PendingStorageSave(
+        val save: () -> Unit,
+        val deny: () -> Unit,
+    )
+    private val pendingStorageSaves = mutableListOf<PendingStorageSave>()
+    private var storagePermissionRequestInFlight = false
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -46,6 +51,33 @@ class MainActivity : FlutterFragmentActivity() {
             }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/downloads")
             .setMethodCallHandler { call, result ->
+                if (call.method == "saveVideo") {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("INVALID_DATA", "视频文件不存在", null)
+                        return@setMethodCallHandler
+                    }
+                    val filename = call.argument<String>("filename") ?: "video.mp4"
+                    saveWithStoragePermission(
+                        save = { saveVideo(path, filename, result) },
+                        deny = { result.error("PERMISSION_DENIED", "未获得相册权限", null) },
+                    )
+                    return@setMethodCallHandler
+                }
+                if (call.method == "saveFile") {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrEmpty()) {
+                        result.error("INVALID_DATA", "文件不存在", null)
+                        return@setMethodCallHandler
+                    }
+                    val filename = call.argument<String>("filename") ?: "attachment"
+                    val mimeType = call.argument<String>("mimeType") ?: "application/octet-stream"
+                    saveWithStoragePermission(
+                        save = { saveFile(path, filename, mimeType, result) },
+                        deny = { result.error("PERMISSION_DENIED", "未获得存储权限", null) },
+                    )
+                    return@setMethodCallHandler
+                }
                 if (call.method != "saveText" && call.method != "saveImage") {
                     result.notImplemented()
                     return@setMethodCallHandler
@@ -56,14 +88,10 @@ class MainActivity : FlutterFragmentActivity() {
                     return@setMethodCallHandler
                 }
                 if (call.method == "saveImage") {
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q &&
-                        checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-                    ) {
-                        pendingImageSave = bytes to result
-                        requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 4203)
-                    } else {
-                        saveImage(bytes, result)
-                    }
+                    saveWithStoragePermission(
+                        save = { saveImage(bytes, result) },
+                        deny = { result.error("PERMISSION_DENIED", "未获得相册权限", null) },
+                    )
                     return@setMethodCallHandler
                 }
                 val filename = call.argument<String>("filename") ?: "aco-chat.txt"
@@ -201,14 +229,32 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != 4203) return
-        val pending = pendingImageSave ?: return
-        pendingImageSave = null
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
-            saveImage(pending.first, pending.second)
-        } else {
-            pending.second.error("PERMISSION_DENIED", "未获得相册权限", null)
+        if (requestCode != LEGACY_STORAGE_PERMISSION_REQUEST) return
+        storagePermissionRequestInFlight = false
+        val pendingSaves = pendingStorageSaves.toList()
+        pendingStorageSaves.clear()
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        pendingSaves.forEach { pending ->
+            if (granted) pending.save() else pending.deny()
         }
+    }
+
+    private fun saveWithStoragePermission(save: () -> Unit, deny: () -> Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q ||
+            checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        ) {
+            save()
+            return
+        }
+
+        pendingStorageSaves += PendingStorageSave(save, deny)
+        if (storagePermissionRequestInFlight) return
+
+        storagePermissionRequestInFlight = true
+        requestPermissions(
+            arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),
+            LEGACY_STORAGE_PERMISSION_REQUEST,
+        )
     }
 
     private fun saveImage(bytes: ByteArray, result: MethodChannel.Result) {
@@ -251,6 +297,91 @@ class MainActivity : FlutterFragmentActivity() {
             if (uri != null) contentResolver.delete(uri, null, null)
             result.error("SAVE_FAILED", error.message, null)
         }
+    }
+
+    private fun saveVideo(path: String, filename: String, result: MethodChannel.Result) {
+        var uri: Uri? = null
+        try {
+            val source = java.io.File(path)
+            if (!source.exists()) throw IllegalStateException("视频文件不存在")
+            val mimeType = when (filename.substringAfterLast('.', "mp4").lowercase()) {
+                "mov" -> "video/quicktime"
+                "webm" -> "video/webm"
+                else -> "video/mp4"
+            }
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, java.io.File(filename).name)
+                put(MediaStore.Video.Media.MIME_TYPE, mimeType)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/Aco Chat")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+            }
+            val destination = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values)
+                ?: throw IllegalStateException("无法创建相册视频")
+            uri = destination
+            source.inputStream().use { input ->
+                contentResolver.openOutputStream(destination)?.use { output -> input.copyTo(output) }
+                    ?: throw IllegalStateException("无法写入相册视频")
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentResolver.update(destination, ContentValues().apply {
+                    put(MediaStore.Video.Media.IS_PENDING, 0)
+                }, null, null)
+            }
+            result.success(destination.toString())
+        } catch (error: Exception) {
+            if (uri != null) contentResolver.delete(uri, null, null)
+            result.error("SAVE_FAILED", error.message, null)
+        }
+    }
+
+    private fun saveFile(path: String, filename: String, mimeType: String, result: MethodChannel.Result) {
+        try {
+            val source = java.io.File(path)
+            if (!source.exists()) throw IllegalStateException("文件不存在")
+            val safeName = java.io.File(filename).name
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: throw IllegalStateException("无法创建下载文件")
+                try {
+                    source.inputStream().use { input ->
+                        contentResolver.openOutputStream(uri)?.use { output -> input.copyTo(output) }
+                            ?: throw IllegalStateException("无法写入下载文件")
+                    }
+                    contentResolver.update(uri, ContentValues().apply {
+                        put(MediaStore.Downloads.IS_PENDING, 0)
+                    }, null, null)
+                } catch (error: Exception) {
+                    contentResolver.delete(uri, null, null)
+                    throw error
+                }
+                result.success(uri.toString())
+            } else {
+                val downloads = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS,
+                )
+                if (!downloads.exists() && !downloads.mkdirs()) {
+                    throw IllegalStateException("无法创建下载目录")
+                }
+                val destination = java.io.File(downloads, safeName)
+                source.inputStream().use { input ->
+                    destination.outputStream().use { output -> input.copyTo(output) }
+                }
+                result.success(destination.absolutePath)
+            }
+        } catch (error: Exception) {
+            result.error("SAVE_FAILED", error.message, null)
+        }
+    }
+
+    companion object {
+        private const val LEGACY_STORAGE_PERMISSION_REQUEST = 4206
     }
 
     private fun hasBluetoothOutput(audioManager: AudioManager): Boolean =
