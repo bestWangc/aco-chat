@@ -275,13 +275,16 @@ class _WalletTab extends StatelessWidget {
                   horizontal: 10,
                   vertical: 4,
                 ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    color: selected ? _white : _walletHeaderMuted,
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                    fontSize: 16,
-                    height: 1,
+                child: Transform.translate(
+                  offset: const Offset(0, 2),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: selected ? _white : _walletHeaderMuted,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                      fontSize: 16,
+                      height: 1,
+                    ),
                   ),
                 ),
               ),

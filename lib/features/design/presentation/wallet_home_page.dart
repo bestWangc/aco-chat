@@ -582,7 +582,7 @@ class _WalletHomeState extends State<_WalletHome> {
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
                                         color: _walletHeaderMuted,
-                                        fontSize: 20,
+                                        fontSize: 17.5,
                                         fontWeight: FontWeight.w400,
                                         height: 1,
                                       ),
