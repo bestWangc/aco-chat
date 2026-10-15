@@ -1455,27 +1455,35 @@ class _AddTokenSearch extends StatelessWidget {
     child: Row(
       children: [
         const SizedBox(width: 13),
-        Icon(CupertinoIcons.search, color: palette.mutedText, size: 19),
+        Image.asset(
+          'assets/icons/add_token_search.png',
+          width: 24,
+          height: 19,
+        ),
         const SizedBox(width: 8),
         Expanded(
-          child: CupertinoTextField(
-            padding: EdgeInsets.zero,
-            decoration: const BoxDecoration(color: _transparent),
-            cursorColor: _lime,
-            placeholder: '搜索代币名称、符号或合约地址',
-            placeholderStyle: TextStyle(
-              color: palette.mutedText,
-              fontSize: AcoTypography.caption,
+          child: Transform.translate(
+            offset: const Offset(0, 2.5),
+            child: CupertinoTextField(
+              padding: EdgeInsets.zero,
+              textAlignVertical: TextAlignVertical.center,
+              decoration: const BoxDecoration(color: _transparent),
+              cursorColor: _lime,
+              placeholder: '搜索代币名称、符号或合约地址',
+              placeholderStyle: TextStyle(
+                color: palette.mutedText,
+                fontSize: 15.5,
+              ),
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.caption,
+              ),
+              onChanged: onChanged,
+              onSubmitted: (_) {
+                _dismissKeyboard();
+                onSubmit();
+              },
             ),
-            style: TextStyle(
-              color: palette.primaryText,
-              fontSize: AcoTypography.caption,
-            ),
-            onChanged: onChanged,
-            onSubmitted: (_) {
-              _dismissKeyboard();
-              onSubmit();
-            },
           ),
         ),
         CupertinoButton(
