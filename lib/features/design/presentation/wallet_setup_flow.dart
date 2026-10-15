@@ -1,5 +1,8 @@
 part of 'aco_design_shell.dart';
 
+const _walletSetupBottomButtonWidth = 399.0;
+const _walletSetupBottomButtonHeight = 66.0;
+
 class _WalletSetupFlow extends StatefulWidget {
   const _WalletSetupFlow({
     required this.dark,
@@ -104,7 +107,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                         _title,
                         style: TextStyle(
                           color: palette.primaryText,
-                          fontSize: AcoTypography.displaySmall,
+                          fontSize: _isImporting
+                              ? 31
+                              : AcoTypography.displaySmall,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -113,14 +118,14 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                         _description,
                         style: TextStyle(
                           color: palette.mutedText,
-                          fontSize: AcoTypography.body,
+                          fontSize: _isImporting ? 15 : AcoTypography.body,
                           height: 1.55,
                         ),
                       ),
                       const SizedBox(height: 32),
                       if (_isCreating && _step == 1) _backupWords(palette),
                       if (_isVerificationStep) _verifyWords(palette),
-                      if (!_isCreating && _step == 0) _importField(palette),
+                      if (_isImporting) _importField(palette),
                       if (_isSecurityStep)
                         _securityFields(
                           palette,
@@ -131,23 +136,38 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                 ),
               ),
               const SizedBox(height: 16),
-              _WalletSetupButton(
-                key: Key(
-                  _isCreating
-                      ? 'continue-create-wallet-button'
-                      : 'confirm-import-wallet-button',
+              SizedBox(
+                height: _walletSetupBottomButtonHeight,
+                child: OverflowBox(
+                  alignment: Alignment.center,
+                  minWidth: _walletSetupBottomButtonWidth,
+                  maxWidth: _walletSetupBottomButtonWidth,
+                  child: SizedBox(
+                    width: _walletSetupBottomButtonWidth,
+                    child: _WalletSetupButton(
+                      key: Key(
+                        _isCreating
+                            ? 'continue-create-wallet-button'
+                            : 'confirm-import-wallet-button',
+                      ),
+                      label: _isCompletingWalletSetup
+                          ? (_completionStatus ?? '正在创建钱包...')
+                          : _continueLabel,
+                      enabled: _canContinue,
+                      loading: _isCompletingWalletSetup,
+                      filled: true,
+                      palette: palette,
+                      backgroundImageAsset:
+                          'assets/images/wallet-bottom-button.png',
+                      height: _walletSetupBottomButtonHeight,
+                      fontSize: _isImporting
+                          ? 17.5
+                          : AcoTypography.bodyEmphasis,
+                      fontWeight: FontWeight.w500,
+                      onPressed: _continue,
+                    ),
+                  ),
                 ),
-                label: _isCompletingWalletSetup
-                    ? (_completionStatus ?? '正在创建钱包...')
-                    : _continueLabel,
-                enabled: _canContinue,
-                loading: _isCompletingWalletSetup,
-                filled: true,
-                palette: palette,
-                height: 44,
-                fontSize: AcoTypography.bodyEmphasis,
-                fontWeight: FontWeight.w500,
-                onPressed: _continue,
               ),
             ],
           ),
@@ -335,7 +355,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
       color: palette.inputSurface,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(20),
     ),
   );
 
@@ -346,6 +366,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             key: const Key('wallet-password-field'),
             controller: _passwordController,
             obscureText: true,
+            textAlign: TextAlign.start,
             textInputAction: TextInputAction.next,
             onChanged: (_) => setState(() {}),
             onTapOutside: (_) => _dismissKeyboard(),
@@ -354,7 +375,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: palette.inputSurface,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(999),
             ),
           ),
           if (!verifyExisting) const SizedBox(height: 12),
@@ -363,6 +384,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               key: const Key('wallet-password-confirm-field'),
               controller: _confirmPasswordController,
               obscureText: true,
+              textAlign: TextAlign.start,
               textInputAction: TextInputAction.done,
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _dismissKeyboard(),
@@ -372,7 +394,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: palette.inputSurface,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(999),
               ),
             ),
         ],
@@ -392,6 +414,8 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
       _selectedVerificationIndexes.length == _verificationIndexes.length;
 
   bool get _isCreating => widget.mode == _WalletSetupMode.create;
+
+  bool get _isImporting => !_isCreating && _step == 0;
 
   bool get _isVerificationStep => _isCreating && _step == 2;
 
@@ -701,7 +725,7 @@ class _WalletSetupButton extends StatelessWidget {
   final bool filled;
   final AcoPalette palette;
   final VoidCallback? onPressed;
-  final double height;
+  final double? height;
   final double fontSize;
   final FontWeight fontWeight;
   final String? backgroundImageAsset;
@@ -721,10 +745,15 @@ class _WalletSetupButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final buttonHeight = backgroundImageAsset == null ? height : null;
+    final buttonHeight = height;
+    final hasLayeredSurface =
+        backgroundImageAsset == null && filled && buttonHeight != null;
+    final contentHeight = buttonHeight == null
+        ? null
+        : buttonHeight - (hasLayeredSurface ? 6 : 0);
     final content = Container(
       width: double.infinity,
-      height: buttonHeight,
+      height: contentHeight,
       alignment: Alignment.center,
       decoration: BoxDecoration(
         color: backgroundImageAsset == null ? _backgroundColor : null,
@@ -737,7 +766,9 @@ class _WalletSetupButton extends StatelessWidget {
         border: backgroundImageAsset == null
             ? Border.all(color: _borderColor)
             : null,
-        borderRadius: BorderRadius.circular((buttonHeight ?? height) / 2),
+        borderRadius: BorderRadius.circular(
+          (contentHeight ?? height ?? 48) / 2,
+        ),
       ),
       child: loading
           ? Row(
@@ -764,9 +795,23 @@ class _WalletSetupButton extends StatelessWidget {
               ),
             ),
     );
-    final buttonContent = backgroundImageAsset == null
-        ? content
-        : AspectRatio(aspectRatio: _welcomeButtonAspectRatio, child: content);
+    Widget buttonContent = content;
+    if (backgroundImageAsset != null && buttonHeight == null) {
+      buttonContent = AspectRatio(
+        aspectRatio: _welcomeButtonAspectRatio,
+        child: content,
+      );
+    } else if (hasLayeredSurface) {
+      buttonContent = Container(
+        height: buttonHeight,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          color: palette.accent.withValues(alpha: .35),
+          borderRadius: BorderRadius.circular(buttonHeight / 2),
+        ),
+        child: content,
+      );
+    }
 
     return Opacity(
       opacity: enabled || loading ? 1 : .42,

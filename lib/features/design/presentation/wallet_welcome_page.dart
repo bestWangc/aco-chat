@@ -292,6 +292,7 @@ class _WalletWelcomeContent extends StatelessWidget {
                       palette: palette,
                       backgroundImageAsset:
                           'assets/images/welcome-create-button.png',
+                      height: null,
                       fontSize: _welcomeActionFontSize,
                       fontWeight: FontWeight.w700,
                       onPressed: onCreate,
@@ -308,6 +309,7 @@ class _WalletWelcomeContent extends StatelessWidget {
                       palette: palette,
                       backgroundImageAsset:
                           'assets/images/welcome-import-button.png',
+                      height: null,
                       textColor: _white,
                       fontSize: _welcomeActionFontSize,
                       fontWeight: FontWeight.w700,
