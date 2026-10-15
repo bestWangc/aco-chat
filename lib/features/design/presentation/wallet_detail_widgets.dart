@@ -1,5 +1,10 @@
 part of 'aco_design_shell.dart';
 
+const _walletDetailDeleteButtonHeight = 55.0;
+const _walletDetailDeleteButtonLayerInset = 6.0;
+const _walletDetailDeleteButtonInnerHeight =
+    _walletDetailDeleteButtonHeight - _walletDetailDeleteButtonLayerInset * 2;
+
 class _WalletDetailDeleteButton extends StatelessWidget {
   const _WalletDetailDeleteButton({required this.onPressed});
 
@@ -11,18 +16,32 @@ class _WalletDetailDeleteButton extends StatelessWidget {
     label: '删除钱包',
     child: SizedBox(
       width: double.infinity,
-      height: 38,
-      child: CupertinoButton(
-        padding: EdgeInsets.zero,
-        color: _walletDetailDeleteColor,
-        borderRadius: BorderRadius.circular(19),
-        onPressed: onPressed,
-        child: const Text(
-          '删除钱包',
-          style: TextStyle(
-            color: _white,
-            fontSize: AcoTypography.body,
-            fontWeight: FontWeight.w500,
+      height: _walletDetailDeleteButtonHeight,
+      child: Container(
+        padding: const EdgeInsets.all(_walletDetailDeleteButtonLayerInset),
+        decoration: BoxDecoration(
+          color: _walletDetailDeleteColor.withValues(alpha: .35),
+          borderRadius: BorderRadius.circular(
+            _walletDetailDeleteButtonHeight / 2,
+          ),
+        ),
+        child: CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size.fromHeight(
+            _walletDetailDeleteButtonInnerHeight,
+          ),
+          color: _walletDetailDeleteColor,
+          borderRadius: BorderRadius.circular(
+            _walletDetailDeleteButtonInnerHeight / 2,
+          ),
+          onPressed: onPressed,
+          child: const Text(
+            '删除钱包',
+            style: TextStyle(
+              color: _white,
+              fontSize: AcoTypography.body,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ),
