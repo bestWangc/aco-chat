@@ -385,33 +385,45 @@ class _RaisedHandRequestsHeader extends StatelessWidget {
         ),
       ),
       Container(
-        constraints: const BoxConstraints(minWidth: 24),
-        height: 24,
-        padding: const EdgeInsets.symmetric(horizontal: 7),
-        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: palette.accent.withValues(alpha: .16),
-          borderRadius: BorderRadius.circular(12),
+          color: _black,
+          borderRadius: BorderRadius.circular(14),
         ),
-        child: Text(
-          '$count',
-          style: TextStyle(
-            color: palette.accent,
-            fontSize: AcoTypography.caption,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-      CupertinoButton(
-        padding: const EdgeInsets.only(left: 8),
-        minimumSize: const Size(30, 28),
-        onPressed: onRejectAll,
-        child: Text(
-          '全部拒绝',
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.caption,
-          ),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              constraints: const BoxConstraints(minWidth: 24),
+              height: 24,
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: palette.accent.withValues(alpha: .16),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  color: palette.accent,
+                  fontSize: AcoTypography.caption,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            CupertinoButton(
+              padding: const EdgeInsets.only(left: 8),
+              minimumSize: const Size(30, 28),
+              onPressed: onRejectAll,
+              child: Text(
+                '全部拒绝',
+                style: TextStyle(
+                  color: palette.mutedText,
+                  fontSize: AcoTypography.caption,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
       CupertinoButton(
@@ -462,16 +474,14 @@ class _RaisedHandRequestChip extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         _RaisedHandAction(
-          icon: CupertinoIcons.checkmark,
+          assetPath: 'assets/icons/live_speaker_approve.png',
           label: '允许',
-          color: palette.accent,
           onPressed: () => onApprove(user.userId),
         ),
         const SizedBox(width: 4),
         _RaisedHandAction(
-          icon: CupertinoIcons.xmark,
+          assetPath: 'assets/icons/live_speaker_reject.png',
           label: '拒绝',
-          color: palette.mutedText,
           onPressed: () => onReject(user.userId),
         ),
       ],
@@ -748,15 +758,13 @@ class _LiveRoomInfoNotice extends StatelessWidget {
 
 class _RaisedHandAction extends StatelessWidget {
   const _RaisedHandAction({
-    required this.icon,
+    required this.assetPath,
     required this.label,
-    required this.color,
     required this.onPressed,
   });
 
-  final IconData icon;
+  final String assetPath;
   final String label;
-  final Color color;
   final VoidCallback onPressed;
 
   @override
@@ -767,7 +775,7 @@ class _RaisedHandAction extends StatelessWidget {
     child: Semantics(
       button: true,
       label: label,
-      child: Icon(icon, color: color, size: 17),
+      child: Image.asset(assetPath, width: 24, height: 24, fit: BoxFit.contain),
     ),
   );
 }

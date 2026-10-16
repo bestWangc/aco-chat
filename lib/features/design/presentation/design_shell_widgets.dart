@@ -262,13 +262,13 @@ class AcoScreenPage extends StatelessWidget {
       ),
       AcoScreen.marketOverview => _MarketOverviewPage(palette: palette),
       AcoScreen.squareFeed => _SquareFeedPage(
-        key: ValueKey('square-feed-$liveListRevision'),
         palette: palette,
         onOpen: onOpen,
         avatarUrl: avatarUrl,
         identity: identity,
         staffIdentity: staffIdentity,
         walletLoginFuture: walletLoginFuture,
+        liveListRevision: liveListRevision,
         initialLives: initialLives,
       ),
       AcoScreen.socialMessages => _SocialMessagesPage(
@@ -737,7 +737,7 @@ class AcoRootHeader extends StatelessWidget {
         Align(
           alignment: Alignment.centerRight,
           child: Padding(
-            padding: const EdgeInsets.only(right: 35),
+            padding: const EdgeInsets.only(right: 16),
             child: trailing ?? AcoTopActions(palette: palette, onOpen: onOpen),
           ),
         ),
@@ -926,13 +926,16 @@ class AcoSearch extends StatelessWidget {
             ),
           SizedBox(width: isSquareComposer ? 8 : 12),
           Expanded(
-            child: Text(
-              hint,
-              style: TextStyle(
-                color: hintColor,
-                fontSize: isSquareComposer
-                    ? AcoTypography.caption
-                    : hintFontSize,
+            child: Transform.translate(
+              offset: Offset(0, isSquareComposer ? 1 : 0),
+              child: Text(
+                hint,
+                style: TextStyle(
+                  color: hintColor,
+                  fontSize: isSquareComposer
+                      ? AcoTypography.caption
+                      : hintFontSize,
+                ),
               ),
             ),
           ),

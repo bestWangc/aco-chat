@@ -9,6 +9,7 @@ class _SquareFeedPage extends StatefulWidget {
     this.identity = 0,
     this.staffIdentity = 0,
     this.walletLoginFuture,
+    this.liveListRevision = 0,
     this.initialLives,
   });
   final AcoPalette palette;
@@ -17,6 +18,7 @@ class _SquareFeedPage extends StatefulWidget {
   final int identity;
   final int staffIdentity;
   final Future<AccountProfile?>? walletLoginFuture;
+  final int liveListRevision;
   final List<LiveSession>? initialLives;
 
   @override
@@ -60,6 +62,14 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     unawaited(_beginLivesLoad());
     unawaited(_beginPostsLoad(_SquareFeedTab.recommended));
     _startLiveRecommendationScrolling();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SquareFeedPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.liveListRevision != widget.liveListRevision) {
+      unawaited(_refreshLives());
+    }
   }
 
   void _startLiveRecommendationScrolling() {
@@ -647,10 +657,6 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   Widget build(BuildContext context) {
     final palette = widget.palette;
     final onOpen = widget.onOpen;
-    // Keep the header in Flutter logical pixels. The surrounding flex layout
-    // adapts its width; it does not scale a full design artboard at runtime.
-    const headerScale = .672;
-    const headerRightInset = 0.0;
 
     return Stack(
       children: [
@@ -664,32 +670,17 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _PinnedHeaderDelegate(
-                  extent: 46 * headerScale + 8 + 36 + 18 + 24 + 16 + 1,
+                  extent: 46 + 8 + 36 + 18 + 24 + 16 + 1,
                   backgroundColor: palette.background,
                   child: Column(
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: _contentHorizontalInset,
-                        ),
-                        child: SizedBox(
-                          height: 46 * headerScale,
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Padding(
-                              padding: EdgeInsets.only(right: headerRightInset),
-                              child: AcoTopActions(
-                                palette: palette,
-                                onOpen: onOpen,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                      AcoRootHeader(palette: palette, onOpen: onOpen),
                       const SizedBox(height: 8),
                       _SquareComposer(
                         palette: palette,
                         imageUrl: widget.avatarUrl,
+                        isLive: _selectedTab == _SquareFeedTab.live,
+                        onCreateMeeting: _handleFloatingAction,
                       ),
                       const SizedBox(height: 18),
                       _SquareTabs(
@@ -711,29 +702,34 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
             ],
           ),
         ),
-        Positioned(
-          right: 22,
-          bottom: 0,
-          child: Semantics(
-            button: true,
-            label: _selectedTab == _SquareFeedTab.live ? '创建会议' : '发布动态',
-            child: CupertinoButton(
-              key: const Key('create-live-button'),
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(54, 54),
-              onPressed: _handleFloatingAction,
-              child: Container(
-                width: 54,
-                height: 54,
-                decoration: BoxDecoration(
-                  color: palette.accent,
-                  shape: BoxShape.circle,
+        if (_selectedTab != _SquareFeedTab.live)
+          Positioned(
+            right: 22,
+            bottom: 0,
+            child: Semantics(
+              button: true,
+              label: '发布动态',
+              child: CupertinoButton(
+                key: const Key('create-live-button'),
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(54, 54),
+                onPressed: _handleFloatingAction,
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: palette.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.add,
+                    color: _black,
+                    size: 30,
+                  ),
                 ),
-                child: const Icon(CupertinoIcons.add, color: _black, size: 30),
               ),
             ),
           ),
-        ),
       ],
     );
   }
@@ -745,7 +741,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
           _liveListHorizontalInset,
           0,
           _liveListHorizontalInset,
-          96,
+          24,
         ),
         sliver: _buildLiveSliver(palette),
       );
@@ -1620,10 +1616,17 @@ class _AddPhotoTile extends StatelessWidget {
 }
 
 class _SquareComposer extends StatelessWidget {
-  const _SquareComposer({required this.palette, this.imageUrl});
+  const _SquareComposer({
+    required this.palette,
+    this.imageUrl,
+    this.isLive = false,
+    this.onCreateMeeting,
+  });
 
   final AcoPalette palette;
   final String? imageUrl;
+  final bool isLive;
+  final VoidCallback? onCreateMeeting;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -1643,7 +1646,49 @@ class _SquareComposer extends StatelessWidget {
             child: Row(
               children: [
                 AcoAvatar(size: 36, imageUrl: imageUrl),
-                const SizedBox(width: 6),
+                const SizedBox(width: 10),
+                if (isLive) ...[
+                  Semantics(
+                    button: true,
+                    label: '创建会议',
+                    child: CupertinoButton(
+                      key: const Key('create-live-button'),
+                      padding: EdgeInsets.zero,
+                      minimumSize: const Size(96, 36),
+                      onPressed: onCreateMeeting,
+                      child: SizedBox(
+                        width: 96,
+                        height: 36,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: palette.accent.withValues(alpha: .45),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(5),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: palette.accent,
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  '创建会议',
+                                  maxLines: 1,
+                                  style: TextStyle(
+                                    color: _black,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 Expanded(
                   child: Transform.translate(
                     offset: const Offset(10, 0),
@@ -1653,7 +1698,7 @@ class _SquareComposer extends StatelessWidget {
                       height: 35,
                       variant: AcoSearchVariant.squareComposer,
                       submitIcon: CupertinoIcons.add,
-                      showSubmit: true,
+                      showSubmit: !isLive,
                     ),
                   ),
                 ),
@@ -1783,7 +1828,7 @@ class _MessageQuickActions extends StatelessWidget {
             badge: hasUnreadMessages,
             useAssetColor: !showContacts,
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 20),
           _MessageHeaderLabel(
             asset: showContacts
                 ? 'assets/icons/chat_contacts_selected.png'
@@ -1796,10 +1841,18 @@ class _MessageQuickActions extends StatelessWidget {
             useAssetColor: showContacts,
           ),
           Expanded(
-            child: _MessageListSearchField(
-              palette: palette,
-              controller: controller,
-              onChanged: onQueryChanged,
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.sizeOf(context).width * 0.55,
+                ),
+                child: _MessageListSearchField(
+                  palette: palette,
+                  controller: controller,
+                  onChanged: onQueryChanged,
+                ),
+              ),
             ),
           ),
         ],

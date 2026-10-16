@@ -49,7 +49,8 @@ class _ChatHistoryMessage {
        videoDuration = null,
        fileName = null,
        fileUrl = null,
-       fileSize = null;
+       fileSize = null,
+       filePath = null;
 
   const _ChatHistoryMessage.image({
     required this.mine,
@@ -73,7 +74,8 @@ class _ChatHistoryMessage {
        isVoiceCallRecord = false,
        fileName = null,
        fileUrl = null,
-       fileSize = null;
+       fileSize = null,
+       filePath = null;
 
   const _ChatHistoryMessage.file({
     required this.mine,
@@ -83,6 +85,7 @@ class _ChatHistoryMessage {
     this.clientMsgID,
     this.timestamp,
     this.sendFailed = false,
+    this.filePath,
   }) : text = '',
        imageBytes = null,
        imagePath = null,
@@ -121,7 +124,8 @@ class _ChatHistoryMessage {
        isVoiceCallRecord = false,
        fileName = null,
        fileUrl = null,
-       fileSize = null;
+       fileSize = null,
+       filePath = null;
 
   const _ChatHistoryMessage.video({
     required this.mine,
@@ -145,7 +149,8 @@ class _ChatHistoryMessage {
        isVoiceCallRecord = false,
        fileName = null,
        fileUrl = null,
-       fileSize = null;
+       fileSize = null,
+       filePath = null;
 
   static bool isDisplayable(Message message) =>
       OpenIMChatRepository.messageText(message) != null ||
@@ -259,6 +264,7 @@ class _ChatHistoryMessage {
   final String? fileName;
   final String? fileUrl;
   final int? fileSize;
+  final String? filePath;
 }
 
 class _SocialMessageTile extends StatelessWidget {
@@ -305,13 +311,12 @@ class _SocialMessageTile extends StatelessWidget {
                 hoverColor: const Color(0x00000000),
               ),
               child: ListTile(
-                dense: true,
                 contentPadding: EdgeInsets.zero,
                 minVerticalPadding: 0,
-                minLeadingWidth: 40,
+                minLeadingWidth: 54,
                 horizontalTitleGap: 12,
                 leading: groupAvatarUrls == null
-                    ? AcoAvatar(size: 40, imageUrl: avatarUrl)
+                    ? AcoAvatar(size: 54, imageUrl: avatarUrl)
                     : _GroupConversationAvatar(
                         imageUrls: groupAvatarUrls!,
                         fallbackAvatarUrl: avatarUrl,
@@ -391,10 +396,10 @@ class _SocialMessageTile extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: 52,
+            left: 66,
             right: 0,
             bottom: 0,
-            height: 1,
+            height: 0.17,
             child: ColoredBox(color: Color(0xFF323232)),
           ),
         ],
@@ -419,8 +424,8 @@ class _GroupConversationAvatar extends StatelessWidget {
         : imageUrls.take(4).cast<String?>().toList(growable: false);
     return ClipOval(
       child: Container(
-        width: 40,
-        height: 40,
+        width: 54,
+        height: 54,
         padding: const EdgeInsets.all(2),
         decoration: const BoxDecoration(color: Color(0xFF3A3A3A)),
         child: avatars.length == 1

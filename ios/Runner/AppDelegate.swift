@@ -22,6 +22,34 @@ import Photos
       name: "aco/downloads",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()
     ).setMethodCallHandler { call, result in
+      if call.method == "saveVideo" {
+        guard let args = call.arguments as? [String: Any],
+              let path = args["path"] as? String,
+              FileManager.default.fileExists(atPath: path) else {
+          result(FlutterError(code: "INVALID_DATA", message: "视频文件不存在", details: nil))
+          return
+        }
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+          guard status == .authorized || status == .limited else {
+            DispatchQueue.main.async {
+              result(FlutterError(code: "PERMISSION_DENIED", message: "未获得相册权限", details: nil))
+            }
+            return
+          }
+          PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: URL(fileURLWithPath: path))
+          }) { saved, error in
+            DispatchQueue.main.async {
+              if saved {
+                result(nil)
+              } else {
+                result(FlutterError(code: "SAVE_FAILED", message: error?.localizedDescription, details: nil))
+              }
+            }
+          }
+        }
+        return
+      }
       guard call.method == "saveImage" else {
         result(FlutterMethodNotImplemented)
         return

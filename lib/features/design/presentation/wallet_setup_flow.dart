@@ -80,96 +80,107 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     return ColoredBox(
       color: palette.background,
       child: AcoSafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Align(
-                alignment: Alignment.centerLeft,
-                child: Transform.translate(
-                  offset: const Offset(-20, 0),
-                  child: AcoIconButton(
-                    icon: CupertinoIcons.back,
-                    palette: palette,
-                    label: '返回',
-                    onPressed: _goBack,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        _title,
-                        style: TextStyle(
-                          color: palette.primaryText,
-                          fontSize: _isImporting
-                              ? 31
-                              : AcoTypography.displaySmall,
-                          fontWeight: FontWeight.w700,
+        child: LayoutBuilder(
+          builder: (context, constraints) => Center(
+            child: SizedBox(
+              width: math.min(500, constraints.maxWidth),
+              height: constraints.maxHeight,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Transform.translate(
+                        offset: const Offset(-20, 0),
+                        child: AcoIconButton(
+                          icon: CupertinoIcons.back,
+                          palette: palette,
+                          label: '返回',
+                          onPressed: _goBack,
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      Text(
-                        _description,
-                        style: TextStyle(
-                          color: palette.mutedText,
-                          fontSize: _isImporting ? 15 : AcoTypography.body,
-                          height: 1.55,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      if (_isCreating && _step == 1) _backupWords(palette),
-                      if (_isVerificationStep) _verifyWords(palette),
-                      if (_isImporting) _importField(palette),
-                      if (_isSecurityStep)
-                        _securityFields(
-                          palette,
-                          verifyExisting: _requiresExistingWalletPassword,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: _walletSetupBottomButtonHeight,
-                child: OverflowBox(
-                  alignment: Alignment.center,
-                  minWidth: _walletSetupBottomButtonWidth,
-                  maxWidth: _walletSetupBottomButtonWidth,
-                  child: SizedBox(
-                    width: _walletSetupBottomButtonWidth,
-                    child: _WalletSetupButton(
-                      key: Key(
-                        _isCreating
-                            ? 'continue-create-wallet-button'
-                            : 'confirm-import-wallet-button',
-                      ),
-                      label: _isCompletingWalletSetup
-                          ? (_completionStatus ?? '正在创建钱包...')
-                          : _continueLabel,
-                      enabled: _canContinue,
-                      loading: _isCompletingWalletSetup,
-                      filled: true,
-                      palette: palette,
-                      backgroundImageAsset:
-                          'assets/images/wallet-bottom-button.png',
-                      height: _walletSetupBottomButtonHeight,
-                      fontSize: _isImporting
-                          ? 17.5
-                          : AcoTypography.bodyEmphasis,
-                      fontWeight: FontWeight.w500,
-                      onPressed: _continue,
                     ),
-                  ),
+                    const SizedBox(height: 20),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              _title,
+                              style: TextStyle(
+                                color: palette.primaryText,
+                                fontSize: _isImporting
+                                    ? 31
+                                    : AcoTypography.displaySmall,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _description,
+                              style: TextStyle(
+                                color: palette.mutedText,
+                                fontSize: _isImporting
+                                    ? 15
+                                    : AcoTypography.body,
+                                height: 1.55,
+                              ),
+                            ),
+                            const SizedBox(height: 32),
+                            if (_isCreating && _step == 1)
+                              _backupWords(palette),
+                            if (_isVerificationStep) _verifyWords(palette),
+                            if (_isImporting) _importField(palette),
+                            if (_isSecurityStep)
+                              _securityFields(
+                                palette,
+                                verifyExisting: _requiresExistingWalletPassword,
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Center(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => SizedBox(
+                          height: _walletSetupBottomButtonHeight,
+                          width: math.min(
+                            _walletSetupBottomButtonWidth,
+                            constraints.maxWidth,
+                          ),
+                          child: _WalletSetupButton(
+                            key: Key(
+                              _isCreating
+                                  ? 'continue-create-wallet-button'
+                                  : 'confirm-import-wallet-button',
+                            ),
+                            label: _isCompletingWalletSetup
+                                ? (_completionStatus ?? '正在创建钱包...')
+                                : _continueLabel,
+                            enabled: _canContinue,
+                            loading: _isCompletingWalletSetup,
+                            filled: true,
+                            palette: palette,
+                            backgroundImageAsset:
+                                'assets/images/wallet-bottom-button.png',
+                            height: _walletSetupBottomButtonHeight,
+                            fontSize: _isImporting
+                                ? 17.5
+                                : AcoTypography.bodyEmphasis,
+                            fontWeight: FontWeight.w500,
+                            onPressed: _continue,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

@@ -578,7 +578,7 @@ class _GroupExitButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(6),
+          padding: const EdgeInsets.all(5),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: const Color(0xFFEB4B6E),
@@ -589,7 +589,7 @@ class _GroupExitButton extends StatelessWidget {
                 '退出群聊',
                 style: TextStyle(
                   color: _white,
-                  fontSize: 18,
+                  fontSize: 17,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -1648,10 +1648,13 @@ class _ChatSettingsToggleRow extends StatelessWidget {
       children: [
         Text(label, style: TextStyle(color: palette.primaryText, fontSize: 18)),
         const Spacer(),
-        CupertinoSwitch(
-          value: value,
-          activeTrackColor: palette.accent,
-          onChanged: onChanged,
+        Transform.scale(
+          scale: 0.9,
+          child: CupertinoSwitch(
+            value: value,
+            activeTrackColor: palette.accent,
+            onChanged: onChanged,
+          ),
         ),
       ],
     ),

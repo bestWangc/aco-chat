@@ -150,6 +150,10 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
         AcoSafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final designWidth = math.min(
+                constraints.maxWidth,
+                _welcomeDesignWidth,
+              );
               final horizontalInset = (constraints.maxWidth * 0.08).clamp(
                 _welcomeContentInsetMin,
                 _welcomeContentInsetMax,
@@ -160,9 +164,7 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
               // constrains the block, so tall screens do not push it too close
               // to the gesture area and short screens keep the actions visible.
               final designContentTop =
-                  _welcomeContentTop *
-                  constraints.maxWidth /
-                  _welcomeDesignWidth;
+                  _welcomeContentTop * designWidth / _welcomeDesignWidth;
               final heightBasedContentTop = constraints.maxHeight * .5;
               final safeContentTop = math.max(
                 0.0,
@@ -181,17 +183,24 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
                   horizontalInset,
                   24,
                 ),
-                child: _WalletWelcomeContent(
-                  palette: palette,
-                  hasAcceptedTerms: _hasAcceptedTerms,
-                  onTermsChanged: (accepted) =>
-                      setState(() => _hasAcceptedTerms = accepted),
-                  onOpenUserAgreement: () =>
-                      _openLegalDocument(LegalDocument.userAgreement),
-                  onOpenPrivacyPolicy: () =>
-                      _openLegalDocument(LegalDocument.privacyPolicy),
-                  onCreate: () => _startWalletSetup(_WalletSetupMode.create),
-                  onImport: () => _startWalletSetup(_WalletSetupMode.import),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    child: _WalletWelcomeContent(
+                      palette: palette,
+                      hasAcceptedTerms: _hasAcceptedTerms,
+                      onTermsChanged: (accepted) =>
+                          setState(() => _hasAcceptedTerms = accepted),
+                      onOpenUserAgreement: () =>
+                          _openLegalDocument(LegalDocument.userAgreement),
+                      onOpenPrivacyPolicy: () =>
+                          _openLegalDocument(LegalDocument.privacyPolicy),
+                      onCreate: () =>
+                          _startWalletSetup(_WalletSetupMode.create),
+                      onImport: () =>
+                          _startWalletSetup(_WalletSetupMode.import),
+                    ),
+                  ),
                 ),
               );
             },
@@ -223,105 +232,117 @@ class _WalletWelcomeContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rowWidth = math.min(
-      _welcomeButtonWidth * 2 + _welcomeButtonGap,
-      MediaQuery.sizeOf(context).width,
-    );
-    final buttonWidth = (rowWidth - _welcomeButtonGap) / 2;
-    final buttonHeight = buttonWidth / _welcomeButtonAspectRatio;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final actionsWidth = math.min(
+          _welcomeButtonWidth * 2 + _welcomeButtonGap,
+          constraints.maxWidth,
+        );
+        final stacked = constraints.maxWidth < 320;
+        final buttonGap = math.min(_welcomeButtonGap, actionsWidth);
+        final buttonWidth = stacked
+            ? actionsWidth
+            : (actionsWidth - buttonGap) / 2;
+        final buttonHeight = math.max(
+          48.0,
+          buttonWidth / _welcomeButtonAspectRatio,
+        );
+        final createButton = SizedBox(
+          width: buttonWidth,
+          height: buttonHeight,
+          child: _WalletSetupButton(
+            key: const Key('create-wallet-button'),
+            label: '创建钱包',
+            enabled: true,
+            filled: true,
+            palette: palette,
+            backgroundImageAsset: 'assets/images/welcome-create-button.png',
+            height: null,
+            fontSize: _welcomeActionFontSize,
+            fontWeight: FontWeight.w700,
+            onPressed: onCreate,
+          ),
+        );
+        final importButton = SizedBox(
+          width: buttonWidth,
+          height: buttonHeight,
+          child: _WalletSetupButton(
+            key: const Key('import-wallet-button'),
+            label: '导入钱包',
+            enabled: true,
+            filled: false,
+            palette: palette,
+            backgroundImageAsset: 'assets/images/welcome-import-button.png',
+            height: null,
+            textColor: _white,
+            fontSize: _welcomeActionFontSize,
+            fontWeight: FontWeight.w700,
+            onPressed: onImport,
+          ),
+        );
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Image.asset(
-          'assets/images/welcome-brand.png',
-          width: _welcomeBrandWidth,
-          filterQuality: FilterQuality.high,
-          semanticLabel: 'Aco Chat 品牌标识',
-        ),
-        const SizedBox(height: _welcomeBrandToTitleGap),
-        Transform.translate(
-          offset: const Offset(-2, 0),
-          child: Padding(
-            padding: const EdgeInsets.only(left: 5.3756),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                '创建新钱包或导入已有钱包\n开始使用',
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: 31,
-                  fontWeight: FontWeight.w500,
-                  height: 1.18,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Image.asset(
+              'assets/images/welcome-brand.png',
+              width: _welcomeBrandWidth,
+              filterQuality: FilterQuality.high,
+              semanticLabel: 'Aco Chat 品牌标识',
+            ),
+            const SizedBox(height: _welcomeBrandToTitleGap),
+            Transform.translate(
+              offset: const Offset(-2, 0),
+              child: Padding(
+                padding: const EdgeInsets.only(left: 5.3756),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '创建新钱包或导入已有钱包\n开始使用',
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: 31,
+                      fontWeight: FontWeight.w500,
+                      height: 1.18,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: _welcomeTitleToAgreementGap),
-        Padding(
-          padding: const EdgeInsets.only(left: 5.3756),
-          child: _WalletWelcomeAgreement(
-            palette: palette,
-            selected: hasAcceptedTerms,
-            onChanged: onTermsChanged,
-            onOpenUserAgreement: onOpenUserAgreement,
-            onOpenPrivacyPolicy: onOpenPrivacyPolicy,
-          ),
-        ),
-        const SizedBox(height: _welcomeAgreementToActionsGap),
-        SizedBox(
-          height: buttonHeight,
-          child: OverflowBox(
-            alignment: Alignment.center,
-            fit: OverflowBoxFit.deferToChild,
-            minWidth: rowWidth,
-            maxWidth: rowWidth,
-            child: SizedBox(
-              width: rowWidth,
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: buttonWidth,
-                    child: _WalletSetupButton(
-                      key: const Key('create-wallet-button'),
-                      label: '创建钱包',
-                      enabled: true,
-                      filled: true,
-                      palette: palette,
-                      backgroundImageAsset:
-                          'assets/images/welcome-create-button.png',
-                      height: null,
-                      fontSize: _welcomeActionFontSize,
-                      fontWeight: FontWeight.w700,
-                      onPressed: onCreate,
-                    ),
-                  ),
-                  const SizedBox(width: _welcomeButtonGap),
-                  SizedBox(
-                    width: buttonWidth,
-                    child: _WalletSetupButton(
-                      key: const Key('import-wallet-button'),
-                      label: '导入钱包',
-                      enabled: true,
-                      filled: false,
-                      palette: palette,
-                      backgroundImageAsset:
-                          'assets/images/welcome-import-button.png',
-                      height: null,
-                      textColor: _white,
-                      fontSize: _welcomeActionFontSize,
-                      fontWeight: FontWeight.w700,
-                      onPressed: onImport,
-                    ),
-                  ),
-                ],
+            const SizedBox(height: _welcomeTitleToAgreementGap),
+            Padding(
+              padding: const EdgeInsets.only(left: 5.3756),
+              child: _WalletWelcomeAgreement(
+                palette: palette,
+                selected: hasAcceptedTerms,
+                onChanged: onTermsChanged,
+                onOpenUserAgreement: onOpenUserAgreement,
+                onOpenPrivacyPolicy: onOpenPrivacyPolicy,
               ),
             ),
-          ),
-        ),
-      ],
+            const SizedBox(height: _welcomeAgreementToActionsGap),
+            SizedBox(
+              width: actionsWidth,
+              child: stacked
+                  ? Column(
+                      children: [
+                        createButton,
+                        SizedBox(height: buttonGap),
+                        importButton,
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        createButton,
+                        SizedBox(width: buttonGap),
+                        importButton,
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

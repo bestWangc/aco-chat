@@ -395,6 +395,9 @@ class LiveSession {
     this.canEdit = false,
     this.canExportCheckIns = false,
     this.scheduledAt,
+    this.hostNickname = '',
+    this.hostIdentity = 0,
+    this.hostStaffIdentity = 0,
   });
 
   final int id;
@@ -407,12 +410,18 @@ class LiveSession {
   final bool canEdit;
   final bool canExportCheckIns;
   final DateTime? scheduledAt;
+  final String hostNickname;
+  final int hostIdentity;
+  final int hostStaffIdentity;
 
   factory LiveSession.fromJson(Map<String, dynamic> json) => LiveSession(
     id: _jsonInt(json['id']),
     title: json['title'] as String,
     coverUrl: json['cover_url'] as String,
     hostAvatarUrl: json['host_avatar_url'] as String? ?? '',
+    hostNickname: json['host_nickname'] as String? ?? '',
+    hostIdentity: (json['host_identity'] as num?)?.toInt() ?? 0,
+    hostStaffIdentity: (json['host_staff_identity'] as num?)?.toInt() ?? 0,
     access: json['access'] as String,
     status: json['status'] as String,
     canEdit: json['can_edit'] as bool? ?? false,

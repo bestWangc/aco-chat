@@ -2464,7 +2464,7 @@ class _ChatMorePanel extends StatelessWidget {
       height: rowCount == 1 ? 116 : 224,
       decoration: const BoxDecoration(
         color: Color(0xFF1E1D1B),
-        border: Border(top: BorderSide(color: Color(0xFF515151))),
+        border: Border(top: BorderSide(color: Color(0xFF515151), width: 0.25)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
       child: GridView.builder(
@@ -3814,30 +3814,34 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                       ),
                       prefix: isSearchEmpty
                           ? null
-                          : const Padding(
-                              padding: EdgeInsets.only(left: 14),
-                              child: Icon(
-                                CupertinoIcons.search,
-                                color: Color(0xFF858585),
-                                size: 22,
+                          : Padding(
+                              padding: const EdgeInsets.only(left: 14),
+                              child: Image.asset(
+                                'assets/icons/square_search.png',
+                                width: 22,
+                                height: 18,
+                                color: const Color(0xFF858585),
+                                filterQuality: FilterQuality.high,
                               ),
                             ),
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
-                        vertical: 8,
+                        vertical: 6,
                       ),
                       style: const TextStyle(color: _white, fontSize: 16),
                       decoration: const BoxDecoration(),
                     ),
                     if (isSearchEmpty)
-                      const IgnorePointer(
+                      IgnorePointer(
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
-                              CupertinoIcons.search,
-                              color: Color(0xFF858585),
-                              size: 22,
+                            Image.asset(
+                              'assets/icons/square_search.png',
+                              width: 22,
+                              height: 18,
+                              color: const Color(0xFF858585),
+                              filterQuality: FilterQuality.high,
                             ),
                             SizedBox(width: 10),
                             Text(

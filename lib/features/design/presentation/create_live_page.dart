@@ -458,8 +458,8 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                     '*',
                                     style: TextStyle(
                                       color: _danger,
-                                      fontSize: AcoTypography.body,
-                                      fontWeight: FontWeight.w700,
+                                      fontSize: 17.3,
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
                                   const SizedBox(width: 2),
@@ -510,29 +510,47 @@ class _CreateLivePageState extends State<_CreateLivePage> {
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
               child: SizedBox(
                 width: double.infinity,
-                height: 44,
+                height: 52,
                 child: CupertinoButton(
                   key: const Key('confirm-create-live-button'),
                   padding: EdgeInsets.zero,
                   onPressed: canConfirm ? _confirm : null,
-                  child: Container(
-                    alignment: Alignment.center,
+                  child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: canConfirm
-                          ? palette.accent
+                          ? palette.accent.withValues(alpha: .45)
                           : _createLiveCardColor(palette),
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(24),
                     ),
-                    child: _submitting
-                        ? const CupertinoActivityIndicator(color: _black)
-                        : Text(
-                            _isEditing ? '保存' : '确认',
-                            style: TextStyle(
-                              color: canConfirm ? _black : palette.mutedText,
-                              fontSize: AcoTypography.body,
-                              fontWeight: FontWeight.w700,
-                            ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(6),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: canConfirm
+                              ? palette.accent
+                              : _createLiveCardColor(palette),
+                          borderRadius: BorderRadius.circular(19),
+                        ),
+                        child: SizedBox.expand(
+                          child: Center(
+                            child: _submitting
+                                ? const CupertinoActivityIndicator(
+                                    color: _black,
+                                  )
+                                : Text(
+                                    _isEditing ? '保存' : '确认',
+                                    style: TextStyle(
+                                      color: canConfirm
+                                          ? _black
+                                          : palette.mutedText,
+                                      fontSize: AcoTypography.body,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                           ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),

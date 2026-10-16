@@ -808,7 +808,8 @@ class _ContactsPageState extends State<_ContactsPage> {
                             contentPadding: const EdgeInsets.symmetric(
                               vertical: 10,
                             ),
-                            nameFontSize: 17,
+                            nameFontSize: 18,
+                            nameFontWeight: FontWeight.w400,
                           ),
                         ),
                     ],
@@ -1183,8 +1184,8 @@ class _ContactsQuickAction extends StatelessWidget {
                     label,
                     style: TextStyle(
                       color: palette.primaryText,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w400,
                     ),
                   ),
                   const Spacer(),

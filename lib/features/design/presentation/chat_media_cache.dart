@@ -19,13 +19,15 @@ final class _ChatMediaCache {
     try {
       final directory = await _directory();
       _scheduleCleanup(directory);
-      final file = File('${directory.path}/${_fileName(url)}_$kind');
+      final extension = _extensionFromUrl(url);
+      final file = File('${directory.path}/${_fileName(url)}_$kind$extension');
       if (await _isFresh(file)) return file;
       final response = await http
           .get(Uri.parse(_httpsUrl(url)))
           .timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty)
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
         throw HttpException('媒体下载失败: ${response.statusCode}');
+      }
       await file.writeAsBytes(response.bodyBytes, flush: true);
       return file;
     } finally {
@@ -84,8 +86,9 @@ final class _ChatMediaCache {
     final now = DateTime.now();
     if (_cleanupFuture != null ||
         (_lastCleanup != null &&
-            now.difference(_lastCleanup!) < _cleanupInterval))
+            now.difference(_lastCleanup!) < _cleanupInterval)) {
       return;
+    }
     _lastCleanup = now;
     _cleanupFuture = _cleanup(
       directory,
@@ -105,5 +108,11 @@ final class _ChatMediaCache {
       hash = (hash ^ unit) * 0x100000001b3 & 0xFFFFFFFFFFFFFFFF;
     }
     return hash.toRadixString(16);
+  }
+
+  static String _extensionFromUrl(String url) {
+    final path = Uri.tryParse(url)?.path ?? '';
+    final name = path.split('/').last;
+    return RegExp(r'\.[a-zA-Z0-9]{1,8}$').firstMatch(name)?.group(0) ?? '';
   }
 }

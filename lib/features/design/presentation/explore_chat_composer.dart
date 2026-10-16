@@ -53,7 +53,10 @@ class _ChatComposer extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   decoration: BoxDecoration(
                     color: const Color(0xFF2C2C2C),
-                    border: Border.all(color: const Color(0xFF464646)),
+                    border: Border.all(
+                      color: const Color(0xFF464646),
+                      width: 0.25,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: CupertinoTextField(

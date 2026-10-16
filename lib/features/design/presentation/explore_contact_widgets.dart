@@ -128,6 +128,7 @@ class _ContactListTile extends StatelessWidget {
     this.nameMaxLines = 1,
     this.avatarSize = 42,
     this.nameFontSize,
+    this.nameFontWeight = FontWeight.w500,
     this.avatarGap = 20,
     this.identity = 0,
     this.staffIdentity = 0,
@@ -144,6 +145,7 @@ class _ContactListTile extends StatelessWidget {
   final int nameMaxLines;
   final double avatarSize;
   final double? nameFontSize;
+  final FontWeight nameFontWeight;
   final double avatarGap;
   final int identity;
   final int staffIdentity;
@@ -180,7 +182,7 @@ class _ContactListTile extends StatelessWidget {
                 style: TextStyle(
                   color: palette.primaryText,
                   fontSize: nameFontSize ?? AcoTypography.body,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: nameFontWeight,
                 ),
               ),
             ),

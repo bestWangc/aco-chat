@@ -1028,7 +1028,7 @@ class _PostAction extends StatelessWidget {
 
 const _chatBubbleTailWidth = 5.0;
 const _chatBubbleTailHeight = 7.0;
-const _chatBubbleRadius = 6.0;
+const _chatBubbleRadius = 3.0;
 
 class _Bubble extends StatelessWidget {
   const _Bubble({
@@ -1191,11 +1191,14 @@ class _LiveCard extends StatelessWidget {
     }
   }
 
-  Color get _statusColor => _isLive || session.status == 'scheduled'
+  Color get _statusColor => _isLive
+      ? const Color(0xFF000000)
+      : session.status == 'scheduled'
       ? palette.accent
       : palette.mutedText;
 
-  Color get _statusBackground => _statusColor.withValues(alpha: 0.14);
+  Color get _statusBackground =>
+      _isLive ? palette.accent : _statusColor.withValues(alpha: 0.14);
 
   @override
   Widget build(BuildContext context) {
@@ -1235,23 +1238,47 @@ class _LiveCard extends StatelessWidget {
                     if (session.status.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(
-                        mainAxisSize: MainAxisSize.min,
+                        mainAxisSize: MainAxisSize.max,
                         children: [
+                          if (session.hostNickname.isNotEmpty) ...[
+                            Flexible(
+                              child: Text(
+                                session.hostNickname,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: palette.primaryText,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            if (session.hostIdentity > 0 ||
+                                session.hostStaffIdentity > 0) ...[
+                              const SizedBox(width: 4),
+                              _PostIdentityBadges(
+                                identity: session.hostIdentity,
+                                staffIdentity: session.hostStaffIdentity,
+                              ),
+                            ],
+                            const SizedBox(width: 6),
+                          ],
                           Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: 7,
-                              vertical: 3,
+                              vertical: _isLive ? 2 : 3,
                             ),
                             decoration: BoxDecoration(
                               color: _statusBackground,
-                              borderRadius: BorderRadius.circular(6),
+                              borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
                               _statusLabel,
                               style: TextStyle(
                                 color: _statusColor,
-                                fontSize: AcoTypography.caption,
-                                fontWeight: FontWeight.w700,
+                                fontSize: _isLive ? 12 : AcoTypography.caption,
+                                fontWeight: _isLive
+                                    ? FontWeight.w400
+                                    : FontWeight.w700,
                               ),
                             ),
                           ),
