@@ -491,7 +491,7 @@ class _WalletChainCard extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: palette.accent,
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(8),
                           ),
                           child: const Text(
                             '当前',
@@ -519,10 +519,11 @@ class _WalletChainCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      Icon(
-                        CupertinoIcons.doc_on_doc,
-                        color: palette.mutedText,
-                        size: 14,
+                      Image.asset(
+                        'assets/icons/wallet_list_copy.png',
+                        width: 14,
+                        height: 14,
+                        fit: BoxFit.contain,
                       ),
                     ],
                   ),

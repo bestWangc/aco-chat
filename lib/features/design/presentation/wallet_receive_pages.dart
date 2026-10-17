@@ -204,7 +204,7 @@ class _ReceivePageContent extends StatelessWidget {
                   ),
           ),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 58),
         Text(
           '收款地址',
           textAlign: TextAlign.center,
@@ -226,25 +226,25 @@ class _ReceivePageContent extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 40),
+        const SizedBox(height: 60),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _ReceiveAction(
               palette: palette,
-              icon: CupertinoIcons.share,
+              iconAsset: 'assets/icons/receive_share.png',
               label: '分享',
               onPressed: _hasWalletAddress ? _shareAddress : null,
             ),
             _ReceiveAction(
               palette: palette,
-              icon: CupertinoIcons.doc_on_doc,
+              iconAsset: 'assets/icons/receive_copy.png',
               label: '复制',
               onPressed: _hasWalletAddress ? () => _copyAddress(context) : null,
             ),
             _ReceiveAction(
               palette: palette,
-              icon: CupertinoIcons.gear_alt,
+              iconAsset: 'assets/icons/receive_amount_settings.png',
               label: '设置数额',
               onPressed: () => _showNotice(context, '设置数额', '收款数额设置即将开放。'),
             ),
@@ -360,97 +360,141 @@ class _ScanPageState extends State<_ScanPage> {
   }
 
   @override
-  Widget build(BuildContext context) => Stack(
-    fit: StackFit.expand,
-    children: [
-      MobileScanner(
-        controller: _controller,
-        onDetect: _handleCapture,
-        errorBuilder: (_, _) => ColoredBox(
-          color: widget.palette.background,
-          child: Center(
-            child: Text(
-              '无法打开相机',
-              style: TextStyle(
-                color: widget.palette.primaryText,
-                fontSize: AcoTypography.bodyEmphasis,
-              ),
-            ),
-          ),
-        ),
-      ),
-      DecoratedBox(
-        decoration: BoxDecoration(
-          color: (widget.palette.dark ? _black : _white).withValues(
-            alpha: widget.palette.dark ? .38 : .76,
-          ),
-        ),
-      ),
-      AcoSafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 10, 20, 0),
-              child: AcoPageHeader(
-                palette: widget.palette,
-                title: '扫一扫',
-                backButtonKey: const Key('scan-back-button'),
-                backButtonOffset: Offset.zero,
-                onBack: () => Navigator.of(context).maybePop(),
-              ),
-            ),
-            const Spacer(flex: 3),
-            Container(
-              key: const ValueKey('scan-frame'),
-              width: 248,
-              height: 248,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: widget.palette.dark
-                      ? _lime
-                      : widget.palette.primaryText,
-                  width: 2,
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final safePadding = MediaQuery.paddingOf(context);
+      final safeWidth = constraints.maxWidth - safePadding.horizontal;
+      final safeHeight = constraints.maxHeight - safePadding.vertical;
+      final scanFrameSize = math
+          .min(248.0, math.min(safeWidth - 48, safeHeight * .38))
+          .clamp(160.0, 248.0)
+          .toDouble();
+      final scanTop = safePadding.top + 10 + 48 + 50;
+      final scanVerticalOffset =
+          scanTop + scanFrameSize / 2 - constraints.maxHeight / 2;
+
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.asset('assets/images/scan_background.png', fit: BoxFit.cover),
+          MobileScanner(
+            controller: _controller,
+            onDetect: _handleCapture,
+            errorBuilder: (_, _) => ColoredBox(
+              color: widget.palette.background,
+              child: Center(
+                child: Text(
+                  '无法打开相机',
+                  style: TextStyle(
+                    color: widget.palette.primaryText,
+                    fontSize: AcoTypography.bodyEmphasis,
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Align(
-                alignment: Alignment.center,
-                child: Container(width: 64, height: 2, color: _lime),
               ),
             ),
-            const SizedBox(height: 22),
-            Text(
+          ),
+          ClipPath(
+            clipper: _ScanBackgroundClipper(scanFrameSize, scanVerticalOffset),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Image.asset(
+                  'assets/images/scan_background.png',
+                  fit: BoxFit.cover,
+                ),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: (widget.palette.dark ? _black : _white).withValues(
+                      alpha: widget.palette.dark ? .15 : .30,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: scanTop,
+            left: (constraints.maxWidth - scanFrameSize) / 2,
+            child: SizedBox(
+              key: const ValueKey('scan-frame'),
+              width: scanFrameSize,
+              height: scanFrameSize,
+            ),
+          ),
+          Positioned(
+            top: scanTop + scanFrameSize + 22,
+            left: 0,
+            right: 0,
+            child: Text(
               '将二维码放入框内，即可自动扫描',
+              textAlign: TextAlign.center,
               style: TextStyle(
                 color: widget.palette.primaryText,
                 fontSize: AcoTypography.bodySmall,
               ),
             ),
-            const Spacer(flex: 2),
-            if (_result case final value?)
-              _ScanResult(
-                palette: widget.palette,
-                value: value,
-                profile: _profile,
-                error: _error,
-                addingFriend: _addingFriend,
-                onAddFriend: _addFriend,
-                onContinue: _continueScanning,
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(bottom: 32),
-                child: _ScanControl(
+          ),
+          Positioned(
+            top: 0,
+            left: 8,
+            right: 20,
+            child: AcoSafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: AcoPageHeader(
                   palette: widget.palette,
-                  icon: CupertinoIcons.bolt_fill,
-                  label: '闪光灯',
-                  onPressed: _controller.toggleTorch,
+                  title: '扫一扫',
+                  backButtonKey: const Key('scan-back-button'),
+                  backButtonOffset: Offset.zero,
+                  onBack: () => Navigator.of(context).maybePop(),
                 ),
               ),
-          ],
-        ),
-      ),
-    ],
+            ),
+          ),
+          if (_result case final value?)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: AcoSafeArea(
+                top: false,
+                child: _ScanResult(
+                  palette: widget.palette,
+                  value: value,
+                  profile: _profile,
+                  error: _error,
+                  addingFriend: _addingFriend,
+                  onAddFriend: _addFriend,
+                  onContinue: _continueScanning,
+                ),
+              ),
+            )
+          else
+            Positioned(
+              top: scanTop + scanFrameSize + 150,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: ValueListenableBuilder<MobileScannerState>(
+                  valueListenable: _controller,
+                  builder: (context, state, _) => _ScanControl(
+                    palette: widget.palette,
+                    icon: CupertinoIcons.bolt_fill,
+                    iconAsset: switch (state.torchState) {
+                      TorchState.off => 'assets/icons/scan_torch_off.png',
+                      TorchState.on => 'assets/icons/scan_torch_on.png',
+                      _ => null,
+                    },
+                    label: '闪光灯',
+                    onPressed: _controller.toggleTorch,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
   );
 }
 
@@ -458,12 +502,14 @@ class _ScanControl extends StatelessWidget {
   const _ScanControl({
     required this.palette,
     required this.icon,
+    this.iconAsset,
     required this.label,
     required this.onPressed,
   });
 
   final AcoPalette palette;
   final IconData icon;
+  final String? iconAsset;
   final String label;
   final VoidCallback? onPressed;
 
@@ -475,7 +521,10 @@ class _ScanControl extends StatelessWidget {
       width: 84,
       child: Column(
         children: [
-          Icon(icon, color: palette.primaryText, size: 25),
+          if (iconAsset case final asset?)
+            Image.asset(asset, width: 79, height: 79)
+          else
+            Icon(icon, color: palette.primaryText, size: 25),
           const SizedBox(height: 8),
           Text(
             label,
@@ -488,6 +537,33 @@ class _ScanControl extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _ScanBackgroundClipper extends CustomClipper<Path> {
+  const _ScanBackgroundClipper(this.windowSize, this.verticalOffset);
+
+  final double windowSize;
+  final double verticalOffset;
+
+  @override
+  Path getClip(Size size) => Path()
+    ..fillType = PathFillType.evenOdd
+    ..addRect(Offset.zero & size)
+    ..addRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: size.center(Offset(0, verticalOffset)),
+          width: windowSize + 4,
+          height: windowSize + 4,
+        ),
+        const Radius.circular(12),
+      ),
+    );
+
+  @override
+  bool shouldReclip(covariant _ScanBackgroundClipper oldClipper) =>
+      oldClipper.windowSize != windowSize ||
+      oldClipper.verticalOffset != verticalOffset;
 }
 
 class _ScanResult extends StatelessWidget {
@@ -598,13 +674,15 @@ String? _groupInviteCodeFromQr(String value) {
 class _ReceiveAction extends StatelessWidget {
   const _ReceiveAction({
     required this.palette,
-    required this.icon,
     required this.label,
     required this.onPressed,
+    this.icon,
+    this.iconAsset,
   });
 
   final AcoPalette palette;
-  final IconData icon;
+  final IconData? icon;
+  final String? iconAsset;
   final String label;
   final VoidCallback? onPressed;
 
@@ -616,7 +694,10 @@ class _ReceiveAction extends StatelessWidget {
       width: 64,
       child: Column(
         children: [
-          Icon(icon, color: palette.mutedText, size: 26),
+          if (iconAsset != null)
+            Image.asset(iconAsset!, width: 26, height: 26, fit: BoxFit.contain)
+          else
+            Icon(icon, color: palette.mutedText, size: 26),
           const SizedBox(height: 7),
           Text(
             label,
@@ -1455,11 +1536,7 @@ class _AddTokenSearch extends StatelessWidget {
     child: Row(
       children: [
         const SizedBox(width: 13),
-        Image.asset(
-          'assets/icons/add_token_search.png',
-          width: 24,
-          height: 19,
-        ),
+        Image.asset('assets/icons/add_token_search.png', width: 24, height: 19),
         const SizedBox(width: 8),
         Expanded(
           child: Transform.translate(

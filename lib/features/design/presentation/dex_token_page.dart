@@ -3128,12 +3128,17 @@ class _DexTradeButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 40,
+  Widget build(BuildContext context) => Container(
+    height: 52,
+    padding: const EdgeInsets.all(6),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: .35),
+      borderRadius: BorderRadius.circular(26),
+    ),
     child: CupertinoButton(
       padding: EdgeInsets.zero,
       color: color,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(20),
       onPressed: onPressed,
       child: Text(
         label,
