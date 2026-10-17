@@ -530,17 +530,42 @@ class _FigmaNavItem extends StatelessWidget {
       return ExcludeSemantics(child: _DexBottomNavIcon(selected: selected));
     }
     // Normal navigation icons share one visual scale.
-    final iconSize = switch (index) {
-      0 => const Size(22, 18),
-      1 => const Size(24, 21),
-      3 => const Size(20, 19),
-      4 => const Size(24, 20),
-      _ => const Size(26, 24),
+    final usesCustomAsset =
+        palette.dark && (index == 0 || index == 1 || index == 3 || index == 4);
+    final iconSize = usesCustomAsset
+        ? const Size(30, 30)
+        : switch (index) {
+            0 => const Size(22, 18),
+            1 => const Size(24, 21),
+            3 => const Size(20, 19),
+            4 => const Size(24, 20),
+            _ => const Size(26, 24),
+          };
+    final iconAsset = switch (index) {
+      0 when usesCustomAsset =>
+        selected
+            ? 'assets/icons/wallet_nav_active.png'
+            : 'assets/icons/wallet_nav_inactive.png',
+      1 when usesCustomAsset =>
+        selected
+            ? 'assets/icons/explore_nav_active.png'
+            : 'assets/icons/explore_nav_inactive.png',
+      3 when usesCustomAsset =>
+        selected
+            ? 'assets/icons/square_nav_active.png'
+            : 'assets/icons/square_nav_inactive.png',
+      4 when usesCustomAsset =>
+        selected
+            ? 'assets/icons/social_nav_active.png'
+            : 'assets/icons/social_nav_inactive.png',
+      _ => null,
     };
-    final icon = ColorFiltered(
-      colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-      child: Image.asset(_navAssets[index], fit: BoxFit.contain),
-    );
+    final icon = iconAsset == null
+        ? ColorFiltered(
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+            child: Image.asset(_navAssets[index], fit: BoxFit.contain),
+          )
+        : Image.asset(iconAsset, fit: BoxFit.contain);
     return ExcludeSemantics(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -548,7 +573,7 @@ class _FigmaNavItem extends StatelessWidget {
           // All icons share the same bottom edge, then the label follows
           // immediately. This avoids SVG-specific offsets.
           SizedBox(
-            height: 24,
+            height: usesCustomAsset ? 30 : 24,
             child: Stack(
               children: [
                 Align(
