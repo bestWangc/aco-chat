@@ -138,23 +138,25 @@ class _ProfilePage extends StatelessWidget {
             ),
           ),
           Transform.translate(
-            offset: const Offset(16, -6),
-            child: _ProfileHeaderButton(
-              iconAsset: 'assets/icons/profile_scan.png',
-              palette: palette,
-              label: '扫描二维码',
-              onPressed: () => onOpen(AcoScreen.scan),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Transform.translate(
-            offset: const Offset(16, -6),
-            child: _ProfileHeaderButton(
-              iconAsset: 'assets/icons/profile_qr_code.png',
-              palette: palette,
-              label: '个人二维码',
-              filled: true,
-              onPressed: () => onOpen(AcoScreen.profileQr),
+            offset: const Offset(0, -6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ProfileHeaderButton(
+                  iconAsset: 'assets/icons/profile_scan.png',
+                  palette: palette,
+                  label: '扫描二维码',
+                  onPressed: () => onOpen(AcoScreen.scan),
+                ),
+                const SizedBox(width: 6),
+                _ProfileHeaderButton(
+                  iconAsset: 'assets/icons/profile_qr_code.png',
+                  palette: palette,
+                  label: '个人二维码',
+                  filled: true,
+                  onPressed: () => onOpen(AcoScreen.profileQr),
+                ),
+              ],
             ),
           ),
         ],

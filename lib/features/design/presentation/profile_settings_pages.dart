@@ -1,6 +1,7 @@
 part of 'aco_design_shell.dart';
 
 const _profileIconSize = 24.0;
+const _profileCardBackgroundColor = Color(0xFF1C1C1C);
 
 class _ProfileHeaderButton extends StatelessWidget {
   const _ProfileHeaderButton({
@@ -84,8 +85,8 @@ class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
   @override
   Widget build(BuildContext context) => AcoSurface(
     palette: widget.palette,
-    backgroundColor: widget.palette.dark ? const Color(0xFF1D1D1D) : null,
-    minHeight: 194,
+    cardBorder: shad.ShadBorder.none,
+    backgroundColor: widget.palette.dark ? _profileCardBackgroundColor : null,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
     child: Column(
@@ -201,7 +202,8 @@ class _ProfileSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AcoSurface(
     palette: palette,
-    backgroundColor: palette.dark ? const Color(0xFF1D1D1D) : null,
+    cardBorder: shad.ShadBorder.none,
+    backgroundColor: palette.dark ? _profileCardBackgroundColor : null,
     minHeight: 130,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),

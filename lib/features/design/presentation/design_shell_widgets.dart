@@ -783,6 +783,7 @@ class AcoSurface extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.radius = 18,
     this.border = false,
+    this.cardBorder,
     this.backgroundColor,
     this.minHeight,
     super.key,
@@ -792,6 +793,7 @@ class AcoSurface extends StatelessWidget {
   final EdgeInsets padding;
   final double radius;
   final bool border;
+  final shad.ShadBorder? cardBorder;
   final Color? backgroundColor;
   final double? minHeight;
 
@@ -807,6 +809,7 @@ class AcoSurface extends StatelessWidget {
     child: shad.ShadCard(
       padding: padding,
       radius: BorderRadius.circular(radius),
+      border: cardBorder,
       backgroundColor: backgroundColor ?? palette.surface,
       child: child,
     ),
