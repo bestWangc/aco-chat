@@ -620,37 +620,85 @@ class _FigmaNavItem extends StatelessWidget {
   }
 }
 
-class _DexBottomNavIcon extends StatelessWidget {
+class _DexBottomNavIcon extends StatefulWidget {
   const _DexBottomNavIcon({required this.selected});
 
   final bool selected;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    // DEX is a two-part mark (wordmark + triangle), not an icon with a label.
-    // Its visual bounds are intentionally taller and sit slightly higher than
-    // the four regular navigation destinations.
-    padding: const EdgeInsets.only(top: 8),
-    child: SizedBox(
-      width: 40,
-      height: 38,
-      child: Transform.translate(
-        offset: const Offset(0, -16),
-        child: Transform.scale(
-          scale: .90,
-          child: selected
-              ? Image.asset(
-                  'assets/icons/source_dex_active.png',
-                  fit: BoxFit.contain,
-                )
-              : Image.asset(
-                  'assets/icons/source_dex_inactive.png',
-                  fit: BoxFit.contain,
-                ),
+  State<_DexBottomNavIcon> createState() => _DexBottomNavIconState();
+}
+
+class _DexBottomNavIconState extends State<_DexBottomNavIcon> {
+  static const _animationDuration = Duration(milliseconds: 880);
+
+  bool _showAnimation = false;
+  int _animationRun = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _showAnimation = widget.selected;
+    if (_showAnimation) _finishAnimationAfterPlayback(++_animationRun);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(
+      const AssetImage('assets/icons/source_dex_active.gif'),
+      context,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _DexBottomNavIcon oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected == widget.selected) return;
+
+    _showAnimation = widget.selected;
+    final animationRun = ++_animationRun;
+    if (_showAnimation) _finishAnimationAfterPlayback(animationRun);
+  }
+
+  Future<void> _finishAnimationAfterPlayback(int animationRun) async {
+    await Future<void>.delayed(_animationDuration);
+    if (!mounted || animationRun != _animationRun || !widget.selected) return;
+    setState(() => _showAnimation = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final String asset;
+    if (_showAnimation) {
+      asset = 'assets/icons/source_dex_active.gif';
+    } else if (widget.selected) {
+      asset = 'assets/icons/source_dex_active.png';
+    } else {
+      asset = 'assets/icons/source_dex_inactive.png';
+    }
+    return Padding(
+      // DEX is a two-part mark (wordmark + triangle), not an icon with a label.
+      // Its visual bounds are intentionally taller and sit slightly higher than
+      // the four regular navigation destinations.
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        width: 40,
+        height: 38,
+        child: Transform.translate(
+          offset: const Offset(0, -16),
+          child: Transform.scale(
+            scale: .90,
+            child: Image.asset(
+              asset,
+              key: ValueKey(asset),
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class AcoTopActions extends StatelessWidget {
