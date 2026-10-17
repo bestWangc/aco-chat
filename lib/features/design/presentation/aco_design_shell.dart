@@ -30,6 +30,7 @@ import 'package:aco_chat/services/sensitive_screen_protection.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_identity_store.dart';
+import 'package:aco_chat/services/wallet_chain_identity_service.dart';
 import 'package:aco_chat/services/wallet_portfolio_service.dart';
 import 'package:aco_chat/services/wallet_valuation_service.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';

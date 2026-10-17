@@ -26,6 +26,7 @@ class _WalletSetupFlow extends StatefulWidget {
 
 class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   final _walletSecurity = WalletSecurity();
+  final _walletChainIdentityService = WalletChainIdentityService();
   final _secretStore = SecureWalletSecretStore();
   final _phraseController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -659,12 +660,14 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             )
             .timeout(const Duration(seconds: 20));
       }
+      _setCompletionStatus('正在生成 Solana 和 TRON 地址...');
+      await _walletChainIdentityService
+          .cacheNonEvmAddresses(mnemonic: mnemonic, identity: identity)
+          .timeout(const Duration(seconds: 60));
       _setCompletionStatus('正在同步账户登录...');
       await widget
           .onComplete(identity, mnemonic)
           .timeout(const Duration(seconds: 15));
-      // Non-EVM address derivation allocates a large native crypto workspace.
-      // Derive those addresses lazily when their respective chain is opened.
     } on WalletSecurityException catch (error) {
       _showCompletionError(error.message);
     } on TimeoutException {
