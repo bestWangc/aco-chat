@@ -88,7 +88,7 @@ class _ReceivePageState extends State<_ReceivePage> {
     builder: (_, snapshot) => _ReceivePageContent(
       palette: widget.palette,
       walletAddress: snapshot.data,
-      networkNotice: _networkNotice,
+      networkNotice: appText(context, _networkNotice),
       networkLabel: widget.selectedChain.label,
     ),
   );
@@ -120,12 +120,14 @@ class _ReceivePageContent extends StatelessWidget {
     }
   }
 
-  Future<void> _shareAddress() async {
+  Future<void> _shareAddress(BuildContext context) async {
     final address = walletAddress;
     if (address == null || address.isEmpty) return;
 
     await SharePlus.instance.share(
-      ShareParams(text: '我的 $networkLabel 收款地址：$address'),
+      ShareParams(
+        text: appText(context, '我的 $networkLabel 收款地址：$address'),
+      ),
     );
   }
 
@@ -177,7 +179,10 @@ class _ReceivePageContent extends StatelessWidget {
                           dataModuleShape: QrDataModuleShape.square,
                           color: _black,
                         ),
-                        semanticsLabel: '收款二维码：$walletAddress',
+                        semanticsLabel: appText(
+                          context,
+                          '收款二维码：$walletAddress',
+                        ),
                       ),
                       Container(
                         width: 44,
@@ -234,7 +239,9 @@ class _ReceivePageContent extends StatelessWidget {
               palette: palette,
               iconAsset: 'assets/icons/receive_share.png',
               label: '分享',
-              onPressed: _hasWalletAddress ? _shareAddress : null,
+              onPressed: _hasWalletAddress
+                  ? () => _shareAddress(context)
+                  : null,
             ),
             _ReceiveAction(
               palette: palette,
@@ -1431,7 +1438,7 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
               children: [
                 _field(
                   label: '代币合约',
-                  placeholder: '请输入代币合约地址',
+                  placeholder: appText(context, '请输入代币合约地址'),
                   controller: _contractController,
                   focusNode: _contractFocus,
                   key: const Key('custom-token-contract-field'),
@@ -1460,7 +1467,7 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
                 const SizedBox(height: 20),
                 _field(
                   label: '代币符号',
-                  placeholder: '自动获取代币符号',
+                  placeholder: appText(context, '自动获取代币符号'),
                   controller: _symbolController,
                   readOnly: true,
                   key: const Key('custom-token-symbol-field'),
@@ -1468,7 +1475,7 @@ class _CustomTokenPageState extends State<_CustomTokenPage> {
                 const SizedBox(height: 20),
                 _field(
                   label: '代币精度',
-                  placeholder: '自动获取代币精度',
+                  placeholder: appText(context, '自动获取代币精度'),
                   controller: _decimalsController,
                   readOnly: true,
                   key: const Key('custom-token-decimals-field'),
@@ -1546,7 +1553,7 @@ class _AddTokenSearch extends StatelessWidget {
               textAlignVertical: TextAlignVertical.center,
               decoration: const BoxDecoration(color: _transparent),
               cursorColor: _lime,
-              placeholder: '搜索代币名称、符号或合约地址',
+              placeholder: appText(context, '搜索代币名称、符号或合约地址'),
               placeholderStyle: TextStyle(
                 color: palette.mutedText,
                 fontSize: 15.5,

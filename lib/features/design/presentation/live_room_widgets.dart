@@ -1449,7 +1449,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: CupertinoTextField(
                 controller: _searchController,
-                placeholder: '搜索成员',
+                placeholder: appText(context, '搜索成员'),
                 style: const TextStyle(color: Color(0xFF151515), fontSize: 14),
                 placeholderStyle: const TextStyle(
                   color: Color(0xFF888888),

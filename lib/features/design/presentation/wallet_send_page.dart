@@ -116,7 +116,7 @@ class _SendTokenPickerState extends State<_SendTokenPicker> {
                     onChanged: (_) => setState(() {}),
                     onTapOutside: (_) => _dismissKeyboard(),
                     onSubmitted: (_) => _dismissKeyboard(),
-                    placeholder: '搜索代币名称或符号',
+                    placeholder: appText(context, '搜索代币名称或符号'),
                     prefix: Padding(
                       padding: const EdgeInsets.only(left: 14, right: 10),
                       child: Icon(
@@ -474,12 +474,17 @@ class _SendTransferPageState extends State<_SendTransferPage> {
       }
       if (mounted) {
         final title = result.status == '已广播' ? '转账成功' : '交易已签名';
-        _showNotice(context, title, '交易哈希：${result.hash}');
+        final hashLabel = appText(context, '交易哈希：');
+        _showNotice(
+          context,
+          title,
+          '$hashLabel ${result.hash}',
+        );
       }
     } on WalletSecurityException catch (error) {
       if (mounted) _showNotice(context, '转账失败', error.message);
     } catch (error) {
-      if (mounted) _showNotice(context, '转账失败', '交易构造失败：$error');
+      if (mounted) _showNotice(context, '转账失败', '交易构造失败');
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -538,7 +543,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                       _scheduleEstimate();
                     },
                     onTapOutside: (_) => _dismissKeyboard(),
-                    placeholder: '输入或粘贴钱包地址',
+                    placeholder: appText(context, '输入或粘贴钱包地址'),
                     placeholderStyle: TextStyle(
                       color: widget.palette.mutedText,
                       fontSize: AcoTypography.body,
@@ -587,7 +592,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                                 _scheduleEstimate();
                               },
                               onTapOutside: (_) => _dismissKeyboard(),
-                              placeholder: '请输入数量',
+                              placeholder: appText(context, '请输入数量'),
                               keyboardType:
                                   const TextInputType.numberWithOptions(
                                     decimal: true,

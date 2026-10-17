@@ -482,7 +482,7 @@ class AcoBottomNav extends StatelessWidget {
                   child: Semantics(
                     button: true,
                     selected: selected == index,
-                    label: _navLabels[index],
+                    label: appText(context, _navLabels[index]),
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: () => onSelected(index),
@@ -605,7 +605,7 @@ class _FigmaNavItem extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            _navLabels[index],
+            appText(context, _navLabels[index]),
             textAlign: TextAlign.center,
             style: TextStyle(
               color: color,

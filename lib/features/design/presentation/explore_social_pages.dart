@@ -945,7 +945,7 @@ class _AddFriendPageState extends State<_AddFriendPage> {
           const SizedBox(height: 12),
           CupertinoSearchTextField(
             controller: _controller,
-            placeholder: '搜索用户名或 UID',
+            placeholder: appText(context, '搜索用户名或 UID'),
             onChanged: _search,
             onSubmitted: _search,
           ),
@@ -1088,7 +1088,7 @@ class _CreateGroupPageState extends State<_CreateGroupPage> {
           children: [
             CupertinoTextField(
               controller: _nameController,
-              placeholder: '群名称',
+              placeholder: appText(context, '群名称'),
               maxLength: 64,
               style: TextStyle(color: widget.palette.primaryText),
               decoration: BoxDecoration(

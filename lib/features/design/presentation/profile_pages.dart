@@ -60,7 +60,7 @@ class _ProfilePage extends StatelessWidget {
     children: [
       AcoPageHeader(
         palette: palette,
-        title: '个人中心',
+        title: appText(context, '个人中心'),
         onBack: onBack,
         backButtonOffset: const Offset(-16, 0),
       ),
@@ -70,7 +70,7 @@ class _ProfilePage extends StatelessWidget {
         children: [
           Semantics(
             button: true,
-            label: '编辑个人资料',
+            label: appText(context, '编辑个人资料'),
             child: GestureDetector(
               onTap: () => onOpen(AcoScreen.profileEdit),
               child: Stack(
@@ -145,14 +145,14 @@ class _ProfilePage extends StatelessWidget {
                 _ProfileHeaderButton(
                   iconAsset: 'assets/icons/profile_scan.png',
                   palette: palette,
-                  label: '扫描二维码',
+                  label: appText(context, '扫描二维码'),
                   onPressed: () => onOpen(AcoScreen.scan),
                 ),
                 const SizedBox(width: 6),
                 _ProfileHeaderButton(
                   iconAsset: 'assets/icons/profile_qr_code.png',
                   palette: palette,
-                  label: '个人二维码',
+                  label: appText(context, '个人二维码'),
                   filled: true,
                   onPressed: () => onOpen(AcoScreen.profileQr),
                 ),
@@ -170,18 +170,18 @@ class _ProfilePage extends StatelessWidget {
       const SizedBox(height: 28),
       _ProfileSection(
         palette: palette,
-        title: '设置',
+        title: appText(context, '设置'),
         actions: [
           _ProfileAction(
             palette: palette,
             iconAsset: 'assets/icons/profile/theme_mode.png',
-            label: '主题模式',
+            label: appText(context, '主题模式'),
             onPressed: () => onOpen(AcoScreen.profileTheme),
           ),
           _ProfileAction(
             palette: palette,
             iconAsset: 'assets/icons/profile/language_mode.png',
-            label: '语言',
+            label: appText(context, '语言'),
             onPressed: () => onOpen(AcoScreen.profileLanguage),
           ),
         ],
@@ -197,7 +197,7 @@ class _ProfilePage extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '当前版本 v${AppConfig.appVersion}',
+                    '${appText(context, '当前版本 v')}${AppConfig.appVersion}',
                     style: TextStyle(
                       color: palette.mutedText,
                       fontSize: AcoTypography.caption,
@@ -222,7 +222,7 @@ class _ProfilePage extends StatelessWidget {
               padding: EdgeInsets.zero,
               onPressed: () => _showConnectionDiagnostics(context, palette),
               child: Text(
-                '连接诊断',
+                appText(context, '连接诊断'),
                 style: TextStyle(
                   color: palette.mutedText,
                   fontSize: AcoTypography.caption,

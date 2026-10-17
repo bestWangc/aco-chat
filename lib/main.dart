@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:aco_chat/core/config/app_config.dart';
+import 'package:aco_chat/core/localization/app_localization.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
@@ -28,6 +29,7 @@ Future<void> main() async {
   final accountProfileFuture = walletConfigured
       ? WalletAccountAuthentication.signInSilently(identity.address)
       : null;
+  final language = await LanguagePreferences.load();
   runApp(
     AcoApp(
       initialIsDark: isDark,
@@ -36,6 +38,7 @@ Future<void> main() async {
       initialWalletIdentity: identity,
       onWalletConfigured: WalletPreferences.save,
       accountProfileFuture: accountProfileFuture,
+      initialLanguage: language,
     ),
   );
 }
@@ -53,6 +56,22 @@ class ThemePreferences {
   static Future<void> save(bool isDark) async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setBool(themeKey, isDark);
+  }
+}
+
+class LanguagePreferences {
+  const LanguagePreferences._();
+
+  static const languageKey = 'app.language';
+
+  static Future<String> load() async {
+    final preferences = await SharedPreferences.getInstance();
+    return preferences.getString(languageKey) ?? '简体中文';
+  }
+
+  static Future<void> save(String language) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(languageKey, language);
   }
 }
 
@@ -219,6 +238,7 @@ class AcoApp extends StatefulWidget {
     this.initialWalletIdentity,
     this.onWalletConfigured,
     this.accountProfileFuture,
+    this.initialLanguage = '简体中文',
     super.key,
   });
 
@@ -228,6 +248,7 @@ class AcoApp extends StatefulWidget {
   final WalletIdentity? initialWalletIdentity;
   final ValueChanged<bool>? onWalletConfigured;
   final Future<AccountProfile?>? accountProfileFuture;
+  final String initialLanguage;
 
   @override
   State<AcoApp> createState() => _AcoAppState();
@@ -244,6 +265,12 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
   AccountProfile? _accountProfile;
   Future<AccountProfile?>? _walletLoginFuture;
   bool _backgroundGuideShown = false;
+  late String _language = widget.initialLanguage;
+
+  void _setLanguage(String language) {
+    setState(() => _language = language);
+    unawaited(LanguagePreferences.save(language));
+  }
 
   @override
   void initState() {
@@ -297,15 +324,20 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       showCupertinoDialog<void>(
         context: dialogContext,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('开启后台消息提醒'),
-          content: const Padding(
+          title: Text(appText(dialogContext, '开启后台消息提醒')),
+          content: Padding(
             padding: EdgeInsets.only(top: 12),
-            child: Text('请在系统设置中允许 ACO 后台运行，并开启自启动。否则手机会暂停应用，无法收到新消息提醒。'),
+            child: Text(
+              appText(
+                dialogContext,
+                '请在系统设置中允许 ACO 后台运行，并开启自启动。否则手机会暂停应用，无法收到新消息提醒。',
+              ),
+            ),
           ),
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('稍后'),
+              child: Text(appText(dialogContext, '稍后')),
             ),
             CupertinoDialogAction(
               isDefaultAction: true,
@@ -315,7 +347,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
                   AndroidChatBackgroundService.openBackgroundSettings(),
                 );
               },
-              child: const Text('去设置'),
+              child: Text(appText(dialogContext, '去设置')),
             ),
             CupertinoDialogAction(
               onPressed: () async {
@@ -324,7 +356,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
                   Navigator.of(dialogContext).pop();
                 }
               },
-              child: const Text('我已开启'),
+              child: Text(appText(dialogContext, '我已开启')),
             ),
           ],
         ),
@@ -340,19 +372,19 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       showCupertinoDialog<void>(
         context: dialogContext,
         builder: (dialogContext) => CupertinoAlertDialog(
-          title: const Text('个人资料加载失败'),
+          title: Text(appText(dialogContext, '个人资料加载失败')),
           content: Padding(
             padding: const EdgeInsets.only(top: 12),
-            child: Text(message),
+            child: Text(appText(dialogContext, message)),
           ),
           actions: [
             CupertinoDialogAction(
               onPressed: () => _returnToWalletSetup(dialogContext),
-              child: const Text('重新导入'),
+              child: Text(appText(dialogContext, '重新导入')),
             ),
             CupertinoDialogAction(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text('取消'),
+              child: Text(appText(dialogContext, '取消')),
             ),
           ],
         ),
@@ -504,8 +536,10 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
           navigatorObservers: [acoRouteObserver],
           title: 'Aco',
           debugShowCheckedModeBanner: false,
-          locale: const Locale('zh', 'CN'),
-          supportedLocales: const [Locale('zh', 'CN')],
+          locale: _language == 'English'
+              ? const Locale('en', 'US')
+              : const Locale('zh', 'CN'),
+          supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
@@ -526,6 +560,8 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
           ),
           home: _walletConfigured
               ? AcoDesignShell(
+                  language: _language,
+                  onLanguageChanged: _setLanguage,
                   themeNotifier: _isDark,
                   onThemeChanged: _onThemeChanged,
                   onWalletReady: _completeWalletSetup,

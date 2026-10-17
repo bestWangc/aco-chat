@@ -66,7 +66,7 @@ class _ChatComposer extends StatelessWidget {
                     textInputAction: TextInputAction.send,
                     cursorColor: _white,
                     padding: EdgeInsets.zero,
-                    placeholder: '发送消息',
+                    placeholder: appText(context, '发送消息'),
                     placeholderStyle: const TextStyle(
                       color: Color(0xFF888888),
                       fontSize: 16,

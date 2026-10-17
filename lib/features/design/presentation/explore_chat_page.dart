@@ -3807,7 +3807,9 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                     CupertinoTextField(
                       controller: _searchController,
                       onChanged: (_) => setState(() {}),
-                      placeholder: isSearchEmpty ? '' : '搜索成员',
+                      placeholder: isSearchEmpty
+                          ? ''
+                          : appText(context, '搜索成员'),
                       placeholderStyle: const TextStyle(
                         color: Color(0xFF777777),
                         fontSize: 16,

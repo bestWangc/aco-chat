@@ -342,7 +342,7 @@ class _HyperliquidContractPageState extends State<_HyperliquidContractPage> {
             key: const Key('dex-contract-search'),
             palette: palette,
             controller: _searchController,
-            placeholder: '搜索合约名称或代码',
+            placeholder: appText(context, '搜索合约名称或代码'),
             onChanged: (value) => setState(() => _searchQuery = value),
           ),
           const SizedBox(height: 12),
@@ -1932,15 +1932,18 @@ class _DexSectionTabs extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Transform.translate(
     offset: Offset(selectedSection == 0 ? 16 : 0, 0),
-    child: _SectionTabs(
-      palette: palette,
-      labels: const ['闪兑&跨链', '代币', '合约', '股票'],
-      selected: selectedSection,
-      itemSpacing: 12,
-      fontSize: 18,
-      horizontalPadding: 8,
-      showSelectedIndicator: true,
-      onChanged: onChanged,
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: _SectionTabs(
+        palette: palette,
+        labels: const ['闪兑&跨链', '代币', '合约', '股票'],
+        selected: selectedSection,
+        itemSpacing: 6,
+        fontSize: 16,
+        horizontalPadding: 6,
+        showSelectedIndicator: true,
+        onChanged: onChanged,
+      ),
     ),
   );
 }
@@ -2074,7 +2077,7 @@ class _DexHotTokenList extends StatelessWidget {
   Widget build(BuildContext context) => SliverList.builder(
     itemCount: tokens.isEmpty ? 1 : tokens.length + 1,
     itemBuilder: (context, index) {
-      if (index == 0) return _buildHeader();
+      if (index == 0) return _buildHeader(context);
       final token = tokens[index - 1];
       return _DexHotTokenRow(
         token: token,
@@ -2085,13 +2088,13 @@ class _DexHotTokenList extends StatelessWidget {
     },
   );
 
-  Widget _buildHeader() => Column(
+  Widget _buildHeader(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       _DexSearchButton(
         key: Key(isStock ? 'dex-stock-search' : 'dex-token-search'),
         palette: palette,
-        placeholder: '搜索代币或股票',
+        placeholder: appText(context, '搜索代币或股票'),
         onPressed: onSearchTap,
       ),
       const SizedBox(height: 14),
@@ -2336,7 +2339,7 @@ class _DexSearchPageState extends State<_DexSearchPage> {
                       key: const Key('dex-search-page-field'),
                       palette: widget.palette,
                       controller: _controller,
-                      placeholder: '搜索代币或股票',
+                      placeholder: appText(context, '搜索代币或股票'),
                       onChanged: _onChanged,
                     ),
                   ),
@@ -3920,7 +3923,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
                                     const TextInputType.numberWithOptions(
                                       decimal: true,
                                     ),
-                                placeholder: '0',
+                                placeholder: appText(context, '0'),
                                 placeholderStyle: TextStyle(
                                   color: palette.mutedText.withValues(
                                     alpha: .7,
@@ -4149,19 +4152,31 @@ class _MarketStat extends StatelessWidget {
     width: width,
     child: Row(
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: palette.mutedText,
-            fontSize: AcoTypography.bodySmall,
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: palette.mutedText,
+              fontSize: AcoTypography.bodySmall,
+            ),
           ),
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            color: palette.primaryText,
-            fontSize: AcoTypography.bodySmall,
+        const SizedBox(width: 4),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: AcoTypography.bodySmall,
+                ),
+              ),
+            ),
           ),
         ),
       ],

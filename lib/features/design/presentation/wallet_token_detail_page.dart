@@ -641,13 +641,15 @@ class _TokenTransactionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final incoming = transaction.isIncoming;
-    final direction = incoming ? '转入' : '转出';
+    final direction = appText(context, incoming ? '转入' : '转出');
     final amountColor = incoming ? _tokenDetailBlue : palette.accent;
     final amountPrefix = incoming ? '+' : '-';
     final counterparty = _shortWalletAddress(
       incoming ? transaction.from : transaction.to,
     );
-    final status = transaction.isSuccessful ? '' : ' · $_statusLabel';
+    final status = transaction.isSuccessful
+        ? ''
+        : ' · ${appText(context, _statusLabel)}';
     return Semantics(
       label: '$direction ${transaction.displayAmount} ${transaction.symbol}',
       child: Padding(

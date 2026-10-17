@@ -432,7 +432,7 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
             controller: controller,
             autofocus: true,
             maxLength: 64,
-            placeholder: '请输入群聊名称',
+            placeholder: appText(context, '请输入群聊名称'),
           ),
         ),
         actions: [
@@ -1386,7 +1386,7 @@ class _GroupMemberSelectionPageState extends State<_GroupMemberSelectionPage> {
                   size: 22,
                 ),
               ),
-              placeholder: '搜索',
+              placeholder: appText(context, '搜索'),
               placeholderStyle: TextStyle(
                 color: widget.palette.mutedText,
                 fontSize: 18,

@@ -81,7 +81,7 @@ class _AssetDetailState extends State<_AssetDetail> {
                     Navigator.of(dialogContext).pop(trimmed);
                   }
                 },
-                placeholder: '请输入钱包名称',
+                placeholder: appText(context, '请输入钱包名称'),
               ),
             ),
             actions: [
@@ -176,7 +176,7 @@ class _AssetDetailState extends State<_AssetDetail> {
                     autofocus: true,
                     obscureText: true,
                     textInputAction: TextInputAction.done,
-                    placeholder: '钱包密码',
+                    placeholder: appText(context, '钱包密码'),
                     onChanged: (value) =>
                         setDialogState(() => password = value),
                     onSubmitted: (_) => verify(),

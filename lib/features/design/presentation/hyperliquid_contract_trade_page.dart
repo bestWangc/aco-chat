@@ -753,7 +753,7 @@ class _HyperliquidContractTradePageState
         _TradeTextField(
           palette: _palette,
           controller: _limitPriceController,
-          placeholder: '价格',
+          placeholder: appText(context, '价格'),
           suffix: 'USDC',
         ),
         const SizedBox(height: 10),
@@ -762,7 +762,7 @@ class _HyperliquidContractTradePageState
         palette: _palette,
         controller: _amountController,
         focusNode: _amountFocusNode,
-        placeholder: '金额',
+        placeholder: appText(context, '金额'),
         suffix: 'USDC',
         height: 40,
         horizontalPadding: 9,
@@ -1563,7 +1563,7 @@ class _RiskInputGrid extends StatelessWidget {
             child: _TradeTextField(
               palette: palette,
               controller: takeProfitPriceController,
-              placeholder: '止盈价格',
+              placeholder: appText(context, '止盈价格'),
               suffix: '',
               height: 40,
               horizontalPadding: 9,
@@ -1574,7 +1574,7 @@ class _RiskInputGrid extends StatelessWidget {
             child: _TradeTextField(
               palette: palette,
               controller: takeProfitRateController,
-              placeholder: '收益',
+              placeholder: appText(context, '收益'),
               suffix: '%',
               height: 40,
               horizontalPadding: 9,
@@ -1589,7 +1589,7 @@ class _RiskInputGrid extends StatelessWidget {
             child: _TradeTextField(
               palette: palette,
               controller: stopLossPriceController,
-              placeholder: '止损价格',
+              placeholder: appText(context, '止损价格'),
               suffix: '',
               height: 40,
               horizontalPadding: 9,
@@ -1600,7 +1600,7 @@ class _RiskInputGrid extends StatelessWidget {
             child: _TradeTextField(
               palette: palette,
               controller: stopLossRateController,
-              placeholder: '亏损',
+              placeholder: appText(context, '亏损'),
               suffix: '%',
               height: 40,
               horizontalPadding: 9,

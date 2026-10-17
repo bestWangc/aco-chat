@@ -35,7 +35,7 @@ class _DetailScaffold extends StatelessWidget {
         ),
         child: AcoPageHeader(
           palette: palette,
-          title: title,
+          title: title == null ? null : appText(context, title!),
           titleWidget: titleWidget,
           right: right,
           titleFollowsBack: titleFollowsBack,
@@ -66,7 +66,7 @@ class _WalletMenuItem extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: onPressed != null,
     enabled: onPressed != null,
-    label: label,
+    label: appText(context, label),
     child: CupertinoButton(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       minimumSize: const Size.fromHeight(42),
@@ -76,7 +76,7 @@ class _WalletMenuItem extends StatelessWidget {
           Icon(icon, color: palette.primaryText, size: 17),
           const SizedBox(width: 9),
           Text(
-            label,
+            appText(context, label),
             style: TextStyle(
               color: palette.primaryText,
               fontSize: AcoTypography.bodySmall,
@@ -165,7 +165,7 @@ class _OutlineButton extends StatelessWidget {
                   Icon(icon, color: foreground, size: iconSize),
                 if (hasLeading) SizedBox(width: iconGap),
                 Text(
-                  label,
+                  appText(context, label),
                   style: TextStyle(
                     color: foreground,
                     fontSize: fontSize,
@@ -201,7 +201,7 @@ class _WalletTabs extends StatelessWidget {
         child: Row(
           children: [
             _WalletTab(
-              label: '资产',
+              label: appText(context, '资产'),
               selected: selected == 0,
               onPressed: () => onChanged(0),
             ),
@@ -212,7 +212,7 @@ class _WalletTabs extends StatelessWidget {
       ),
       Semantics(
         button: true,
-        label: '添加代币',
+        label: appText(context, '添加代币'),
         child: Transform.translate(
           offset: const Offset(0, -5.5),
           child: CompositedTransformTarget(
@@ -278,7 +278,7 @@ class _WalletTab extends StatelessWidget {
                 child: Transform.translate(
                   offset: const Offset(0, 2),
                   child: Text(
-                    label,
+                    appText(context, label),
                     style: TextStyle(
                       color: selected ? _white : _walletHeaderMuted,
                       fontWeight: selected ? FontWeight.w700 : FontWeight.w400,

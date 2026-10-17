@@ -60,11 +60,11 @@ class _AcoWalletWelcomePageState extends State<AcoWalletWelcomePage> {
       showCupertinoDialog<void>(
         context: context,
         builder: (context) => CupertinoAlertDialog(
-          content: const Text('请先同意用户协议和隐私政策'),
+          content: Text(appText(context, '请先同意用户协议和隐私政策')),
           actions: [
             CupertinoDialogAction(
               onPressed: () => Navigator.pop(context),
-              child: const Text('知道了'),
+              child: Text(appText(context, '知道了')),
             ),
           ],
         ),
@@ -252,7 +252,7 @@ class _WalletWelcomeContent extends StatelessWidget {
           height: buttonHeight,
           child: _WalletSetupButton(
             key: const Key('create-wallet-button'),
-            label: '创建钱包',
+            label: appText(context, '创建钱包'),
             enabled: true,
             filled: true,
             palette: palette,
@@ -268,7 +268,7 @@ class _WalletWelcomeContent extends StatelessWidget {
           height: buttonHeight,
           child: _WalletSetupButton(
             key: const Key('import-wallet-button'),
-            label: '导入钱包',
+            label: appText(context, '导入钱包'),
             enabled: true,
             filled: false,
             palette: palette,
@@ -299,7 +299,7 @@ class _WalletWelcomeContent extends StatelessWidget {
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '创建新钱包或导入已有钱包\n开始使用',
+                    appText(context, '创建新钱包或导入已有钱包\n开始使用'),
                     style: TextStyle(
                       color: palette.primaryText,
                       fontSize: 31,
@@ -371,7 +371,7 @@ class _WalletWelcomeAgreement extends StatelessWidget {
       Padding(
         padding: const EdgeInsets.only(top: _welcomeCheckboxTopInset),
         child: Semantics(
-          label: '同意用户协议和隐私政策',
+          label: appText(context, '同意用户协议和隐私政策'),
           checked: selected,
           child: CupertinoButton(
             key: const Key('wallet-terms-checkbox'),
@@ -405,14 +405,23 @@ class _WalletWelcomeAgreement extends StatelessWidget {
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                _AgreementText(text: '我已阅读并同意 ', palette: palette),
-                _AgreementLink(label: '《用户协议》', onPressed: onOpenUserAgreement),
-                _AgreementText(text: ' 和 ', palette: palette),
-                _AgreementLink(label: '《隐私政策》', onPressed: onOpenPrivacyPolicy),
+                _AgreementText(
+                  text: appText(context, '我已阅读并同意 '),
+                  palette: palette,
+                ),
+                _AgreementLink(
+                  label: appText(context, '《用户协议》'),
+                  onPressed: onOpenUserAgreement,
+                ),
+                _AgreementText(text: appText(context, ' 和 '), palette: palette),
+                _AgreementLink(
+                  label: appText(context, '《隐私政策》'),
+                  onPressed: onOpenPrivacyPolicy,
+                ),
               ],
             ),
             Text(
-              '由 Aladdin Dao Inc 提供',
+              appText(context, '由 Aladdin Dao Inc 提供'),
               style: TextStyle(
                 color: palette.primaryText,
                 fontSize: _welcomeAgreementFontSize,

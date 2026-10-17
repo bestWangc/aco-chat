@@ -278,7 +278,7 @@ class _MessageSearchField extends StatelessWidget {
             maxLines: 1,
             textInputAction: TextInputAction.search,
             cursorColor: palette.primaryText,
-            placeholder: '搜索聊天内容',
+            placeholder: appText(context, '搜索聊天内容'),
             placeholderStyle: TextStyle(
               color: palette.mutedText,
               fontSize: AcoTypography.caption,

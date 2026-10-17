@@ -295,7 +295,7 @@ class _MnemonicPhraseView extends StatelessWidget {
         const SizedBox(height: 20),
         Semantics(
           button: !visible,
-          label: visible ? '助记词已显示' : '点击显示助记词',
+          label: appText(context, visible ? '助记词已显示' : '点击显示助记词'),
           child: CupertinoButton(
             key: const Key('mnemonic-reveal-button'),
             padding: EdgeInsets.zero,
@@ -394,7 +394,7 @@ class _PrivateKeyView extends StatelessWidget {
       const SizedBox(height: 20),
       Semantics(
         button: !visible,
-        label: visible ? '私钥已显示' : '点击显示私钥',
+          label: appText(context, visible ? '私钥已显示' : '点击显示私钥'),
         child: CupertinoButton(
           key: const Key('private-key-reveal-button'),
           padding: EdgeInsets.zero,

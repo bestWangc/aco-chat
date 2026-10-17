@@ -1,3 +1,4 @@
+import 'package:aco_chat/core/localization/app_localization.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:flutter/cupertino.dart';
 
@@ -54,7 +55,7 @@ class AcoPageHeader extends StatelessWidget {
         (title == null
             ? null
             : Text(
-                title!,
+                appText(context, title!),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -71,7 +72,7 @@ class AcoPageHeader extends StatelessWidget {
               key: backButtonKey,
               icon: CupertinoIcons.back,
               palette: palette,
-              label: '返回',
+              label: appText(context, '返回'),
               onPressed: onBack!,
             ),
           );
@@ -127,7 +128,7 @@ class AcoIconButton extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     container: true,
     button: true,
-    label: label,
+    label: appText(context, label),
     child: SizedBox(
       width: 44,
       height: 44,

@@ -93,7 +93,7 @@ class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          '个人主页',
+          appText(context, '个人主页'),
           style: TextStyle(
             color: widget.palette.primaryText,
             fontSize: AcoTypography.body,
@@ -112,7 +112,7 @@ class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
                     palette: widget.palette,
                     iconAsset: 'assets/icons/profile/my_likes.png',
                     value: _profileStatValue(stats?.likedPosts),
-                    label: '我的点赞',
+                    label: appText(context, '我的点赞'),
                   ),
                 ),
                 _profileGridCell(
@@ -120,7 +120,7 @@ class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
                     palette: widget.palette,
                     iconAsset: 'assets/icons/profile/followers.png',
                     value: _profileStatValue(stats?.followerCount),
-                    label: '粉丝',
+                    label: appText(context, '粉丝'),
                   ),
                 ),
                 _profileGridCell(
@@ -128,7 +128,7 @@ class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
                     palette: widget.palette,
                     iconAsset: 'assets/icons/profile/received_likes.png',
                     value: _profileStatValue(stats?.receivedLikes),
-                    label: '获赞',
+                    label: appText(context, '获赞'),
                   ),
                 ),
               ],
@@ -297,14 +297,14 @@ class _ThemeSettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _SettingsScaffold(
     palette: palette,
-    title: '主题模式',
-    sectionTitle: '外观偏好',
+    title: appText(context, '主题模式'),
+    sectionTitle: appText(context, '外观偏好'),
     child: Column(
       children: [
         _PreferenceOption(
           icon: CupertinoIcons.moon,
-          title: '深色模式',
-          subtitle: '适合低光环境',
+          title: appText(context, '深色模式'),
+          subtitle: appText(context, '适合低光环境'),
           selected: dark,
           palette: palette,
           onPressed: dark ? null : onThemeToggle,
@@ -312,8 +312,8 @@ class _ThemeSettingsPage extends StatelessWidget {
         Container(height: 1, color: palette.border),
         _PreferenceOption(
           icon: CupertinoIcons.sun_max,
-          title: '浅色模式',
-          subtitle: '清晰明亮的界面',
+          title: appText(context, '浅色模式'),
+          subtitle: appText(context, '清晰明亮的界面'),
           selected: !dark,
           palette: palette,
           onPressed: null,
@@ -347,25 +347,32 @@ class _LanguageSettingsPageState extends State<_LanguageSettingsPage> {
   }
 
   @override
+  void didUpdateWidget(covariant _LanguageSettingsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialLanguage != widget.initialLanguage) {
+      _selectedLanguage = widget.initialLanguage;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) => _SettingsScaffold(
     palette: widget.palette,
-    title: '语言',
-    sectionTitle: '显示语言',
+    title: appText(context, '语言'),
+    sectionTitle: appText(context, '显示语言'),
     child: Column(
       children: [
         for (final language in const [
-          ('简体中文', 'Chinese (Simplified)'),
-          ('English', 'English (US)'),
+          ('简体中文', '简体中文', 'Chinese (Simplified)'),
+          ('English', 'English', 'English (US)'),
         ]) ...[
           _PreferenceOption(
             icon: CupertinoIcons.globe,
-            title: language.$1,
-            subtitle: language.$2,
+            title: language.$2,
+            subtitle: language.$3,
             selected: _selectedLanguage == language.$1,
-            enabled: language.$1 != 'English',
+            enabled: true,
             palette: widget.palette,
-            onPressed:
-                language.$1 == 'English' || _selectedLanguage == language.$1
+            onPressed: _selectedLanguage == language.$1
                 ? null
                 : () => _selectLanguage(language.$1),
           ),

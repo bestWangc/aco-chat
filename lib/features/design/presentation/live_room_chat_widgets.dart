@@ -321,7 +321,9 @@ class _RoomComposer extends StatelessWidget {
                 textInputAction: TextInputAction.send,
                 cursorColor: palette.accent,
                 padding: const EdgeInsets.only(right: 14),
-                placeholder: chatMuted ? '全员禁言中' : '说点什么...',
+                placeholder: chatMuted
+                    ? appText(context, '全员禁言中')
+                    : appText(context, '说点什么...'),
                 placeholderStyle: TextStyle(
                   color: textColor,
                   fontSize: AcoTypography.bodySmall,

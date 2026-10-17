@@ -1,3 +1,4 @@
+import 'package:aco_chat/core/localization/app_localization.dart';
 import 'package:aco_chat/services/biometric_authentication.dart';
 import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
@@ -89,9 +90,11 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
     });
     try {
       if (!await BiometricAuthentication.authenticate(
-        reason: '使用指纹或面容验证钱包操作',
+        reason: appText(context, '使用指纹或面容验证钱包操作'),
       )) {
-        throw const WalletSecurityException('设备验证未通过，可重试或输入钱包密码。');
+        throw WalletSecurityException(
+          appText(context, '设备验证未通过，可重试或输入钱包密码。'),
+        );
       }
       if (attempt != _authAttempt) return;
       final mnemonic = await widget.security.unlockMnemonicWithDeviceProtection(
@@ -101,11 +104,13 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
       if (mounted) Navigator.of(context).pop(mnemonic);
     } on WalletSecurityException catch (error) {
       if (mounted && attempt == _authAttempt) {
-        setState(() => _error = error.message);
+        setState(() => _error = appText(context, error.message));
       }
     } catch (_) {
       if (mounted && attempt == _authAttempt) {
-        setState(() => _error = '设备解锁失败，可重试或输入钱包密码。');
+        setState(
+          () => _error = appText(context, '设备解锁失败，可重试或输入钱包密码。'),
+        );
       }
     } finally {
       if (mounted && attempt == _authAttempt) setState(() => _busy = false);
@@ -126,9 +131,11 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
       );
       if (mounted) Navigator.of(context).pop(mnemonic);
     } on WalletSecurityException catch (error) {
-      if (mounted) setState(() => _error = error.message);
+      if (mounted) setState(() => _error = appText(context, error.message));
     } catch (_) {
-      if (mounted) setState(() => _error = '验证失败，请稍后重试。');
+      if (mounted) {
+        setState(() => _error = appText(context, '验证失败，请稍后重试。'));
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -174,7 +181,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                   children: [
                     Expanded(
                       child: Text(
-                        '安全验证',
+                        appText(context, '安全验证'),
                         style: TextStyle(
                           color: palette.mutedText,
                           fontSize: 14,
@@ -195,7 +202,10 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                           _error = null;
                         }),
                         child: Text(
-                          _usingPassword ? '使用设备验证' : '使用密码',
+                          appText(
+                            context,
+                            _usingPassword ? '使用设备验证' : '使用密码',
+                          ),
                           style: TextStyle(
                             color: palette.accent,
                             fontSize: 14,
@@ -227,7 +237,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
               ),
               const SizedBox(height: 18),
               Text(
-                _usingPassword ? '输入钱包密码' : '验证钱包操作',
+                appText(context, _usingPassword ? '输入钱包密码' : '验证钱包操作'),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: palette.primaryText,
@@ -237,11 +247,14 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
               ),
               const SizedBox(height: 8),
               Text(
-                _usingPassword
-                    ? '验证通过后继续签名'
-                    : _busy
-                    ? '正在等待设备验证…'
-                    : '使用指纹或面容继续',
+                appText(
+                  context,
+                  _usingPassword
+                      ? '验证通过后继续签名'
+                      : _busy
+                      ? '正在等待设备验证…'
+                      : '使用指纹或面容继续',
+                ),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: palette.mutedText,
@@ -259,7 +272,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _unlockWithPassword(),
                   onChanged: (_) => setState(() => _error = null),
-                  placeholder: '钱包密码',
+                  placeholder: appText(context, '钱包密码'),
                   prefix: Padding(
                     padding: const EdgeInsets.only(left: 14, right: 8),
                     child: Icon(
@@ -284,7 +297,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(
-                  _error!,
+                  appText(context, _error!),
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     color: CupertinoColors.systemRed,
@@ -312,7 +325,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                           color: Color(0xFF111111),
                         )
                       : Text(
-                          _confirmLabel,
+                          appText(context, _confirmLabel),
                           style: const TextStyle(
                             color: Color(0xFF111111),
                             fontSize: 16,
@@ -329,7 +342,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                   padding: EdgeInsets.zero,
                   onPressed: _busy ? null : () => Navigator.of(context).pop(),
                   child: Text(
-                    '取消',
+                    appText(context, '取消'),
                     style: TextStyle(color: palette.mutedText, fontSize: 15),
                   ),
                 ),

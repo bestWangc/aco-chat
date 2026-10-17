@@ -110,7 +110,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Text(
-                              _title,
+                              appText(context, _title),
                               style: TextStyle(
                                 color: palette.primaryText,
                                 fontSize: _isImporting
@@ -121,7 +121,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                             ),
                             const SizedBox(height: 10),
                             Text(
-                              _description,
+                              appText(context, _description),
                               style: TextStyle(
                                 color: palette.mutedText,
                                 fontSize: _isImporting
@@ -206,11 +206,13 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                 color: _backedUp ? _lime : palette.mutedText,
               ),
               const SizedBox(width: 10),
-              Text(
-                '我已安全备份，绝不分享给他人',
-                style: TextStyle(
-                  color: palette.primaryText,
-                  fontSize: AcoTypography.body,
+              Expanded(
+                child: Text(
+                  '我已安全备份，绝不分享给他人',
+                  style: TextStyle(
+                    color: palette.primaryText,
+                    fontSize: AcoTypography.body,
+                  ),
                 ),
               ),
             ],
@@ -362,7 +364,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     onChanged: (_) => setState(() {}),
     onSubmitted: (_) => _dismissKeyboard(),
     onTapOutside: (_) => _dismissKeyboard(),
-    placeholder: '在此粘贴助记词',
+    placeholder: appText(context, '在此粘贴助记词'),
     style: TextStyle(color: palette.primaryText),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
@@ -382,7 +384,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             textInputAction: TextInputAction.next,
             onChanged: (_) => setState(() {}),
             onTapOutside: (_) => _dismissKeyboard(),
-            placeholder: verifyExisting ? '输入当前钱包密码' : '设置钱包密码（至少 8 位）',
+            placeholder: verifyExisting
+                ? appText(context, '输入当前钱包密码')
+                : appText(context, '设置钱包密码（至少 8 位）'),
             style: TextStyle(color: palette.primaryText),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -401,7 +405,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
               onChanged: (_) => setState(() {}),
               onSubmitted: (_) => _dismissKeyboard(),
               onTapOutside: (_) => _dismissKeyboard(),
-              placeholder: '再次输入钱包密码',
+              placeholder: appText(context, '再次输入钱包密码'),
               style: TextStyle(color: palette.primaryText),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -695,7 +699,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.pop(context),
-            child: const Text('知道了'),
+            child: Text(appText(context, '知道了')),
           ),
         ],
       ),

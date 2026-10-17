@@ -294,7 +294,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                     Navigator.of(dialogContext).pop(value.trim());
                   }
                 },
-                placeholder: '输入至少 4 位密码',
+                placeholder: appText(context, '输入至少 4 位密码'),
               ),
             ),
             actions: [
@@ -356,7 +356,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                           onChanged: (_) => setState(() {}),
                           onSubmitted: (_) => _dismissKeyboard(),
                           onTapOutside: (_) => _dismissKeyboard(),
-                          placeholder: '输入会议主题',
+                          placeholder: appText(context, '输入会议主题'),
                           placeholderStyle: TextStyle(
                             color: palette.mutedText,
                             fontSize: AcoTypography.body,

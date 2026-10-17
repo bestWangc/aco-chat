@@ -9,6 +9,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:aco_chat/core/config/app_config.dart';
+import 'package:aco_chat/core/localization/app_localization.dart';
+import 'package:aco_chat/core/localization/localized_text.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
@@ -45,7 +47,6 @@ import 'package:aco_chat/services/hyperliquid_exchange_client.dart';
 import 'package:aco_chat/services/hyperliquid_agent_store.dart';
 import 'package:aco_chat/services/hyperliquid_builder_approval_store.dart';
 import 'package:aco_chat/services/hyperliquid_signing.dart';
-import 'package:aco_chat/services/mayan_hypercore_deposit_client.dart';
 import 'package:aco_chat/services/trade_fee_config_client.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
@@ -57,9 +58,8 @@ import 'package:aco_chat/services/tron_transfer_service.dart';
 import 'package:aco_chat/services/solana_transfer_service.dart';
 import 'package:aco_chat/services/wallet_rpc_client.dart';
 import 'package:aco_chat/services/wallet_token_metadata_reader.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:flutter/cupertino.dart' hide Text;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:flutter_chen_kchart/k_chart.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart'
@@ -92,6 +92,7 @@ import 'package:record/record.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:video_player/video_player.dart';
+
 import 'package:video_thumbnail/video_thumbnail.dart' as video_thumbnail;
 import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:http/http.dart' as http;
@@ -241,6 +242,8 @@ const _navAssets = [
 
 class AcoDesignShell extends StatefulWidget {
   const AcoDesignShell({
+    this.language = '简体中文',
+    this.onLanguageChanged,
     this.themeNotifier,
     this.onThemeChanged,
     this.onWalletReady,
@@ -254,6 +257,8 @@ class AcoDesignShell extends StatefulWidget {
 
   /// Owned by [AcoApp] so the Cupertino and shadcn themes update together.
   final ValueNotifier<bool>? themeNotifier;
+  final String language;
+  final ValueChanged<String>? onLanguageChanged;
   final ValueChanged<bool>? onThemeChanged;
   final Future<void> Function(WalletIdentity, String)? onWalletReady;
   final Future<void> Function(WalletIdentity)? onWalletSelected;
@@ -288,7 +293,6 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
   final ValueNotifier<int> _identity = ValueNotifier<int>(0);
   final ValueNotifier<int> _staffIdentity = ValueNotifier<int>(0);
   late final WalletTransactionService _walletTransactionService;
-  String _language = '简体中文';
   bool _hasAppUpdate = false;
   String? _presentedIncomingCallID;
 
@@ -701,11 +705,11 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
         onAvatarUrlChanged: (avatarUrl) {
           if (mounted) _avatarUrl.value = avatarUrl;
         },
-        language: _language,
+        language: widget.language,
         liveListRevision: _liveListRevision,
         hasAppUpdate: _hasAppUpdate,
         onOpenAppUpdate: () => const AppUpdateService().openWebsite(),
-        onLanguageChanged: (language) => setState(() => _language = language),
+        onLanguageChanged: widget.onLanguageChanged,
       );
     },
   );
@@ -793,13 +797,12 @@ class _AcoDesignShellState extends State<AcoDesignShell> {
                           onAvatarUrlChanged: (avatarUrl) {
                             if (mounted) _avatarUrl.value = avatarUrl;
                           },
-                          language: _language,
+                          language: widget.language,
                           liveListRevision: _liveListRevision,
                           hasAppUpdate: _hasAppUpdate,
                           onOpenAppUpdate: () =>
                               const AppUpdateService().openWebsite(),
-                          onLanguageChanged: (language) =>
-                              setState(() => _language = language),
+                          onLanguageChanged: widget.onLanguageChanged,
                         );
                       },
                     ),

@@ -1,0 +1,652 @@
+import 'package:flutter/widgets.dart';
+
+/// Small in-app string table for the existing Chinese-first UI.
+String appText(BuildContext context, String chinese) {
+  if (Localizations.localeOf(context).languageCode != 'en') return chinese;
+  final translated = _englishStrings[chinese];
+  if (translated != null) return translated;
+  if (chinese.startsWith('暂无') && chinese.endsWith('钱包')) {
+    return 'No ${chinese.substring(2, chinese.length - 2)} wallet';
+  }
+  if (chinese.endsWith('钱包未准备好')) {
+    return '${chinese.substring(0, chinese.length - 7)} wallet is not ready';
+  }
+  const receivePrefix = '仅向该地址转入 ';
+  const receiveSuffix = ' 相关资产';
+  if (chinese.startsWith(receivePrefix) && chinese.endsWith(receiveSuffix)) {
+    final network = chinese.substring(
+      receivePrefix.length,
+      chinese.length - receiveSuffix.length,
+    );
+    return 'Only send $network assets to this address.';
+  }
+  const shareAddressPrefix = '我的 ';
+  const shareAddressSeparator = ' 收款地址：';
+  if (chinese.startsWith(shareAddressPrefix) &&
+      chinese.contains(shareAddressSeparator)) {
+    final separatorIndex = chinese.indexOf(shareAddressSeparator);
+    final network = chinese.substring(
+      shareAddressPrefix.length,
+      separatorIndex,
+    );
+    final address = chinese.substring(
+      separatorIndex + shareAddressSeparator.length,
+    );
+    return 'My $network address: $address';
+  }
+  if (chinese.startsWith('收款二维码：')) {
+    return 'Receiving QR code: ${chinese.substring('收款二维码：'.length)}';
+  }
+  const addressSuffix = '地址，请先导入或创建该公链钱包后再进行跨链兑换。';
+  if (chinese.startsWith('当前钱包还没有') && chinese.endsWith(addressSuffix)) {
+    final chain = chinese.substring(
+      '当前钱包还没有'.length,
+      chinese.length - addressSuffix.length,
+    );
+    return 'This wallet has no $chain address. Import or create a wallet for this chain before bridging.';
+  }
+  if (chinese.startsWith('交易哈希\n') && chinese.contains('正在等待授权生效')) {
+    final lines = chinese.split('\n');
+    final hash = lines.length > 1 ? lines[1] : '';
+    return 'Transaction hash\n$hash\n\nWaiting for approval…';
+  }
+  if (chinese.startsWith('请稍候 ') && chinese.endsWith(' 秒')) {
+    return 'Please wait ${chinese.substring(4, chinese.length - 2)} seconds';
+  }
+  if (chinese.startsWith('请按顺序选择：')) {
+    final targets = chinese
+        .substring('请按顺序选择：'.length)
+        .replaceAllMapped(
+          RegExp(r'第\s*(\d+)\s*个'),
+          (match) => 'word ${match[1]}',
+        )
+        .replaceAll('、', ', ');
+    return 'Select these in order: $targets';
+  }
+  if (chinese.startsWith('至 ')) return 'To ${chinese.substring(2)}';
+  if (chinese.startsWith('管理成员 (') && chinese.endsWith(')')) {
+    return 'Manage members (${chinese.substring(6)}';
+  }
+  if (chinese.startsWith('找到 ') && chinese.endsWith(' 个结果')) {
+    return 'Found ${chinese.substring(3, chinese.length - 4)} results';
+  }
+  final tokenAge = RegExp(r'^(\d+)天$').firstMatch(chinese);
+  if (tokenAge != null) return '${tokenAge[1]}d';
+  final minutesAgo = RegExp(r'^(\d+)分钟前$').firstMatch(chinese);
+  if (minutesAgo != null) return '${minutesAgo[1]}m ago';
+  final hoursAgo = RegExp(r'^(\d+)小时前$').firstMatch(chinese);
+  if (hoursAgo != null) return '${hoursAgo[1]}h ago';
+  final daysAgo = RegExp(r'^(\d+)天前$').firstMatch(chinese);
+  if (daysAgo != null) return '${daysAgo[1]}d ago';
+  final sold = RegExp(r'^卖出 (.+)，获得 (.+) USDT$').firstMatch(chinese);
+  if (sold != null) return 'Sold ${sold[1]} for ${sold[2]} USDT';
+  final bought = RegExp(r'^(.+) USDT 买入 (.+)$').firstMatch(chinese);
+  if (bought != null) return 'Bought ${bought[2]} for ${bought[1]} USDT';
+  final cost = RegExp(r'^成本价 (.+) USDT$').firstMatch(chinese);
+  if (cost != null) return 'Avg. price: ${cost[1]} USDT';
+  if (chinese.startsWith('确定要将 ') && chinese.endsWith(' 移出群聊吗？')) {
+    final name = chinese.substring(5, chinese.length - 7);
+    return 'Remove $name from the group chat?';
+  }
+  return chinese;
+}
+
+const _englishStrings = <String, String>{
+  '钱包': 'Wallet',
+  '探索': 'Explore',
+  '广场': 'Community',
+  '社交': 'Social',
+  '个人中心': 'Profile',
+  '个人主页': 'My Profile',
+  '设置': 'Settings',
+  '主题模式': 'Theme',
+  '语言': 'Language',
+  '我的点赞': 'Likes given',
+  '粉丝': 'Followers',
+  '获赞': 'Likes received',
+  '编辑个人资料': 'Edit profile',
+  '扫描二维码': 'Scan QR code',
+  '个人二维码': 'My QR code',
+  '当前版本 v': 'Version ',
+  '连接诊断': 'Connection diagnostics',
+  '外观偏好': 'Appearance',
+  '深色模式': 'Dark mode',
+  '适合低光环境': 'For low-light use',
+  '浅色模式': 'Light mode',
+  '清晰明亮的界面': 'A clear, bright interface',
+  '显示语言': 'Display language',
+  '简体中文': '简体中文',
+  'Chinese (Simplified)': 'Chinese (Simplified)',
+  'English': 'English',
+  'English (US)': 'English (US)',
+  '发送资产': 'Send',
+  '接收资产': 'Receive',
+  '转入': 'Received',
+  '转出': 'Sent',
+  '资产': 'Assets',
+  '添加代币': 'Add token',
+  '搜索代币': 'Search tokens',
+  '搜索': 'Search',
+  '取消': 'Cancel',
+  '确认': 'Confirm',
+  '验证': 'Verify',
+  '重新验证': 'Verify again',
+  '完成': 'Done',
+  '返回': 'Back',
+  '保存': 'Save',
+  '编辑': 'Edit',
+  '删除': 'Delete',
+  '移除': 'Remove',
+  '移除代币': 'Remove token',
+  '移除失败': 'Failed to remove token',
+  '仅从资产列表移除，不会影响链上资产。':
+      'This removes the token from your asset list only. Your on-chain assets are unaffected.',
+  '请稍后重试。': 'Please try again later.',
+  '失败': 'Failed',
+  '处理中': 'Pending',
+  '未知状态': 'Unknown status',
+  '复制': 'Copy',
+  '分享': 'Share',
+  '刷新': 'Refresh',
+  '重试': 'Retry',
+  '暂无数据': 'No data',
+  '加载中...': 'Loading...',
+  '加载中': 'Loading...',
+  '加载失败': 'Failed to load',
+  '网络错误，请稍后重试': 'Network error. Please try again later.',
+  '发现新版本': 'Update available',
+  '已有新版本可用，是否立即查看？': 'A new version is available. View it now?',
+  '稍后再说': 'Later',
+  '立即更新': 'Update now',
+  '开启后台消息提醒': 'Enable background notifications',
+  '重新导入': 'Import again',
+  '请在系统设置中允许 ACO 后台运行，并开启自启动。否则手机会暂停应用，无法收到新消息提醒。':
+      'Allow ACO to run in the background and enable auto-start in system settings. Otherwise, your phone may pause the app and delay notifications.',
+  '稍后': 'Later',
+  '去设置': 'Settings',
+  '我已开启': "I've enabled it",
+  '个人资料加载失败': 'Failed to load profile',
+  '钱包尚未注册，请完成钱包验证后再注册账号。':
+      'This wallet is not registered. Verify your wallet to create an account.',
+  '个人资料加载失败，请检查网络后重试。':
+      'Could not load your profile. Check your connection and try again.',
+  '钱包地址': 'Wallet address',
+  '收款地址': 'Address',
+  '复制地址': 'Copy address',
+  '钱包地址已复制到剪贴板。': 'Wallet address copied.',
+  '收款数额设置即将开放。': 'Amount settings are coming soon.',
+  '收款二维码：': 'Receiving QR code:',
+  '扫一扫': 'Scan',
+  '发送': 'Send',
+  '接收': 'Receive',
+  '全部': 'All',
+  '热门': 'Trending',
+  'ACO 社区': 'ACO Community',
+  '价格': 'Price',
+  '数量': 'Amount',
+  '总资产': 'Total assets',
+  '我的资产': 'My assets',
+  '创建钱包': 'Create wallet',
+  '导入钱包': 'Import wallet',
+  '备份钱包': 'Back up wallet',
+  '助记词': 'Recovery phrase',
+  '私钥': 'Private key',
+  '复制助记词': 'Copy recovery phrase',
+  '已复制助记词': 'Recovery phrase copied',
+  '复制私钥': 'Copy private key',
+  '已复制私钥': 'Private key copied',
+  '下一步': 'Next',
+  '上一步': 'Previous',
+  '我已知晓': 'I understand',
+  '同意并继续': 'Agree and continue',
+  '请输入': 'Please enter',
+  '用户名': 'Username',
+  '昵称': 'Nickname',
+  '头像': 'Avatar',
+  '账号': 'Account',
+  '消息': 'Messages',
+  '好友': 'Friends',
+  '群聊信息': 'Group info',
+  '聊天信息': 'Chat info',
+  '群聊名称': 'Group name',
+  '群二维码': 'Group QR',
+  '查找聊天内容': 'Search chat',
+  '置顶聊天': 'Pin chat',
+  '解散群聊': 'Disband group',
+  '清空聊天记录': 'Clear chat history',
+  '拉黑': 'Block',
+  '群聊': 'Group chat',
+  '聊天': 'Chat',
+  '动态': 'Posts',
+  '发布': 'Post',
+  '评论': 'Comments',
+  '点赞': 'Like',
+  '关注': 'Follow',
+  '已关注': 'Following',
+  '直播': 'Live',
+  '创建会议': 'Create meeting',
+  '申请发言': 'Requests to speak',
+  '买入': 'Buy',
+  '卖出': 'Sell',
+  '兑换': 'Swap',
+  '代币': 'Tokens',
+  '连接钱包': 'Connect wallet',
+  '选择网络': 'Select network',
+  '语言设置': 'Language settings',
+  '个人设置': 'Profile settings',
+  '钱包操作菜单': 'Wallet actions',
+  '刷新列表': 'Refresh list',
+  '切换钱包': 'Switch wallet',
+  '切换网络': 'Switch network',
+  '闪兑&跨链': 'Swap & bridge',
+  '扫码': 'Scan QR code',
+  '请先同意用户协议和隐私政策': 'Please accept the User Agreement and Privacy Policy first.',
+  '知道了': 'Got it',
+  '创建新钱包或导入已有钱包\n开始使用':
+      'Create a new wallet or import an existing one\nto get started',
+  '同意用户协议和隐私政策': 'Agree to the User Agreement and Privacy Policy',
+  '我已阅读并同意 ': 'I have read and agree to ',
+  '《用户协议》': 'User Agreement',
+  ' 和 ': ' and ',
+  '《隐私政策》': 'Privacy Policy',
+  '由 Aladdin Dao Inc 提供': 'Provided by Aladdin Dao Inc',
+  '我的二维码': 'My QR code',
+  '编辑资料': 'Edit profile',
+  '保存修改': 'Save changes',
+  '保存中...': 'Saving...',
+  '关闭': 'Close',
+  '删除钱包': 'Delete wallet',
+  '修改钱包名称': 'Edit wallet name',
+  '请输入钱包名称': 'Enter a wallet name',
+  '确认删除': 'Delete wallet',
+  '验证钱包密码': 'Verify wallet password',
+  '安全验证': 'Security verification',
+  '使用设备验证': 'Use biometrics',
+  '使用密码': 'Use password',
+  '输入钱包密码': 'Enter wallet password',
+  '验证钱包操作': 'Verify wallet action',
+  '验证通过后继续签名': 'Verify to continue signing',
+  '正在等待设备验证…': 'Waiting for device verification…',
+  '使用指纹或面容继续': 'Use biometrics to continue',
+  '使用指纹或面容验证钱包操作': 'Authenticate to verify this wallet action',
+  '设备验证未通过，可重试或输入钱包密码。':
+      'Verification failed. Try again or use your wallet password.',
+  '设备解锁失败，可重试或输入钱包密码。':
+      'Could not unlock the wallet. Try again or use your password.',
+  '验证失败，请稍后重试。': 'Verification failed. Try again.',
+  '钱包密码错误或安全数据已损坏':
+      'Incorrect wallet password or corrupted security data.',
+  '设备加密数据与密钥不匹配或已损坏':
+      'Device encryption data is invalid or corrupted.',
+  '钱包安全数据已损坏': 'Wallet security data is corrupted.',
+  '钱包安全数据格式无效': 'Invalid wallet security data format.',
+  '助记词仅支持 12 或 24 个单词':
+      'Recovery phrases must contain 12 or 24 words.',
+  '设备保护数据写入校验失败': 'Could not verify saved device protection data.',
+  '未找到该钱包的本地安全数据': 'No local security data found for this wallet.',
+  '不支持的钱包安全数据版本': 'Unsupported wallet security data version.',
+  '设备加密数据已损坏': 'Encrypted device data is corrupted.',
+  '未配置设备保护': 'Device protection is not set up.',
+  '钱包密码数据写入校验失败': 'Could not verify saved wallet password data.',
+  '助记词无效': 'Invalid recovery phrase.',
+  '钱包密码至少需要 8 位': 'Wallet passwords must be at least 8 characters.',
+  '钱包地址不能为空': 'Wallet address is required.',
+  '输入钱包密码后删除钱包。': 'Enter your wallet password to delete this wallet.',
+  '钱包密码': 'Wallet password',
+  '验证并删除': 'Verify and delete',
+  '钱包详情': 'Wallet details',
+  '导出助记词': 'Export recovery phrase',
+  '导出私钥': 'Export private key',
+  '钱包列表': 'Wallets',
+  '添加钱包': 'Add wallet',
+  '备份助记词': 'Back up recovery phrase',
+  '验证助记词': 'Verify recovery phrase',
+  '导入已有钱包': 'Import wallet',
+  '确认助记词': 'Confirm recovery phrase',
+  '我已安全备份': "I've backed it up",
+  '我已安全备份，绝不分享给他人': "I've backed it up and won't share it",
+  '请按顺序安全备份这些助记词，任何人索取它们都是诈骗。':
+      'Write down your recovery phrase in order. Anyone asking for it is trying to scam you.',
+  '设置统一钱包密码': 'Set a wallet password',
+  '确认添加钱包': 'Confirm wallet addition',
+  '完成并进入钱包': 'Finish and open wallet',
+  '保护你的钱包': 'Secure your wallet',
+  '当前钱包仅启用设备保护。通过设备验证后，可为当前钱包和新钱包设置相同密码。':
+      'This wallet uses device protection only. Verify with your device to set the same password for both wallets.',
+  '输入当前已选钱包的密码以确认身份，新钱包将使用相同密码保护。':
+      'Enter the current wallet password to verify your identity. The new wallet will use the same password.',
+  '设置钱包密码，并使用设备验证以完成操作。':
+      'Set a wallet password and verify with your device to continue.',
+  '输入 12 或 24 个助记词，单词之间用空格分隔。':
+      'Enter your 12- or 24-word recovery phrase, separated by spaces.',
+  '确认你已妥善备份。请从词库中按顺序选择指定单词。':
+      'Confirm your backup by selecting the requested words in order.',
+  '正在创建钱包...': 'Creating wallet…',
+  '正在验证身份...': 'Verifying identity…',
+  '设备验证未完成，请重试。': 'Device verification incomplete. Try again.',
+  '当前钱包没有可用的密码或设备保护，无法验证身份。':
+      'This wallet has no password or device protection, so your identity cannot be verified.',
+  '设备验证已取消，请重试。': 'Device verification canceled. Try again.',
+  '正在生成钱包...': 'Generating wallet…',
+  '正在加密保存...': 'Encrypting wallet data…',
+  '正在生成 Solana 和 TRON 地址...': 'Generating Solana and TRON addresses…',
+  '正在同步账户登录...': 'Syncing account…',
+  '创建超时，请重试': 'Wallet creation timed out. Try again.',
+  '创建失败，请重试': 'Wallet creation failed. Try again.',
+  '备份助记词，保护钱包安全': 'Back up your recovery phrase to keep your wallet safe',
+  '导出私钥，保护钱包安全': 'Export your private key safely',
+  '助记词是恢复钱包的唯一凭证。请妥善备份，并确保仅由你自己保存。':
+      'Your recovery phrase is the only way to restore your wallet. Back it up and keep it private.',
+  '私钥可直接控制钱包资产。请仅在安全环境下导出，并确保仅由你自己保存。':
+      'Your private key gives direct access to your assets. Export it only in a private setting and keep it secure.',
+  '任何人只要获取助记词，即可控制你的资产。':
+      'Anyone with your recovery phrase can take control of your assets.',
+  '任何人只要获取私钥，即可控制你的资产。':
+      'Anyone with your private key can take control of your assets.',
+  '建议备份方式': 'How to back it up',
+  '安全提示': 'Security tips',
+  '使用笔和纸按顺序抄写\n保存到安全地点\n不要截屏、复制或通过网络传输':
+      'Write the words down in order\nStore them somewhere secure\nNever screenshot, copy, or send them online',
+  '确认当前环境无人窥视\n导出后妥善保管\n不要通过网络传输或分享给他人':
+      'Make sure no one can see your screen\nStore the key securely after export\nNever send it online or share it',
+  '重要提醒': 'Important',
+  '安全保护已开启': 'Security protection enabled',
+  '助记词默认隐藏，离开此页面后将自动清除显示。':
+      'Your recovery phrase stays hidden and is cleared when you leave this page.',
+  '私钥默认隐藏，离开此页面后将自动清除显示。':
+      'Your private key stays hidden and is cleared when you leave this page.',
+  '助记词已显示': 'Recovery phrase is visible',
+  '点击显示助记词': 'Tap to reveal recovery phrase',
+  '私钥已显示': 'Private key is visible',
+  '点击显示私钥': 'Tap to reveal private key',
+  '在此粘贴助记词': 'Paste your recovery phrase here',
+  '输入当前钱包密码': 'Enter your current wallet password',
+  '设置钱包密码（至少 8 位）': 'Set a wallet password (at least 8 characters)',
+  '再次输入钱包密码': 'Re-enter your wallet password',
+  '选择转账代币': 'Select a token to send',
+  '搜索代币名称或符号': 'Search token name or symbol',
+  '转账': 'Transfer',
+  '输入或粘贴钱包地址': 'Enter address',
+  '转账金额': 'Amount',
+  '请输入数量': 'Enter amount',
+  '输入金额后估算': 'Enter an amount to estimate fee',
+  '暂不支持': 'Unavailable',
+  '网络费已通过当前 RPC 估算': 'Fee estimated via RPC',
+  '该公链转账功能正在接入': 'Transfers for this network are coming soon',
+  '缺少代币合约地址': 'Token contract address is missing.',
+  '请先登录账户以获取链上 RPC': 'Sign in to access the network RPC.',
+  '转账成功': 'Transfer sent',
+  '交易已签名': 'Transaction signed',
+  '转账失败': 'Transfer failed',
+  '交易构造失败': 'Could not build the transaction. Try again.',
+  '请使用钱包首页的扫码功能。': 'Use the scanner on the wallet home screen.',
+  '网络费': 'Network fee',
+  '收款': 'Receive',
+  '设置数额': 'Set amount',
+  '闪光灯': 'Flashlight',
+  '发送中…': 'Sending…',
+  '继续扫描': 'Scan again',
+  '自定义代币': 'Custom token',
+  '代币合约': 'Token contract',
+  '请输入代币合约地址': 'Enter the token contract address',
+  '重新获取': 'Fetch again',
+  '代币符号': 'Token symbol',
+  '自动获取代币符号': 'Token symbol is fetched automatically',
+  '代币精度': 'Token decimals',
+  '自动获取代币精度': 'Token decimals are fetched automatically',
+  '搜索代币名称、符号或合约地址': 'Search by token name, symbol, or contract address',
+  '请输入网址': 'Enter a URL',
+  '跳转提示': 'Navigation notice',
+  '我已仔细阅读并了解风险': 'I have read and understand the risks',
+  '继续访问': 'Continue',
+  '选择支持的公链': 'Select a supported chain',
+  '温馨提示': 'Notice',
+  '该 DApp 不支持您当前的钱包网络，请切换钱包后继续访问。':
+      'This dApp does not support the current wallet network. Switch wallets to continue.',
+  '确定进入': 'Continue to site',
+  '忽略，仍然进入': 'Ignore and continue',
+  '工具': 'Tools',
+  '现货': 'Spot',
+  '合约': 'Perpetuals',
+  '股票': 'Stocks',
+  '闪兑': 'Swap',
+  '输入会议密码': 'Enter meeting password',
+  '请输入会议密码': 'Enter the meeting password',
+  '进入': 'Join',
+  '下载签到数据': 'Download attendance data',
+  '会议已结束，是否要下载签到数据？': 'The meeting has ended. Download attendance data?',
+  '发布动态': 'Create post',
+  '动态详情': 'Post details',
+  '写下你的回复…': 'Write a reply…',
+  '分享此刻想说的话…': 'Share a thought…',
+  '推荐': 'Recommended',
+  '会议': 'Meetings',
+  '通讯录': 'Contacts',
+  '没有找到相关联系人或聊天记录': 'No matching contacts or chat history found',
+  '联系人': 'Contacts',
+  '聊天记录': 'Chat history',
+  '好友申请': 'Friend requests',
+  '兑换已提交': 'Swap submitted',
+  '当前钱包还没有地址，请先导入或创建该公链钱包后再进行跨链兑换。':
+      'No address found for this chain in the current wallet. Import or create a wallet for this chain before bridging.',
+  '去导入钱包': 'Import wallet',
+  '去创建钱包': 'Create wallet',
+  '交易已广播，正在等待链上确认。':
+      'Transaction sent. Waiting for on-chain confirmation.',
+  '复制交易哈希': 'Copy transaction hash',
+  '授权已提交': 'Approval submitted',
+  '交易哈希': 'Transaction hash',
+  '正在等待授权生效…': 'Waiting for approval to take effect…',
+  '确认兑换': 'Confirm swap',
+  '需要代币授权': 'Token approval required',
+  '获取报价中…': 'Getting quote…',
+  '兑换记录': 'Swap history',
+  '输入代币名称或合约地址': 'Enter a token name or contract address',
+  '保存图片': 'Save image',
+  '个人资料暂不可用': 'Profile is unavailable',
+  '主持人': 'Host',
+  '任何人直接加入': 'Anyone can join',
+  '交易记录加载失败': 'Failed to load transaction history',
+  '交易已发送至源链，正在等待网络确认。':
+      'Transaction sent to the source chain. Waiting for network confirmation.',
+  '交易已提交': 'Transaction submitted',
+  '充值': 'Deposit',
+  '充值已提交': 'Deposit submitted',
+  '全部成员': 'All members',
+  '回复加载失败，点击重试': 'Failed to load replies. Tap to retry.',
+  '图片加载失败': 'Failed to load image',
+  '已举手，请等待主持人批准': 'Hand raised. Please wait for the host to approve.',
+  '已复制': 'Copied',
+  '建议使用横向图片': 'Landscape images are recommended',
+  '当前': 'Current',
+  '当前图表组件暂不支持 EMA 指标': 'EMA is not supported by this chart yet',
+  '实用、快速赚币工具集合，最大化闲置资金收益!':
+      'A collection of practical tools to help earn from idle funds.',
+  '实际到账数量、网络手续费和路由费用以链上执行结果为准。':
+      'Final amount received, network fees, and routing fees are determined on-chain.',
+  '我的会议': 'My meetings',
+  '我知道了': 'Got it',
+  '扫一扫上面的二维码图案，加我为朋友。': 'Scan the QR code above to add me as a friend.',
+  '扫一扫加入群聊\n群人数上限为 500 人。':
+      'Scan to join the group chat.\nThe group can have up to 500 members.',
+  '平仓': 'Close position',
+  '市价': 'Market',
+  '市场': 'Market',
+  '成交量\n合约持仓量': 'Vol.\nOpen Int.',
+  '最后价格\n24小时变化': 'Last Px\n24h Chg.',
+  '公司｜币种': 'Company | Ticker',
+  '市值｜成交额': 'Mkt cap | Vol.',
+  '搜索帖文或消息': 'Search posts or chats',
+  '市值': 'Mkt cap',
+  '流动性': 'Liquidity',
+  '24h交易额': '24h vol.',
+  '5分': '5m',
+  '15分': '15m',
+  '1小时': '1h',
+  '4小时': '4h',
+  '12小时': '12h',
+  '1天': '1d',
+  '交易动态': 'Activity',
+  '持仓': 'Holders',
+  '暂无交易动态': 'No recent trades',
+  '暂无买入卖出记录': 'No buy or sell history',
+  '连接钱包后查看你的买入卖出记录': 'Connect a wallet to view your trades',
+  '暂无K线数据': 'No chart data',
+  '暂无会议，去创建一场吧。': 'No meetings yet. Create one?',
+  '刚刚': 'Just now',
+  '交易失败': 'Trade failed',
+  '等待节点返回交易标识': 'Waiting for the network to return a transaction ID',
+  '匿名用户': 'Anonymous',
+  '暂无会话': 'No conversations',
+  '暂无匹配代币': 'No matching tokens',
+  '暂无成交数据': 'No trade data',
+  '暂无日志，刷新页面后重试': 'No logs. Refresh the page and try again.',
+  '暂无最近浏览': 'No recently viewed items',
+  '暂无消息': 'No messages',
+  '暂无热门代币': 'No trending tokens',
+  '暂无钱包': 'No wallets',
+  '暂无闪兑记录': 'No swap history',
+  '更多记录': 'More history',
+  '最近10条记录': 'Latest 10 entries',
+  '最近浏览': 'Recently viewed',
+  '未找到代币': 'Token not found',
+  '未找到匹配用户': 'No matching users found',
+  '未找到匹配结果': 'No results found',
+  '未找到相关会话': 'No matching conversations found',
+  '未找到群成员': 'No group members found',
+  '松开 发送': 'Release to send',
+  '查看更多  ›': 'View more  ›',
+  '查看浏览器': 'View in explorer',
+  '止盈止损': 'Take profit / stop loss',
+  '正在准备重新进入会议': 'Preparing to rejoin the meeting',
+  '正在跳转第三方网站': 'Opening third-party website',
+  '添加照片': 'Add photo',
+  '清空': 'Clear',
+  '清除': 'Clear',
+  '清除 DApp 缓存': 'Clear dApp cache',
+  '点击下方区域查看并按顺序抄写。不要向任何人透露。':
+      'Tap below to reveal and copy the words in order. Never share them with anyone.',
+  '点击下方区域查看私钥。不要向任何人透露。':
+      'Tap below to reveal the private key. Never share it with anyone.',
+  '点击查看': 'Tap to view',
+  '热门代币': 'Trending tokens',
+  '照片': 'Photos',
+  '拍摄': 'Camera',
+  '语音通话': 'Voice call',
+  '文件': 'Files',
+  '盈亏': 'PnL',
+  '确定': 'OK',
+  '确认交易': 'Confirm transaction',
+  '确认转账': 'Send',
+  '移出': 'Remove',
+  '移出会议': 'Remove from meeting',
+  '移出群成员': 'Remove group member',
+  '移出群聊': 'Remove from group chat',
+  '移至听众': 'Move to audience',
+  '签到中': 'Checking in',
+  '签到成功': 'Checked in',
+  '类别': 'Category',
+  '网页工具': 'Web tools',
+  '群主': 'Group owner',
+  '词库': 'Word list',
+  '请先导入或创建对应的钱包，再切换到该网络。':
+      'Import or create a wallet for this chain before switching to it.',
+  '请妥善保管助记词': 'Keep your recovery phrase safe',
+  '请妥善保管私钥': 'Keep your private key safe',
+  '请输入名称、符号或合约地址后搜索': 'Enter a name, symbol, or contract address to search',
+  '请检查网络连接或查看诊断信息。': 'Check your network connection or view diagnostics.',
+  '质押仅支持Donmi Chain，请在钱包中手动切换后继续。':
+      'Staking is only available on Donmi Chain. Switch networks in your wallet to continue.',
+  '转让主持人': 'Transfer host role',
+  '转账中…': 'Sending…',
+  '连接状态': 'Connection status',
+  '退出群聊': 'Leave group chat',
+  '选择交易代币': 'Select trading token',
+  '选择代币': 'Select token',
+  '选择划转币种': 'Select transfer asset',
+  '选择好友（最多 499 人）': 'Select friends (up to 499)',
+  '选择开播时间': 'Choose a start time',
+  '选择提醒的人': 'Select people to notify',
+  '选择订单类型': 'Select order type',
+  '邀请上麦': 'Invite to speak',
+  '重新加载': 'Reload',
+  '钱包地址未就绪': 'Wallet address is not ready',
+  '限价': 'Limit',
+  '限价单': 'Limit order',
+  '需要密码才能加入': 'A password is required to join',
+  '预计获得数量': 'Estimated output',
+  'USDC 将通过 Arbitrum 网络发送到您的地址。':
+      'USDC will be sent to your address over the Arbitrum network.',
+  '\$29.73万': '\$297.3K',
+  '交易哈希：': 'Transaction hash:',
+  '从下方词库中依次点选': 'Select the words below in the correct order',
+  '价格\n(USDC)': 'Price\n(USDC)',
+  '价格｜涨跌幅': 'Price | Change',
+  '余额: 0.00': 'Balance: 0.00',
+  '修改群聊名称': 'Edit group name',
+  '全仓': 'Cross',
+  '全部拒绝': 'Reject all',
+  '创建群聊': 'Create group chat',
+  '删除后将从此设备移除钱包及本地安全数据，且无法撤销。请确认已备份助记词或私钥。':
+      'This permanently removes the wallet and local security data from this device. Make sure you have backed up your recovery phrase or private key.',
+  '助记词已隐藏': 'Recovery phrase is hidden',
+  '助记词顺序不正确，请重新选择。':
+      'The recovery phrase is in the wrong order. Please select again.',
+  '发起签到': 'Start check-in',
+  '取消联席主持人': 'Remove co-host',
+  '可用': 'Available',
+  '可用余额': 'Available balance',
+  '基本资料': 'Basic information',
+  '复制哈希': 'Copy hash',
+  '复制日志': 'Copy logs',
+  '将二维码放入框内，即可自动扫描': 'Place the QR code in the frame to scan it automatically',
+  '将清除此网站的 Cookie 和本地数据，可能需要重新登录。':
+      'This clears the website cookies and local data. You may need to sign in again.',
+  '已发送到区块链，等待网络确认': 'Sent to the blockchain. Waiting for network confirmation.',
+  '已选择会议封面': 'Meeting cover selected',
+  '常用代币': 'Common tokens',
+  '您即将进入第三方链接。第三方网站的使用行为适用其隐私政策和用户协议，并由第三方独立承担责任。请确认您信任该网站并自行承担访问可能产生的风险。':
+      'You are opening a third-party link. The site is governed by its own privacy policy and terms. Continue only if you trust it and accept the risks.',
+  '拖动和缩放图片，圆形区域将作为头像保存':
+      'Move and zoom the image. The circular area will be saved as your avatar.',
+  '推荐网络费': 'Recommended fee',
+  '提现': 'Withdraw',
+  '提示': 'Notice',
+  '搜索成员': 'Search members',
+  '撤单': 'Cancel order',
+  '支持的网络': 'Supported networks',
+  '收益专区': 'Earn',
+  '无法打开相机': 'Unable to open camera',
+  '时间': 'Time',
+  '没有找到您的交易？': 'Can’t find your transaction?',
+  '没有找到成员': 'No members found',
+  '私钥已隐藏': 'Private key is hidden',
+  '立即开播': 'Go live now',
+  '自选 ▼': 'Watchlist ▼',
+  '裁剪头像': 'Crop avatar',
+  '视频': 'Video',
+  '视频播放失败': 'Failed to play video',
+  '设为联席主持人': 'Make co-host',
+  '设置加入密码': 'Set a join password',
+  '设置加入权限': 'Set join permissions',
+  '输入名称、符号或合约地址后搜索': 'Enter a name, symbol, or contract address to search',
+  '还没有回复': 'No replies yet',
+  '请选择签到时长，成员将在房间内看到签到提醒。':
+      'Choose a check-in duration. Members will see a reminder in the room.',
+  '全员禁言中': 'Everyone is muted',
+  '说点什么...': 'Say something...',
+  '发送消息': 'Send a message',
+  '搜索聊天内容': 'Search messages',
+  '搜索合约名称或代码': 'Search contract name or ticker',
+  '搜索代币或股票': 'Search tokens or stocks',
+  '输入至少 4 位密码': 'Enter a password with at least 4 characters',
+  '输入会议主题': 'Enter a meeting topic',
+  '搜索用户名或 UID': 'Search by username or UID',
+  '群名称': 'Group name',
+  '请输入群聊名称': 'Enter a group chat name',
+  '金额': 'Amount',
+  '止盈价格': 'Take-profit price',
+  '收益': 'Profit',
+  '止损价格': 'Stop-loss price',
+  '亏损': 'Loss',
+};

@@ -479,7 +479,7 @@ class _WalletHomeState extends State<_WalletHome> {
             offset: const Offset(0, -7),
             child: Semantics(
               container: true,
-              label: '钱包操作菜单',
+              label: appText(context, '钱包操作菜单'),
               child: Container(
                 width: 154,
                 padding: const EdgeInsets.all(4),
@@ -496,7 +496,7 @@ class _WalletHomeState extends State<_WalletHome> {
                   children: [
                     _WalletMenuItem(
                       icon: CupertinoIcons.refresh,
-                      label: '刷新列表',
+                      label: appText(context, '刷新列表'),
                       palette: widget.palette,
                       onPressed: () {
                         _dismissWalletActions();
@@ -505,7 +505,7 @@ class _WalletHomeState extends State<_WalletHome> {
                     ),
                     _WalletMenuItem(
                       icon: CupertinoIcons.add,
-                      label: '添加代币',
+                      label: appText(context, '添加代币'),
                       palette: widget.palette,
                       onPressed: () {
                         _dismissWalletActions();
@@ -555,7 +555,7 @@ class _WalletHomeState extends State<_WalletHome> {
                       Expanded(
                         child: Semantics(
                           button: true,
-                          label: '切换钱包',
+                          label: appText(context, '切换钱包'),
                           child: CupertinoButton(
                             padding: EdgeInsets.zero,
                             minimumSize: Size.zero,
@@ -605,7 +605,7 @@ class _WalletHomeState extends State<_WalletHome> {
                       SizedBox(width: 12),
                       Semantics(
                         button: true,
-                        label: '切换网络',
+                        label: appText(context, '切换网络'),
                         child: GestureDetector(
                           key: const Key('wallet-network-selector'),
                           behavior: HitTestBehavior.opaque,
@@ -671,7 +671,7 @@ class _WalletHomeState extends State<_WalletHome> {
                     children: [
                       Expanded(
                         child: _OutlineButton(
-                          label: '发送资产',
+                          label: appText(context, '发送资产'),
                           palette: widget.palette,
                           height: 58,
                           fontSize: 15,
@@ -687,7 +687,7 @@ class _WalletHomeState extends State<_WalletHome> {
                       const SizedBox(width: 16),
                       Expanded(
                         child: _OutlineButton(
-                          label: '接收资产',
+                          label: appText(context, '接收资产'),
                           icon: null,
                           palette: widget.palette,
                           height: 58,
@@ -711,7 +711,7 @@ class _WalletHomeState extends State<_WalletHome> {
                     children: [
                       Expanded(
                         child: _OutlineButton(
-                          label: '闪兑&跨链',
+                          label: appText(context, '闪兑&跨链'),
                           icon: CupertinoIcons.bolt_fill,
                           palette: widget.palette,
                           height: 58,
@@ -732,7 +732,7 @@ class _WalletHomeState extends State<_WalletHome> {
                       const SizedBox(width: 16),
                       Expanded(
                         child: _OutlineButton(
-                          label: '扫码',
+                          label: appText(context, '扫码'),
                           icon: CupertinoIcons.qrcode_viewfinder,
                           palette: widget.palette,
                           height: 58,

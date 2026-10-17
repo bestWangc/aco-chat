@@ -79,7 +79,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
           keyboardType: TextInputType.url,
           textInputAction: TextInputAction.go,
           style: TextStyle(color: widget.palette.primaryText, fontSize: 16),
-          placeholder: '请输入网址',
+          placeholder: appText(context, '请输入网址'),
           placeholderStyle: TextStyle(
             color: widget.palette.mutedText,
             fontSize: 16,

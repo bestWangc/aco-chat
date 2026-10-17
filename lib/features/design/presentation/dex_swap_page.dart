@@ -2001,7 +2001,7 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                     _query = value;
                     _displayLimit = 80;
                   }),
-                  placeholder: '输入代币名称或合约地址',
+                  placeholder: appText(context, '输入代币名称或合约地址'),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
                     vertical: 13,

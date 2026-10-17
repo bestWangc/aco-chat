@@ -490,7 +490,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
                   Navigator.of(dialogContext).pop(value.trim());
                 }
               },
-              placeholder: '请输入会议密码',
+              placeholder: appText(context, '请输入会议密码'),
             ),
           ),
           actions: [
@@ -1247,7 +1247,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
               controller: _textController,
               maxLines: 1,
               maxLength: 280,
-              placeholder: '写下你的回复…',
+              placeholder: appText(context, '写下你的回复…'),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: widget.palette.inputSurface,
@@ -1416,7 +1416,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
             minLines: 8,
             maxLines: null,
             onChanged: (_) => setState(() {}),
-            placeholder: '分享此刻想说的话…',
+            placeholder: appText(context, '分享此刻想说的话…'),
             placeholderStyle: TextStyle(color: widget.palette.mutedText),
             style: TextStyle(
               color: widget.palette.primaryText,
@@ -1629,56 +1629,62 @@ class _SquareComposer extends StatelessWidget {
   final VoidCallback? onCreateMeeting;
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(
-      horizontal: _squareComposerHorizontalInset,
-    ),
-    child: SizedBox(
-      height: 36,
-      child: OverflowBox(
-        alignment: Alignment.centerLeft,
-        maxWidth: double.infinity,
-        maxHeight: 36,
-        child: Transform.translate(
-          offset: const Offset(-11, 0),
-          child: SizedBox(
-            width: MediaQuery.sizeOf(context).width - 54,
-            child: Row(
-              children: [
-                AcoAvatar(size: 36, imageUrl: imageUrl),
-                const SizedBox(width: 10),
-                if (isLive) ...[
-                  Semantics(
-                    button: true,
-                    label: '创建会议',
-                    child: CupertinoButton(
-                      key: const Key('create-live-button'),
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(96, 36),
-                      onPressed: onCreateMeeting,
-                      child: SizedBox(
-                        width: 96,
-                        height: 36,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: palette.accent.withValues(alpha: .45),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(5),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: palette.accent,
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  '创建会议',
-                                  maxLines: 1,
-                                  style: TextStyle(
-                                    color: _black,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w400,
+  Widget build(BuildContext context) {
+    final createMeetingLabel =
+        Localizations.localeOf(context).languageCode == 'en'
+        ? 'Create'
+        : '创建会议';
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: _squareComposerHorizontalInset,
+      ),
+      child: SizedBox(
+        height: 36,
+        child: OverflowBox(
+          alignment: Alignment.centerLeft,
+          maxWidth: double.infinity,
+          maxHeight: 36,
+          child: Transform.translate(
+            offset: const Offset(-11, 0),
+            child: SizedBox(
+              width: MediaQuery.sizeOf(context).width - 54,
+              child: Row(
+                children: [
+                  AcoAvatar(size: 36, imageUrl: imageUrl),
+                  const SizedBox(width: 10),
+                  if (isLive) ...[
+                    Semantics(
+                      button: true,
+                      label: createMeetingLabel,
+                      child: CupertinoButton(
+                        key: const Key('create-live-button'),
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(96, 36),
+                        onPressed: onCreateMeeting,
+                        child: SizedBox(
+                          width: 96,
+                          height: 36,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: palette.accent.withValues(alpha: .45),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(5),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: palette.accent,
+                                  borderRadius: BorderRadius.circular(15),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    createMeetingLabel,
+                                    maxLines: 1,
+                                    style: const TextStyle(
+                                      color: _black,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w400,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -1687,28 +1693,28 @@ class _SquareComposer extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ),
-                ],
-                Expanded(
-                  child: Transform.translate(
-                    offset: const Offset(10, 0),
-                    child: AcoSearch(
-                      palette: palette,
-                      hint: '搜索帖文或消息',
-                      height: 35,
-                      variant: AcoSearchVariant.squareComposer,
-                      submitIcon: CupertinoIcons.add,
-                      showSubmit: !isLive,
+                  ],
+                  Expanded(
+                    child: Transform.translate(
+                      offset: const Offset(10, 0),
+                      child: AcoSearch(
+                        palette: palette,
+                        hint: '搜索帖文或消息',
+                        height: 35,
+                        variant: AcoSearchVariant.squareComposer,
+                        submitIcon: CupertinoIcons.add,
+                        showSubmit: !isLive,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 enum _SquareFeedTab { recommended, friends, live }
@@ -1730,7 +1736,7 @@ class _SquareTabs extends StatelessWidget {
       horizontal: _squareComposerHorizontalInset,
     ),
     child: Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _SquareTabButton(
           label: '推荐',
@@ -1738,14 +1744,12 @@ class _SquareTabs extends StatelessWidget {
           palette: palette,
           onPressed: () => onSelected(_SquareFeedTab.recommended),
         ),
-        const SizedBox(width: 54),
         _SquareTabButton(
           label: '好友',
           selected: selectedTab == _SquareFeedTab.friends,
           palette: palette,
           onPressed: () => onSelected(_SquareFeedTab.friends),
         ),
-        const SizedBox(width: 54),
         _SquareTabButton(
           label: '会议',
           selected: selectedTab == _SquareFeedTab.live,
@@ -1890,7 +1894,7 @@ class _MessageListSearchField extends StatelessWidget {
             maxLines: 1,
             textInputAction: TextInputAction.search,
             cursorColor: palette.accent,
-            placeholder: '搜索',
+            placeholder: appText(context, '搜索'),
             placeholderStyle: TextStyle(
               color: palette.mutedText,
               fontSize: AcoTypography.caption,
