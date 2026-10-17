@@ -1642,7 +1642,11 @@ final _evmProviderUserScript = UserScript(
       return response ? response.result : null;
     }),
     enable: () => provider.request({method: 'eth_requestAccounts'}),
-    on: (event, listener) => { (listeners[event] ||= []).push(listener); return provider; },
+    on: (event, listener) => {
+      const eventListeners = listeners[event] || (listeners[event] = []);
+      eventListeners.push(listener);
+      return provider;
+    },
     removeListener: (event, listener) => {
       listeners[event] = (listeners[event] || []).filter((item) => item !== listener);
       return provider;
@@ -1725,7 +1729,11 @@ final _solanaProviderUserScript = UserScript(
     }),
     signAllTransactions: (transactions) => Promise.reject({code: 4200, message: 'Solana 交易解析正在接入'}),
     signAndSendTransaction: (transaction, options) => Promise.reject({code: 4200, message: 'Solana 交易解析正在接入'}),
-    on: (event, listener) => { (listeners[event] ||= []).push(listener); return provider; },
+    on: (event, listener) => {
+      const eventListeners = listeners[event] || (listeners[event] = []);
+      eventListeners.push(listener);
+      return provider;
+    },
     removeListener: (event, listener) => {
       listeners[event] = (listeners[event] || []).filter((item) => item !== listener);
       return provider;
