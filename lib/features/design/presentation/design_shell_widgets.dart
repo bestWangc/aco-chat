@@ -638,12 +638,15 @@ class _DexBottomNavIcon extends StatelessWidget {
         offset: const Offset(0, -16),
         child: Transform.scale(
           scale: .90,
-          child: SvgPicture.asset(
-            selected
-                ? 'assets/icons/source_dex_active.svg'
-                : 'assets/icons/source_dex_inactive.svg',
-            fit: BoxFit.contain,
-          ),
+          child: selected
+              ? Image.asset(
+                  'assets/icons/source_dex_active.png',
+                  fit: BoxFit.contain,
+                )
+              : Image.asset(
+                  'assets/icons/source_dex_inactive.png',
+                  fit: BoxFit.contain,
+                ),
         ),
       ),
     ),
