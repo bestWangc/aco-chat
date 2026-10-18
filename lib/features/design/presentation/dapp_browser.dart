@@ -1569,11 +1569,18 @@ final _dappStorageUserScript = UserScript(
 (() => {
   if (!window.flutter_inappwebview) return;
   const origin = window.location.origin;
+  if (origin === 'null') return;
+  let storage;
+  try {
+    storage = window.localStorage;
+  } catch (_) {
+    return;
+  }
   const snapshot = () => {
     const data = {};
-    for (let index = 0; index < window.localStorage.length; index += 1) {
-      const key = window.localStorage.key(index);
-      if (key !== null) data[key] = window.localStorage.getItem(key);
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      if (key !== null) data[key] = storage.getItem(key);
     }
     return window.flutter_inappwebview.callHandler(
       'acoDappStorageSet',
@@ -1588,20 +1595,20 @@ final _dappStorageUserScript = UserScript(
       );
       if (saved && typeof saved === 'object') {
         Object.keys(saved).forEach((key) => {
-          if (window.localStorage.getItem(key) === null) {
-            window.localStorage.setItem(key, saved[key]);
+          if (storage.getItem(key) === null) {
+            storage.setItem(key, saved[key]);
           }
         });
       }
     } catch (_) {}
-    window.localStorage.addEventListener?.('storage', snapshot);
-    const originalSetItem = window.localStorage.setItem.bind(window.localStorage);
-    const originalRemoveItem = window.localStorage.removeItem.bind(window.localStorage);
-    window.localStorage.setItem = (...args) => {
+    storage.addEventListener?.('storage', snapshot);
+    const originalSetItem = storage.setItem.bind(storage);
+    const originalRemoveItem = storage.removeItem.bind(storage);
+    storage.setItem = (...args) => {
       originalSetItem(...args);
       snapshot();
     };
-    window.localStorage.removeItem = (...args) => {
+    storage.removeItem = (...args) => {
       originalRemoveItem(...args);
       snapshot();
     };

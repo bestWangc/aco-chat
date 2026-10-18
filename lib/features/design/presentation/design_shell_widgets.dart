@@ -505,7 +505,7 @@ class AcoBottomNav extends StatelessWidget {
   }
 }
 
-class _FigmaNavItem extends StatelessWidget {
+class _FigmaNavItem extends StatefulWidget {
   const _FigmaNavItem({
     required this.index,
     required this.selected,
@@ -519,7 +519,163 @@ class _FigmaNavItem extends StatelessWidget {
   final bool showBadge;
 
   @override
+  State<_FigmaNavItem> createState() => _FigmaNavItemState();
+}
+
+class _OneShotNavGif extends StatefulWidget {
+  const _OneShotNavGif({required this.asset, required this.onCompleted});
+
+  final String asset;
+  final VoidCallback onCompleted;
+
+  @override
+  State<_OneShotNavGif> createState() => _OneShotNavGifState();
+}
+
+class _OneShotNavGifState extends State<_OneShotNavGif> {
+  ui.Codec? _codec;
+  ui.Image? _image;
+  final _decodedFrames = <ui.Image>[];
+  Timer? _frameTimer;
+  var _frameCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _play();
+  }
+
+  Future<void> _play() async {
+    try {
+      final data = await rootBundle.load(widget.asset);
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      if (!mounted) {
+        codec.dispose();
+        return;
+      }
+      _codec = codec;
+      await _showNextFrame();
+    } catch (_) {
+      if (mounted) widget.onCompleted();
+    }
+  }
+
+  Future<void> _showNextFrame() async {
+    final codec = _codec;
+    if (codec == null) return;
+    try {
+      final frame = await codec.getNextFrame();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      _decodedFrames.add(frame.image);
+      setState(() {
+        _image = frame.image;
+        _frameCount++;
+      });
+      _frameTimer = Timer(
+        frame.duration,
+        _frameCount == codec.frameCount ? widget.onCompleted : _showNextFrame,
+      );
+    } catch (_) {
+      if (mounted) widget.onCompleted();
+    }
+  }
+
+  @override
+  void dispose() {
+    _frameTimer?.cancel();
+    _codec?.dispose();
+    for (final frame in _decodedFrames) {
+      frame.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      RawImage(image: _image, fit: BoxFit.contain);
+}
+
+class _FigmaNavItemState extends State<_FigmaNavItem> {
+  bool _playingWalletTransition = false;
+  bool _playingExploreTransition = false;
+  bool _playingSquareTransition = false;
+  bool _playingSocialTransition = false;
+  bool _playingDexTransition = false;
+  @override
+  void didUpdateWidget(covariant _FigmaNavItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index == 0 &&
+        widget.palette.dark &&
+        !oldWidget.selected &&
+        widget.selected) {
+      _playingWalletTransition = true;
+    } else if (widget.index == 0 &&
+        (!widget.selected || !widget.palette.dark)) {
+      _playingWalletTransition = false;
+    }
+    if (widget.index == 1 &&
+        widget.palette.dark &&
+        !oldWidget.selected &&
+        widget.selected) {
+      _playingExploreTransition = true;
+    } else if (widget.index == 1 &&
+        (!widget.selected || !widget.palette.dark)) {
+      _playingExploreTransition = false;
+    }
+    if (widget.index == 3 &&
+        widget.palette.dark &&
+        !oldWidget.selected &&
+        widget.selected) {
+      _playingSquareTransition = true;
+    } else if (widget.index == 3 &&
+        (!widget.selected || !widget.palette.dark)) {
+      _playingSquareTransition = false;
+    }
+    if (widget.index == 4 &&
+        widget.palette.dark &&
+        !oldWidget.selected &&
+        widget.selected) {
+      _playingSocialTransition = true;
+    } else if (widget.index == 4 &&
+        (!widget.selected || !widget.palette.dark)) {
+      _playingSocialTransition = false;
+    }
+    if (widget.index == 2 && !oldWidget.selected && widget.selected) {
+      _playingDexTransition = true;
+    } else if (widget.index == 2 && !widget.selected) {
+      _playingDexTransition = false;
+    }
+  }
+
+  Widget _buildTransitionIcon({
+    required String inactiveAsset,
+    required String transitionAsset,
+    required VoidCallback onCompleted,
+    double scale = 1,
+  }) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Image.asset(inactiveAsset, fit: BoxFit.contain),
+      Center(
+        child: Transform.scale(
+          scale: scale,
+          child: _OneShotNavGif(
+            asset: transitionAsset,
+            onCompleted: onCompleted,
+          ),
+        ),
+      ),
+    ],
+  );
+
+  @override
   Widget build(BuildContext context) {
+    final index = widget.index;
+    final selected = widget.selected;
+    final palette = widget.palette;
     final Color color;
     if (selected) {
       color = palette.dark ? _walletHeaderLime : palette.primaryText;
@@ -527,7 +683,15 @@ class _FigmaNavItem extends StatelessWidget {
       color = palette.dark ? _walletNavInactive : palette.navInactive;
     }
     if (index == 2) {
-      return ExcludeSemantics(child: _DexBottomNavIcon(selected: selected));
+      return ExcludeSemantics(
+        child: _DexBottomNavIcon(
+          selected: selected,
+          playingTransition: _playingDexTransition,
+          onTransitionCompleted: () {
+            if (mounted) setState(() => _playingDexTransition = false);
+          },
+        ),
+      );
     }
     // Normal navigation icons share one visual scale.
     final usesCustomAsset =
@@ -544,11 +708,11 @@ class _FigmaNavItem extends StatelessWidget {
     final iconAsset = switch (index) {
       0 when usesCustomAsset =>
         selected
-            ? 'assets/icons/wallet_nav_active.png'
+            ? 'assets/icons/wallet_nav_transition_end.png'
             : 'assets/icons/wallet_nav_inactive.png',
       1 when usesCustomAsset =>
         selected
-            ? 'assets/icons/explore_nav_active.png'
+            ? 'assets/icons/explore_nav_transition_end.png'
             : 'assets/icons/explore_nav_inactive.png',
       3 when usesCustomAsset =>
         selected
@@ -556,7 +720,7 @@ class _FigmaNavItem extends StatelessWidget {
             : 'assets/icons/square_nav_inactive.png',
       4 when usesCustomAsset =>
         selected
-            ? 'assets/icons/social_nav_active.png'
+            ? 'assets/icons/social_nav_transition_end.png'
             : 'assets/icons/social_nav_inactive.png',
       _ => null,
     };
@@ -566,6 +730,53 @@ class _FigmaNavItem extends StatelessWidget {
             child: Image.asset(_navAssets[index], fit: BoxFit.contain),
           )
         : Image.asset(iconAsset, fit: BoxFit.contain);
+    var displayedIcon = icon;
+    if (index == 0 && selected && usesCustomAsset) {
+      displayedIcon = _playingWalletTransition
+          ? _buildTransitionIcon(
+              inactiveAsset: 'assets/icons/wallet_nav_inactive.png',
+              transitionAsset: 'assets/icons/wallet_nav_transition.gif',
+              scale: .8,
+              onCompleted: () {
+                if (mounted) setState(() => _playingWalletTransition = false);
+              },
+            )
+          : Transform.scale(scale: .8, child: icon);
+    } else if (index == 1 &&
+        selected &&
+        usesCustomAsset &&
+        _playingExploreTransition) {
+      displayedIcon = _buildTransitionIcon(
+        inactiveAsset: 'assets/icons/explore_nav_inactive.png',
+        transitionAsset: 'assets/icons/explore_nav_transition.gif',
+        onCompleted: () {
+          if (mounted) setState(() => _playingExploreTransition = false);
+        },
+      );
+    } else if (index == 3 &&
+        selected &&
+        usesCustomAsset &&
+        _playingSquareTransition) {
+      displayedIcon = _buildTransitionIcon(
+        inactiveAsset: 'assets/icons/square_nav_inactive.png',
+        transitionAsset: 'assets/icons/square_nav_transition.gif',
+        scale: .88,
+        onCompleted: () {
+          if (mounted) setState(() => _playingSquareTransition = false);
+        },
+      );
+    } else if (index == 4 &&
+        selected &&
+        usesCustomAsset &&
+        _playingSocialTransition) {
+      displayedIcon = _buildTransitionIcon(
+        inactiveAsset: 'assets/icons/social_nav_inactive.png',
+        transitionAsset: 'assets/icons/social_nav_transition.gif',
+        onCompleted: () {
+          if (mounted) setState(() => _playingSocialTransition = false);
+        },
+      );
+    }
     return ExcludeSemantics(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -583,11 +794,11 @@ class _FigmaNavItem extends StatelessWidget {
                     child: SizedBox(
                       width: iconSize.width,
                       height: iconSize.height,
-                      child: icon,
+                      child: displayedIcon,
                     ),
                   ),
                 ),
-                if (showBadge)
+                if (widget.showBadge)
                   Positioned(
                     right: 16,
                     top: 0,
@@ -621,15 +832,36 @@ class _FigmaNavItem extends StatelessWidget {
 }
 
 class _DexBottomNavIcon extends StatelessWidget {
-  const _DexBottomNavIcon({required this.selected});
+  const _DexBottomNavIcon({
+    required this.selected,
+    required this.playingTransition,
+    required this.onTransitionCompleted,
+  });
 
   final bool selected;
+  final bool playingTransition;
+  final VoidCallback onTransitionCompleted;
 
   @override
   Widget build(BuildContext context) {
     final asset = selected
-        ? 'assets/icons/source_dex_active.png'
+        ? 'assets/icons/dex_nav_transition_end.png'
         : 'assets/icons/source_dex_inactive.png';
+    final icon = playingTransition
+        ? Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.asset(
+                'assets/icons/source_dex_inactive.png',
+                fit: BoxFit.contain,
+              ),
+              _OneShotNavGif(
+                asset: 'assets/icons/dex_nav_transition.gif',
+                onCompleted: onTransitionCompleted,
+              ),
+            ],
+          )
+        : Image.asset(asset, key: ValueKey(asset), fit: BoxFit.contain);
     return Padding(
       // DEX is a two-part mark (wordmark + triangle), not an icon with a label.
       // Its visual bounds are intentionally taller and sit slightly higher than
@@ -640,14 +872,7 @@ class _DexBottomNavIcon extends StatelessWidget {
         height: 38,
         child: Transform.translate(
           offset: const Offset(0, -16),
-          child: Transform.scale(
-            scale: .90,
-            child: Image.asset(
-              asset,
-              key: ValueKey(asset),
-              fit: BoxFit.contain,
-            ),
-          ),
+          child: Transform.scale(scale: .90, child: icon),
         ),
       ),
     );
