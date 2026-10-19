@@ -164,12 +164,18 @@ class _OutlineButton extends StatelessWidget {
                 else if (icon != null)
                   Icon(icon, color: foreground, size: iconSize),
                 if (hasLeading) SizedBox(width: iconGap),
-                Text(
-                  appText(context, label),
-                  style: TextStyle(
-                    color: foreground,
-                    fontSize: fontSize,
-                    fontWeight: fontWeight,
+                Flexible(
+                  child: Text(
+                    appText(context, label),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: foreground,
+                      fontSize: fontSize,
+                      fontWeight: fontWeight,
+                    ),
                   ),
                 ),
               ],

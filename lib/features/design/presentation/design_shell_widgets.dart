@@ -1360,21 +1360,21 @@ void _showNotice(BuildContext context, String title, String message) {
       const themeColor = _accentGreen;
       return CupertinoActionSheet(
         title: Text(
-          title,
+          appText(context, title),
           style: TextStyle(
             fontSize: AcoTypography.body,
             fontWeight: FontWeight.w700,
           ),
         ),
         message: Text(
-          message,
+          appText(context, message),
           style: TextStyle(fontSize: AcoTypography.caption),
         ),
         actions: [
           CupertinoActionSheetAction(
             onPressed: () => Navigator.of(sheetContext).pop(),
             child: Text(
-              '知道了',
+              appText(context, '知道了'),
               style: TextStyle(color: themeColor, fontSize: AcoTypography.body),
             ),
           ),
@@ -1382,7 +1382,7 @@ void _showNotice(BuildContext context, String title, String message) {
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
           child: Text(
-            '取消',
+            appText(context, '取消'),
             style: TextStyle(color: themeColor, fontSize: AcoTypography.body),
           ),
         ),

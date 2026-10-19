@@ -1181,7 +1181,7 @@ class _ContactsQuickAction extends StatelessWidget {
                   ),
                   const SizedBox(width: 16),
                   Text(
-                    label,
+                    appText(context, label),
                     style: TextStyle(
                       color: palette.primaryText,
                       fontSize: 18,

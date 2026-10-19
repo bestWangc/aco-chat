@@ -238,7 +238,7 @@ class _WalletWelcomeContent extends StatelessWidget {
           _welcomeButtonWidth * 2 + _welcomeButtonGap,
           constraints.maxWidth,
         );
-        final stacked = constraints.maxWidth < 320;
+        final stacked = constraints.maxWidth < 280;
         final buttonGap = math.min(_welcomeButtonGap, actionsWidth);
         final buttonWidth = stacked
             ? actionsWidth

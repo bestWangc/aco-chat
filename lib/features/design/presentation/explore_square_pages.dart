@@ -670,7 +670,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
               SliverPersistentHeader(
                 pinned: true,
                 delegate: _PinnedHeaderDelegate(
-                  extent: 46 + 8 + 36 + 18 + 24 + 16 + 1,
+                  extent: 46 + 8 + 36 + 18 + 28 + 16 + 1,
                   backgroundColor: palette.background,
                   child: Column(
                     children: [
@@ -1630,10 +1630,14 @@ class _SquareComposer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final createMeetingLabel =
-        Localizations.localeOf(context).languageCode == 'en'
-        ? 'Create'
-        : '创建会议';
+    final createMeetingLabel = switch (Localizations.localeOf(
+      context,
+    ).languageCode) {
+      'en' => 'Create',
+      'ar' => 'إنشاء',
+      'th' => 'สร้าง',
+      _ => '创建会议',
+    };
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: _squareComposerHorizontalInset,

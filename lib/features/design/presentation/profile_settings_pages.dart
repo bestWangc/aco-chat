@@ -364,6 +364,10 @@ class _LanguageSettingsPageState extends State<_LanguageSettingsPage> {
         for (final language in const [
           ('简体中文', '简体中文', 'Chinese (Simplified)'),
           ('English', 'English', 'English (US)'),
+          ('العربية', 'العربية', 'Arabic'),
+          ('ไทย', 'ไทย', 'Thai'),
+          ('日本語', '日本語', 'Japanese'),
+          ('한국어', '한국어', 'Korean'),
         ]) ...[
           _PreferenceOption(
             icon: CupertinoIcons.globe,
@@ -376,7 +380,7 @@ class _LanguageSettingsPageState extends State<_LanguageSettingsPage> {
                 ? null
                 : () => _selectLanguage(language.$1),
           ),
-          if (language.$1 != 'English')
+          if (language.$1 != '한국어')
             Container(height: 1, color: widget.palette.border),
         ],
       ],

@@ -664,7 +664,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
             )
             .timeout(const Duration(seconds: 20));
       }
-      _setCompletionStatus('正在生成 Solana 和 TRON 地址...');
+      _setCompletionStatus('正在创建钱包...');
       await _walletChainIdentityService
           .cacheNonEvmAddresses(mnemonic: mnemonic, identity: identity)
           .timeout(const Duration(seconds: 60));

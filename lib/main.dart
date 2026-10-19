@@ -536,10 +536,22 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
           navigatorObservers: [acoRouteObserver],
           title: 'Aco',
           debugShowCheckedModeBanner: false,
-          locale: _language == 'English'
-              ? const Locale('en', 'US')
-              : const Locale('zh', 'CN'),
-          supportedLocales: const [Locale('zh', 'CN'), Locale('en', 'US')],
+          locale: switch (_language) {
+            'English' => const Locale('en', 'US'),
+            'العربية' => const Locale('ar'),
+            'ไทย' => const Locale('th', 'TH'),
+            '日本語' => const Locale('ja', 'JP'),
+            '한국어' => const Locale('ko', 'KR'),
+            _ => const Locale('zh', 'CN'),
+          },
+          supportedLocales: const [
+            Locale('zh', 'CN'),
+            Locale('en', 'US'),
+            Locale('ar'),
+            Locale('th', 'TH'),
+            Locale('ja', 'JP'),
+            Locale('ko', 'KR'),
+          ],
           localizationsDelegates: const [
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,

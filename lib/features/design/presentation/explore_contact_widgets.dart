@@ -103,7 +103,7 @@ class _ContactDetailActionRow extends StatelessWidget {
         Icon(icon, color: palette.accent, size: 19),
         const SizedBox(width: 8),
         Text(
-          label,
+          appText(context, label),
           style: TextStyle(
             color: palette.primaryText,
             fontSize: AcoTypography.body,
