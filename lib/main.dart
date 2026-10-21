@@ -9,6 +9,7 @@ import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/shared/widgets/aco_page_header.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
 import 'package:aco_chat/services/wallet_security.dart';
@@ -562,7 +563,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
             primaryColor: accent,
             scaffoldBackgroundColor: isDark
                 ? const Color(0xFF050505)
-                : const Color(0xFFFFFFFF),
+                : AcoPalette(false).background,
             textTheme: const CupertinoTextThemeData(
               textStyle: TextStyle(
                 fontFamily: 'HarmonyOS Sans SC',

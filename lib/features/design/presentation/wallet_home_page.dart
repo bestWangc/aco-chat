@@ -526,8 +526,18 @@ class _WalletHomeState extends State<_WalletHome> {
   @override
   Widget build(BuildContext context) {
     // The wallet artboard intentionally uses light action cards on black.
-    final actionSurface = _walletActionSurface;
+    final isDark = widget.palette.dark;
+    final actionSurface = isDark
+        ? _walletActionSurface
+        : const Color(0xFFFFFFFF);
     final actionForeground = _walletActionForeground;
+    const actionRadius = 29.0;
+    const primaryActionBorderWidth = 8.0;
+    const secondaryActionBorderWidth = 8.0;
+    const primaryActionBorderColor = Color(0xFF6D9800);
+    final secondaryActionBorderColor = isDark
+        ? const Color(0xFF9E9E9E)
+        : const Color(0xFFD2D6DC);
     final networkLabel = widget.selectedChain.displayLabel;
     // Wallet dimensions are fixed logical pixels. Flex layouts below
     // provide adaptation without scaling an entire artboard at runtime.
@@ -570,6 +580,10 @@ class _WalletHomeState extends State<_WalletHome> {
                                   child: Image.asset(
                                     'assets/icons/wallet_selector.png',
                                     fit: BoxFit.contain,
+                                    color: widget.palette.dark
+                                        ? null
+                                        : widget.palette.primaryText,
+                                    colorBlendMode: BlendMode.srcIn,
                                   ),
                                 ),
                                 SizedBox(width: 16),
@@ -677,9 +691,9 @@ class _WalletHomeState extends State<_WalletHome> {
                           fontSize: 15,
                           backgroundColor: _accentGreen,
                           foregroundColor: _walletActionForeground,
-                          radius: 29,
-                          borderColor: const Color(0xFF6D9800),
-                          borderWidth: 8,
+                          radius: actionRadius,
+                          borderColor: primaryActionBorderColor,
+                          borderWidth: primaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: _showSendTokenPicker,
                         ),
@@ -694,9 +708,9 @@ class _WalletHomeState extends State<_WalletHome> {
                           fontSize: 15,
                           backgroundColor: actionSurface,
                           foregroundColor: actionForeground,
-                          radius: 29,
-                          borderColor: const Color(0xFF9E9E9E),
-                          borderWidth: 8,
+                          radius: actionRadius,
+                          borderColor: secondaryActionBorderColor,
+                          borderWidth: secondaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: () => widget.onOpen(AcoScreen.receive),
                         ),
@@ -722,9 +736,9 @@ class _WalletHomeState extends State<_WalletHome> {
                           iconGap: 12,
                           backgroundColor: actionSurface,
                           foregroundColor: actionForeground,
-                          radius: 29,
-                          borderColor: const Color(0xFF9E9E9E),
-                          borderWidth: 8,
+                          radius: actionRadius,
+                          borderColor: secondaryActionBorderColor,
+                          borderWidth: secondaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: () => widget.onOpen(AcoScreen.dexToken),
                         ),
@@ -742,9 +756,9 @@ class _WalletHomeState extends State<_WalletHome> {
                           iconGap: 12,
                           backgroundColor: actionSurface,
                           foregroundColor: actionForeground,
-                          radius: 29,
-                          borderColor: const Color(0xFF9E9E9E),
-                          borderWidth: 8,
+                          radius: actionRadius,
+                          borderColor: secondaryActionBorderColor,
+                          borderWidth: secondaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: () => widget.onOpen(AcoScreen.scan),
                         ),

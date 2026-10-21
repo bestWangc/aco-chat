@@ -405,7 +405,7 @@ class _RaisedHandRequestsHeader extends StatelessWidget {
               child: Text(
                 '$count',
                 style: TextStyle(
-                  color: palette.accent,
+                  color: palette.accentForeground,
                   fontSize: AcoTypography.caption,
                   fontWeight: FontWeight.w800,
                 ),
@@ -538,12 +538,16 @@ class _LiveRoomHeaderActions extends StatelessWidget {
                 height: 12,
                 fit: BoxFit.contain,
                 filterQuality: FilterQuality.high,
+                color: palette.dark ? null : palette.primaryText,
+                colorBlendMode: BlendMode.srcIn,
                 errorBuilder: (_, _, _) => Image.memory(
                   _viewerCountIcon,
                   width: 14,
                   height: 12,
                   fit: BoxFit.contain,
                   filterQuality: FilterQuality.high,
+                  color: palette.dark ? null : palette.primaryText,
+                  colorBlendMode: BlendMode.srcIn,
                 ),
               ),
               const SizedBox(width: 3),
@@ -569,6 +573,8 @@ class _LiveRoomHeaderActions extends StatelessWidget {
             width: 12,
             height: 28,
             fit: BoxFit.contain,
+            color: palette.dark ? null : palette.primaryText,
+            colorBlendMode: BlendMode.srcIn,
           ),
         ),
     ],
@@ -657,7 +663,7 @@ class _LiveRoomHostCard extends StatelessWidget {
                   style: TextStyle(
                     color: host.identity == 0
                         ? palette.primaryText
-                        : _identityColor(host.identity, palette),
+                        : _identityLabelColor(host.identity, palette),
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
@@ -971,8 +977,8 @@ class _LiveRoomParticipantCard extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: participant.identity == 0
-                        ? _white
-                        : _identityColor(participant.identity, palette),
+                        ? palette.primaryText
+                        : _identityLabelColor(participant.identity, palette),
                     fontSize: 12,
                     fontWeight: FontWeight.w400,
                   ),

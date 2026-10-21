@@ -522,7 +522,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
         actions: [
           CupertinoDialogAction(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            textStyle: TextStyle(color: widget.palette.accent),
+            textStyle: TextStyle(color: widget.palette.accentForeground),
             child: const Text('取消'),
           ),
           CupertinoDialogAction(
@@ -692,7 +692,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
                       SizedBox(
                         width: double.infinity,
                         height: 1,
-                        child: const ColoredBox(color: Color(0xFF1C1C1C)),
+                        child: ColoredBox(color: palette.border),
                       ),
                     ],
                   ),
@@ -1261,7 +1261,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             onPressed: _sending ? null : _sendReply,
             child: _sending
                 ? const CupertinoActivityIndicator()
-                : Text('发送', style: TextStyle(color: widget.palette.accent)),
+                : Text(
+                    '发送',
+                    style: TextStyle(color: widget.palette.accentForeground),
+                  ),
           ),
         ],
       ),
@@ -1398,7 +1401,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
         child: Text(
           _submitting ? '发布中' : '发布',
           style: TextStyle(
-            color: widget.palette.accent,
+            color: widget.palette.accentForeground,
             fontSize: AcoTypography.body,
           ),
         ),
@@ -1818,8 +1821,8 @@ class _MessageQuickActions extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: double.infinity,
     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-    decoration: const BoxDecoration(
-      border: Border(bottom: BorderSide(color: Color(0xFF191919), width: 1)),
+    decoration: BoxDecoration(
+      border: Border(bottom: BorderSide(color: palette.border, width: 1)),
     ),
     child: SizedBox(
       height: 44,

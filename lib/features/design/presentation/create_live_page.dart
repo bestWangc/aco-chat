@@ -167,7 +167,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                         child: Text(
                           '确定',
                           style: TextStyle(
-                            color: palette.accent,
+                            color: palette.accentForeground,
                             fontSize: AcoTypography.body,
                             fontWeight: FontWeight.w700,
                           ),
@@ -563,7 +563,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
 }
 
 Color _createLiveCardColor(AcoPalette palette) =>
-    palette.dark ? const Color(0xFF161616) : palette.surface;
+    palette.dark ? const Color(0xFF161616) : const Color(0xFFFFFFFF);
 
 class _CreateLiveRow extends StatelessWidget {
   const _CreateLiveRow({

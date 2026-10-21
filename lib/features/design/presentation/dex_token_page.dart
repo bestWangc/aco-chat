@@ -1201,7 +1201,9 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                               },
                         child: Text(
                           '复制哈希',
-                          style: TextStyle(color: widget.palette.accent),
+                          style: TextStyle(
+                            color: widget.palette.accentForeground,
+                          ),
                         ),
                       ),
                     ),
@@ -1766,7 +1768,7 @@ class _DexTradeActivityCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: const Color(0xFF191919),
+        color: palette.dark ? const Color(0xFF191919) : palette.surfaceRaised,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(
@@ -3474,7 +3476,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
                             child: Text(
                               '取消',
                               style: TextStyle(
-                                color: widget.palette.accent,
+                                color: widget.palette.accentForeground,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -3797,7 +3799,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
                   Text(
                     asset.symbol,
                     style: TextStyle(
-                      color: widget.palette.accent,
+                      color: widget.palette.accentForeground,
                       fontSize: 17,
                       fontWeight: FontWeight.w600,
                     ),
@@ -3806,7 +3808,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
                     const SizedBox(width: 8),
                     Icon(
                       CupertinoIcons.check_mark,
-                      color: widget.palette.accent,
+                      color: widget.palette.accentForeground,
                       size: 17,
                     ),
                   ],
@@ -3819,7 +3821,7 @@ class _DexTradeSheetState extends State<_DexTradeSheet> {
           child: Text(
             '取消',
             style: TextStyle(
-              color: widget.palette.accent,
+              color: widget.palette.accentForeground,
               fontSize: 17,
               fontWeight: FontWeight.w600,
             ),

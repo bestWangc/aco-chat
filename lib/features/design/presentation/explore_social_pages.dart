@@ -97,9 +97,11 @@ class _SocialMessagesPageState extends State<_SocialMessagesPage> {
           ],
         ),
         child: Material(
-          color: const Color(0xFF1B1B1B),
+          color: widget.palette.dark
+              ? const Color(0xFF1B1B1B)
+              : widget.palette.surface,
           shape: RoundedRectangleBorder(
-            side: const BorderSide(color: Color(0xFF303030)),
+            side: BorderSide(color: widget.palette.border),
             borderRadius: BorderRadius.circular(14),
           ),
           clipBehavior: Clip.antiAlias,
@@ -345,7 +347,7 @@ class _SocialGlobalSearchResultsState
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
       children: [
         if (_friendResults.isNotEmpty) ...[
-          const _ContactsSectionLabel(label: '联系人'),
+          _ContactsSectionLabel(palette: widget.palette, label: '联系人'),
           const SizedBox(height: 4),
           for (final friend in _friendResults)
             _ContactListTile(
@@ -366,7 +368,7 @@ class _SocialGlobalSearchResultsState
         if (_friendResults.isNotEmpty && _messageResults.isNotEmpty)
           const SizedBox(height: 16),
         if (_messageResults.isNotEmpty) ...[
-          const _ContactsSectionLabel(label: '聊天记录'),
+          _ContactsSectionLabel(palette: widget.palette, label: '聊天记录'),
           const SizedBox(height: 4),
           for (final result in _messageResults)
             _SocialMessageTile(
@@ -519,7 +521,9 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
                         avatarUrl: request.avatarUrl,
                         staffIdentity: request.staffIdentity,
                         onTap: () => _respond(request, true),
-                        backgroundColor: const Color(0xFF151515),
+                        backgroundColor: widget.palette.dark
+                            ? const Color(0xFF151515)
+                            : widget.palette.surfaceRaised,
                         borderRadius: BorderRadius.circular(10),
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -538,8 +542,10 @@ class _FriendRequestsPageState extends State<_FriendRequestsPage> {
                               child: Container(
                                 width: 30,
                                 height: 30,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF292929),
+                                decoration: BoxDecoration(
+                                  color: widget.palette.dark
+                                      ? Color(0xFF292929)
+                                      : widget.palette.surface,
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -790,7 +796,10 @@ class _ContactsPageState extends State<_ContactsPage> {
                       Padding(
                         key: _sectionKeys[letter],
                         padding: const EdgeInsets.symmetric(horizontal: 18),
-                        child: _ContactsSectionLabel(label: letter),
+                        child: _ContactsSectionLabel(
+                          palette: widget.palette,
+                          label: letter,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       for (final friend in groupedFriends[letter]!)
@@ -1216,10 +1225,10 @@ class _ContactsQuickAction extends StatelessWidget {
           ),
           Padding(
             padding: EdgeInsets.only(left: dividerLeftPadding),
-            child: const SizedBox(
+            child: SizedBox(
               width: double.infinity,
               height: 1,
-              child: ColoredBox(color: Color(0xFF191919)),
+              child: ColoredBox(color: palette.border),
             ),
           ),
         ],
@@ -1229,13 +1238,14 @@ class _ContactsQuickAction extends StatelessWidget {
 }
 
 class _ContactsSectionLabel extends StatelessWidget {
-  const _ContactsSectionLabel({required this.label});
+  const _ContactsSectionLabel({required this.palette, required this.label});
+  final AcoPalette palette;
   final String label;
   @override
   Widget build(BuildContext context) => Text(
     label,
-    style: const TextStyle(
-      color: Color(0xFFD5D5D5),
+    style: TextStyle(
+      color: palette.dark ? const Color(0xFFD5D5D5) : palette.mutedText,
       fontSize: 16,
       fontWeight: FontWeight.w500,
     ),

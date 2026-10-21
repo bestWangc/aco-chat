@@ -318,6 +318,7 @@ class _SocialMessageTile extends StatelessWidget {
                 leading: groupAvatarUrls == null
                     ? AcoAvatar(size: 54, imageUrl: avatarUrl)
                     : _GroupConversationAvatar(
+                        palette: palette,
                         imageUrls: groupAvatarUrls!,
                         fallbackAvatarUrl: avatarUrl,
                       ),
@@ -357,8 +358,8 @@ class _SocialMessageTile extends StatelessWidget {
                   message,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFFA2A4A8),
+                  style: TextStyle(
+                    color: palette.mutedText,
                     fontSize: AcoTypography.caption,
                   ),
                 ),
@@ -372,8 +373,8 @@ class _SocialMessageTile extends StatelessWidget {
                     children: [
                       Text(
                         _formatConversationDate(timestamp),
-                        style: const TextStyle(
-                          color: Color(0xFF9D9EA0),
+                        style: TextStyle(
+                          color: palette.mutedText,
                           fontSize: AcoTypography.caption - 2,
                         ),
                       ),
@@ -400,7 +401,7 @@ class _SocialMessageTile extends StatelessWidget {
             right: 0,
             bottom: 0,
             height: 0.17,
-            child: ColoredBox(color: Color(0xFF323232)),
+            child: ColoredBox(color: palette.border),
           ),
         ],
       ),
@@ -410,10 +411,12 @@ class _SocialMessageTile extends StatelessWidget {
 
 class _GroupConversationAvatar extends StatelessWidget {
   const _GroupConversationAvatar({
+    required this.palette,
     required this.imageUrls,
     required this.fallbackAvatarUrl,
   });
 
+  final AcoPalette palette;
   final List<String> imageUrls;
   final String? fallbackAvatarUrl;
 
@@ -427,7 +430,7 @@ class _GroupConversationAvatar extends StatelessWidget {
         width: 54,
         height: 54,
         padding: const EdgeInsets.all(2),
-        decoration: const BoxDecoration(color: Color(0xFF3A3A3A)),
+        decoration: BoxDecoration(color: palette.surfaceRaised),
         child: avatars.length == 1
             ? _GroupAvatarCell(imageUrl: avatars.single)
             : GridView.builder(

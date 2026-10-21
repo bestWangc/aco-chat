@@ -192,7 +192,7 @@ class _MnemonicBackupWarning extends StatelessWidget {
         child: Center(
           child: Icon(
             CupertinoIcons.shield_lefthalf_fill,
-            color: palette.accent,
+            color: palette.accentForeground,
             size: 52,
           ),
         ),
@@ -394,7 +394,7 @@ class _PrivateKeyView extends StatelessWidget {
       const SizedBox(height: 20),
       Semantics(
         button: !visible,
-          label: appText(context, visible ? '私钥已显示' : '点击显示私钥'),
+        label: appText(context, visible ? '私钥已显示' : '点击显示私钥'),
         child: CupertinoButton(
           key: const Key('private-key-reveal-button'),
           padding: EdgeInsets.zero,

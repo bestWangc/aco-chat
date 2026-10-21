@@ -121,7 +121,7 @@ class _WalletChainsState extends State<_WalletChains> {
             child: Text(
               '创建钱包',
               style: TextStyle(
-                color: widget.palette.accent,
+                color: widget.palette.accentForeground,
                 fontSize: AcoTypography.body,
                 fontWeight: FontWeight.w400,
               ),
@@ -135,7 +135,7 @@ class _WalletChainsState extends State<_WalletChains> {
             child: Text(
               '导入钱包',
               style: TextStyle(
-                color: widget.palette.accent,
+                color: widget.palette.accentForeground,
                 fontSize: AcoTypography.body,
                 fontWeight: FontWeight.w400,
               ),
@@ -147,7 +147,7 @@ class _WalletChainsState extends State<_WalletChains> {
           child: Text(
             '取消',
             style: TextStyle(
-              color: widget.palette.accent,
+              color: widget.palette.accentForeground,
               fontSize: AcoTypography.body,
               fontWeight: FontWeight.w400,
             ),
@@ -230,7 +230,7 @@ class _WalletChainsState extends State<_WalletChains> {
                               offset: const Offset(-.2, 0),
                               child: Icon(
                                 CupertinoIcons.add_circled,
-                                color: widget.palette.accent,
+                                color: widget.palette.accentForeground,
                                 size: 19,
                               ),
                             ),
@@ -238,7 +238,7 @@ class _WalletChainsState extends State<_WalletChains> {
                               offset: const Offset(.2, 0),
                               child: Icon(
                                 CupertinoIcons.add_circled,
-                                color: widget.palette.accent,
+                                color: widget.palette.accentForeground,
                                 size: 19,
                               ),
                             ),
@@ -259,7 +259,7 @@ class _WalletChainsState extends State<_WalletChains> {
                   if (wallets == null) {
                     return Center(
                       child: CupertinoActivityIndicator(
-                        color: widget.palette.accent,
+                        color: widget.palette.accentForeground,
                       ),
                     );
                   }
@@ -404,7 +404,7 @@ class _WalletChainRail extends StatelessWidget {
                   child: Container(
                     width: _walletChainRailIndicatorWidth,
                     height: _walletChainRailItemHeight,
-                    color: palette.accent,
+                    color: palette.accentForeground,
                   ),
                 ),
             ],
@@ -459,14 +459,26 @@ class _WalletChainCard extends StatelessWidget {
                 12,
                 10,
               ),
-              decoration: current
-                  ? BoxDecoration(
-                      color: _walletCurrentCardColor,
-                      borderRadius: BorderRadius.circular(8),
-                    )
+              decoration: palette.dark
+                  ? current
+                        ? BoxDecoration(
+                            color: _walletCurrentCardColor,
+                            borderRadius: BorderRadius.circular(8),
+                          )
+                        : BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _walletInactiveCardBorderColor,
+                            ),
+                          )
                   : BoxDecoration(
+                      color: const Color(0xFFFFFFFF),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _walletInactiveCardBorderColor),
+                      border: Border.all(
+                        color: current
+                            ? const Color(0xFFD7E5B4)
+                            : const Color(0xFFE1E5EA),
+                      ),
                     ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -560,7 +572,7 @@ class _WalletChainCard extends StatelessWidget {
                       offset: const Offset(-.5, 0),
                       child: Icon(
                         CupertinoIcons.chevron_right,
-                        color: palette.accent,
+                        color: palette.accentForeground,
                         size: 15,
                       ),
                     ),
@@ -568,7 +580,7 @@ class _WalletChainCard extends StatelessWidget {
                       offset: const Offset(.5, 0),
                       child: Icon(
                         CupertinoIcons.chevron_right,
-                        color: palette.accent,
+                        color: palette.accentForeground,
                         size: 15,
                       ),
                     ),

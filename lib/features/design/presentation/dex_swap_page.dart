@@ -1919,9 +1919,7 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
 
   @override
   Widget build(BuildContext context) {
-    // The picker follows the dark transfer-sheet treatment; its content and
-    // token data remain driven by the active chain.
-    const palette = AcoPalette(true);
+    final palette = widget.palette;
     final panelColor = palette.dark
         ? const Color(0xFF222222)
         : palette.background;
@@ -2040,7 +2038,9 @@ class _DexTokenPickerState extends State<_DexTokenPicker> {
                         minSize: 0,
                         color: selected
                             ? palette.accent
-                            : const Color(0xFF303030),
+                            : palette.dark
+                            ? const Color(0xFF303030)
+                            : palette.surfaceRaised,
                         borderRadius: BorderRadius.circular(17),
                         onPressed: () => _selectChain(chain),
                         child: Text(

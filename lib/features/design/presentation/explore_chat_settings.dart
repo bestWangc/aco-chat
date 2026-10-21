@@ -686,7 +686,7 @@ class _ChatSettingsActionRow extends StatelessWidget {
       height: 58,
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      color: const Color(0xFF191919),
+      color: palette.dark ? const Color(0xFF191919) : palette.surfaceRaised,
       child: Row(
         children: [
           Text(
@@ -724,7 +724,7 @@ class _GroupSettingsCard extends StatelessWidget {
     width: double.infinity,
     child: DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xFF191919),
+        color: palette.dark ? const Color(0xFF191919) : palette.surfaceRaised,
         borderRadius: BorderRadius.circular(2),
       ),
       child: Column(
@@ -964,7 +964,7 @@ class _GroupMemberAvatar extends StatelessWidget {
                   style: TextStyle(
                     color: identity == 0
                         ? palette.mutedText
-                        : _identityColor(identity, palette),
+                        : _identityLabelColor(identity, palette),
                     fontSize: 12,
                   ),
                 ),
@@ -1643,7 +1643,7 @@ class _ChatSettingsToggleRow extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     height: 58,
     padding: const EdgeInsets.symmetric(horizontal: 16),
-    color: const Color(0xFF191919),
+    color: palette.dark ? const Color(0xFF191919) : palette.surfaceRaised,
     child: Row(
       children: [
         Text(label, style: TextStyle(color: palette.primaryText, fontSize: 18)),

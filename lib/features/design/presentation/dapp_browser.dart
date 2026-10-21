@@ -521,7 +521,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
           duration: const Duration(milliseconds: 180),
           height: 3,
           width: _isLoading ? MediaQuery.sizeOf(context).width * .25 : 0,
-          color: widget.palette.accent,
+          color: widget.palette.accentForeground,
         ),
       ),
     ],

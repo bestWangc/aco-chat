@@ -92,9 +92,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
       if (!await BiometricAuthentication.authenticate(
         reason: appText(context, '使用指纹或面容验证钱包操作'),
       )) {
-        throw WalletSecurityException(
-          appText(context, '设备验证未通过，可重试或输入钱包密码。'),
-        );
+        throw WalletSecurityException(appText(context, '设备验证未通过，可重试或输入钱包密码。'));
       }
       if (attempt != _authAttempt) return;
       final mnemonic = await widget.security.unlockMnemonicWithDeviceProtection(
@@ -108,9 +106,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
       }
     } catch (_) {
       if (mounted && attempt == _authAttempt) {
-        setState(
-          () => _error = appText(context, '设备解锁失败，可重试或输入钱包密码。'),
-        );
+        setState(() => _error = appText(context, '设备解锁失败，可重试或输入钱包密码。'));
       }
     } finally {
       if (mounted && attempt == _authAttempt) setState(() => _busy = false);
@@ -202,12 +198,9 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                           _error = null;
                         }),
                         child: Text(
-                          appText(
-                            context,
-                            _usingPassword ? '使用设备验证' : '使用密码',
-                          ),
+                          appText(context, _usingPassword ? '使用设备验证' : '使用密码'),
                           style: TextStyle(
-                            color: palette.accent,
+                            color: palette.accentForeground,
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
@@ -231,7 +224,7 @@ class _WalletUnlockDialogState extends State<_WalletUnlockDialog> {
                   _usingPassword
                       ? CupertinoIcons.lock_fill
                       : CupertinoIcons.lock_shield_fill,
-                  color: palette.accent,
+                  color: palette.accentForeground,
                   size: 34,
                 ),
               ),

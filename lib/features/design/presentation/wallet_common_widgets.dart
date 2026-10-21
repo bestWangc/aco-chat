@@ -641,7 +641,7 @@ class _WalletAssetRow extends StatelessWidget {
                 bottom: 0,
                 child: SizedBox(
                   height: 1,
-                  child: const ColoredBox(color: Color(0xFF161616)),
+                  child: ColoredBox(color: palette.border),
                 ),
               ),
             ],

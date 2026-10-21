@@ -111,7 +111,7 @@ class _ProfilePage extends StatelessWidget {
                   style: TextStyle(
                     color: identity == 0
                         ? palette.primaryText
-                        : _identityColor(identity, palette),
+                        : _identityLabelColor(identity, palette),
                     fontSize: AcoTypography.titleLarge,
                     fontWeight: FontWeight.w700,
                   ),

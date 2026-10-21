@@ -1227,7 +1227,7 @@ class _LeveragePickerSheetState extends State<_LeveragePickerSheet> {
                 Text(
                   '${_value}x',
                   style: TextStyle(
-                    color: widget.palette.accent,
+                    color: widget.palette.accentForeground,
                     fontSize: 20,
                     fontWeight: FontWeight.w700,
                   ),
@@ -1726,7 +1726,10 @@ class _AmountSlider extends StatelessWidget {
                     left: thumbSize / 2,
                     width: stepWidth * selectedIndex,
                     bottom: (thumbSize - 3) / 2,
-                    child: Container(height: 3, color: palette.accent),
+                    child: Container(
+                      height: 3,
+                      color: palette.accentForeground,
+                    ),
                   ),
                 for (var index = 0; index < ratios.length; index++)
                   Positioned(
@@ -1774,7 +1777,7 @@ class _AmountSlider extends StatelessWidget {
                       child: Text(
                         '${(ratios[selectedIndex] * 100).round()}%',
                         style: TextStyle(
-                          color: palette.accent,
+                          color: palette.accentForeground,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -2565,7 +2568,7 @@ class _HyperliquidUsdcDepositSheetState
                                 ? CupertinoIcons.check_mark
                                 : CupertinoIcons.doc_on_doc,
                             size: 16,
-                            color: widget.palette.accent,
+                            color: widget.palette.accentForeground,
                           ),
                           const SizedBox(height: 1),
                           Text(
@@ -3103,7 +3106,7 @@ class _ContractTransferAssetPicker extends StatelessWidget {
               Text(
                 chain,
                 style: TextStyle(
-                  color: palette.accent,
+                  color: palette.accentForeground,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -3252,7 +3255,7 @@ class _ContractTransferAssetRow extends StatelessWidget {
           if (selected)
             Icon(
               CupertinoIcons.check_mark_circled_solid,
-              color: palette.accent,
+              color: palette.accentForeground,
               size: 21,
             ),
         ],
@@ -3626,9 +3629,9 @@ class _PositionRow extends StatelessWidget {
                   height: 36,
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: palette.accent.withValues(alpha: .14),
+                    color: palette.accentForeground.withValues(alpha: .14),
                     border: Border.all(
-                      color: palette.accent.withValues(alpha: .82),
+                      color: palette.accentForeground.withValues(alpha: .82),
                     ),
                     borderRadius: BorderRadius.circular(7),
                   ),
@@ -3636,7 +3639,7 @@ class _PositionRow extends StatelessWidget {
                     child: Text(
                       '平仓',
                       style: TextStyle(
-                        color: palette.accent,
+                        color: palette.accentForeground,
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
                       ),
@@ -3801,9 +3804,9 @@ class _OpenOrderRow extends StatelessWidget {
                   height: 32,
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
-                    color: palette.accent.withValues(alpha: .14),
+                    color: palette.accentForeground.withValues(alpha: .14),
                     border: Border.all(
-                      color: palette.accent.withValues(alpha: .82),
+                      color: palette.accentForeground.withValues(alpha: .82),
                     ),
                     borderRadius: BorderRadius.circular(7),
                   ),
@@ -3811,7 +3814,7 @@ class _OpenOrderRow extends StatelessWidget {
                     child: Text(
                       '撤单',
                       style: TextStyle(
-                        color: palette.accent,
+                        color: palette.accentForeground,
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                       ),

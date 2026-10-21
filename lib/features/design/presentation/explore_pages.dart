@@ -94,7 +94,7 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
             onPressed: _openAddress,
             child: Icon(
               CupertinoIcons.arrow_right_circle_fill,
-              color: widget.palette.accent,
+              color: widget.palette.accentForeground,
             ),
           ),
           decoration: BoxDecoration(

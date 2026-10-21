@@ -988,7 +988,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       isDestructive: true,
       isDefaultAction: false,
       contentPadding: const EdgeInsets.only(top: 8),
-      cancelTextStyle: TextStyle(color: widget.palette.accent),
+      cancelTextStyle: TextStyle(color: widget.palette.accentForeground),
     );
     if (!mounted) return;
     _dismissKeyboard();

@@ -203,7 +203,7 @@ class _ChatHistoryResultTile extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF191919),
+        color: palette.dark ? const Color(0xFF191919) : palette.surfaceRaised,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -264,7 +264,7 @@ class _MessageSearchField extends StatelessWidget {
     height: 38,
     padding: const EdgeInsets.symmetric(horizontal: 12),
     decoration: BoxDecoration(
-      color: const Color(0xFF191919),
+      color: palette.dark ? const Color(0xFF191919) : palette.inputSurface,
       borderRadius: BorderRadius.circular(8),
     ),
     child: Row(

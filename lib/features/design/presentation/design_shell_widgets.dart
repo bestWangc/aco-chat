@@ -607,40 +607,24 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
   @override
   void didUpdateWidget(covariant _FigmaNavItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.index == 0 &&
-        widget.palette.dark &&
-        !oldWidget.selected &&
-        widget.selected) {
+    if (widget.index == 0 && !oldWidget.selected && widget.selected) {
       _playingWalletTransition = true;
-    } else if (widget.index == 0 &&
-        (!widget.selected || !widget.palette.dark)) {
+    } else if (widget.index == 0 && !widget.selected) {
       _playingWalletTransition = false;
     }
-    if (widget.index == 1 &&
-        widget.palette.dark &&
-        !oldWidget.selected &&
-        widget.selected) {
+    if (widget.index == 1 && !oldWidget.selected && widget.selected) {
       _playingExploreTransition = true;
-    } else if (widget.index == 1 &&
-        (!widget.selected || !widget.palette.dark)) {
+    } else if (widget.index == 1 && !widget.selected) {
       _playingExploreTransition = false;
     }
-    if (widget.index == 3 &&
-        widget.palette.dark &&
-        !oldWidget.selected &&
-        widget.selected) {
+    if (widget.index == 3 && !oldWidget.selected && widget.selected) {
       _playingSquareTransition = true;
-    } else if (widget.index == 3 &&
-        (!widget.selected || !widget.palette.dark)) {
+    } else if (widget.index == 3 && !widget.selected) {
       _playingSquareTransition = false;
     }
-    if (widget.index == 4 &&
-        widget.palette.dark &&
-        !oldWidget.selected &&
-        widget.selected) {
+    if (widget.index == 4 && !oldWidget.selected && widget.selected) {
       _playingSocialTransition = true;
-    } else if (widget.index == 4 &&
-        (!widget.selected || !widget.palette.dark)) {
+    } else if (widget.index == 4 && !widget.selected) {
       _playingSocialTransition = false;
     }
     if (widget.index == 2 && !oldWidget.selected && widget.selected) {
@@ -651,24 +635,14 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
   }
 
   Widget _buildTransitionIcon({
-    required String inactiveAsset,
     required String transitionAsset,
     required VoidCallback onCompleted,
     double scale = 1,
-  }) => Stack(
-    fit: StackFit.expand,
-    children: [
-      Image.asset(inactiveAsset, fit: BoxFit.contain),
-      Center(
-        child: Transform.scale(
-          scale: scale,
-          child: _OneShotNavGif(
-            asset: transitionAsset,
-            onCompleted: onCompleted,
-          ),
-        ),
-      ),
-    ],
+  }) => Center(
+    child: Transform.scale(
+      scale: scale,
+      child: _OneShotNavGif(asset: transitionAsset, onCompleted: onCompleted),
+    ),
   );
 
   @override
@@ -678,7 +652,7 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
     final palette = widget.palette;
     final Color color;
     if (selected) {
-      color = palette.dark ? _walletHeaderLime : palette.primaryText;
+      color = palette.dark ? _walletHeaderLime : palette.accentForeground;
     } else {
       color = palette.dark ? _walletNavInactive : palette.navInactive;
     }
@@ -693,32 +667,22 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
         ),
       );
     }
-    // Normal navigation icons share one visual scale.
-    final usesCustomAsset =
-        palette.dark && (index == 0 || index == 1 || index == 3 || index == 4);
-    final iconSize = usesCustomAsset
-        ? const Size(30, 30)
-        : switch (index) {
-            0 => const Size(22, 18),
-            1 => const Size(24, 21),
-            3 => const Size(20, 19),
-            4 => const Size(24, 20),
-            _ => const Size(26, 24),
-          };
+    // Normal navigation icons share one visual scale. DEX returned above.
+    const iconSize = Size(30, 30);
     final iconAsset = switch (index) {
-      0 when usesCustomAsset =>
+      0 =>
         selected
             ? 'assets/icons/wallet_nav_transition_end.png'
             : 'assets/icons/wallet_nav_inactive.png',
-      1 when usesCustomAsset =>
+      1 =>
         selected
             ? 'assets/icons/explore_nav_transition_end.png'
             : 'assets/icons/explore_nav_inactive.png',
-      3 when usesCustomAsset =>
+      3 =>
         selected
             ? 'assets/icons/square_nav_active.png'
             : 'assets/icons/square_nav_inactive.png',
-      4 when usesCustomAsset =>
+      4 =>
         selected
             ? 'assets/icons/social_nav_transition_end.png'
             : 'assets/icons/social_nav_inactive.png',
@@ -731,10 +695,9 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
           )
         : Image.asset(iconAsset, fit: BoxFit.contain);
     var displayedIcon = icon;
-    if (index == 0 && selected && usesCustomAsset) {
+    if (index == 0 && selected) {
       displayedIcon = _playingWalletTransition
           ? _buildTransitionIcon(
-              inactiveAsset: 'assets/icons/wallet_nav_inactive.png',
               transitionAsset: 'assets/icons/wallet_nav_transition.gif',
               scale: .8,
               onCompleted: () {
@@ -742,35 +705,23 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
               },
             )
           : Transform.scale(scale: .8, child: icon);
-    } else if (index == 1 &&
-        selected &&
-        usesCustomAsset &&
-        _playingExploreTransition) {
+    } else if (index == 1 && selected && _playingExploreTransition) {
       displayedIcon = _buildTransitionIcon(
-        inactiveAsset: 'assets/icons/explore_nav_inactive.png',
         transitionAsset: 'assets/icons/explore_nav_transition.gif',
         onCompleted: () {
           if (mounted) setState(() => _playingExploreTransition = false);
         },
       );
-    } else if (index == 3 &&
-        selected &&
-        usesCustomAsset &&
-        _playingSquareTransition) {
+    } else if (index == 3 && selected && _playingSquareTransition) {
       displayedIcon = _buildTransitionIcon(
-        inactiveAsset: 'assets/icons/square_nav_inactive.png',
         transitionAsset: 'assets/icons/square_nav_transition.gif',
         scale: .88,
         onCompleted: () {
           if (mounted) setState(() => _playingSquareTransition = false);
         },
       );
-    } else if (index == 4 &&
-        selected &&
-        usesCustomAsset &&
-        _playingSocialTransition) {
+    } else if (index == 4 && selected && _playingSocialTransition) {
       displayedIcon = _buildTransitionIcon(
-        inactiveAsset: 'assets/icons/social_nav_inactive.png',
         transitionAsset: 'assets/icons/social_nav_transition.gif',
         onCompleted: () {
           if (mounted) setState(() => _playingSocialTransition = false);
@@ -784,7 +735,7 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
           // All icons share the same bottom edge, then the label follows
           // immediately. This avoids SVG-specific offsets.
           SizedBox(
-            height: usesCustomAsset ? 30 : 24,
+            height: 30,
             child: Stack(
               children: [
                 Align(
@@ -848,18 +799,9 @@ class _DexBottomNavIcon extends StatelessWidget {
         ? 'assets/icons/dex_nav_transition_end.png'
         : 'assets/icons/source_dex_inactive.png';
     final icon = playingTransition
-        ? Stack(
-            fit: StackFit.expand,
-            children: [
-              Image.asset(
-                'assets/icons/source_dex_inactive.png',
-                fit: BoxFit.contain,
-              ),
-              _OneShotNavGif(
-                asset: 'assets/icons/dex_nav_transition.gif',
-                onCompleted: onTransitionCompleted,
-              ),
-            ],
+        ? _OneShotNavGif(
+            asset: 'assets/icons/dex_nav_transition.gif',
+            onCompleted: onTransitionCompleted,
           )
         : Image.asset(asset, key: ValueKey(asset), fit: BoxFit.contain);
     return Padding(
@@ -1415,6 +1357,9 @@ void showAcoAlertNotice(BuildContext context, String title, String message) {
 }
 
 void showCheckInSuccessDialog(BuildContext context) {
+  final palette = AcoPalette(
+    CupertinoTheme.brightnessOf(context) == Brightness.dark,
+  );
   showGeneralDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -1425,7 +1370,7 @@ void showCheckInSuccessDialog(BuildContext context) {
         child: Container(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
           decoration: BoxDecoration(
-            color: const Color(0xFF202020),
+            color: palette.surfaceRaised,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -1442,10 +1387,10 @@ void showCheckInSuccessDialog(BuildContext context) {
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 '签到成功',
                 style: TextStyle(
-                  color: _white,
+                  color: palette.primaryText,
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
                 ),

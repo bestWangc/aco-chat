@@ -119,9 +119,10 @@ final class _ChatThumbnailCache {
 }
 
 class _CachedChatThumbnail extends StatefulWidget {
-  const _CachedChatThumbnail({required this.url});
+  const _CachedChatThumbnail({required this.url, required this.palette});
 
   final String url;
+  final AcoPalette palette;
 
   @override
   State<_CachedChatThumbnail> createState() => _CachedChatThumbnailState();
@@ -152,10 +153,13 @@ class _CachedChatThumbnailState extends State<_CachedChatThumbnail> {
         return Image.file(
           file,
           fit: BoxFit.contain,
-          errorBuilder: (_, error, stackTrace) => const _ImageUnavailable(),
+          errorBuilder: (_, error, stackTrace) =>
+              _ImageUnavailable(palette: widget.palette),
         );
       }
-      if (snapshot.hasError) return const _ImageUnavailable();
+      if (snapshot.hasError) {
+        return _ImageUnavailable(palette: widget.palette);
+      }
       return const SizedBox(
         width: 64,
         height: 64,

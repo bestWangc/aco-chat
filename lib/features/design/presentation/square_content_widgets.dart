@@ -407,6 +407,15 @@ class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
   @override
   Widget build(BuildContext context) {
     final titleController = _titleController ??= _createTitleController();
+    final background = widget.palette.dark
+        ? _liveRecommendationBackground
+        : widget.palette.surfaceRaised;
+    final border = widget.palette.dark
+        ? _liveRecommendationBorder
+        : widget.palette.border;
+    final accent = widget.palette.dark
+        ? widget.palette.accent
+        : const Color(0xFF557A00);
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
@@ -418,8 +427,8 @@ class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
-                  color: _liveRecommendationBackground,
-                  border: Border.all(color: _liveRecommendationBorder),
+                  color: background,
+                  border: Border.all(color: border),
                   borderRadius: BorderRadius.circular(24),
                 ),
                 child: Padding(
@@ -429,7 +438,7 @@ class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
                       Expanded(
                         child: _ScrollingLiveTitle(
                           title: widget.live.title,
-                          color: widget.palette.accent,
+                          color: accent,
                           animation: titleController,
                         ),
                       ),
@@ -437,7 +446,7 @@ class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
                         padding: const EdgeInsets.only(left: 5, right: 12),
                         child: _AnimatedSignalBars(
                           animation: _barsController,
-                          color: widget.palette.accent,
+                          color: accent,
                         ),
                       ),
                     ],
@@ -454,7 +463,7 @@ class _LiveRecommendationCardState extends State<_LiveRecommendationCard>
                 height: 48,
                 padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
-                  border: Border.all(color: _liveRecommendationBorder),
+                  border: Border.all(color: border),
                   shape: BoxShape.circle,
                 ),
                 child: AcoAvatar(size: 42, imageUrl: widget.live.hostAvatarUrl),
@@ -723,8 +732,8 @@ class _PostCard extends StatelessWidget {
                 if (post.content.isNotEmpty)
                   Text(
                     post.content,
-                    style: const TextStyle(
-                      color: Color(0xFFF3F3F3),
+                    style: TextStyle(
+                      color: palette.primaryText,
                       height: 1.5,
                       fontSize: AcoTypography.body,
                     ),
@@ -964,7 +973,7 @@ class _PostFollowBadge extends StatelessWidget {
   Widget build(BuildContext context) => Text(
     '已关注',
     style: TextStyle(
-      color: palette.accent,
+      color: palette.accentForeground,
       fontSize: AcoTypography.caption,
       fontWeight: FontWeight.w600,
     ),
@@ -1296,7 +1305,7 @@ class _LiveCard extends StatelessWidget {
                               child: Text(
                                 '我的会议',
                                 style: TextStyle(
-                                  color: palette.accent,
+                                  color: palette.accentForeground,
                                   fontSize: AcoTypography.caption,
                                   fontWeight: FontWeight.w700,
                                 ),

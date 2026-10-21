@@ -7,6 +7,15 @@ Color _identityColor(int identity, AcoPalette palette) => switch (identity) {
   _ => palette.accent,
 };
 
+Color _identityLabelColor(int identity, AcoPalette palette) => palette.dark
+    ? _identityColor(identity, palette)
+    : switch (identity) {
+        1 => const Color(0xFF8030B0),
+        2 => const Color(0xFF2867A5),
+        3 => const Color(0xFF826200),
+        _ => palette.accentForeground,
+      };
+
 String? _identityBadgeAsset(int identity) => switch (identity) {
   1 => 'assets/images/identity_badges/identity_long_shareholder_purple.png',
   2 => 'assets/images/identity_badges/identity_long_shareholder_blue.png',
@@ -570,6 +579,41 @@ class _RoomControl extends StatelessWidget {
   }
 }
 
+Future<void> _copyLiveRoomMessage(BuildContext context, String text) async {
+  await Clipboard.setData(ClipboardData(text: text));
+  if (!context.mounted) return;
+  final overlay = Overlay.maybeOf(context, rootOverlay: true);
+  if (overlay == null) return;
+
+  final copiedText = appText(context, '已复制');
+  final entry = OverlayEntry(
+    builder: (_) => Positioned(
+      left: 0,
+      right: 0,
+      bottom: 96,
+      child: IgnorePointer(
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xE6000000),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+              child: Text(
+                copiedText,
+                style: const TextStyle(color: _white, fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+  overlay.insert(entry);
+  Timer(const Duration(milliseconds: 1400), entry.remove);
+}
+
 class _RoomMessage extends StatelessWidget {
   const _RoomMessage({
     required this.palette,
@@ -597,10 +641,12 @@ class _RoomMessage extends StatelessWidget {
     final badgeAsset = _identityBadgeAsset(identity);
     final staffBadgeAsset = _staffLongBadgeAsset(staffIdentity);
     final nameColor = identity == 0
-        ? _white
-        : _identityColor(identity, palette);
+        ? (palette.dark ? _white : palette.primaryText)
+        : _identityLabelColor(identity, palette);
     final messageStyle = TextStyle(
-      color: isSystemMessage ? palette.accent : _white,
+      color: isSystemMessage
+          ? palette.accentForeground
+          : (palette.dark ? _white : palette.primaryText),
       fontSize: 15,
       fontWeight: isSystemMessage ? FontWeight.w500 : FontWeight.w400,
       height: 1.2,
@@ -622,76 +668,85 @@ class _RoomMessage extends StatelessWidget {
       MediaQuery.sizeOf(context).width - 32,
     );
     final hasImage = imageUrl?.trim().isNotEmpty == true;
+    final canCopyText = !isSystemMessage && !hasImage && text.isNotEmpty;
     const textHeightBehavior = TextHeightBehavior(
       applyHeightToFirstAscent: false,
       applyHeightToLastDescent: false,
     );
     return Align(
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-        padding: EdgeInsets.fromLTRB(14, 6, 14, hasImage ? 10 : 6),
-        decoration: decoration,
-        child: isSystemMessage
-            ? Text(
-                text,
-                textAlign: TextAlign.center,
-                textHeightBehavior: textHeightBehavior,
-                style: messageStyle,
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  RichText(
-                    textAlign: TextAlign.start,
-                    textHeightBehavior: textHeightBehavior,
-                    text: TextSpan(
-                      style: messageStyle,
-                      children: [
-                        if (badgeAsset != null)
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.bottom,
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 2),
-                              child: _identityBadge(
-                                context,
-                                identity,
-                                widthFactor: .16,
+      child: GestureDetector(
+        onLongPress: canCopyText
+            ? () => _copyLiveRoomMessage(context, text)
+            : null,
+        child: Container(
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+          padding: EdgeInsets.fromLTRB(14, 6, 14, hasImage ? 10 : 6),
+          decoration: decoration,
+          child: isSystemMessage
+              ? Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  textHeightBehavior: textHeightBehavior,
+                  style: messageStyle,
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    RichText(
+                      textAlign: TextAlign.start,
+                      textHeightBehavior: textHeightBehavior,
+                      text: TextSpan(
+                        style: messageStyle,
+                        children: [
+                          if (badgeAsset != null)
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.bottom,
+                              child: Padding(
+                                padding: const EdgeInsets.only(right: 2),
+                                child: _identityBadge(
+                                  context,
+                                  identity,
+                                  widthFactor: .16,
+                                ),
                               ),
                             ),
-                          ),
-                        if (staffBadgeAsset != null)
-                          WidgetSpan(
-                            alignment: PlaceholderAlignment.bottom,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 1, right: 5),
-                              child: Image.asset(
-                                staffBadgeAsset,
-                                width: MediaQuery.sizeOf(context).width * .16,
-                                fit: BoxFit.contain,
+                          if (staffBadgeAsset != null)
+                            WidgetSpan(
+                              alignment: PlaceholderAlignment.bottom,
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  left: 1,
+                                  right: 5,
+                                ),
+                                child: Image.asset(
+                                  staffBadgeAsset,
+                                  width: MediaQuery.sizeOf(context).width * .16,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
+                          TextSpan(
+                            text: '$name:  ',
+                            style: TextStyle(color: nameColor),
                           ),
-                        TextSpan(
-                          text: '$name:  ',
-                          style: TextStyle(color: nameColor),
-                        ),
-                        if (!hasImage) TextSpan(text: text),
-                      ],
+                          if (!hasImage) TextSpan(text: text),
+                        ],
+                      ),
                     ),
-                  ),
-                  if (hasImage) ...[
-                    const SizedBox(height: 7),
-                    _LiveChatImage(
-                      url: imageUrl!,
-                      previewUrl: previewImageUrl,
-                      name: imageName,
-                      maxWidth: math.min(240, maxBubbleWidth - 28),
-                    ),
+                    if (hasImage) ...[
+                      const SizedBox(height: 7),
+                      _LiveChatImage(
+                        url: imageUrl!,
+                        previewUrl: previewImageUrl,
+                        name: imageName,
+                        maxWidth: math.min(240, maxBubbleWidth - 28),
+                      ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+        ),
       ),
     );
   }

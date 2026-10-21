@@ -22,7 +22,7 @@ class AcoRefreshIndicator extends StatelessWidget {
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      color: palette.accent,
+      color: palette.accentForeground,
       backgroundColor: palette.surfaceRaised,
       strokeWidth: 2.5,
       displacement: 40,

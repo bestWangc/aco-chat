@@ -94,13 +94,13 @@ class _ContactDetailActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: const EdgeInsets.symmetric(vertical: 13),
-    color: const Color(0xFF191919),
+    color: palette.dark ? const Color(0xFF191919) : palette.surfaceRaised,
     borderRadius: BorderRadius.circular(12),
     onPressed: onTap,
     child: Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, color: palette.accent, size: 19),
+        Icon(icon, color: palette.accentForeground, size: 19),
         const SizedBox(width: 8),
         Text(
           appText(context, label),

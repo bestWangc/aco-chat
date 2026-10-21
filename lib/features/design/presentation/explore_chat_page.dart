@@ -1184,6 +1184,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       builder: (sheetContext) => SafeArea(
         top: false,
         child: _GroupMentionPanel(
+          palette: widget.palette,
           height: MediaQuery.sizeOf(sheetContext).height * 0.72,
           members: _mentionMembers,
           loading: _mentionLoading,
@@ -1656,9 +1657,13 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                   ),
                 ),
                 DecoratedBox(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1E1D1B),
-                    border: Border(top: BorderSide(color: Color(0xFF2D2D2D))),
+                  decoration: BoxDecoration(
+                    color: widget.palette.dark
+                        ? const Color(0xFF1E1D1B)
+                        : widget.palette.surface,
+                    border: Border(
+                      top: BorderSide(color: widget.palette.border),
+                    ),
                   ),
                   child: AcoSafeArea(
                     top: false,
@@ -1674,6 +1679,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                         compactBottomBar ? 5 : 8,
                       ),
                       child: _ChatComposer(
+                        palette: widget.palette,
                         controller: _messageController,
                         focusNode: _messageFocusNode,
                         voiceInputActive: _voiceInputActive,
@@ -1696,6 +1702,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                   ),
                 if (_morePanelVisible)
                   _ChatMorePanel(
+                    palette: widget.palette,
                     isGroup: _isGroup,
                     onSelected: _handleMorePanelSelection,
                   ),
@@ -2379,18 +2386,26 @@ class _ComposerImageIcon extends StatelessWidget {
     required this.assetPath,
     required this.onPressed,
     this.size = 24,
+    this.color,
   });
 
   final String assetPath;
   final VoidCallback onPressed;
   final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
     padding: EdgeInsets.zero,
     minimumSize: Size(size, size),
     onPressed: onPressed,
-    child: Image.asset(assetPath, width: size, height: size),
+    child: Image.asset(
+      assetPath,
+      width: size,
+      height: size,
+      color: color,
+      colorBlendMode: color == null ? null : BlendMode.srcIn,
+    ),
   );
 }
 
@@ -2399,11 +2414,13 @@ class _ComposerCupertinoIcon extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onPressed,
+    required this.color,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onPressed;
+  final Color color;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -2413,14 +2430,19 @@ class _ComposerCupertinoIcon extends StatelessWidget {
       padding: EdgeInsets.zero,
       minimumSize: const Size(24, 24),
       onPressed: onPressed,
-      child: Icon(icon, color: _white, size: 23),
+      child: Icon(icon, color: color, size: 23),
     ),
   );
 }
 
 class _ChatMorePanel extends StatelessWidget {
-  const _ChatMorePanel({required this.isGroup, required this.onSelected});
+  const _ChatMorePanel({
+    required this.palette,
+    required this.isGroup,
+    required this.onSelected,
+  });
 
+  final AcoPalette palette;
   final bool isGroup;
   final Future<void> Function(String label) onSelected;
 
@@ -2462,9 +2484,9 @@ class _ChatMorePanel extends StatelessWidget {
       // Each tile is roughly 96 px tall at phone widths; reserve a full
       // second row so the last entry is not clipped by the panel bounds.
       height: rowCount == 1 ? 116 : 224,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1D1B),
-        border: Border(top: BorderSide(color: Color(0xFF515151), width: 0.25)),
+      decoration: BoxDecoration(
+        color: palette.dark ? const Color(0xFF1E1D1B) : palette.surface,
+        border: Border(top: BorderSide(color: palette.border, width: 0.25)),
       ),
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
       child: GridView.builder(
@@ -2492,14 +2514,16 @@ class _ChatMorePanel extends StatelessWidget {
                     width: 60,
                     height: 60,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF2C2C2C),
+                      color: palette.dark
+                          ? const Color(0xFF2C2C2C)
+                          : palette.surfaceRaised,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
                       child: item.label == '文件'
-                          ? const Icon(
+                          ? Icon(
                               CupertinoIcons.doc_fill,
-                              color: Color(0xFFB7B7B7),
+                              color: palette.mutedText,
                               size: 28,
                             )
                           : SizedBox(
@@ -2508,6 +2532,10 @@ class _ChatMorePanel extends StatelessWidget {
                               child: Image.asset(
                                 item.assetPath,
                                 fit: BoxFit.contain,
+                                color: palette.dark
+                                    ? null
+                                    : palette.primaryText,
+                                colorBlendMode: BlendMode.srcIn,
                               ),
                             ),
                     ),
@@ -2517,10 +2545,7 @@ class _ChatMorePanel extends StatelessWidget {
                     item.label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Color(0xFF9D9EA0),
-                      fontSize: 12,
-                    ),
+                    style: TextStyle(color: palette.mutedText, fontSize: 12),
                   ),
                 ],
               ),
@@ -2677,11 +2702,12 @@ class _ChatMessage extends StatelessWidget {
       return _image(
         context,
         shouldCacheThumbnail
-            ? _CachedChatThumbnail(url: imageUrl!)
+            ? _CachedChatThumbnail(url: imageUrl!, palette: palette)
             : AcoNetworkImage(
                 url: imageUrl!,
                 fit: BoxFit.contain,
-                errorWidget: (context, url, error) => const _ImageUnavailable(),
+                errorWidget: (context, url, error) =>
+                    _ImageUnavailable(palette: palette),
               ),
         maxWidth: maxWidth,
         previewImage: CachedNetworkImageProvider(previewUrl),
@@ -2689,10 +2715,11 @@ class _ChatMessage extends StatelessWidget {
       );
     }
 
-    if (imagePath != null) return const _ImageUnavailable();
+    if (imagePath != null) return _ImageUnavailable(palette: palette);
 
     if (soundPath != null || soundUrl != null) {
       return _VoiceMessageBubble(
+        palette: palette,
         path: soundPath,
         url: soundUrl,
         duration: soundDuration ?? 0,
@@ -2702,6 +2729,7 @@ class _ChatMessage extends StatelessWidget {
 
     if (videoPath != null || videoUrl != null) {
       return _ChatVideoBubble(
+        palette: palette,
         videoPath: videoPath,
         videoUrl: videoUrl,
         snapshotPath: videoSnapshotPath,
@@ -2715,6 +2743,7 @@ class _ChatMessage extends StatelessWidget {
       return ConstrainedBox(
         constraints: BoxConstraints(maxWidth: maxWidth),
         child: _ChatFileBubble(
+          palette: palette,
           name: fileName ?? '文件',
           size: fileSize ?? 0,
           mine: mine,
@@ -2725,7 +2754,7 @@ class _ChatMessage extends StatelessWidget {
     }
 
     if (isVoiceCallRecord) {
-      return _VoiceCallRecordBubble(text: text, mine: mine);
+      return _VoiceCallRecordBubble(palette: palette, text: text, mine: mine);
     }
 
     return _Bubble(
@@ -2898,6 +2927,7 @@ class _ChatMessage extends StatelessWidget {
 
 class _ChatFileBubble extends StatelessWidget {
   const _ChatFileBubble({
+    required this.palette,
     required this.name,
     required this.size,
     required this.mine,
@@ -2905,6 +2935,7 @@ class _ChatFileBubble extends StatelessWidget {
     required this.onSave,
   });
 
+  final AcoPalette palette;
   final String name;
   final int size;
   final bool mine;
@@ -2913,9 +2944,12 @@ class _ChatFileBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = mine ? _black : _white;
-    final secondary = mine ? const Color(0xFF5E5E5E) : const Color(0xFFB5B5B5);
-    final background = mine ? const Color(0xFF28B561) : const Color(0xFF2C2C2C);
+    final foreground = mine ? _black : palette.primaryText;
+    final secondary = mine ? const Color(0xFF5E5E5E) : palette.mutedText;
+    final incomingBackground = palette.dark
+        ? const Color(0xFF2C2C2C)
+        : palette.surfaceRaised;
+    final background = mine ? const Color(0xFF28B561) : incomingBackground;
     final icon = name.toLowerCase().endsWith('.pdf')
         ? CupertinoIcons.doc_text_fill
         : CupertinoIcons.doc_fill;
@@ -2983,15 +3017,23 @@ class _ChatFileBubble extends StatelessWidget {
 }
 
 class _VoiceCallRecordBubble extends StatelessWidget {
-  const _VoiceCallRecordBubble({required this.text, required this.mine});
+  const _VoiceCallRecordBubble({
+    required this.palette,
+    required this.text,
+    required this.mine,
+  });
 
+  final AcoPalette palette;
   final String text;
   final bool mine;
 
   @override
   Widget build(BuildContext context) {
-    final foreground = mine ? _black : _white;
-    final background = mine ? const Color(0xFF28B561) : const Color(0xFF2C2C2C);
+    final foreground = mine ? _black : palette.primaryText;
+    final incomingBackground = palette.dark
+        ? const Color(0xFF2C2C2C)
+        : palette.surfaceRaised;
+    final background = mine ? const Color(0xFF28B561) : incomingBackground;
     return CustomPaint(
       painter: mine
           ? _MineBubblePainter(color: background)
@@ -3022,6 +3064,7 @@ class _VoiceCallRecordBubble extends StatelessWidget {
 
 class _ChatVideoBubble extends StatelessWidget {
   const _ChatVideoBubble({
+    required this.palette,
     required this.videoPath,
     required this.videoUrl,
     required this.snapshotPath,
@@ -3030,6 +3073,7 @@ class _ChatVideoBubble extends StatelessWidget {
     required this.mine,
   });
 
+  final AcoPalette palette;
   final String? videoPath;
   final String? videoUrl;
   final String? snapshotPath;
@@ -3055,6 +3099,9 @@ class _ChatVideoBubble extends StatelessWidget {
         : null;
     final hasLocalSnapshot = localSnapshot?.existsSync() == true;
     final hasNetwork = networkSnapshot != null;
+    final incomingBackground = palette.dark
+        ? const Color(0xFF2C2C2C)
+        : palette.surfaceRaised;
     return Semantics(
       button: true,
       label: '播放视频消息，$duration秒',
@@ -3074,16 +3121,16 @@ class _ChatVideoBubble extends StatelessWidget {
           child: Container(
             width: 215,
             height: 150,
-            color: mine ? const Color(0xFF28B561) : const Color(0xFF2C2C2C),
+            color: mine ? const Color(0xFF28B561) : incomingBackground,
             child: Stack(
               fit: StackFit.expand,
               children: [
                 if (hasNetwork)
-                  _CachedChatThumbnail(url: networkSnapshot)
+                  _CachedChatThumbnail(url: networkSnapshot, palette: palette)
                 else if (hasLocalSnapshot)
                   Image.file(localSnapshot!, fit: BoxFit.cover)
                 else
-                  const _VideoUnavailable(),
+                  _VideoUnavailable(palette: palette),
                 const Center(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -3140,13 +3187,15 @@ class _ChatVideoBubble extends StatelessWidget {
 }
 
 class _VideoUnavailable extends StatelessWidget {
-  const _VideoUnavailable();
+  const _VideoUnavailable({required this.palette});
+
+  final AcoPalette palette;
 
   @override
-  Widget build(BuildContext context) => const Center(
+  Widget build(BuildContext context) => Center(
     child: Icon(
       CupertinoIcons.videocam_fill,
-      color: Color(0xFFAAAAAA),
+      color: palette.mutedText,
       size: 42,
     ),
   );
@@ -3399,12 +3448,14 @@ class _ChatImagePreviewState extends State<_ChatImagePreview> {
 
 class _VoiceMessageBubble extends StatefulWidget {
   const _VoiceMessageBubble({
+    required this.palette,
     required this.path,
     required this.url,
     required this.duration,
     required this.mine,
   });
 
+  final AcoPalette palette;
   final String? path;
   final String? url;
   final int duration;
@@ -3542,10 +3593,13 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = widget.mine ? _black : _white;
+    final foreground = widget.mine ? _black : widget.palette.primaryText;
+    final incomingBackground = widget.palette.dark
+        ? const Color(0xFF2C2C2C)
+        : widget.palette.surfaceRaised;
     final background = widget.mine
         ? const Color(0xFF28B561)
-        : const Color(0xFF2C2C2C);
+        : incomingBackground;
     return Semantics(
       button: true,
       label: '播放语音消息，${widget.duration}秒',
@@ -3610,6 +3664,7 @@ class _GroupMention {
 
 class _GroupMentionPanel extends StatefulWidget {
   const _GroupMentionPanel({
+    required this.palette,
     required this.height,
     required this.members,
     required this.loading,
@@ -3617,6 +3672,7 @@ class _GroupMentionPanel extends StatefulWidget {
     required this.onDismiss,
   });
 
+  final AcoPalette palette;
   final double height;
   final List<GroupMembersInfo> members;
   final bool loading;
@@ -3754,10 +3810,12 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
     final isSearchEmpty = _searchController.text.isEmpty;
     return Container(
       height: widget.height,
-      decoration: const BoxDecoration(
-        color: Color(0xFF2B2B2B),
+      decoration: BoxDecoration(
+        color: widget.palette.dark
+            ? const Color(0xFF2B2B2B)
+            : widget.palette.background,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(top: BorderSide(color: Color(0xFF3A3A3A))),
+        border: Border(top: BorderSide(color: widget.palette.border)),
       ),
       child: Column(
         children: [
@@ -3767,10 +3825,10 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
             child: Stack(
               alignment: Alignment.center,
               children: [
-                const Text(
+                Text(
                   '选择提醒的人',
                   style: TextStyle(
-                    color: _white,
+                    color: widget.palette.primaryText,
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
                   ),
@@ -3795,8 +3853,10 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: DecoratedBox(
-              decoration: const BoxDecoration(
-                color: Color(0xFF232323),
+              decoration: BoxDecoration(
+                color: widget.palette.dark
+                    ? const Color(0xFF232323)
+                    : widget.palette.inputSurface,
                 borderRadius: BorderRadius.all(Radius.circular(24)),
               ),
               child: SizedBox(
@@ -3810,8 +3870,8 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                       placeholder: isSearchEmpty
                           ? ''
                           : appText(context, '搜索成员'),
-                      placeholderStyle: const TextStyle(
-                        color: Color(0xFF777777),
+                      placeholderStyle: TextStyle(
+                        color: widget.palette.mutedText,
                         fontSize: 16,
                       ),
                       prefix: isSearchEmpty
@@ -3822,7 +3882,7 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                                 'assets/icons/square_search.png',
                                 width: 22,
                                 height: 18,
-                                color: const Color(0xFF858585),
+                                color: widget.palette.mutedText,
                                 filterQuality: FilterQuality.high,
                               ),
                             ),
@@ -3830,7 +3890,10 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                         horizontal: 12,
                         vertical: 6,
                       ),
-                      style: const TextStyle(color: _white, fontSize: 16),
+                      style: TextStyle(
+                        color: widget.palette.primaryText,
+                        fontSize: 16,
+                      ),
                       decoration: const BoxDecoration(),
                     ),
                     if (isSearchEmpty)
@@ -3842,14 +3905,14 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                               'assets/icons/square_search.png',
                               width: 22,
                               height: 18,
-                              color: const Color(0xFF858585),
+                              color: widget.palette.mutedText,
                               filterQuality: FilterQuality.high,
                             ),
                             SizedBox(width: 10),
                             Text(
                               '搜索成员',
                               style: TextStyle(
-                                color: Color(0xFF777777),
+                                color: widget.palette.mutedText,
                                 fontSize: 16,
                               ),
                             ),
@@ -3865,10 +3928,10 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
             child: widget.loading
                 ? const Center(child: CupertinoActivityIndicator())
                 : members.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
                       '未找到群成员',
-                      style: TextStyle(color: Color(0xFFAAAAAA)),
+                      style: TextStyle(color: widget.palette.mutedText),
                     ),
                   )
                 : Stack(
@@ -3973,16 +4036,18 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
 }
 
 class _ImageUnavailable extends StatelessWidget {
-  const _ImageUnavailable();
+  const _ImageUnavailable({required this.palette});
+
+  final AcoPalette palette;
 
   @override
-  Widget build(BuildContext context) => const ColoredBox(
-    color: Color(0xFF2C2C2C),
+  Widget build(BuildContext context) => ColoredBox(
+    color: palette.dark ? const Color(0xFF2C2C2C) : palette.surfaceRaised,
     child: SizedBox(
       width: 180,
       height: 180,
       child: Center(
-        child: Icon(CupertinoIcons.photo, color: Color(0xFFAAAAAA)),
+        child: Icon(CupertinoIcons.photo, color: palette.mutedText),
       ),
     ),
   );

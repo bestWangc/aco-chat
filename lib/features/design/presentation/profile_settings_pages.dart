@@ -2,6 +2,7 @@ part of 'aco_design_shell.dart';
 
 const _profileIconSize = 24.0;
 const _profileCardBackgroundColor = Color(0xFF1C1C1C);
+const _profileCardLightBackgroundColor = Color(0xFFFFFFFF);
 
 class _ProfileHeaderButton extends StatelessWidget {
   const _ProfileHeaderButton({
@@ -31,7 +32,12 @@ class _ProfileHeaderButton extends StatelessWidget {
             child: SizedBox(
               width: assetIconSize,
               height: assetIconSize,
-              child: Image.asset(iconAsset!, filterQuality: FilterQuality.high),
+              child: Image.asset(
+                iconAsset!,
+                filterQuality: FilterQuality.high,
+                color: palette.dark ? null : palette.primaryText,
+                colorBlendMode: BlendMode.srcIn,
+              ),
             ),
           );
     return Semantics(
@@ -50,8 +56,15 @@ class _ProfileHeaderButton extends StatelessWidget {
               height: visualSize,
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: filled ? const Color(0xFF1C1C1C) : null,
+                  color: filled
+                      ? palette.dark
+                            ? const Color(0xFF1C1C1C)
+                            : const Color(0xFFFFFFFF)
+                      : null,
                   shape: BoxShape.circle,
+                  border: filled && !palette.dark
+                      ? Border.all(color: palette.border)
+                      : null,
                 ),
                 child: SizedBox.expand(child: child),
               ),
@@ -86,7 +99,9 @@ class _ProfileOverviewSectionState extends State<_ProfileOverviewSection> {
   Widget build(BuildContext context) => AcoSurface(
     palette: widget.palette,
     cardBorder: shad.ShadBorder.none,
-    backgroundColor: widget.palette.dark ? _profileCardBackgroundColor : null,
+    backgroundColor: widget.palette.dark
+        ? _profileCardBackgroundColor
+        : _profileCardLightBackgroundColor,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
     child: Column(
@@ -203,7 +218,9 @@ class _ProfileSection extends StatelessWidget {
   Widget build(BuildContext context) => AcoSurface(
     palette: palette,
     cardBorder: shad.ShadBorder.none,
-    backgroundColor: palette.dark ? _profileCardBackgroundColor : null,
+    backgroundColor: palette.dark
+        ? _profileCardBackgroundColor
+        : _profileCardLightBackgroundColor,
     minHeight: 130,
     radius: 24,
     padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
@@ -316,7 +333,7 @@ class _ThemeSettingsPage extends StatelessWidget {
           subtitle: appText(context, '清晰明亮的界面'),
           selected: !dark,
           palette: palette,
-          onPressed: null,
+          onPressed: dark ? onThemeToggle : null,
         ),
       ],
     ),
@@ -493,7 +510,7 @@ class _PreferenceOption extends StatelessWidget {
             if (selected)
               Icon(
                 CupertinoIcons.check_mark_circled_solid,
-                color: palette.accent,
+                color: palette.accentForeground,
               ),
           ],
         ),

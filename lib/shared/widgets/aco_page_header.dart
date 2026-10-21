@@ -8,8 +8,9 @@ class AcoPalette {
   final bool dark;
 
   Color get accent => const Color(0xFFA6DE00);
+  Color get accentForeground => dark ? accent : const Color(0xFF557A00);
   Color get background =>
-      dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
+      dark ? const Color(0xFF000000) : const Color(0xFFF5F6F8);
   Color get surface => dark ? const Color(0xFF3A3A3A) : const Color(0xFFF4F4F4);
   Color get surfaceRaised =>
       dark ? const Color(0xFF222222) : const Color(0xFFEDEDED);
@@ -18,10 +19,10 @@ class AcoPalette {
   Color get primaryText =>
       dark ? const Color(0xFFF7F7F7) : const Color(0xFF151515);
   Color get mutedText =>
-      dark ? const Color(0xFF929292) : const Color(0xFF939393);
+      dark ? const Color(0xFF929292) : const Color(0xFF757575);
   Color get border => dark ? const Color(0xFF2D2D2D) : const Color(0xFFE2E2E2);
   Color get navInactive =>
-      dark ? const Color(0xFF9E9E9E) : const Color(0xFFC4C4C4);
+      dark ? const Color(0xFF9E9E9E) : const Color(0xFF757575);
 }
 
 class AcoPageHeader extends StatelessWidget {

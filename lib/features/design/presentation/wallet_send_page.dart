@@ -475,11 +475,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
       if (mounted) {
         final title = result.status == '已广播' ? '转账成功' : '交易已签名';
         final hashLabel = appText(context, '交易哈希：');
-        _showNotice(
-          context,
-          title,
-          '$hashLabel ${result.hash}',
-        );
+        _showNotice(context, title, '$hashLabel ${result.hash}');
       }
     } on WalletSecurityException catch (error) {
       if (mounted) _showNotice(context, '转账失败', error.message);
@@ -644,7 +640,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                               child: Text(
                                 '全部',
                                 style: TextStyle(
-                                  color: widget.palette.accent,
+                                  color: widget.palette.accentForeground,
                                   fontSize: AcoTypography.bodySmall,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -695,7 +691,7 @@ class _SendTransferPageState extends State<_SendTransferPage> {
                       children: [
                         Icon(
                           CupertinoIcons.speedometer,
-                          color: widget.palette.accent,
+                          color: widget.palette.accentForeground,
                           size: 23,
                         ),
                         const SizedBox(width: 12),
