@@ -25,17 +25,8 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
   final _addressController = TextEditingController();
   late Future<List<DappEntry>> _hotDapps;
   late Future<List<DappEntry>> _earningsDapps;
+  late Future<List<DappEntry>> _communityDapps;
   var _selectedSection = 0;
-
-  static const _community = DappEntry(
-    id: 'wandering-earth',
-    name: '流浪星球',
-    category: 'game',
-    subcategory: 'game',
-    url: 'https://wander.acogame.fun',
-    iconUrl: '',
-    networks: ['bsc'],
-  );
 
   @override
   void initState() {
@@ -44,6 +35,9 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
       widget.selectedChain.network.name,
     );
     _earningsDapps = DappDirectoryService().loadEarnings(
+      widget.selectedChain.network.name,
+    );
+    _communityDapps = DappDirectoryService().loadCommunity(
       widget.selectedChain.network.name,
     );
   }
@@ -56,6 +50,9 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
         widget.selectedChain.network.name,
       );
       _earningsDapps = DappDirectoryService().loadEarnings(
+        widget.selectedChain.network.name,
+      );
+      _communityDapps = DappDirectoryService().loadCommunity(
         widget.selectedChain.network.name,
       );
     }
@@ -177,14 +174,27 @@ class _BrowserDiscoverPageState extends State<_BrowserDiscoverPage> {
       else
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Align(
-            alignment: Alignment.topLeft,
-            child: _DiscoverShortcut(
-              palette: widget.palette,
-              dapp: _community,
-              onTap: () => _openDapp(context, _community),
-              logoAsset: 'assets/images/community_wandering_earth.webp',
-            ),
+          child: FutureBuilder<List<DappEntry>>(
+            future: _communityDapps,
+            builder: (_, snapshot) {
+              final dapps = snapshot.data ?? const <DappEntry>[];
+              if (snapshot.connectionState != ConnectionState.done ||
+                  dapps.isEmpty) {
+                return const SizedBox(height: 85);
+              }
+              return Wrap(
+                spacing: 20,
+                runSpacing: 12,
+                children: [
+                  for (final dapp in dapps)
+                    _DiscoverShortcut(
+                      palette: widget.palette,
+                      dapp: dapp,
+                      onTap: () => _openDapp(context, dapp),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       const SizedBox(height: 22),

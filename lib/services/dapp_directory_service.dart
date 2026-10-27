@@ -52,14 +52,20 @@ class DappDirectoryService {
 
   static const _cacheTtl = Duration(minutes: 5);
   static final _cache = <String, _DappCacheEntry>{};
-  static final _pending = <String, Future<List<DappEntry>>>{};
+  static final _pending = <String, Future<_DappCacheEntry>>{};
 
-  Future<List<DappEntry>> loadHot(String chain) async {
+  Future<List<DappEntry>> loadHot(String chain) async =>
+      (await _loadDirectory(chain)).hotDapps;
+
+  Future<List<DappEntry>> loadCommunity(String chain) async =>
+      (await _loadDirectory(chain)).communityDapps;
+
+  Future<_DappCacheEntry> _loadDirectory(String chain) async {
     final key = chain.trim().toLowerCase();
     final cached = _cache[key];
     if (cached != null) {
       final age = DateTime.now().difference(cached.createdAt);
-      if (age < _cacheTtl) return cached.dapps;
+      if (age < _cacheTtl) return cached;
     }
     final inFlight = _pending[key];
     if (inFlight != null) return inFlight;
@@ -67,9 +73,9 @@ class DappDirectoryService {
     final request = _fetchHot(key);
     _pending[key] = request;
     try {
-      final dapps = await request;
-      _cache[key] = _DappCacheEntry(DateTime.now(), dapps);
-      return dapps;
+      final entry = await request;
+      _cache[key] = entry;
+      return entry;
     } finally {
       _pending.remove(key);
     }
@@ -92,7 +98,7 @@ class DappDirectoryService {
         .toList(growable: false);
   }
 
-  Future<List<DappEntry>> _fetchHot(String chain) async {
+  Future<_DappCacheEntry> _fetchHot(String chain) async {
     final base = const AppConfig().apiBaseUrl.replaceFirst(RegExp(r'/+$'), '');
     final response = await _client
         .get(
@@ -106,19 +112,31 @@ class DappDirectoryService {
       throw StateError('hot dapp request failed');
     }
     final body = jsonDecode(response.body) as Map<String, dynamic>;
-    final rawDapps = body['dapps'];
-    if (rawDapps is! List) return const [];
-    return rawDapps
-        .whereType<Map<String, dynamic>>()
-        .map(DappEntry.fromJson)
-        .where((dapp) => dapp.id.isNotEmpty && dapp.name.isNotEmpty)
-        .toList(growable: false);
+    return _DappCacheEntry(
+      DateTime.now(),
+      hotDapps: _parseDapps(body['dapps']),
+      communityDapps: _parseDapps(body['community_dapps']),
+    );
   }
 }
 
+List<DappEntry> _parseDapps(Object? raw) {
+  if (raw is! List) return const [];
+  return raw
+      .whereType<Map<String, dynamic>>()
+      .map(DappEntry.fromJson)
+      .where((dapp) => dapp.id.isNotEmpty && dapp.name.isNotEmpty)
+      .toList(growable: false);
+}
+
 class _DappCacheEntry {
-  const _DappCacheEntry(this.createdAt, this.dapps);
+  const _DappCacheEntry(
+    this.createdAt, {
+    required this.hotDapps,
+    required this.communityDapps,
+  });
 
   final DateTime createdAt;
-  final List<DappEntry> dapps;
+  final List<DappEntry> hotDapps;
+  final List<DappEntry> communityDapps;
 }
