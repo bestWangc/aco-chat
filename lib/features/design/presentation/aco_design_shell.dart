@@ -51,6 +51,7 @@ import 'package:aco_chat/services/trade_fee_config_client.dart';
 import 'package:aco_chat/services/wallet_hot_token_service.dart';
 import 'package:aco_chat/services/wallet_transaction_models.dart';
 import 'package:aco_chat/services/wallet_transaction_service.dart';
+import 'package:aco_chat/services/ads_module.dart';
 import 'package:aco_chat/services/dapp_directory_service.dart';
 import 'package:aco_chat/services/solana_signing_service.dart';
 import 'package:aco_chat/services/tron_signing_service.dart';

@@ -1,0 +1,54 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--联⽹权限-->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!--检测当前⽹络状态是2G、3G、4G还是WiFi-->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- 华硕获取OAID权限 -->
+    <uses-permission android:name="com.asus.msa.SupplementaryDID.ACCESS" />
+    <!-- 广告可选权限，摇一摇权限，用于广告互动 -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!--穿山甲sdk需要的权限，不接入穿山甲sdk不用添加-->
+    <!--必要权限，解决安全风险漏洞，发送和注册广播事件需要调用带有传递权限的接口-->
+    <permission
+        android:name="${applicationId}.openadsdk.permission.TT_PANGOLIN"
+        android:protectionLevel="signature" />
+    <!--必要权限，解决安全风险漏洞，发送和注册广播事件需要调用带有传递权限的接口-->
+    <uses-permission android:name="${applicationId}.openadsdk.permission.TT_PANGOLIN" />
+    <!-- 如果视频广告使用textureView播放，请务必添加，否则黑屏 -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!--ks-->
+    <permission
+        android:name="${applicationId}.permission.KW_SDK_BROADCAST"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="${applicationId}.permission.KW_SDK_BROADCAST" />
+
+    <application android:networkSecurityConfig="@xml/network_security_config">
+        <activity
+            android:name=".tube.TubeActivity"
+            android:configChanges="keyboard|orientation|screenSize"
+            android:launchMode="singleTask"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
+        <provider
+            android:name="com.qq.e.comm.GDTFileProvider"
+            android:authorities="${applicationId}.gdt.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/gdt_file_path" />
+        </provider>
+        <provider
+            android:name="com.bytedance.sdk.openadsdk.TTFileProvider"
+            android:authorities="${applicationId}.TTFileProvider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+    </application>
+</manifest>

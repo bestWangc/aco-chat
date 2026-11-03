@@ -90,6 +90,7 @@ class _DappBrowserMenu extends StatelessWidget {
     required this.onOpenExternal,
     required this.onShowDiagnostics,
     required this.onClearDappData,
+    this.onTestInterstitialAd,
   });
 
   final AcoPalette palette;
@@ -99,6 +100,7 @@ class _DappBrowserMenu extends StatelessWidget {
   final VoidCallback onOpenExternal;
   final VoidCallback onShowDiagnostics;
   final VoidCallback onClearDappData;
+  final VoidCallback? onTestInterstitialAd;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -160,6 +162,13 @@ class _DappBrowserMenu extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final actions = [
+                if (onTestInterstitialAd case final onTestInterstitialAd?)
+                  _DappBrowserMenuAction(
+                    icon: CupertinoIcons.play_rectangle,
+                    label: '测试全屏插屏',
+                    palette: palette,
+                    onPressed: onTestInterstitialAd,
+                  ),
                 _DappBrowserMenuAction(
                   icon: CupertinoIcons.doc_on_doc,
                   label: '复制链接',
@@ -274,6 +283,8 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
   final _sessionConnectedOrigins = <String>{};
   InAppWebViewController? _controller;
   late Uri _currentUri;
+  String? _initialAdsOrigin;
+  String? _adsBridgeNonce;
   late _WalletChain _activeChain;
   var _isLoading = true;
   String? _loadError;
@@ -315,6 +326,11 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       _dappDiagnosticUserScript,
       _dappStorageUserScript,
     ];
+    final adsOrigin = _initialAdsOrigin;
+    final adsNonce = _adsBridgeNonce;
+    if (adsOrigin != null && adsNonce != null) {
+      scripts.add(_dappAdsUserScript(adsOrigin, adsNonce));
+    }
     if (_isEvmChain) {
       scripts.add(_evmProviderUserScript);
     } else if (_activeChain.network == WalletNetwork.solana) {
@@ -328,6 +344,14 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
     super.initState();
     _activeChain = widget.selectedChain;
     _currentUri = _normalizeDappUri(widget.initialUrl);
+    if (_currentUri.scheme == 'https' && _currentUri.host.isNotEmpty) {
+      _initialAdsOrigin = _currentUri.origin;
+      final random = math.Random.secure();
+      _adsBridgeNonce = List.generate(
+        32,
+        (_) => random.nextInt(16).toRadixString(16),
+      ).join();
+    }
     unawaited(_restoreConnectedPermissions());
   }
 
@@ -540,6 +564,46 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
         onOpenExternal: () => _openInSystemBrowser(menuContext),
         onShowDiagnostics: () => _showDiagnostics(menuContext),
         onClearDappData: () => _confirmClearDappData(menuContext),
+        onTestInterstitialAd: kDebugMode
+            ? () => _testInterstitialAd(menuContext)
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _testInterstitialAd(BuildContext menuContext) async {
+    Navigator.of(menuContext).pop();
+    final result = await AdsModule.instance.showInterstitial(
+      widget.dappId,
+      walletAddress: widget.walletIdentity?.address,
+    );
+    if (!mounted) return;
+
+    final errorMessage = result['message']?.toString();
+    final placementId = result['placementId']?.toString();
+    final message = result['ok'] == true
+        ? result['shown'] == true
+              ? '全屏插屏已展示并关闭。'
+              : '广告请求成功，但未确认展示。'
+        : [
+            '错误码：${result['code'] ?? 'unknown'}',
+            if (errorMessage != null && errorMessage.isNotEmpty) errorMessage,
+            if (placementId != null) '广告位：$placementId',
+          ].join('\n');
+    await showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('广告测试结果'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(message),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('知道了'),
+          ),
+        ],
       ),
     );
   }
@@ -733,6 +797,72 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
       handlerName: 'acoDappStorageSet',
       callback: (arguments) => _saveDappStorage(arguments),
     );
+    controller.addJavaScriptHandler(
+      handlerName: 'acoAds',
+      callback: _handleAdsRequest,
+    );
+  }
+
+  Future<Map<String, Object?>> _handleAdsRequest(
+    List<dynamic> arguments,
+  ) async {
+    if (_initialAdsOrigin == null || _origin != _initialAdsOrigin) {
+      return {'ok': false, 'code': 'unavailable'};
+    }
+    if (arguments.isEmpty || arguments.first is! Map) {
+      return {'ok': false, 'code': 'invalid_request'};
+    }
+    final request = arguments.first as Map;
+    if (request['nonce'] != _adsBridgeNonce) {
+      return {'ok': false, 'code': 'forbidden'};
+    }
+    final method = request['method'];
+    if (method != 'showInterstitial' && method != 'showRewarded') {
+      return {'ok': false, 'code': 'unsupported_method'};
+    }
+
+    final currentWalletAddress = widget.walletIdentity?.address.trim();
+    if (currentWalletAddress == null || currentWalletAddress.isEmpty) {
+      return {'ok': false, 'code': 'wallet_required', 'dappId': widget.dappId};
+    }
+    final rawWalletAddress = request['walletAddress'];
+    if (rawWalletAddress is! String || rawWalletAddress.trim().isEmpty) {
+      return {
+        'ok': false,
+        'code': 'wallet_address_required',
+        'dappId': widget.dappId,
+      };
+    }
+    final requestedWalletAddress = rawWalletAddress.trim();
+    final isEvmAddress = RegExp(r'^0x[0-9a-fA-F]{40}$');
+    final sameWalletAddress =
+        currentWalletAddress == requestedWalletAddress ||
+        (isEvmAddress.hasMatch(currentWalletAddress) &&
+            isEvmAddress.hasMatch(requestedWalletAddress) &&
+            currentWalletAddress.toLowerCase() ==
+                requestedWalletAddress.toLowerCase());
+    if (!sameWalletAddress) {
+      return {'ok': false, 'code': 'wallet_mismatch', 'dappId': widget.dappId};
+    }
+    final walletAddress = currentWalletAddress;
+    if (walletAddress.length > 128) {
+      return {
+        'ok': false,
+        'code': 'invalid_wallet_address',
+        'dappId': widget.dappId,
+      };
+    }
+
+    final result = method == 'showInterstitial'
+        ? await AdsModule.instance.showInterstitial(
+            widget.dappId,
+            walletAddress: walletAddress,
+          )
+        : await AdsModule.instance.showRewarded(
+            widget.dappId,
+            walletAddress: walletAddress,
+          );
+    return {...result, 'dappId': widget.dappId, 'walletAddress': walletAddress};
   }
 
   Future<void> _readWebViewEnvironment() async {
@@ -1561,6 +1691,43 @@ final _dappDiagnosticUserScript = UserScript(
 })();
 ''',
 );
+
+UserScript _dappAdsUserScript(String allowedOrigin, String bridgeNonce) =>
+    UserScript(
+      injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,
+      forMainFrameOnly: true,
+      source:
+          '''
+(() => {
+  if (window.top !== window || window.location.origin !== ${jsonEncode(allowedOrigin)}) return;
+  const bridgeNonce = ${jsonEncode(bridgeNonce)};
+  const install = () => {
+    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) return false;
+    if (window.acoAds) return true;
+  const call = (method, options) => window.flutter_inappwebview.callHandler('acoAds', {
+    method,
+    nonce: bridgeNonce,
+    walletAddress: options && options.walletAddress
+  });
+    Object.defineProperty(window, 'acoAds', {
+      value: Object.freeze({
+      showInterstitial: (options) => call('showInterstitial', options),
+      showRewarded: (options) => call('showRewarded', options),
+      }),
+      configurable: false,
+    });
+    return true;
+  };
+  if (install()) return;
+  window.addEventListener('flutterInAppWebViewPlatformReady', install, false);
+  let retries = 0;
+  const timer = window.setInterval(() => {
+    retries += 1;
+    if (install() || retries >= 100) window.clearInterval(timer);
+  }, 100);
+})();
+''',
+    );
 
 final _dappStorageUserScript = UserScript(
   injectionTime: UserScriptInjectionTime.AT_DOCUMENT_START,

@@ -430,6 +430,13 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_ads_plugin:
+    dependency: "direct main"
+    description:
+      path: "plugins/flutter_ads_plugin"
+      relative: true
+    source: path
+    version: "0.0.1"
   flutter_animate:
     dependency: transitive
     description:
@@ -667,6 +674,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "4.1.2"
+  huijing_ads_plugin:
+    dependency: "direct main"
+    description:
+      path: "plugins/huijing_ads_plugin"
+      relative: true
+    source: path
+    version: "0.0.1"
   image:
     dependency: transitive
     description:
@@ -940,7 +954,7 @@ packages:
     source: hosted
     version: "2.2.0"
   package_info_plus:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: package_info_plus
       sha256: "127e1751e37ffb2ff4658beeaca77bad0c27bf5f932bd3a501c2296926d4b481"

@@ -50,12 +50,17 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   http: ^1.6.0
   path_provider: ^2.1.5
+  package_info_plus: ^10.2.1
   record: ^6.2.1
   audioplayers: ^6.5.0
   livekit_client: ^2.11.0
   lpinyin: ^2.0.3
   flutter_openim_sdk:
     path: third_party/flutter_openim_sdk
+  flutter_ads_plugin:
+    path: plugins/flutter_ads_plugin
+  huijing_ads_plugin:
+    path: plugins/huijing_ads_plugin
   web_socket_channel: ^3.0.3
   video_player: ^2.14.0
   video_thumbnail: ^0.5.3

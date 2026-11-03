@@ -4,6 +4,11 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val androidApplicationId = providers.gradleProperty("acoApplicationId").orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: "com.aco.aco_chat"
+
 android {
     namespace = "com.aco.aco_chat"
     // Keep the app aligned with the newest Android API required by plugins.
@@ -18,7 +23,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.aco.aco_chat"
+        applicationId = androidApplicationId
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
