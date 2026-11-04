@@ -90,7 +90,6 @@ class _DappBrowserMenu extends StatelessWidget {
     required this.onOpenExternal,
     required this.onShowDiagnostics,
     required this.onClearDappData,
-    this.onTestInterstitialAd,
   });
 
   final AcoPalette palette;
@@ -100,7 +99,6 @@ class _DappBrowserMenu extends StatelessWidget {
   final VoidCallback onOpenExternal;
   final VoidCallback onShowDiagnostics;
   final VoidCallback onClearDappData;
-  final VoidCallback? onTestInterstitialAd;
 
   @override
   Widget build(BuildContext context) => SafeArea(
@@ -162,13 +160,6 @@ class _DappBrowserMenu extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final actions = [
-                if (onTestInterstitialAd case final onTestInterstitialAd?)
-                  _DappBrowserMenuAction(
-                    icon: CupertinoIcons.play_rectangle,
-                    label: '测试全屏插屏',
-                    palette: palette,
-                    onPressed: onTestInterstitialAd,
-                  ),
                 _DappBrowserMenuAction(
                   icon: CupertinoIcons.doc_on_doc,
                   label: '复制链接',
@@ -564,46 +555,6 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
         onOpenExternal: () => _openInSystemBrowser(menuContext),
         onShowDiagnostics: () => _showDiagnostics(menuContext),
         onClearDappData: () => _confirmClearDappData(menuContext),
-        onTestInterstitialAd: kDebugMode
-            ? () => _testInterstitialAd(menuContext)
-            : null,
-      ),
-    );
-  }
-
-  Future<void> _testInterstitialAd(BuildContext menuContext) async {
-    Navigator.of(menuContext).pop();
-    final result = await AdsModule.instance.showInterstitial(
-      widget.dappId,
-      walletAddress: widget.walletIdentity?.address,
-    );
-    if (!mounted) return;
-
-    final errorMessage = result['message']?.toString();
-    final placementId = result['placementId']?.toString();
-    final message = result['ok'] == true
-        ? result['shown'] == true
-              ? '全屏插屏已展示并关闭。'
-              : '广告请求成功，但未确认展示。'
-        : [
-            '错误码：${result['code'] ?? 'unknown'}',
-            if (errorMessage != null && errorMessage.isNotEmpty) errorMessage,
-            if (placementId != null) '广告位：$placementId',
-          ].join('\n');
-    await showCupertinoDialog<void>(
-      context: context,
-      builder: (dialogContext) => CupertinoAlertDialog(
-        title: const Text('广告测试结果'),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(message),
-        ),
-        actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('知道了'),
-          ),
-        ],
       ),
     );
   }

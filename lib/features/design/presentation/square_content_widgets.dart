@@ -35,6 +35,9 @@ String _dappLogoAsset(String dappId) {
   if (dappId == 'wandering-earth') {
     return 'assets/images/community_wandering_earth.webp';
   }
+  if (dappId == 'startfarm') {
+    return 'assets/images/dapps/startfarm.png';
+  }
   final trustWalletLogo = _trustWalletDappLogos[dappId];
   return trustWalletLogo == null
       ? 'assets/images/dapps/$dappId.webp'
