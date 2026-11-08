@@ -1068,15 +1068,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               ),
             ),
             CupertinoActionSheetAction(
-              onPressed: () => Navigator.of(
-                sheetContext,
-              ).pop(_LiveMemberAction.transferHost),
-              child: const Text(
-                '转让主持人',
-                style: TextStyle(fontSize: AcoTypography.bodySmall),
-              ),
-            ),
-            CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () => Navigator.of(
                 sheetContext,
@@ -1087,6 +1078,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
               ),
             ),
           ],
+          if (isHost && (member.role == 'speaker' || member.role == 'cohost'))
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.transferHost),
+              child: const Text(
+                '转让主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
           if (isHost && member.role == 'cohost')
             CupertinoActionSheetAction(
               onPressed: () => Navigator.of(
