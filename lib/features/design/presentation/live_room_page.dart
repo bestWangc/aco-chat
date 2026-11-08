@@ -1039,12 +1039,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     if (live == null || member.role == 'host') return;
     final isHost = _room?.viewerRole == 'host';
-    final hasCohost =
-        _room?.speakers.any((participant) => participant.role == 'cohost') ==
-            true ||
-        _room?.listeners.any((participant) => participant.role == 'cohost') ==
-            true;
-    final canSetCohost = isHost && (member.role == 'cohost' || !hasCohost);
     final action = await showCupertinoModalPopup<_LiveMemberAction>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
@@ -1103,7 +1097,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 style: TextStyle(fontSize: AcoTypography.bodySmall),
               ),
             )
-          else if (canSetCohost)
+          else if (isHost)
             CupertinoActionSheetAction(
               onPressed: () =>
                   Navigator.of(sheetContext).pop(_LiveMemberAction.setCohost),

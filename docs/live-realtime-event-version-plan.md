@@ -43,8 +43,8 @@
 - `POST /lives/:live_id/cohosts/:user_id/add`：设为联席主持人；
 - `POST /lives/:live_id/cohosts/:user_id/remove`：取消联席主持人；
 - 设置、取消联席主持人的接口仅授权 `host`；其余主持人管理接口同时授权 `host`、`cohost`；
-- 服务端必须在事务中校验数量上限，并向所有在线成员发送带有最新角色的 `room.snapshot`；
-- 本期产品上限为 1 位联席主持人；后端不得仅依赖客户端限制。
+- 服务端必须向所有在线成员发送带有最新角色的 `room.snapshot`；
+- 一场会议可以设置多位联席主持人。
 
 ## 2.2 邀请上麦与移至听众的事件边界
 
