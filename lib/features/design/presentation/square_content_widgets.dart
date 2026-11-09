@@ -1171,11 +1171,13 @@ class _LiveCard extends StatelessWidget {
     required this.session,
     this.onTap,
     this.onEdit,
+    this.onShare,
   });
   final AcoPalette palette;
   final LiveSession session;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
+  final VoidCallback? onShare;
 
   String? get _scheduledStartLabel {
     final scheduledAt = session.scheduledAt;
@@ -1243,6 +1245,14 @@ class _LiveCard extends StatelessWidget {
                         color: palette.primaryText,
                         fontSize: AcoTypography.body,
                         fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      '会议号：${session.id}',
+                      style: TextStyle(
+                        color: palette.mutedText,
+                        fontSize: AcoTypography.caption,
                       ),
                     ),
                     if (session.status.isNotEmpty) ...[
@@ -1335,6 +1345,14 @@ class _LiveCard extends StatelessWidget {
                 ),
               ),
             ),
+            if (onShare != null)
+              AcoIconButton(
+                icon: CupertinoIcons.share,
+                palette: palette,
+                label: '分享会议',
+                size: 20,
+                onPressed: onShare!,
+              ),
             if (onEdit != null) ...[
               const SizedBox(width: 6),
               AcoIconButton(

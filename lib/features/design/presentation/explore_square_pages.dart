@@ -11,6 +11,7 @@ class _SquareFeedPage extends StatefulWidget {
     this.walletLoginFuture,
     this.liveListRevision = 0,
     this.initialLives,
+    this.initialMeetingNumber,
   });
   final AcoPalette palette;
   final ValueChanged<AcoScreen> onOpen;
@@ -20,6 +21,7 @@ class _SquareFeedPage extends StatefulWidget {
   final Future<AccountProfile?>? walletLoginFuture;
   final int liveListRevision;
   final List<LiveSession>? initialLives;
+  final String? initialMeetingNumber;
 
   @override
   State<_SquareFeedPage> createState() => _SquareFeedPageState();
@@ -36,6 +38,10 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   var _selectedTab = _SquareFeedTab.recommended;
   final AccountApiClient _apiClient = AccountApiClient();
   List<LiveSession>? _loadedLives;
+  final _meetingNumberController = TextEditingController();
+  List<LiveSession>? _meetingSearchResults;
+  bool _meetingSearching = false;
+  int _meetingSearchRevision = 0;
   final Set<int> _endedLiveIDs = <int>{};
   Object? _livesError;
   var _livesLoading = true;
@@ -57,6 +63,13 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   @override
   void initState() {
     super.initState();
+    if (widget.initialMeetingNumber != null) {
+      _selectedTab = _SquareFeedTab.live;
+      _meetingNumberController.text = widget.initialMeetingNumber!;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_searchMeeting());
+      });
+    }
     WidgetsBinding.instance.addObserver(this);
     _postsScrollController.addListener(_maybeLoadMorePosts);
     unawaited(_beginLivesLoad());
@@ -378,8 +391,44 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     _liveRecommendationScrollTimer?.cancel();
     _liveRecommendationScrollController.dispose();
     _postsScrollController.dispose();
+    _meetingNumberController.dispose();
     _apiClient.close();
     super.dispose();
+  }
+
+  Future<void> _searchMeeting() async {
+    final number = _meetingNumberController.text.trim();
+    final revision = ++_meetingSearchRevision;
+    if (number.isEmpty) {
+      setState(() {
+        _meetingSearchResults = null;
+        _meetingSearching = false;
+      });
+      return;
+    }
+    if (!RegExp(r'^\d+$').hasMatch(number)) {
+      setState(() => _meetingSearching = false);
+      showAcoAlertNotice(context, '会议号无效', '请输入数字会议号。');
+      return;
+    }
+    setState(() => _meetingSearching = true);
+    try {
+      await widget.walletLoginFuture;
+      final results = await AccountSession(
+        _apiClient,
+      ).listLives(meetingNumber: number);
+      if (mounted && revision == _meetingSearchRevision) {
+        setState(() => _meetingSearchResults = results);
+      }
+    } catch (_) {
+      if (mounted && revision == _meetingSearchRevision) {
+        showAcoAlertNotice(context, '搜索失败', '请检查网络后重试。');
+      }
+    } finally {
+      if (mounted && revision == _meetingSearchRevision) {
+        setState(() => _meetingSearching = false);
+      }
+    }
   }
 
   Future<void> _openLiveRoom(LiveSession session) async {
@@ -603,7 +652,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   }
 
   Widget _buildLiveSliver(AcoPalette palette) {
-    if (_livesLoading) {
+    if (_meetingSearching || (_meetingSearchResults == null && _livesLoading)) {
       return const SliverToBoxAdapter(
         child: Padding(
           padding: EdgeInsets.only(top: 24),
@@ -611,7 +660,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
         ),
       );
     }
-    if (_livesError != null) {
+    if (_meetingSearchResults == null && _livesError != null) {
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.only(top: 24),
@@ -624,12 +673,16 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
         ),
       );
     }
-    final sessions = _loadedLives ?? const <LiveSession>[];
+    final sessions =
+        _meetingSearchResults ?? _loadedLives ?? const <LiveSession>[];
     if (sessions.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
           padding: const EdgeInsets.only(top: 24),
-          child: _LiveListMessage(palette: palette, message: '暂无会议，去创建一场吧。'),
+          child: _LiveListMessage(
+            palette: palette,
+            message: _meetingSearchResults == null ? '暂无会议，去创建一场吧。' : '未找到该会议。',
+          ),
         ),
       );
     }
@@ -644,6 +697,18 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
             palette: palette,
             session: session,
             onTap: () => _openLiveRoom(session),
+            onShare: () async {
+              final time = session.scheduledAt?.toLocal();
+              final timeLine = time == null
+                  ? ''
+                  : '\n会议时间：${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+              await SharePlus.instance.share(
+                ShareParams(
+                  text:
+                      '邀请你参加 Aco Chat 会议\n会议主题：${session.title}$timeLine\n会议号：${session.id}\n点击链接入会：${AppConfig.websiteUrl}/meeting/${session.id}',
+                ),
+              );
+            },
             onEdit: session.canEdit && session.status == 'scheduled'
                 ? () => _editLive(session)
                 : null,
@@ -657,6 +722,30 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
   Widget build(BuildContext context) {
     final palette = widget.palette;
     final onOpen = widget.onOpen;
+
+    if (widget.initialMeetingNumber != null) {
+      return CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(25, 24, 25, 0),
+              child: Text(
+                '会议详情',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 25),
+            sliver: _buildLiveSliver(palette),
+          ),
+        ],
+      );
+    }
 
     return Stack(
       children: [
@@ -698,6 +787,33 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
                   ),
                 ),
               ),
+              if (_selectedTab == _SquareFeedTab.live)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(25, 16, 25, 0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: CupertinoSearchTextField(
+                            controller: _meetingNumberController,
+                            placeholder: appText(context, '搜索会议号'),
+                            keyboardType: TextInputType.number,
+                            onSubmitted: (_) => _searchMeeting(),
+                            onSuffixTap: () {
+                              _meetingNumberController.clear();
+                              _searchMeeting();
+                            },
+                          ),
+                        ),
+                        CupertinoButton(
+                          padding: const EdgeInsets.only(left: 12),
+                          onPressed: _searchMeeting,
+                          child: const Text('搜索'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               _buildTabContent(palette),
             ],
           ),

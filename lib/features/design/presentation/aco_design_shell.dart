@@ -241,6 +241,35 @@ const _navAssets = [
   'assets/icons/source_social.png',
 ];
 
+class AcoMeetingLinkPage extends StatelessWidget {
+  const AcoMeetingLinkPage({
+    super.key,
+    required this.meetingNumber,
+    this.walletLoginFuture,
+  });
+
+  final String meetingNumber;
+  final Future<AccountProfile?>? walletLoginFuture;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AcoPalette(
+      CupertinoTheme.of(context).brightness == Brightness.dark,
+    );
+    return CupertinoPageScaffold(
+      navigationBar: const CupertinoNavigationBar(middle: Text('会议')),
+      child: AcoSafeArea(
+        child: _SquareFeedPage(
+          palette: palette,
+          onOpen: (_) {},
+          initialMeetingNumber: meetingNumber,
+          walletLoginFuture: walletLoginFuture,
+        ),
+      ),
+    );
+  }
+}
+
 class AcoDesignShell extends StatefulWidget {
   const AcoDesignShell({
     this.language = '简体中文',

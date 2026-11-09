@@ -544,9 +544,16 @@ class AccountApiClient {
     return AccountProfile.fromJson(body['user'] as Map<String, dynamic>);
   }
 
-  Future<List<LiveSession>> listLives({required String token}) async {
+  Future<List<LiveSession>> listLives({
+    required String token,
+    String? meetingNumber,
+  }) async {
+    var uri = _uri('lives');
+    if (meetingNumber != null) {
+      uri = uri.replace(queryParameters: {'meeting_number': meetingNumber});
+    }
     final response = await _httpClient.get(
-      _uri('lives'),
+      uri,
       headers: _authorizedHeaders(token),
     );
     final body = _body(response);

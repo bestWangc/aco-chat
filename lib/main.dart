@@ -9,6 +9,7 @@ import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
 import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/features/live/domain/meeting_link.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_preferences.dart';
@@ -267,6 +268,41 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
   Future<AccountProfile?>? _walletLoginFuture;
   bool _backgroundGuideShown = false;
   late String _language = widget.initialLanguage;
+  String? _pendingMeetingNumber;
+
+  bool _receiveMeetingLink(String location) {
+    final number = meetingNumberFromLink(location);
+    if (number == null) return false;
+    _pendingMeetingNumber = number;
+    _openPendingMeeting();
+    return true;
+  }
+
+  void _openPendingMeeting() {
+    if (!_walletConfigured || _pendingMeetingNumber == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_walletConfigured || _pendingMeetingNumber == null) {
+        return;
+      }
+      final navigator = _navigatorKey.currentState;
+      if (navigator == null) return;
+      final number = _pendingMeetingNumber!;
+      _pendingMeetingNumber = null;
+      navigator.push(
+        CupertinoPageRoute<void>(
+          builder: (_) => AcoMeetingLinkPage(
+            meetingNumber: number,
+            walletLoginFuture: _walletLoginFuture,
+          ),
+        ),
+      );
+    });
+  }
+
+  @override
+  Future<bool> didPushRouteInformation(
+    RouteInformation routeInformation,
+  ) async => _receiveMeetingLink(routeInformation.uri.toString());
 
   void _setLanguage(String language) {
     setState(() => _language = language);
@@ -280,6 +316,9 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
     _accountProfile = null;
     final profileFuture = widget.accountProfileFuture;
     _walletLoginFuture = profileFuture;
+    _receiveMeetingLink(
+      WidgetsBinding.instance.platformDispatcher.defaultRouteName,
+    );
     if (profileFuture != null) {
       unawaited(_resolveAccountProfile(profileFuture));
     }
@@ -432,6 +471,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       _accountProfile = profile;
     });
     widget.onWalletConfigured?.call(true);
+    _openPendingMeeting();
   }
 
   Future<AccountProfile> _syncWalletAccount(
@@ -534,6 +574,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
         ),
         appBuilder: (_) => CupertinoApp(
           navigatorKey: _navigatorKey,
+          initialRoute: '/',
           navigatorObservers: [acoRouteObserver],
           title: 'Aco',
           debugShowCheckedModeBanner: false,

@@ -203,10 +203,13 @@ class AccountSession {
   /// The square/live feed is also reachable while the app is still restoring
   /// the wallet session. Treat that transient unauthenticated state as an
   /// empty feed instead of surfacing a programming-error StateError.
-  Future<List<LiveSession>> listLives() async {
+  Future<List<LiveSession>> listLives({String? meetingNumber}) async {
     final tokens = await _tokenStore.read();
     if (tokens == null) return const <LiveSession>[];
-    return _apiClient.listLives(token: tokens.accessToken);
+    return _apiClient.listLives(
+      token: tokens.accessToken,
+      meetingNumber: meetingNumber,
+    );
   }
 
   Future<SquarePostPage> listRecommendedPostsPage({String? cursor}) async {
