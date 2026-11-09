@@ -2,6 +2,8 @@ package com.flutter.ads_plugin.flutter_ads_plugin;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Process;
 import android.util.Log;
 
@@ -17,11 +19,13 @@ import com.flutter.ads_plugin.flutter_ads_plugin.view.BannerViewFlutterPlugin;
 import com.flutter.ads_plugin.flutter_ads_plugin.view.FeedViewFlutterPlugin;
 import com.hzhj.openads.HJAdsSdk;
 import com.hzhj.openads.listener.OnAdsSdkListener;
+import com.mobads.vivatb.WindMillAd;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.flutter.embedding.engine.plugins.FlutterPlugin;
 import io.flutter.embedding.engine.plugins.activity.ActivityAware;
@@ -69,8 +73,33 @@ public class FlutterAdsPlugin implements FlutterPlugin, MethodCallHandler, Activ
             hjAdsSdk.setAdult(false); // Do not assume every user is an adult.
             hjAdsSdk.setDebugEnable(false);
             hjAdsSdk.setPersonalizedAdvertisingOn(isPersonalizedAdvertisingOn == 1);
-            //hj初始化方法
-            hjAdsSdk.startWithAppId(mActivity.getApplication(), initId);
+            Handler mainHandler = new Handler(Looper.getMainLooper());
+            AtomicBoolean resultCompleted = new AtomicBoolean(false);
+            hjAdsSdk.setWindMillAdInitListener(new WindMillAd.WindMillAdInitListener() {
+                @Override
+                public void onInitSuccess() {
+                    Log.d(hjTag, "___" + Process.myPid() + "___HJAdsSdk_Init_onInitSuccess");
+                    if (resultCompleted.compareAndSet(false, true)) {
+                        mainHandler.post(() -> result.success(null));
+                    }
+                }
+
+                @Override
+                public void onInitFailed(int code, String message) {
+                    Log.e(hjTag, "___" + Process.myPid() + "___HJAdsSdk_Init_onInitFailed=" + code + ":" + message);
+                    if (resultCompleted.compareAndSet(false, true)) {
+                        mainHandler.post(() -> result.error("ads_init_failed", message, code));
+                    }
+                }
+            });
+            try {
+                hjAdsSdk.startWithAppId(mActivity.getApplication(), initId);
+            } catch (Exception error) {
+                if (resultCompleted.compareAndSet(false, true)) {
+                    mainHandler.post(() -> result.error("ads_init_failed", error.getMessage(), null));
+                }
+            }
+            return;
         } else if (call.method.equals("init2")) {
             String initId = ValueUtils.getString(map.get("initId"));
             int isPersonalizedAdvertisingOn = ValueUtils.getInt(map.get("isPersonalizedAdvertisingOn"), 1);

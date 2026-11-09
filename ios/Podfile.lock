@@ -10,6 +10,18 @@ PODS:
   - flutter_openim_sdk (0.0.1):
     - Flutter
     - OpenIMSDKCore (= 3.8.3-hotfix.14)
+  - GDTMobSDK (4.15.65)
+  - HJOpenAdSDK (4.7.0.2):
+    - ToBid-iOS/BaiduAdapter (= 4.7.0)
+    - ToBid-iOS/CSJMediationAdapter (= 4.7.0)
+    - ToBid-iOS/GDTAdapter (= 4.7.0)
+    - ToBid-iOS/KSAdapter (= 4.7.0)
+    - ToBid-iOS/MintegralAdapter (= 4.7.0)
+    - ToBid-iOS/TouTiaoAdapter (= 4.7.0)
+  - huijing_ads_plugin (2.0.1):
+    - Flutter
+    - HJOpenAdSDK (= 4.7.0.2)
+  - KSAdSDK (4.11.30.1)
   - libwebp (1.6.0):
     - libwebp/demux (= 1.6.0)
     - libwebp/mux (= 1.6.0)
@@ -22,8 +34,61 @@ PODS:
   - libwebp/sharpyuv (1.6.0)
   - libwebp/webp (1.6.0):
     - libwebp/sharpyuv
+  - MintegralAdSDK/BannerAd (7.7.6):
+    - MintegralAdSDK/NativeAd
+  - MintegralAdSDK/BidBannerAd (7.7.6):
+    - MintegralAdSDK/BannerAd
+    - MintegralAdSDK/BidNativeAd
+  - MintegralAdSDK/BidNativeAd (7.7.6):
+    - MintegralAdSDK/NativeAd
+  - MintegralAdSDK/BidNativeAdvancedAd (7.7.6):
+    - MintegralAdSDK/BidNativeAd
+    - MintegralAdSDK/NativeAdvancedAd
+  - MintegralAdSDK/BidNewInterstitialAd (7.7.6):
+    - MintegralAdSDK/BidNativeAd
+    - MintegralAdSDK/NewInterstitialAd
+  - MintegralAdSDK/BidRewardVideoAd (7.7.6):
+    - MintegralAdSDK/BidNativeAd
+    - MintegralAdSDK/RewardVideoAd
+  - MintegralAdSDK/BidSplashAd (7.7.6):
+    - MintegralAdSDK/BidNativeAd
+    - MintegralAdSDK/SplashAd
+  - MintegralAdSDK/InterstitialVideoAd (7.7.6):
+    - MintegralAdSDK/NativeAd
+  - MintegralAdSDK/NativeAd (7.7.6)
+  - MintegralAdSDK/NativeAdvancedAd (7.7.6):
+    - MintegralAdSDK/NativeAd
+  - MintegralAdSDK/NewInterstitialAd (7.7.6):
+    - MintegralAdSDK/InterstitialVideoAd
+    - MintegralAdSDK/NativeAd
+  - MintegralAdSDK/RewardVideoAd (7.7.6):
+    - MintegralAdSDK/NativeAd
+  - MintegralAdSDK/SplashAd (7.7.6):
+    - MintegralAdSDK/NativeAd
   - OpenIMSDKCore (3.8.3-hotfix.14)
   - OrderedSet (6.0.3)
+  - ToBid-iOS/BaiduAdapter (4.7.0):
+    - ToBid-iOS/ToBidSDK
+  - ToBid-iOS/CSJMediationAdapter (4.7.0):
+    - ToBid-iOS/TouTiaoAdapter
+  - ToBid-iOS/GDTAdapter (4.7.0):
+    - GDTMobSDK (= 4.15.65)
+    - ToBid-iOS/ToBidSDK
+  - ToBid-iOS/KSAdapter (4.7.0):
+    - KSAdSDK (= 4.11.30.1)
+    - ToBid-iOS/ToBidSDK
+  - ToBid-iOS/MintegralAdapter (4.7.0):
+    - MintegralAdSDK/BidBannerAd (= 7.7.6)
+    - MintegralAdSDK/BidNativeAd (= 7.7.6)
+    - MintegralAdSDK/BidNativeAdvancedAd (= 7.7.6)
+    - MintegralAdSDK/BidNewInterstitialAd (= 7.7.6)
+    - MintegralAdSDK/BidRewardVideoAd (= 7.7.6)
+    - MintegralAdSDK/BidSplashAd (= 7.7.6)
+    - MintegralAdSDK/NewInterstitialAd (= 7.7.6)
+    - ToBid-iOS/ToBidSDK
+  - ToBid-iOS/ToBidSDK (4.7.0)
+  - ToBid-iOS/TouTiaoAdapter (4.7.0):
+    - ToBid-iOS/ToBidSDK
   - video_thumbnail (0.0.1):
     - Flutter
     - libwebp
@@ -32,13 +97,19 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_inappwebview_ios (from `.symlinks/plugins/flutter_inappwebview_ios/ios`)
   - flutter_openim_sdk (from `.symlinks/plugins/flutter_openim_sdk/ios`)
+  - huijing_ads_plugin (from `.symlinks/plugins/huijing_ads_plugin/ios`)
   - video_thumbnail (from `.symlinks/plugins/video_thumbnail/ios`)
 
 SPEC REPOS:
   trunk:
+    - GDTMobSDK
+    - HJOpenAdSDK
+    - KSAdSDK
     - libwebp
+    - MintegralAdSDK
     - OpenIMSDKCore
     - OrderedSet
+    - ToBid-iOS
 
 EXTERNAL SOURCES:
   Flutter:
@@ -47,6 +118,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_inappwebview_ios/ios"
   flutter_openim_sdk:
     :path: ".symlinks/plugins/flutter_openim_sdk/ios"
+  huijing_ads_plugin:
+    :path: ".symlinks/plugins/huijing_ads_plugin/ios"
   video_thumbnail:
     :path: ".symlinks/plugins/video_thumbnail/ios"
 
@@ -54,9 +127,15 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_inappwebview_ios: b89ba3482b96fb25e00c967aae065701b66e9b99
   flutter_openim_sdk: 04f6f9846f56a8b371773c7ea9e2f1b5180dee49
+  GDTMobSDK: f3aefaaca7a7393300a7b4f667d361250ac764b4
+  HJOpenAdSDK: e51a687122bc6572b156259078d2d04b3bd08ffa
+  huijing_ads_plugin: e05e0b7eb38ec9c061b240085b7d07a46875fc2b
+  KSAdSDK: 5fbf3bbbda6603d39a59f90953cba45091a85898
   libwebp: af5937a13536ef73f3784d69cc342b98961acf33
+  MintegralAdSDK: 81febc34aafe94f744f0526bfbd421eda325722e
   OpenIMSDKCore: bfa4a42abb7896a8f24b7c5d307da7ee9bb4d22d
   OrderedSet: e539b66b644ff081c73a262d24ad552a69be3a94
+  ToBid-iOS: 503913da0eb0f08a44ac18a44bdef2c13d752003
   video_thumbnail: b637e0ad5f588ca9945f6e2c927f73a69a661140
 
 PODFILE CHECKSUM: d1113c5f0d239100493b6088af869ef6311828b7

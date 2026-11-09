@@ -29,9 +29,18 @@ class AdsModule {
   );
 
   final _configCache = <String, _CachedAdsConfig>{};
+  final _preparations = <String, Future<_DappAdsConfig?>>{};
   Future<bool>? _initialization;
   String? _initializedAppId;
   String? _activeAd;
+
+  Future<void> prepare(String dappId) async {
+    try {
+      await _prepare(dappId);
+    } on Object {
+      // The ad request retries preparation and reports the failure.
+    }
+  }
 
   Future<Map<String, Object?>> showInterstitial(
     String dappId, {
@@ -58,7 +67,9 @@ class AdsModule {
     try {
       _DappAdsConfig? config;
       try {
-        config = await _loadConfig(dappId);
+        config = await _prepare(dappId);
+      } on _AdsInitializationException {
+        return _failure('initialization_failed');
       } on Object {
         return _failure('config_unavailable');
       }
@@ -67,9 +78,6 @@ class AdsModule {
           ? config.placement.interstitialId
           : config.placement.rewardedId;
       if (placementId == null) return _failure('not_configured');
-      if (!await _ensureInitialized(config.appId)) {
-        return _failure('initialization_failed');
-      }
       viewTracker = _DappAdViewTracker(
         onQualified: () => unawaited(
           _reportAdView(
@@ -457,14 +465,13 @@ class AdsModule {
 
   Future<bool> _initialize(String appId) async {
     try {
-      if (Platform.isIOS) {
-        await HjAd.init(appId);
-      } else {
-        await _invoke('init', {
-          'initId': appId,
-          'isPersonalizedAdvertisingOn': 0,
-        });
-      }
+      final initialization = Platform.isIOS
+          ? HjAd.init(appId)
+          : _invoke('init', {
+              'initId': appId,
+              'isPersonalizedAdvertisingOn': 0,
+            });
+      await initialization.timeout(const Duration(seconds: 30));
       _initializedAppId = appId;
       _initialization = null;
       return true;
@@ -585,6 +592,38 @@ class AdsModule {
     return config;
   }
 
+  Future<_DappAdsConfig?> _prepare(String dappId) {
+    final platform = Platform.isIOS ? 'ios' : 'android';
+    final key = '$platform:$dappId';
+    final pending = _preparations[key];
+    if (pending != null) return pending;
+
+    late final Future<_DappAdsConfig?> preparation;
+    preparation = (() async {
+      final config = await _loadConfig(dappId);
+      if (config != null && !await _ensureInitialized(config.appId)) {
+        throw const _AdsInitializationException();
+      }
+      return config;
+    })();
+    _preparations[key] = preparation;
+    unawaited(
+      preparation.then<void>(
+        (_) {
+          if (identical(_preparations[key], preparation)) {
+            _preparations.remove(key);
+          }
+        },
+        onError: (Object _, StackTrace __) {
+          if (identical(_preparations[key], preparation)) {
+            _preparations.remove(key);
+          }
+        },
+      ),
+    );
+    return preparation;
+  }
+
   static String? _nonEmpty(String? value) =>
       value == null || value.isEmpty ? null : value;
 
@@ -617,6 +656,10 @@ class _CachedAdsConfig {
 
   final DateTime fetchedAt;
   final _DappAdsConfig? config;
+}
+
+class _AdsInitializationException implements Exception {
+  const _AdsInitializationException();
 }
 
 class _DappAdsConfig {

@@ -342,6 +342,7 @@ class _DappBrowserPageState extends State<_DappBrowserPage> {
         32,
         (_) => random.nextInt(16).toRadixString(16),
       ).join();
+      unawaited(AdsModule.instance.prepare(widget.dappId));
     }
     unawaited(_restoreConnectedPermissions());
   }
@@ -1659,6 +1660,11 @@ UserScript _dappAdsUserScript(String allowedOrigin, String bridgeNonce) =>
     method,
     nonce: bridgeNonce,
     walletAddress: options && options.walletAddress
+  }).then(result => {
+    if (result && result.ok === false) {
+      throw new Error(result.message || result.code || '广告请求失败');
+    }
+    return result;
   });
     Object.defineProperty(window, 'acoAds', {
       value: Object.freeze({
