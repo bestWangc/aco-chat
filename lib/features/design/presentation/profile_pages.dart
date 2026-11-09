@@ -242,6 +242,10 @@ Future<void> _showConnectionDiagnostics(
 ) async {
   final config = const AppConfig();
   final diagnostics = await AccountApiClient.runConnectionDiagnostics();
+  final preferences = await SharedPreferences.getInstance();
+  final liveCheckInLogs =
+      preferences.getStringList(_liveCheckInDiagnosticsStorageKey) ??
+      const <String>[];
   if (!context.mounted) return;
   final request = AccountApiClient.lastRequest ?? '暂无请求记录';
   final status = AccountApiClient.lastStatusCode?.toString() ?? '暂无';
@@ -258,7 +262,8 @@ Future<void> _showConnectionDiagnostics(
       '${serverTiming == null ? '' : '服务端：$serverTiming\n'}'
       '返回：$response'
       '${error == null ? '' : '\n错误：$error'}\n\n'
-      '链路探测：\n$diagnostics';
+      '链路探测：\n$diagnostics'
+      '${liveCheckInLogs.isEmpty ? '' : '\n\nLive check-in diagnostics:\n${liveCheckInLogs.join('\n')}'}';
   showCupertinoDialog<void>(
     context: context,
     builder: (dialogContext) => CupertinoAlertDialog(

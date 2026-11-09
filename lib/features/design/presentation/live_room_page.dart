@@ -17,6 +17,9 @@ class _LiveStreamPage extends StatelessWidget {
 
 enum LiveRoomExitReason { kicked }
 
+const _liveCheckInDiagnosticsStorageKey = 'live_check_in_diagnostics_v1';
+const _maxLiveCheckInDiagnosticEntries = 500;
+
 Future<Uint8List> _encodeImageAsPng(
   Uint8List bytes, {
   int? targetWidth,
@@ -156,7 +159,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Timer? _checkInTimer;
   Timer? _hostHeartbeatTimer;
   Timer? _roomSnapshotCalibrationTimer;
+  Timer? _checkInDiagnosticPersistTimer;
   bool _roomSnapshotCalibrationInFlight = false;
+  final List<String> _checkInDiagnosticEntries = <String>[];
+  late final Future<void> _checkInDiagnosticsReady;
+  String? _lastCheckInButtonState;
+  int _realtimeMessageCount = 0;
   Room? _liveKitRoom;
   EventsListener<RoomEvent>? _liveKitEventListener;
   bool _liveKitConnecting = false;
@@ -184,6 +192,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   @override
   void initState() {
     super.initState();
+    _checkInDiagnosticsReady = _loadSavedCheckInDiagnostics();
+    _recordCheckInDiagnostic('room_open');
     _chatBuffer = LiveChatBuffer(
       onChanged: () {
         if (mounted) setState(() {});
@@ -191,7 +201,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
     _realtimeClient = LiveRealtimeClient(
       onEvent: _handleRealtimeEvent,
+      onConnectionError: (reason) =>
+          _recordCheckInDiagnostic('websocket_error reason=$reason'),
       onConnected: () {
+        _recordCheckInDiagnostic('websocket_connected');
         if (mounted && !_leaving) {
           // One authoritative snapshot per successful WebSocket connection,
           // including reconnects. This callback is separate from the
@@ -205,6 +218,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         }
       },
       onReconnectingChanged: (reconnecting) {
+        if (reconnecting != _networkReconnecting) {
+          _recordCheckInDiagnostic('websocket_reconnecting=$reconnecting');
+        }
         if (mounted) {
           setState(() {
             _networkReconnecting = reconnecting;
@@ -217,6 +233,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         }
       },
       onReconnectStopped: () {
+        _recordCheckInDiagnostic('websocket_reconnect_stopped');
         if (mounted) _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入会议。');
       },
     );
@@ -263,6 +280,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         joinPassword: widget.joinPassword,
         resetRole: resetRole,
       );
+      _recordCheckInDiagnostic(
+        'room_snapshot_received source=api role=${room.viewerRole} '
+        '${_checkInDiagnosticSummary(room.checkIn)}',
+      );
       debugPrint(
         'Live room snapshot: source=api live=${live.id} '
         'role=${room.viewerRole} hostMuted=${room.host.muted} '
@@ -273,10 +294,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applyRoomSnapshot(room);
       }
     } on AccountApiException catch (error) {
+      _recordCheckInDiagnostic(
+        'room_snapshot_failed source=api status=${error.statusCode}',
+      );
       if (requestSequence == _roomLoadSequence && !silent && mounted) {
         _showNotice(context, '无法进入会议', error.localizedMessage);
       }
-    } catch (_) {
+    } catch (error) {
+      _recordCheckInDiagnostic(
+        'room_snapshot_failed source=api error=${error.runtimeType}',
+      );
       if (requestSequence == _roomLoadSequence && !silent && mounted) {
         _showNotice(context, '无法进入会议', '请检查网络后重试。');
       }
@@ -367,6 +394,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     if (live == null || !mounted || _leaving) return;
     if (refreshRoom) await _loadRoom(silent: true);
+    _recordCheckInDiagnostic('websocket_connect_requested');
     await _realtimeClient.connect(
       uri: _liveWebsocketUri(live.id),
       ticketLoader: () => _accountSession.liveWebsocketTicket(live.id),
@@ -386,12 +414,38 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   void _handleRealtimeEvent(dynamic rawEvent) {
+    final receivedAt = DateTime.now().toUtc();
+    final eventType = _realtimeEventType(rawEvent);
+    _realtimeMessageCount++;
+    _recordCheckInDiagnostic(
+      'websocket_message_received count=$_realtimeMessageCount type=$eventType',
+      at: receivedAt,
+    );
     final event = LiveRealtimeEventParser.parse(rawEvent);
-    if (event == null) return;
+    if (event == null) {
+      _recordCheckInDiagnostic(
+        'websocket_message_unparsed type=$eventType',
+        at: receivedAt,
+      );
+      return;
+    }
+    if (event is LiveCheckInEvent || event is LiveCheckInStartedEvent) {
+      _recordCheckInDiagnostic(
+        'check_in_event_parsed type=$eventType',
+        at: receivedAt,
+      );
+    }
     final eventKey = _stateEventKey(event);
     if (eventKey != null && event.eventVersion > 0) {
       final previousVersion = _latestRealtimeEventVersions[eventKey];
       if (previousVersion != null && event.eventVersion <= previousVersion) {
+        if (event is LiveCheckInEvent || event is LiveCheckInStartedEvent) {
+          _recordCheckInDiagnostic(
+            'check_in_event_ignored reason=stale_version '
+            'version=${event.eventVersion} previous=$previousVersion',
+            at: receivedAt,
+          );
+        }
         return;
       }
       _latestRealtimeEventVersions[eventKey] = event.eventVersion;
@@ -630,9 +684,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _applyCheckInEvent(DateTime deadline, int checkedInCount, int userId) {
     final room = _room;
-    if (room == null || !mounted) return;
+    if (room == null || !mounted) {
+      _recordCheckInDiagnostic('check_in_result_ignored reason=no_room');
+      return;
+    }
     final current = room.checkIn;
-    if (current == null || current.deadline != deadline) return;
+    if (current == null || current.deadline != deadline) {
+      _recordCheckInDiagnostic(
+        'check_in_result_ignored reason=deadline_mismatch '
+        'active_deadline=${current?.deadline.toUtc().toIso8601String() ?? 'none'} '
+        'event_deadline=${deadline.toUtc().toIso8601String()}',
+      );
+      return;
+    }
     _realtimeCheckInDeadline = deadline;
     _realtimeCheckInCount = checkedInCount > (_realtimeCheckInCount ?? 0)
         ? checkedInCount
@@ -653,10 +717,23 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   void _applyCheckInStarted(DateTime deadline) {
     final room = _room;
-    if (room == null || !mounted) return;
-    if (room.checkIn?.deadline == deadline) return;
+    if (room == null || !mounted) {
+      _recordCheckInDiagnostic('check_in_start_ignored reason=no_room');
+      return;
+    }
+    if (room.checkIn?.deadline == deadline) {
+      _recordCheckInDiagnostic(
+        'check_in_start_ignored reason=already_active '
+        'deadline=${deadline.toUtc().toIso8601String()}',
+      );
+      return;
+    }
     _realtimeCheckInDeadline = deadline;
     _realtimeCheckInCount = 0;
+    _recordCheckInDiagnostic(
+      'check_in_state_applied source=websocket '
+      'deadline=${deadline.toUtc().toIso8601String()}',
+    );
     setState(
       () => _room = _copyRoom(
         room,
@@ -784,6 +861,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       room,
       participantCount: displayedParticipantCount,
       checkIn: displayedCheckIn,
+    );
+    _recordCheckInDiagnostic(
+      'room_snapshot_applied role=${displayedRoom.viewerRole} '
+      '${_checkInDiagnosticSummary(displayedRoom.checkIn)}',
     );
     debugPrint(
       'Live room snapshot: source=state live=${room.live.id} '
@@ -1310,6 +1391,142 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
   }
 
+  void _recordCheckInButtonState(
+    LiveRoom? room, {
+    required bool isHost,
+    String? hiddenReason,
+  }) {
+    final checkIn = room?.checkIn;
+    final deadline = checkIn?.deadline.toUtc().toIso8601String() ?? 'none';
+    final active = checkIn != null && checkIn.deadline.isAfter(DateTime.now());
+    final reason =
+        hiddenReason ??
+        (room == null
+            ? 'room_not_loaded'
+            : isHost
+            ? 'host_view'
+            : checkIn == null
+            ? 'no_active_check_in'
+            : !active
+            ? 'expired'
+            : checkIn.viewerChecked
+            ? 'already_checked_in'
+            : _checkingIn
+            ? 'confirmation_in_progress'
+            : 'visible');
+    final state = '$deadline|${room?.viewerRole ?? 'unknown'}|$reason';
+    if (_lastCheckInButtonState == state) return;
+    _lastCheckInButtonState = state;
+    _recordCheckInDiagnostic(
+      'check_in_button_state=$reason role=${room?.viewerRole ?? 'unknown'} '
+      'deadline=$deadline',
+    );
+  }
+
+  void _recordCheckInButtonDisplayed(DateTime deadline) {
+    _recordCheckInDiagnostic(
+      'check_in_button_first_frame '
+      'deadline=${deadline.toUtc().toIso8601String()}',
+    );
+  }
+
+  void _recordCheckInDiagnostic(String message, {DateTime? at}) {
+    final timestamp = (at ?? DateTime.now()).toUtc().toIso8601String();
+    final entry = '$timestamp live_id=${widget.live?.id ?? 'unknown'} $message';
+    _checkInDiagnosticEntries.add(entry);
+    if (_checkInDiagnosticEntries.length > _maxLiveCheckInDiagnosticEntries) {
+      _checkInDiagnosticEntries.removeRange(
+        0,
+        _checkInDiagnosticEntries.length - _maxLiveCheckInDiagnosticEntries,
+      );
+    }
+    _scheduleCheckInDiagnosticPersist();
+    debugPrint('[LiveCheckIn] $entry');
+  }
+
+  Future<void> _loadSavedCheckInDiagnostics() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final savedEntries =
+          preferences.getStringList(_liveCheckInDiagnosticsStorageKey) ??
+          const <String>[];
+      _checkInDiagnosticEntries.insertAll(0, savedEntries);
+      if (_checkInDiagnosticEntries.length > _maxLiveCheckInDiagnosticEntries) {
+        _checkInDiagnosticEntries.removeRange(
+          0,
+          _checkInDiagnosticEntries.length - _maxLiveCheckInDiagnosticEntries,
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        '[LiveCheckIn] Load saved diagnostics failed: ${error.runtimeType}',
+      );
+    }
+  }
+
+  void _scheduleCheckInDiagnosticPersist() {
+    _checkInDiagnosticPersistTimer?.cancel();
+    _checkInDiagnosticPersistTimer = Timer(
+      const Duration(milliseconds: 500),
+      () {
+        _checkInDiagnosticPersistTimer = null;
+        unawaited(_persistCheckInDiagnostics());
+      },
+    );
+  }
+
+  Future<void> _persistCheckInDiagnostics() async {
+    await _checkInDiagnosticsReady;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setStringList(
+        _liveCheckInDiagnosticsStorageKey,
+        List<String>.of(_checkInDiagnosticEntries),
+      );
+    } catch (error) {
+      debugPrint('[LiveCheckIn] Save diagnostics failed: ${error.runtimeType}');
+    }
+  }
+
+  String _checkInDiagnosticSummary(LiveCheckIn? checkIn) => checkIn == null
+      ? 'check_in=none'
+      : 'check_in_deadline=${checkIn.deadline.toUtc().toIso8601String()} '
+            'viewer_checked=${checkIn.viewerChecked}';
+
+  String _realtimeEventType(Object? rawEvent) {
+    final payload = switch (rawEvent) {
+      String value => value,
+      List<int> value => utf8.decode(value, allowMalformed: true),
+      _ => null,
+    };
+    if (payload == null) return 'unknown';
+    try {
+      final decoded = jsonDecode(payload);
+      final type = decoded is Map<String, dynamic> ? decoded['type'] : null;
+      return type is String && RegExp(r'^[a-zA-Z0-9_.-]{1,64}$').hasMatch(type)
+          ? type
+          : 'unknown';
+    } catch (_) {
+      return 'invalid_json';
+    }
+  }
+
+  Future<void> _copyCheckInDiagnostics() async {
+    await _checkInDiagnosticsReady;
+    await _persistCheckInDiagnostics();
+    final diagnosticText = [
+      'live_check_in_diagnostics timestamps=UTC',
+      'app_version=${AppConfig.appVersion}',
+      'live_id=${widget.live?.id ?? 'unknown'}',
+      'websocket_messages_received=$_realtimeMessageCount',
+      ..._checkInDiagnosticEntries,
+    ].join('\n');
+    await Clipboard.setData(ClipboardData(text: diagnosticText));
+    if (mounted) {
+      _showNotice(context, '已复制', '签到诊断日志已复制，请发送给客服。');
+    }
+  }
+
   Future<void> _showRaisedHandRequests() async {
     final room = _room;
     final live = widget.live;
@@ -1513,6 +1730,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   @override
   void dispose() {
     unawaited(_setLiveRoomWakelock(false));
+    _checkInDiagnosticPersistTimer?.cancel();
+    unawaited(_persistCheckInDiagnostics());
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
     _hostHeartbeatTimer?.cancel();

@@ -15,12 +15,14 @@ class LiveRealtimeClient {
   LiveRealtimeClient({
     required this.onEvent,
     required this.onConnected,
+    required this.onConnectionError,
     required this.onReconnectingChanged,
     required this.onReconnectStopped,
   });
 
   final LiveRealtimeEventHandler onEvent;
   final void Function() onConnected;
+  final void Function(String reason) onConnectionError;
   final void Function(bool reconnecting) onReconnectingChanged;
   final void Function() onReconnectStopped;
 
@@ -70,11 +72,13 @@ class LiveRealtimeClient {
           connectionGeneration: connectionGeneration,
           uri: uri,
           ticketLoader: ticketLoader,
+          reason: 'stream_error',
         ),
         onDone: () => _handleConnectionClosed(
           connectionGeneration: connectionGeneration,
           uri: uri,
           ticketLoader: ticketLoader,
+          reason: 'stream_closed',
         ),
       );
       _reconnectTimer?.cancel();
@@ -84,6 +88,7 @@ class LiveRealtimeClient {
       onReconnectingChanged(false);
       onConnected();
     } on AccountApiException catch (error) {
+      onConnectionError('ticket_http_${error.statusCode}');
       if (error.statusCode == 404 || error.statusCode == 409) {
         _reconnectTimer?.cancel();
         _reconnectScheduled = false;
@@ -91,7 +96,8 @@ class LiveRealtimeClient {
         return;
       }
       _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
-    } catch (_) {
+    } catch (error) {
+      onConnectionError(error.runtimeType.toString());
       _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
     } finally {
       _connectInFlight = false;
@@ -136,8 +142,10 @@ class LiveRealtimeClient {
     required int connectionGeneration,
     required Uri uri,
     required LiveRealtimeTicketLoader ticketLoader,
+    required String reason,
   }) {
     if (connectionGeneration != _connectionGeneration) return;
+    onConnectionError(reason);
     _scheduleReconnect(uri: uri, ticketLoader: ticketLoader);
   }
 }

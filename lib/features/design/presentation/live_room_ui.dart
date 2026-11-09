@@ -10,7 +10,15 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     required LiveRoom? room,
     required bool isHost,
   }) {
-    if (_emojiPickerVisible) return null;
+    if (_emojiPickerVisible) {
+      _recordCheckInButtonState(
+        room,
+        isHost: isHost,
+        hiddenReason: 'emoji_picker_open',
+      );
+      return null;
+    }
+    _recordCheckInButtonState(room, isHost: isHost);
     if (room != null) {
       return _LiveRoomOverview(
         palette: palette,
@@ -25,6 +33,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         checkingIn: _checkingIn,
         speakingParticipantIds: _liveKitSpeakingParticipantIds,
         onCheckIn: _confirmCheckIn,
+        onCheckInButtonShown: _recordCheckInButtonDisplayed,
         onShowRaisedHandRequests: () => unawaited(_showRaisedHandRequests()),
         // Member mute/unmute is managed from the members list. Keep avatars
         // display-only so tapping one does not open an action sheet.
@@ -93,6 +102,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
           palette: palette,
           count: room?.participantCount,
           onMembers: _showMembers,
+          onCopyDiagnostics: () => unawaited(_copyCheckInDiagnostics()),
           onMore: isHost ? _showHostActions : null,
         ),
         child: Stack(

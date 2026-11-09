@@ -10,6 +10,7 @@ class _LiveRoomOverview extends StatelessWidget {
     required this.checkingIn,
     required this.speakingParticipantIds,
     required this.onCheckIn,
+    required this.onCheckInButtonShown,
     required this.onShowRaisedHandRequests,
     this.onSpeakerTap,
   });
@@ -22,6 +23,7 @@ class _LiveRoomOverview extends StatelessWidget {
   final bool checkingIn;
   final Set<String> speakingParticipantIds;
   final VoidCallback onCheckIn;
+  final ValueChanged<DateTime> onCheckInButtonShown;
   final VoidCallback onShowRaisedHandRequests;
   final ValueChanged<LiveParticipant>? onSpeakerTap;
 
@@ -73,6 +75,7 @@ class _LiveRoomOverview extends StatelessWidget {
                   checkIn: room.checkIn!,
                   isHost: false,
                   onPressed: onCheckIn,
+                  onShown: () => onCheckInButtonShown(room.checkIn!.deadline),
                 ),
               ),
             if (isHost && (room.raisedHandCount ?? 0) > 0)
@@ -108,12 +111,14 @@ class _LiveRoomCheckInButton extends StatefulWidget {
     required this.checkIn,
     required this.isHost,
     required this.onPressed,
+    this.onShown,
   });
 
   final AcoPalette palette;
   final LiveCheckIn checkIn;
   final bool isHost;
   final VoidCallback? onPressed;
+  final VoidCallback? onShown;
 
   @override
   State<_LiveRoomCheckInButton> createState() => _LiveRoomCheckInButtonState();
@@ -126,6 +131,7 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
   void initState() {
     super.initState();
     _startTimer();
+    _reportShown();
   }
 
   @override
@@ -133,6 +139,7 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.checkIn.deadline != widget.checkIn.deadline) {
       _startTimer();
+      _reportShown();
     }
   }
 
@@ -146,6 +153,15 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
+    });
+  }
+
+  void _reportShown() {
+    final deadline = widget.checkIn.deadline;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && deadline == widget.checkIn.deadline) {
+        widget.onShown?.call();
+      }
     });
   }
 
@@ -494,12 +510,14 @@ class _LiveRoomHeaderActions extends StatelessWidget {
     required this.palette,
     required this.count,
     required this.onMembers,
+    required this.onCopyDiagnostics,
     this.onMore,
   });
 
   final AcoPalette palette;
   final int? count;
   final VoidCallback onMembers;
+  final VoidCallback onCopyDiagnostics;
   final VoidCallback? onMore;
 
   // Provided livestream viewer-count glyph.
@@ -562,6 +580,13 @@ class _LiveRoomHeaderActions extends StatelessWidget {
             ],
           ),
         ),
+      ),
+      AcoIconButton(
+        icon: CupertinoIcons.doc_text,
+        palette: palette,
+        label: '复制日志',
+        onPressed: onCopyDiagnostics,
+        size: 18,
       ),
       if (onMore != null)
         CupertinoButton(
