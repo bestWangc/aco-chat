@@ -412,6 +412,7 @@ class AcoSafeArea extends StatelessWidget {
     this.bottom = true,
     this.left = true,
     this.right = true,
+    this.maintainBottomViewPadding = false,
     this.minimum = EdgeInsets.zero,
     super.key,
   });
@@ -421,6 +422,7 @@ class AcoSafeArea extends StatelessWidget {
   final bool bottom;
   final bool left;
   final bool right;
+  final bool maintainBottomViewPadding;
   final EdgeInsets minimum;
 
   @override
@@ -429,6 +431,7 @@ class AcoSafeArea extends StatelessWidget {
     bottom: bottom,
     left: left,
     right: right,
+    maintainBottomViewPadding: maintainBottomViewPadding,
     minimum: minimum,
     child: child,
   );
@@ -472,6 +475,7 @@ class AcoBottomNav extends StatelessWidget {
         top: false,
         left: false,
         right: false,
+        maintainBottomViewPadding: true,
         child: SizedBox(
           height: 58,
           child: Row(
