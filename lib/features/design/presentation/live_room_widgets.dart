@@ -1299,7 +1299,7 @@ class _LiveRoomMembersSheet extends StatefulWidget {
   const _LiveRoomMembersSheet({
     required this.palette,
     required this.initialTotal,
-    required this.isModerator,
+    required this.canManageMicrophones,
     required this.currentUserId,
     required this.loadPage,
     this.onMemberTap,
@@ -1311,7 +1311,7 @@ class _LiveRoomMembersSheet extends StatefulWidget {
 
   final AcoPalette palette;
   final int initialTotal;
-  final bool isModerator;
+  final bool canManageMicrophones;
   final int currentUserId;
   final Future<LiveMembersPage> Function(int page, String keyword) loadPage;
   final Future<void> Function(LiveParticipant member)? onMemberTap;
@@ -1520,9 +1520,9 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
             ),
             const SizedBox(height: 8),
             Expanded(child: _buildBody()),
-            if (widget.isModerator &&
-                widget.onToggleAudioMute != null &&
-                widget.onToggleChatMute != null)
+            if (widget.canManageMicrophones &&
+                (widget.onToggleAudioMute != null ||
+                    widget.onToggleChatMute != null))
               _buildMuteActions(),
           ],
         ),
@@ -1530,36 +1530,48 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
     ),
   );
 
-  Widget _buildMuteActions() => Container(
-    padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-    decoration: const BoxDecoration(
-      color: CupertinoColors.white,
-      border: Border(top: BorderSide(color: Color(0x14000000))),
-    ),
-    child: AcoSafeArea(
-      top: false,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _buildMuteButton(
-            label: _audioMuted ? '解除全体静音' : '全体静音',
-            currentMuted: _audioMuted,
-            targetMuted: !_audioMuted,
-            onToggle: widget.onToggleAudioMute!,
-            onChanged: (muted) => _audioMuted = muted,
-          ),
-          const SizedBox(width: 24),
-          _buildMuteButton(
-            label: _chatMuted ? '解除全员禁言' : '全员禁言',
-            currentMuted: _chatMuted,
-            targetMuted: !_chatMuted,
-            onToggle: widget.onToggleChatMute!,
-            onChanged: (muted) => _chatMuted = muted,
-          ),
-        ],
+  Widget _buildMuteActions() {
+    final actions = <Widget>[];
+    if (widget.onToggleAudioMute case final onToggleAudioMute?) {
+      actions.add(
+        _buildMuteButton(
+          label: _audioMuted ? '解除全体静音' : '全体静音',
+          currentMuted: _audioMuted,
+          targetMuted: !_audioMuted,
+          onToggle: onToggleAudioMute,
+          onChanged: (muted) => _audioMuted = muted,
+        ),
+      );
+    }
+    if (widget.onToggleAudioMute != null && widget.onToggleChatMute != null) {
+      actions.add(const SizedBox(width: 24));
+    }
+    if (widget.onToggleChatMute case final onToggleChatMute?) {
+      actions.add(
+        _buildMuteButton(
+          label: _chatMuted ? '解除全员禁言' : '全员禁言',
+          currentMuted: _chatMuted,
+          targetMuted: !_chatMuted,
+          onToggle: onToggleChatMute,
+          onChanged: (muted) => _chatMuted = muted,
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      decoration: const BoxDecoration(
+        color: CupertinoColors.white,
+        border: Border(top: BorderSide(color: Color(0x14000000))),
       ),
-    ),
-  );
+      child: AcoSafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: actions,
+        ),
+      ),
+    );
+  }
 
   Widget _buildMuteButton({
     required String label,
@@ -1661,7 +1673,7 @@ class _LiveRoomMembersSheetState extends State<_LiveRoomMembersSheet> {
         }
         final member = _members[index];
         final canManage =
-            widget.isModerator &&
+            widget.canManageMicrophones &&
             member.userId != widget.currentUserId &&
             member.role != 'host';
         final identityBadgeAsset = _identityBadgeAsset(member.identity);

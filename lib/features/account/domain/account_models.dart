@@ -1,13 +1,10 @@
 import 'dart:convert';
 
+import 'package:aco_chat/core/config/app_config.dart';
+
 const _shortAccountIdLength = 17;
 
-/// The sole public OpenIM entrypoint. Aco API issues the user token, while
-/// message traffic goes directly to this TLS-protected gateway. These values
-/// intentionally do not come from the token response, so an older API cannot
-/// direct a client to a test port or container hostname.
-const openIMApiAddress = 'https://im.aco.chat';
-const openIMWebSocketAddress = 'wss://im.aco.chat';
+/// OpenIM traffic uses the HTTPS and WSS gateways derived from the website config.
 
 String displayAccountId(String accountId) {
   final digitsOnly = accountId.replaceAll(RegExp(r'[^0-9]'), '');
@@ -224,8 +221,8 @@ class OpenIMToken {
   factory OpenIMToken.fromJson(Map<String, dynamic> json) => OpenIMToken(
     userId: json['user_id'] as String,
     token: json['token'] as String,
-    apiAddr: openIMApiAddress,
-    wsAddr: openIMWebSocketAddress,
+    apiAddr: AppConfig.openIMApiAddress,
+    wsAddr: AppConfig.openIMWebSocketAddress,
   );
 }
 

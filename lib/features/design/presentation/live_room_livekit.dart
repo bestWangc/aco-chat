@@ -543,7 +543,7 @@ extension _VoiceRoomLiveKit on _VoiceRoomPageState {
 
   bool _canPublishAudio(LiveRoom room) {
     // Mute controls the track; the role controls publish permission.
-    return _isLiveModeratorRole(room.viewerRole) ||
+    return _canManageLiveMicrophones(room.viewerRole) ||
         room.viewerRole == 'speaker';
   }
 

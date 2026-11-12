@@ -97,7 +97,9 @@ final class _ChatMediaCache {
 
   static String _httpsUrl(String url) {
     final uri = Uri.tryParse(url);
-    return uri != null && uri.scheme == 'http' && uri.host == 'im.aco.chat'
+    return uri != null &&
+            uri.scheme == 'http' &&
+            AppConfig.isOpenIMHost(uri.host)
         ? uri.replace(scheme: 'https').toString()
         : url;
   }

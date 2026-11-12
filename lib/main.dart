@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.initialize();
   final isDark = await ThemePreferences.load();
   await WalletPreferences.removeLegacyPlaceholderData();
   final identity = await WalletPreferences.walletIdentity();

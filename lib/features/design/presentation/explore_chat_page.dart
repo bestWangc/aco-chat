@@ -2842,7 +2842,7 @@ class _ChatMessage extends StatelessWidget {
     if (uri == null) return url;
     final apiUri = Uri.parse(const AppConfig().apiBaseUrl);
     final resolved = uri.hasScheme ? uri : apiUri.resolveUri(uri);
-    return resolved.scheme == 'http' && resolved.host == 'im.aco.chat'
+    return resolved.scheme == 'http' && AppConfig.isOpenIMHost(resolved.host)
         ? resolved.replace(scheme: 'https').toString()
         : resolved.toString();
   }
@@ -3083,7 +3083,9 @@ class _ChatVideoBubble extends StatelessWidget {
 
   String _playbackUrl(String url) {
     final uri = Uri.tryParse(url);
-    if (uri == null || uri.scheme != 'http' || uri.host != 'im.aco.chat') {
+    if (uri == null ||
+        uri.scheme != 'http' ||
+        !AppConfig.isOpenIMHost(uri.host)) {
       return url;
     }
     return uri.replace(scheme: 'https').toString();

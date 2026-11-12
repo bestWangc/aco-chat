@@ -166,10 +166,7 @@ class AccountApiClient {
   static Future<String> runConnectionDiagnostics() async {
     final relayBaseUrl = AppConfig.relayApiBaseUrl;
     final reports = <Future<String>>[
-      _runConnectionDiagnostic(
-        '主 API',
-        Uri.parse(AppConfig.cloudflareApiBaseUrl),
-      ),
+      _runConnectionDiagnostic('主 API', Uri.parse(AppConfig.primaryApiBaseUrl)),
       relayBaseUrl.isEmpty
           ? Future.value('[国内中转]\n未配置')
           : _runConnectionDiagnostic('国内中转', Uri.parse(relayBaseUrl)),

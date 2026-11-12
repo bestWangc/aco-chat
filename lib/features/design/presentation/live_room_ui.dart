@@ -54,7 +54,8 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     final live = widget.live;
     final room = _room;
     final serverViewerRole = room?.viewerRole;
-    final isHost = _isLiveModeratorRole(serverViewerRole);
+    final isHost = _isLiveHostRole(serverViewerRole);
+    final canManageMicrophones = _canManageLiveMicrophones(serverViewerRole);
     // The room snapshot is only an authorization update. A listener becomes
     // a connected speaker in the UI only after the fresh LiveKit token has
     // connected and its local track has been initialized successfully.
@@ -65,7 +66,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     final canSpeak =
         live == null ||
         (_liveKitRoom != null &&
-            (isHost ||
+            (canManageMicrophones ||
                 (serverViewerRole == 'speaker' && _liveKitPublishReady)));
     // The server keeps membership through a reconnect grace period, but do
     // not send mute requests while the realtime connection is recovering.
@@ -190,7 +191,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 muted: _muted,
                 canSpeak: canSpeak,
                 audioMuted: audioMuted,
-                showHandControl: !isHost,
+                showHandControl: !canManageMicrophones,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
                 onMic: canToggleMicrophone ? _toggleMicrophone : null,

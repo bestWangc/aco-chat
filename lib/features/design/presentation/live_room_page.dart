@@ -44,8 +44,10 @@ Future<Uint8List> _encodeImageAsPng(
   }
 }
 
-/// 联席主持人拥有与主持人相同的会议管理权限。
-bool _isLiveModeratorRole(String? role) => role == 'host' || role == 'cohost';
+bool _isLiveHostRole(String? role) => role == 'host';
+
+bool _canManageLiveMicrophones(String? role) =>
+    role == 'host' || role == 'cohost';
 
 int _parseLiveMessageIdentity(Object? payloadIdentity, String? metadata) {
   if (payloadIdentity is num) return payloadIdentity.toInt();
@@ -315,7 +317,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   void _ensureHostHeartbeat(LiveRoom room) {
-    if (!_isLiveModeratorRole(room.viewerRole)) {
+    if (!_isLiveHostRole(room.viewerRole)) {
       _hostHeartbeatTimer?.cancel();
       _hostHeartbeatTimer = null;
       return;
@@ -359,7 +361,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (state != AppLifecycleState.resumed) return;
 
     final room = _room;
-    if (!_isLiveModeratorRole(room?.viewerRole)) return;
+    if (!_isLiveHostRole(room?.viewerRole)) return;
     _ensureHostHeartbeat(room!);
     unawaited(_sendHostHeartbeat());
     _scheduleRoomSnapshotCalibration();
@@ -941,7 +943,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _muted = localMuteOverride ?? displayedRoom.viewerMuted || keepLocalMute;
       if (displayedRoom.viewerRole != 'listener') _handRaised = false;
       if (displayedRoom.chatMuted &&
-          !_isLiveModeratorRole(displayedRoom.viewerRole)) {
+          !_isLiveHostRole(displayedRoom.viewerRole)) {
         _emojiPickerVisible = false;
       }
     });
@@ -1091,22 +1093,22 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       builder: (_) => _LiveRoomMembersSheet(
         palette: widget.palette,
         initialTotal: room.participantCount,
-        isModerator: _isLiveModeratorRole(room.viewerRole),
+        canManageMicrophones: _canManageLiveMicrophones(room.viewerRole),
         currentUserId: room.viewerUserId,
         loadPage: (page, keyword) =>
             _accountSession.liveMembers(live.id, page: page, keyword: keyword),
-        onMemberTap: _isLiveModeratorRole(room.viewerRole)
+        onMemberTap: _canManageLiveMicrophones(room.viewerRole)
             ? _showMemberActions
             : null,
         audioMuted: room.audioMuted,
-        onToggleAudioMute: _isLiveModeratorRole(room.viewerRole)
+        onToggleAudioMute: _canManageLiveMicrophones(room.viewerRole)
             ? (muted) async {
                 await _setAudioMute(muted);
                 await _loadRoom(silent: true);
               }
             : null,
         chatMuted: room.chatMuted,
-        onToggleChatMute: _isLiveModeratorRole(room.viewerRole)
+        onToggleChatMute: _isLiveHostRole(room.viewerRole)
             ? (muted) async {
                 await _setChatMute(muted);
                 await _loadRoom(silent: true);
@@ -1119,7 +1121,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _showMemberActions(LiveParticipant member) async {
     final live = widget.live;
     if (live == null || member.role == 'host') return;
-    final isHost = _room?.viewerRole == 'host';
+    final viewerRole = _room?.viewerRole;
+    final isHost = _isLiveHostRole(viewerRole);
+    if (!_canManageLiveMicrophones(viewerRole)) return;
+    if (!isHost && member.role != 'speaker' && member.role != 'cohost') return;
     final action = await showCupertinoModalPopup<_LiveMemberAction>(
       context: context,
       builder: (sheetContext) => CupertinoActionSheet(
@@ -1128,7 +1133,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           style: const TextStyle(fontSize: AcoTypography.bodySmall),
         ),
         actions: [
-          if (member.role == 'listener')
+          if (isHost && member.role == 'listener')
             CupertinoActionSheetAction(
               onPressed: () {
                 Navigator.of(sheetContext).pop();
@@ -1139,15 +1144,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 style: TextStyle(fontSize: AcoTypography.bodySmall),
               ),
             ),
-          if (member.role == 'speaker') ...[
+          if (member.role == 'speaker' || member.role == 'cohost')
             CupertinoActionSheetAction(
               onPressed: () =>
                   Navigator.of(sheetContext).pop(_LiveMemberAction.toggleMute),
               child: Text(
-                member.muted ? '解除静音' : '静音',
+                member.muted ? '开麦' : '关麦',
                 style: const TextStyle(fontSize: AcoTypography.bodySmall),
               ),
             ),
+          if (isHost && member.role == 'speaker') ...[
             CupertinoActionSheetAction(
               isDestructiveAction: true,
               onPressed: () => Navigator.of(
@@ -1188,15 +1194,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 style: TextStyle(fontSize: AcoTypography.bodySmall),
               ),
             ),
-          CupertinoActionSheetAction(
-            isDestructiveAction: true,
-            onPressed: () =>
-                Navigator.of(sheetContext).pop(_LiveMemberAction.kick),
-            child: const Text(
-              '移出会议',
-              style: TextStyle(fontSize: AcoTypography.bodySmall),
+          if (isHost)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(_LiveMemberAction.kick),
+              child: const Text(
+                '移出会议',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
             ),
-          ),
         ],
         cancelButton: CupertinoActionSheetAction(
           onPressed: () => Navigator.of(sheetContext).pop(),
@@ -1530,7 +1537,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _showRaisedHandRequests() async {
     final room = _room;
     final live = widget.live;
-    if (!_isLiveModeratorRole(room?.viewerRole) || live == null) return;
+    if (!_isLiveHostRole(room?.viewerRole) || live == null) return;
     try {
       final users = await _accountSession.raisedLiveHands(live.id);
       if (!mounted) return;
@@ -1599,6 +1606,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ),
         child: CupertinoActionSheet(
           actions: [
+            if (!_transferringHost)
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_showHostTransferCandidates());
+                },
+                child: _hostActionLabel('转让主持人'),
+              ),
             if (room?.checkIn == null)
               CupertinoActionSheetAction(
                 onPressed: () {
@@ -1628,9 +1643,49 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Widget _hostActionLabel(String label) =>
       Text(label, style: const TextStyle(fontSize: AcoTypography.body));
 
+  Future<void> _showHostTransferCandidates() async {
+    final live = widget.live;
+    if (live == null || _transferringHost) return;
+
+    try {
+      final candidates = await _accountSession.liveHostTransferCandidates(
+        live.id,
+      );
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        _showNotice(context, '无法转让', '当前没有可接任的发言人。');
+        return;
+      }
+
+      final candidate = await showCupertinoModalPopup<LiveParticipant>(
+        context: context,
+        builder: (sheetContext) => CupertinoActionSheet(
+          title: const Text('选择新主持人'),
+          actions: candidates
+              .map(
+                (candidate) => CupertinoActionSheetAction(
+                  onPressed: () => Navigator.of(sheetContext).pop(candidate),
+                  child: Text(candidate.nickname),
+                ),
+              )
+              .toList(growable: false),
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('取消'),
+          ),
+        ),
+      );
+      if (candidate != null && mounted) await _transferHost(candidate);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '无法加载候选人', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '无法加载候选人', '请检查网络后重试。');
+    }
+  }
+
   Future<void> _handleBack() async {
     if (_room?.live.status == 'live' &&
-        _isLiveModeratorRole(_room?.viewerRole) &&
+        _isLiveHostRole(_room?.viewerRole) &&
         !_hostTransferred) {
       await _confirmEndLive();
       return;
@@ -1663,6 +1718,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _transferHost(LiveParticipant speaker) async {
     final live = widget.live;
     if (live == null || _transferringHost) return;
+    final shouldTransfer = await showAcoConfirmDialog(
+      context: context,
+      title: '转让主持人',
+      message: '确定将主持人转让给 ${speaker.nickname} 吗？转让后你会变为听众。',
+      confirmLabel: '确认转让',
+      isDefaultAction: false,
+      contentPadding: const EdgeInsets.only(top: 8),
+    );
+    if (!shouldTransfer || !mounted) return;
     setState(() => _transferringHost = true);
     try {
       await _accountSession.transferLiveHost(live.id, speaker.userId);
@@ -1809,7 +1873,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     final text = _messageController.text.trim();
     final isViewerChatMuted =
-        _room?.chatMuted == true && !_isLiveModeratorRole(_room?.viewerRole);
+        _room?.chatMuted == true && !_isLiveHostRole(_room?.viewerRole);
     if (live == null ||
         text.isEmpty ||
         _sending ||
@@ -1865,7 +1929,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _pickAndSendImage() async {
     final live = widget.live;
     final isViewerChatMuted =
-        _room?.chatMuted == true && !_isLiveModeratorRole(_room?.viewerRole);
+        _room?.chatMuted == true && !_isLiveHostRole(_room?.viewerRole);
     if (live == null ||
         _sendingImage ||
         _networkReconnecting ||
