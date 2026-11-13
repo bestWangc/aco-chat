@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppConfig {
+  static const _apiBaseUrlOverride = String.fromEnvironment('ACO_API_BASE_URL');
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
     defaultValue: '1.0.58',
@@ -61,10 +62,15 @@ class AppConfig {
   /// The bundled endpoint remains available if both storage and network fail.
   static Future<void> initialize({http.Client? client}) async {
     final preferences = await SharedPreferences.getInstance();
+    final overrideBaseUrl = _validatedApiBaseUrl(
+      _apiBaseUrlOverride,
+      allowHttp: _apiBaseUrlOverride.isNotEmpty,
+    );
     final cachedBaseUrl = _validatedApiBaseUrl(
       preferences.getString(_apiConfigPreferenceKey),
     );
-    _primaryApiBaseUrl = cachedBaseUrl ?? cloudflareApiBaseUrl;
+    _primaryApiBaseUrl =
+        overrideBaseUrl ?? cachedBaseUrl ?? cloudflareApiBaseUrl;
     _selectedApiBaseUrl = _primaryApiBaseUrl;
     _selectedImDomain =
         _validatedDomain(preferences.getString(_imDomainPreferenceKey)) ??
@@ -83,7 +89,7 @@ class AppConfig {
       final decoded = jsonDecode(response.body);
       if (decoded is! Map<String, dynamic>) return;
       final baseUrl = _apiBaseUrlFromDomain(decoded['apiDomain'] as String?);
-      if (baseUrl != null) {
+      if (baseUrl != null && overrideBaseUrl == null) {
         _primaryApiBaseUrl = baseUrl;
         _selectedApiBaseUrl = baseUrl;
         await preferences.setString(_apiConfigPreferenceKey, baseUrl);
@@ -100,11 +106,11 @@ class AppConfig {
     }
   }
 
-  static String? _validatedApiBaseUrl(String? value) {
+  static String? _validatedApiBaseUrl(String? value, {bool allowHttp = false}) {
     if (value == null || value.trim().isEmpty) return null;
     final uri = Uri.tryParse(value.trim());
     if (uri == null ||
-        uri.scheme != 'https' ||
+        (uri.scheme != 'https' && !(allowHttp && uri.scheme == 'http')) ||
         uri.host.isEmpty ||
         uri.userInfo.isNotEmpty ||
         uri.query.isNotEmpty ||
@@ -145,6 +151,9 @@ class AppConfig {
 
   static String get primaryApiBaseUrl =>
       _primaryApiBaseUrl ?? cloudflareApiBaseUrl;
+
+  static bool get hasExplicitApiBaseUrlOverride =>
+      _validatedApiBaseUrl(_apiBaseUrlOverride, allowHttp: true) != null;
 
   static bool get isUsingRelayApiRoute =>
       _selectedApiBaseUrl == relayApiBaseUrl;

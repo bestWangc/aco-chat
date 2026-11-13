@@ -160,9 +160,16 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Timer? _handRaiseNoticeTimer;
   Timer? _checkInTimer;
   Timer? _hostHeartbeatTimer;
+  Timer? _aliyunStreamPollTimer;
+  Timer? _aliyunStreamHeartbeatTimer;
   Timer? _roomSnapshotCalibrationTimer;
   Timer? _checkInDiagnosticPersistTimer;
   bool _roomSnapshotCalibrationInFlight = false;
+  bool _screenBroadcastStarting = false;
+  bool _screenBroadcasting = false;
+  bool _aliyunPlaybackLoading = false;
+  VideoPlayerController? _aliyunLiveVideo;
+  final AliyunScreenBroadcast _aliyunScreenBroadcast = AliyunScreenBroadcast();
   final List<String> _checkInDiagnosticEntries = <String>[];
   late final Future<void> _checkInDiagnosticsReady;
   String? _lastCheckInButtonState;
@@ -265,6 +272,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       await _loadRoom(resetRole: true);
     }
     await _connectLiveKit();
+    _aliyunStreamPollTimer?.cancel();
+    _aliyunStreamPollTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => unawaited(_refreshAliyunPlayback()),
+    );
+    unawaited(_refreshAliyunPlayback());
     // The auxiliary state stream is started in the background; chat itself is
     // handled by LiveKit data.
     unawaited(_connectRealtime(refreshRoom: false));
@@ -1047,6 +1060,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final live = widget.live;
     if (live == null) return;
     try {
+      await _stopScreenBroadcast();
       // The host action sheet is popped immediately before this method is
       // started. Wait until the room route is current before popping it, so a
       // fast API response cannot pop the still-closing sheet instead.
@@ -1058,6 +1072,167 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _closeRoom(true);
     } on AccountApiException catch (error) {
       if (mounted) _showNotice(context, '结束失败', error.message);
+    }
+  }
+
+  Future<void> _startScreenBroadcast() async {
+    final live = widget.live;
+    if (live == null || _screenBroadcastStarting || _screenBroadcasting) return;
+    debugPrint('Aliyun screen share: start requested live=${live.id}');
+    setState(() => _screenBroadcastStarting = true);
+    try {
+      final urls = await _accountSession.aliyunLiveStreamUrls(live.id);
+      final pushUrl = urls['push_url'] as String?;
+      debugPrint(
+        'Aliyun screen share: push URL received=${pushUrl?.isNotEmpty == true}',
+      );
+      if (pushUrl == null || pushUrl.isEmpty) {
+        throw StateError('API 未返回推流地址');
+      }
+      await _aliyunScreenBroadcast.start(
+        pushUrl,
+        requestIOSBroadcast: () =>
+            AliyunScreenBroadcast.requestIOSBroadcast(context),
+      );
+      try {
+        await _accountSession.setAliyunLiveScreenShareActive(
+          live.id,
+          active: true,
+        );
+      } on Object {
+        await _aliyunScreenBroadcast.stop();
+        rethrow;
+      }
+      _aliyunStreamHeartbeatTimer?.cancel();
+      _aliyunStreamHeartbeatTimer = Timer.periodic(
+        const Duration(minutes: 2),
+        (_) => unawaited(_renewAliyunScreenShare(live.id)),
+      );
+      if (mounted) setState(() => _screenBroadcasting = true);
+      unawaited(_refreshAliyunPlayback());
+    } on AccountApiException catch (error) {
+      debugPrint('Aliyun screen share API failed: $error');
+      if (mounted) _showNotice(context, '无法开始屏幕共享', error.localizedMessage);
+    } catch (error) {
+      debugPrint('Aliyun screen share failed: $error');
+      if (mounted) {
+        _showNotice(
+          context,
+          '无法开始屏幕共享',
+          error is StateError
+              ? error.message
+              : error is UnsupportedError
+              ? error.message.toString()
+              : '请检查系统屏幕录制权限后重试。',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _screenBroadcastStarting = false);
+    }
+  }
+
+  Future<void> _stopScreenBroadcast() async {
+    if (!_screenBroadcasting && !_screenBroadcastStarting) return;
+    _aliyunStreamHeartbeatTimer?.cancel();
+    _aliyunStreamHeartbeatTimer = null;
+    final liveId = widget.live?.id;
+    try {
+      await _aliyunScreenBroadcast.stop();
+    } finally {
+      if (liveId != null) {
+        try {
+          await _accountSession.setAliyunLiveScreenShareActive(
+            liveId,
+            active: false,
+          );
+        } on Object catch (error) {
+          debugPrint('Aliyun screen share stop sync failed: $error');
+        }
+      }
+      if (mounted) {
+        setState(() => _screenBroadcasting = false);
+      }
+    }
+  }
+
+  Future<void> _renewAliyunScreenShare(int liveId) async {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.iOS &&
+          !await AliyunScreenBroadcast.isIOSBroadcasting()) {
+        await _stopScreenBroadcast();
+        return;
+      }
+      await _accountSession.setAliyunLiveScreenShareActive(
+        liveId,
+        active: true,
+      );
+    } on Object catch (error) {
+      debugPrint('Aliyun screen share heartbeat failed: $error');
+    }
+  }
+
+  Future<void> _refreshAliyunPlayback() async {
+    final live = widget.live;
+    if (live == null || _leaving || _aliyunPlaybackLoading) return;
+    _aliyunPlaybackLoading = true;
+    try {
+      final urls = await _accountSession.aliyunLiveStreamUrls(live.id);
+      if (urls['is_pushing'] != true) {
+        final old = _aliyunLiveVideo;
+        _aliyunLiveVideo = null;
+        await old?.dispose();
+        if (mounted && old != null) setState(() {});
+        return;
+      }
+      final url = urls['play_url'] as String?;
+      final currentUrl = _aliyunLiveVideo?.dataSource;
+      final sameStream =
+          currentUrl != null &&
+          url != null &&
+          Uri.parse(currentUrl).replace(query: '').toString() ==
+              Uri.parse(url).replace(query: '').toString();
+      final currentAuthKey = currentUrl == null
+          ? null
+          : Uri.tryParse(currentUrl)?.queryParameters['auth_key'];
+      final currentExpiry = currentAuthKey == null
+          ? null
+          : int.tryParse(currentAuthKey.split('-').first);
+      final signatureNeedsRefresh =
+          currentExpiry == null ||
+          currentExpiry <
+              DateTime.now().millisecondsSinceEpoch ~/ 1000 + 10 * 60;
+      if (!mounted ||
+          url == null ||
+          url.isEmpty ||
+          (sameStream && !signatureNeedsRefresh)) {
+        return;
+      }
+      final old = _aliyunLiveVideo;
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      try {
+        await controller.initialize();
+        await controller.setLooping(true);
+        await controller.play();
+        if (!mounted) {
+          await controller.dispose();
+          return;
+        }
+        _aliyunLiveVideo = controller;
+        await old?.dispose();
+        setState(() {});
+      } on Object {
+        await controller.dispose();
+        rethrow;
+      }
+    } on AccountApiException catch (error) {
+      if (error.statusCode == 404 || error.statusCode == 503) {
+        _aliyunStreamPollTimer?.cancel();
+        _aliyunStreamPollTimer = null;
+      }
+    } on Object {
+      // The host may not have started screen sharing yet. The timer retries.
+    } finally {
+      _aliyunPlaybackLoading = false;
     }
   }
 
@@ -1606,6 +1781,21 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ),
         child: CupertinoActionSheet(
           actions: [
+            if (defaultTargetPlatform == TargetPlatform.android ||
+                defaultTargetPlatform == TargetPlatform.iOS)
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  if (_screenBroadcasting) {
+                    unawaited(_stopScreenBroadcast());
+                  } else {
+                    unawaited(_startScreenBroadcast());
+                  }
+                },
+                child: _hostActionLabel(
+                  _screenBroadcasting ? '停止屏幕共享' : '共享屏幕给观众',
+                ),
+              ),
             if (!_transferringHost)
               CupertinoActionSheetAction(
                 onPressed: () {
@@ -1692,6 +1882,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     }
     if (_leaving) return;
     _leaving = true;
+    await _stopScreenBroadcast();
     await _disconnectLiveKitForLeave();
     final live = widget.live;
     if (live != null) {
@@ -1730,6 +1921,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     setState(() => _transferringHost = true);
     try {
       await _accountSession.transferLiveHost(live.id, speaker.userId);
+      await _stopScreenBroadcast();
       // The room snapshot may briefly retain the old role. Record the
       // successful transfer immediately so leaving cannot end the live.
       _hostTransferred = true;
@@ -1799,6 +1991,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _handRaiseNoticeTimer?.cancel();
     _checkInTimer?.cancel();
     _hostHeartbeatTimer?.cancel();
+    _aliyunStreamPollTimer?.cancel();
+    _aliyunStreamHeartbeatTimer?.cancel();
+    unawaited(_aliyunScreenBroadcast.stop());
+    unawaited(_aliyunLiveVideo?.dispose());
     _roomSnapshotCalibrationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _chatBuffer.dispose();

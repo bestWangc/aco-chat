@@ -86,6 +86,8 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
       room: room,
       isHost: isHost,
     );
+    final aliyunVideo = _aliyunLiveVideo;
+    final hasAliyunVideo = aliyunVideo?.value.isInitialized == true;
 
     return PopScope(
       canPop: _allowPop,
@@ -129,12 +131,27 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                     builder: (context, constraints) {
                       const overviewChatGap = 6.0;
                       const minChatHeight = 160.0;
+                      const screenShareHeight = 202.0;
                       final overviewMaxHeight = math.max(
                         0.0,
-                        constraints.maxHeight - overviewChatGap - minChatHeight,
+                        constraints.maxHeight -
+                            overviewChatGap -
+                            minChatHeight -
+                            (hasAliyunVideo ? screenShareHeight : 0),
                       );
                       return Column(
                         children: [
+                          if (hasAliyunVideo)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: AspectRatio(
+                                aspectRatio: 16 / 9,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: VideoPlayer(aliyunVideo!),
+                                ),
+                              ),
+                            ),
                           if (roomOverview != null)
                             ConstrainedBox(
                               constraints: BoxConstraints(

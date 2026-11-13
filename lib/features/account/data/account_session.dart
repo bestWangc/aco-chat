@@ -400,6 +400,21 @@ class AccountSession {
     token: await _requireToken(),
   );
 
+  Future<Map<String, dynamic>> aliyunLiveStreamUrls(int liveId) async =>
+      _apiClient.getAliyunLiveStreamUrls(
+        liveId: liveId,
+        token: await _requireToken(),
+      );
+
+  Future<void> setAliyunLiveScreenShareActive(
+    int liveId, {
+    required bool active,
+  }) async => _apiClient.setAliyunLiveScreenShareActive(
+    liveId: liveId,
+    token: await _requireToken(),
+    active: active,
+  );
+
   Future<VoiceCallInfo> startVoiceCall(String peerAccountId) async =>
       _apiClient.startVoiceCall(
         peerAccountId: peerAccountId,

@@ -961,6 +961,26 @@ class AccountApiClient {
     return LiveKitJoinInfo.fromJson(_body(response));
   }
 
+  Future<Map<String, dynamic>> getAliyunLiveStreamUrls({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/aliyun-stream'),
+      headers: _authorizedHeaders(token),
+    );
+    return Map<String, dynamic>.from(_body(response) as Map);
+  }
+
+  Future<void> setAliyunLiveScreenShareActive({
+    required int liveId,
+    required String token,
+    required bool active,
+  }) => _postWithoutBody(
+    'lives/$liveId/aliyun-stream/${active ? 'start' : 'stop'}',
+    token,
+  );
+
   Future<VoiceCallInfo> startVoiceCall({
     required String peerAccountId,
     required String token,

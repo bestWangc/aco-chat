@@ -5,6 +5,7 @@ import UIKit
 import AVFoundation
 import MediaPlayer
 import Photos
+import ReplayKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
@@ -101,6 +102,26 @@ import Photos
         default:
           result(FlutterMethodNotImplemented)
         }
+      }
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoAliyunBroadcastPicker") {
+      registrar.register(AliyunBroadcastPickerFactory(), withId: "aco/aliyun-broadcast-picker")
+      FlutterMethodChannel(
+        name: "aco/aliyun-screen-capture",
+        binaryMessenger: registrar.messenger()
+      ).setMethodCallHandler { call, result in
+        let defaults = UserDefaults(suiteName: "group.com.meimeidacios.app")
+        if call.method == "stop" {
+          defaults?.set(true, forKey: "aco.aliyun.broadcast.stop_requested")
+          defaults?.synchronize()
+          result(nil)
+          return
+        }
+        guard call.method == "isBroadcasting" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(defaults?.bool(forKey: "aco.aliyun.broadcast.active") ?? false)
       }
     }
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AcoLiveAudioRoute") {
@@ -214,4 +235,27 @@ import Photos
       }
     }
   }
+}
+
+private final class AliyunBroadcastPickerFactory: NSObject, FlutterPlatformViewFactory {
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    FlutterStandardMessageCodec.sharedInstance()
+  }
+
+  func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+    AliyunBroadcastPicker(frame: frame)
+  }
+}
+
+private final class AliyunBroadcastPicker: NSObject, FlutterPlatformView {
+  private let picker: RPSystemBroadcastPickerView
+
+  init(frame: CGRect) {
+    picker = RPSystemBroadcastPickerView(frame: frame)
+    picker.preferredExtension = "com.meimeidacios.app.AcoScreenBroadcast"
+    picker.showsMicrophoneButton = false
+    super.init()
+  }
+
+  func view() -> UIView { picker }
 }

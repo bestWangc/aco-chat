@@ -1,0 +1,51 @@
+group 'com.alivc.livepush'
+version '1.0'
+
+buildscript {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter' }
+        maven { url "https://maven.aliyun.com/repository/releases" }
+        maven { url 'https://maven.aliyun.com/nexus/content/groups/public' }
+        maven { url "https://maven.aliyun.com/nexus/content/repositories/releases" }
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:7.1.2'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/jcenter' }
+        maven { url "https://maven.aliyun.com/repository/releases" }
+        maven { url 'https://maven.aliyun.com/nexus/content/groups/public' }
+
+        maven { url "https://maven.aliyun.com/nexus/content/repositories/releases" }
+    }
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.alivc.livepush'
+
+    compileSdkVersion 30
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        minSdkVersion 16
+    }
+    buildToolsVersion '30.0.0'
+}
+
+dependencies {
+    compileOnly 'androidx.annotation:annotation:1.2.0'
+    // 互动直播：直播推流（含超低延时直播、RTC连麦）＋播放器
+    implementation 'com.aliyun.aio:AliVCSDK_InteractiveLive:7.11.0'
+}

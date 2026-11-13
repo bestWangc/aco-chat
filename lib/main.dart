@@ -90,7 +90,8 @@ class WalletAccountAuthentication {
     try {
       return await _signInSilently(walletAddress);
     } on Object catch (error) {
-      if (AppConfig.relayApiBaseUrl.isNotEmpty &&
+      if (!AppConfig.hasExplicitApiBaseUrlOverride &&
+          AppConfig.relayApiBaseUrl.isNotEmpty &&
           !AppConfig.isUsingRelayApiRoute &&
           WalletAccountAuthentication._isNetworkError(error)) {
         AppConfig.useRelayApiRoute();
@@ -485,7 +486,8 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       // The primary hostname may be unavailable in a user's network even
       // though the relay is reachable. Keep the first-wallet flow consistent
       // with silent login by retrying network failures through the relay.
-      if (AppConfig.relayApiBaseUrl.isNotEmpty &&
+      if (!AppConfig.hasExplicitApiBaseUrlOverride &&
+          AppConfig.relayApiBaseUrl.isNotEmpty &&
           !AppConfig.isUsingRelayApiRoute &&
           WalletAccountAuthentication._isNetworkError(error)) {
         AppConfig.useRelayApiRoute();
