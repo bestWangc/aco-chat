@@ -951,6 +951,10 @@ class _LiveRoomParticipantCard extends StatelessWidget {
     final isSpeaking =
         !participant.muted &&
         speakingParticipantIds.contains(participant.userId.toString());
+    final hasMicrophone =
+        participant.role == 'host' ||
+        participant.role == 'cohost' ||
+        participant.role == 'speaker';
     final canMuteSpeaker =
         participant.role == 'speaker' && onSpeakerTap != null;
     final avatar = AcoAvatar(
@@ -975,7 +979,7 @@ class _LiveRoomParticipantCard extends StatelessWidget {
                   : avatar,
               if (isSpeaking)
                 const Positioned(right: -2, bottom: -2, child: _SpeakingBadge())
-              else if (participant.role != 'speaker' || participant.muted)
+              else if (!hasMicrophone || participant.muted)
                 Positioned(
                   right: -2,
                   bottom: -2,
