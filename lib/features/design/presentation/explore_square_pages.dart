@@ -304,6 +304,45 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     }
   }
 
+  Future<void> _deletePost(SquarePost post) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('删除动态'),
+        content: const Text('删除后无法恢复，确定删除这条动态吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.walletLoginFuture;
+      await AccountSession(_apiClient).deletePost(post.id);
+      if (!mounted) return;
+      setState(
+        () => _loadedPosts = _loadedPosts
+            ?.where((item) => item.id != post.id)
+            .toList(growable: false),
+      );
+    } catch (error) {
+      if (mounted)
+        _showNotice(
+          context,
+          '删除失败',
+          error is AccountApiException ? error.localizedMessage : '请检查网络后重试。',
+        );
+    }
+  }
+
   Future<void> _openPostDetail(SquarePost post) async {
     final updatedPost = await Navigator.of(context).push<SquarePost>(
       _AcoPageRoute<SquarePost>(
@@ -770,6 +809,8 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
                         imageUrl: widget.avatarUrl,
                         isLive: _selectedTab == _SquareFeedTab.live,
                         onCreateMeeting: _handleFloatingAction,
+                        meetingSearchController: _meetingNumberController,
+                        onMeetingSearchSubmitted: _searchMeeting,
                       ),
                       const SizedBox(height: 18),
                       _SquareTabs(
@@ -787,33 +828,6 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
                   ),
                 ),
               ),
-              if (_selectedTab == _SquareFeedTab.live)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(25, 16, 25, 0),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: CupertinoSearchTextField(
-                            controller: _meetingNumberController,
-                            placeholder: appText(context, '搜索会议号'),
-                            keyboardType: TextInputType.number,
-                            onSubmitted: (_) => _searchMeeting(),
-                            onSuffixTap: () {
-                              _meetingNumberController.clear();
-                              _searchMeeting();
-                            },
-                          ),
-                        ),
-                        CupertinoButton(
-                          padding: const EdgeInsets.only(left: 12),
-                          onPressed: _searchMeeting,
-                          child: const Text('搜索'),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               _buildTabContent(palette),
             ],
           ),
@@ -976,6 +990,7 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
               onOpen: () => _openPostDetail(post),
               onReply: () => _openPostDetail(post),
               onFollow: () => _togglePostFollow(post),
+              onDelete: () => _deletePost(post),
             ),
           ),
         if (_postsLoadingMore)
@@ -1740,12 +1755,16 @@ class _SquareComposer extends StatelessWidget {
     this.imageUrl,
     this.isLive = false,
     this.onCreateMeeting,
+    this.meetingSearchController,
+    this.onMeetingSearchSubmitted,
   });
 
   final AcoPalette palette;
   final String? imageUrl;
   final bool isLive;
   final VoidCallback? onCreateMeeting;
+  final TextEditingController? meetingSearchController;
+  final VoidCallback? onMeetingSearchSubmitted;
 
   @override
   Widget build(BuildContext context) {
@@ -1822,11 +1841,16 @@ class _SquareComposer extends StatelessWidget {
                       offset: const Offset(10, 0),
                       child: AcoSearch(
                         palette: palette,
-                        hint: '搜索帖文或消息',
+                        hint: isLive ? '搜索会议号' : '搜索帖文或消息',
                         height: 35,
                         variant: AcoSearchVariant.squareComposer,
                         submitIcon: CupertinoIcons.add,
-                        showSubmit: !isLive,
+                        textController: isLive ? meetingSearchController : null,
+                        keyboardType: isLive ? TextInputType.number : null,
+                        textInputAction: isLive ? TextInputAction.search : null,
+                        onTextSubmitted: isLive
+                            ? (_) => onMeetingSearchSubmitted?.call()
+                            : null,
                       ),
                     ),
                   ),

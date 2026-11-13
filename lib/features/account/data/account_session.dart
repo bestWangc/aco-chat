@@ -232,6 +232,9 @@ class AccountSession {
     token: await _requireToken(),
   );
 
+  Future<void> deletePost(int postID) async =>
+      _apiClient.deletePost(postID: postID, token: await _requireToken());
+
   Future<PostLikeResult> likePost(int postID) async =>
       _apiClient.likePost(postID: postID, token: await _requireToken());
 

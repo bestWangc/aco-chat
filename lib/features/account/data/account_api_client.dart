@@ -717,6 +717,10 @@ class AccountApiClient {
     return SquarePost.fromJson(_body(await _readResponse(response)));
   }
 
+  Future<void> deletePost({required int postID, required String token}) async {
+    await _postWithoutBody('posts/$postID/delete', token);
+  }
+
   Future<PostLikeResult> likePost({
     required int postID,
     required String token,

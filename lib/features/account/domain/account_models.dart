@@ -242,6 +242,7 @@ class SquarePost {
     required this.liked,
     required this.following,
     required this.createdAt,
+    this.isMine = false,
   });
 
   final int id;
@@ -258,6 +259,7 @@ class SquarePost {
   final bool liked;
   final bool following;
   final DateTime createdAt;
+  final bool isMine;
 
   SquarePost copyWith({
     int? replyCount,
@@ -279,6 +281,7 @@ class SquarePost {
     liked: liked ?? this.liked,
     following: following ?? this.following,
     createdAt: createdAt,
+    isMine: isMine,
   );
 
   factory SquarePost.fromJson(Map<String, dynamic> json) {
@@ -301,6 +304,7 @@ class SquarePost {
       liked: json['liked'] as bool? ?? false,
       following: json['following'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
+      isMine: json['is_mine'] as bool? ?? false,
     );
   }
 }

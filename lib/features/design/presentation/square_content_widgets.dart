@@ -578,6 +578,7 @@ class _PostCard extends StatelessWidget {
     required this.onOpen,
     required this.onReply,
     required this.onFollow,
+    required this.onDelete,
     this.likePending = false,
     this.followPending = false,
   });
@@ -588,6 +589,7 @@ class _PostCard extends StatelessWidget {
   final VoidCallback onOpen;
   final VoidCallback onReply;
   final VoidCallback onFollow;
+  final VoidCallback onDelete;
   final bool likePending;
   final bool followPending;
 
@@ -595,7 +597,7 @@ class _PostCard extends StatelessWidget {
     final buttonBox = context.findRenderObject() as RenderBox;
     final overlayBox =
         Overlay.of(context).context.findRenderObject() as RenderBox;
-    const popupWidth = 112.0;
+    const popupWidth = 140.0;
     final buttonTopLeft = buttonBox.localToGlobal(
       Offset.zero,
       ancestor: overlayBox,
@@ -605,10 +607,11 @@ class _PostCard extends StatelessWidget {
       maxLeft,
       math.max(8.0, buttonTopLeft.dx + buttonBox.size.width - popupWidth),
     );
-    final maxTop = math.max(8.0, overlayBox.size.height - 58);
+    final menuHeight = post.isMine ? 104.0 : 58.0;
+    final maxTop = math.max(8.0, overlayBox.size.height - menuHeight);
     final top = math.min(maxTop, buttonTopLeft.dy + buttonBox.size.height + 4);
 
-    final shouldFollow = await showGeneralDialog<bool>(
+    final action = await showGeneralDialog<String>(
       context: context,
       barrierDismissible: true,
       barrierLabel: '关闭动态操作菜单',
@@ -632,23 +635,48 @@ class _PostCard extends StatelessWidget {
               ),
               child: SizedBox(
                 width: popupWidth,
-                child: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
-                  ),
-                  minimumSize: Size.zero,
-                  onPressed: () => Navigator.of(dialogContext).pop(true),
-                  child: Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      post.following ? '取消关注' : '关注',
-                      style: TextStyle(
-                        color: palette.primaryText,
-                        fontSize: AcoTypography.body,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CupertinoButton(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      minimumSize: Size.zero,
+                      onPressed: () =>
+                          Navigator.of(dialogContext).pop('follow'),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          post.following ? '取消关注' : '关注',
+                          style: TextStyle(
+                            color: palette.primaryText,
+                            fontSize: AcoTypography.body,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    if (post.isMine)
+                      CupertinoButton(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        minimumSize: Size.zero,
+                        onPressed: () =>
+                            Navigator.of(dialogContext).pop('delete'),
+                        child: const Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            '删除动态',
+                            style: TextStyle(
+                              color: CupertinoColors.destructiveRed,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),
@@ -658,7 +686,8 @@ class _PostCard extends StatelessWidget {
       transitionBuilder: (context, animation, secondaryAnimation, child) =>
           FadeTransition(opacity: animation, child: child),
     );
-    if (shouldFollow == true && !followPending) onFollow();
+    if (action == 'follow' && !followPending) onFollow();
+    if (action == 'delete') onDelete();
   }
 
   @override
@@ -716,8 +745,8 @@ class _PostCard extends StatelessWidget {
                     ),
                     Builder(
                       builder: (menuContext) => CupertinoButton(
-                        padding: const EdgeInsets.only(right: 12),
-                        minimumSize: Size.zero,
+                        padding: EdgeInsets.zero,
+                        minimumSize: const Size(44, 44),
                         onPressed: () => unawaited(_showMoreMenu(menuContext)),
                         child: Image.asset(
                           'assets/icons/post_more_indicator.png',

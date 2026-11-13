@@ -1076,6 +1076,10 @@ class AcoSearch extends StatelessWidget {
     this.submitIcon = CupertinoIcons.arrow_right,
     this.variant = AcoSearchVariant.standard,
     this.showSubmit = false,
+    this.textController,
+    this.onTextSubmitted,
+    this.keyboardType,
+    this.textInputAction,
     super.key,
   });
   final AcoPalette palette;
@@ -1087,6 +1091,10 @@ class AcoSearch extends StatelessWidget {
   final IconData submitIcon;
   final AcoSearchVariant variant;
   final bool showSubmit;
+  final TextEditingController? textController;
+  final ValueChanged<String>? onTextSubmitted;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1131,15 +1139,40 @@ class AcoSearch extends StatelessWidget {
           Expanded(
             child: Transform.translate(
               offset: Offset(0, isSquareComposer ? 1 : 0),
-              child: Text(
-                hint,
-                style: TextStyle(
-                  color: hintColor,
-                  fontSize: isSquareComposer
-                      ? AcoTypography.caption
-                      : hintFontSize,
-                ),
-              ),
+              child: textController == null
+                  ? Text(
+                      hint,
+                      style: TextStyle(
+                        color: hintColor,
+                        fontSize: isSquareComposer
+                            ? AcoTypography.caption
+                            : hintFontSize,
+                      ),
+                    )
+                  : CupertinoTextField(
+                      controller: textController,
+                      keyboardType: keyboardType,
+                      textInputAction: textInputAction,
+                      onSubmitted: onTextSubmitted,
+                      placeholder: hint,
+                      cursorColor: palette.accent,
+                      textAlignVertical: TextAlignVertical.center,
+                      style: TextStyle(
+                        color: hintColor,
+                        fontSize: isSquareComposer
+                            ? AcoTypography.caption
+                            : hintFontSize,
+                      ),
+                      placeholderStyle: TextStyle(
+                        color: hintColor,
+                        fontSize: isSquareComposer
+                            ? AcoTypography.caption
+                            : hintFontSize,
+                      ),
+                      decoration: null,
+                      padding: EdgeInsets.zero,
+                      maxLines: 1,
+                    ),
             ),
           ),
           ?action,
