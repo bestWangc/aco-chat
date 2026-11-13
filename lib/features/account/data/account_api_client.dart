@@ -164,14 +164,10 @@ class AccountApiClient {
   static String? lastServerTiming;
 
   static Future<String> runConnectionDiagnostics() async {
-    final relayBaseUrl = AppConfig.relayApiBaseUrl;
-    final reports = <Future<String>>[
-      _runConnectionDiagnostic('主 API', Uri.parse(AppConfig.primaryApiBaseUrl)),
-      relayBaseUrl.isEmpty
-          ? Future.value('[国内中转]\n未配置')
-          : _runConnectionDiagnostic('国内中转', Uri.parse(relayBaseUrl)),
-    ];
-    return (await Future.wait(reports)).join('\n\n');
+    return _runConnectionDiagnostic(
+      '当前 API',
+      Uri.parse(const AppConfig().apiBaseUrl),
+    );
   }
 
   static Future<String> _runConnectionDiagnostic(
