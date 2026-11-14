@@ -29,18 +29,24 @@ class WalletValuationService {
       final address = balance.tokenAddress ?? _wrappedNative(balance.chain);
       return address != null && _chainId(balance.chain) != null;
     }).toList();
-    final prices = <String, Future<double?>>{};
+    final addressesByChain = <String, Set<String>>{};
     for (final balance in candidates) {
       final address = balance.tokenAddress ?? _wrappedNative(balance.chain)!;
-      final key = '${balance.chain.toLowerCase()}:$address';
-      prices.putIfAbsent(key, () => _priceUsd(balance.chain, address));
+      final chainId = _chainId(balance.chain)!;
+      addressesByChain.putIfAbsent(chainId, () => <String>{}).add(address);
+    }
+
+    final pricesByChain = <String, Future<Map<String, double>>>{};
+    for (final entry in addressesByChain.entries) {
+      pricesByChain[entry.key] = _pricesUsd(entry.key, entry.value.toList());
     }
 
     final values = <String, double>{};
     for (final balance in candidates) {
       final address = balance.tokenAddress ?? _wrappedNative(balance.chain)!;
-      final key = '${balance.chain.toLowerCase()}:$address';
-      final price = await prices[key]!;
+      final chainId = _chainId(balance.chain)!;
+      final prices = await pricesByChain[chainId]!;
+      final price = prices[_priceAddressKey(chainId, address)];
       if (price != null) {
         values[balance.id] =
             _toDecimal(balance.balance!, balance.decimals) * price;
@@ -49,33 +55,44 @@ class WalletValuationService {
     return values;
   }
 
-  Future<double?> _priceUsd(String chain, String token) async {
+  Future<Map<String, double>> _pricesUsd(
+    String chainId,
+    List<String> addresses,
+  ) async {
     try {
-      final chainId = _chainId(chain);
-      if (chainId == null) return null;
+      final joinedAddresses = addresses.map(Uri.encodeComponent).join(',');
       final response = await _client
-          .get(_apiUri('dex/tokens/$chainId/${Uri.encodeComponent(token)}'))
+          .get(_apiUri('dex/tokens/$chainId/$joinedAddresses'))
           .timeout(const Duration(seconds: 5));
-      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return const <String, double>{};
+      }
       final decoded = jsonDecode(response.body);
       final pairs = decoded is List
           ? decoded
           : decoded is Map<String, dynamic>
           ? decoded['pairs']
           : null;
-      if (pairs is! List) return null;
+      if (pairs is! List) return const <String, double>{};
+      final prices = <String, double>{};
       for (final item in pairs) {
         if (item is! Map<String, dynamic> || item['chainId'] != chainId) {
           continue;
         }
+        final address = item['id'];
         final price = double.tryParse('${item['priceUsd']}');
-        if (price != null && price.isFinite) return price;
+        if (address is String && price != null && price.isFinite) {
+          prices[_priceAddressKey(chainId, address)] = price;
+        }
       }
+      return prices;
     } catch (_) {
-      return null;
+      return const <String, double>{};
     }
-    return null;
   }
+
+  String _priceAddressKey(String chain, String address) =>
+      chain == 'solana' || chain == 'tron' ? address : address.toLowerCase();
 
   Uri _apiUri(String path) {
     final basePath = _baseUri.path.replaceFirst(RegExp(r'/+$'), '');

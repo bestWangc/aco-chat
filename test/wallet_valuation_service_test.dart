@@ -39,8 +39,7 @@ void main() {
     expect(values[balances[0].id], closeTo(1.8, 0.000001));
     expect(values[balances[1].id], closeTo(2, 0.000001));
     expect(client.requestedUris.map((uri) => uri.path), [
-      '/api/v1/dex/tokens/bsc/0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',
-      '/api/v1/dex/tokens/bsc/0x55d398326f99059fF775485246999027B3197955',
+      '/api/v1/dex/tokens/bsc/0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c,0x55d398326f99059fF775485246999027B3197955',
     ]);
     service.dispose();
   });
@@ -52,24 +51,23 @@ class _PriceClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     requestedUris.add(request.url);
-    final token = request.url.pathSegments.last.toLowerCase();
-    final price = token.startsWith('0xbb4c')
-        ? '600'
-        : token.startsWith('0x55d3')
-        ? '1'
-        : null;
+    final tokens = request.url.pathSegments.last.split(',');
+    final prices = tokens
+        .map((token) {
+          final normalized = token.toLowerCase();
+          final price = normalized.startsWith('0xbb4c')
+              ? '600'
+              : normalized.startsWith('0x55d3')
+              ? '1'
+              : null;
+          return price == null
+              ? null
+              : {'chainId': 'bsc', 'id': token, 'priceUsd': price};
+        })
+        .whereType<Map<String, String>>()
+        .toList();
     return http.StreamedResponse(
-      Stream.value(
-        utf8.encode(
-          jsonEncode(
-            price == null
-                ? <Map<String, String>>[]
-                : [
-                    {'chainId': 'bsc', 'priceUsd': price},
-                  ],
-          ),
-        ),
-      ),
+      Stream.value(utf8.encode(jsonEncode(prices))),
       200,
       request: request,
     );
