@@ -620,6 +620,39 @@ Future<void> _copyLiveRoomMessage(BuildContext context, String text) async {
   Timer(const Duration(milliseconds: 1400), entry.remove);
 }
 
+Future<void> _showLiveRoomMessageActions(
+  BuildContext context,
+  LongPressStartDetails details,
+  String text,
+) async {
+  final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+  final localPosition = overlay.globalToLocal(details.globalPosition);
+  final position = RelativeRect.fromRect(
+    ui.Rect.fromLTWH(localPosition.dx, localPosition.dy, 1, 1),
+    ui.Offset.zero & overlay.size,
+  );
+  final action = await showMenu<String>(
+    context: context,
+    position: position,
+    items: [
+      PopupMenuItem<String>(
+        value: 'copy',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.copy, size: 20),
+            const SizedBox(width: 12),
+            Text(appText(context, '复制')),
+          ],
+        ),
+      ),
+    ],
+  );
+  if (action == 'copy' && context.mounted) {
+    await _copyLiveRoomMessage(context, text);
+  }
+}
+
 class _RoomMessage extends StatelessWidget {
   const _RoomMessage({
     required this.palette,
@@ -690,8 +723,9 @@ class _RoomMessage extends StatelessWidget {
     return Align(
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: GestureDetector(
-        onLongPress: canCopyText
-            ? () => _copyLiveRoomMessage(context, text)
+        onLongPressStart: canCopyText
+            ? (details) =>
+                  unawaited(_showLiveRoomMessageActions(context, details, text))
             : null,
         child: Container(
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
