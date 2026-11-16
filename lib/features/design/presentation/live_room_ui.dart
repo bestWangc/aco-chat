@@ -49,6 +49,174 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     return null;
   }
 
+  Widget _buildAliyunShareStage({
+    required BuildContext context,
+    required AcoPalette palette,
+    required LiveRoom? room,
+    required bool isHost,
+  }) => LayoutBuilder(
+    builder: (context, constraints) {
+      final panelWidth = (constraints.maxWidth * .15)
+          .clamp(58.0, 68.0)
+          .toDouble();
+      final panelHeight = math.min(420.0, constraints.maxHeight * .62);
+      final participants = room == null
+          ? const <LiveParticipant>[]
+          : <LiveParticipant>[room.host, ...room.speakers, ...room.listeners];
+      final seenUserIds = <int>{};
+      final uniqueParticipants = participants
+          .where((participant) => seenUserIds.add(participant.userId))
+          .toList(growable: false);
+      final checkIn = room?.checkIn;
+      final showCheckIn =
+          checkIn != null &&
+          _checkInIsActive(checkIn) &&
+          (isHost || (!_checkingIn && !checkIn.viewerChecked));
+
+      return Stack(
+        clipBehavior: Clip.hardEdge,
+        children: [
+          const Positioned.fill(child: ColoredBox(color: _black)),
+          Positioned.fill(
+            child: AliPlayerView(
+              onCreated: _onAliyunPlayerViewCreated,
+              x: 0,
+              y: 0,
+              width: constraints.maxWidth,
+              height: constraints.maxHeight,
+              aliPlayerViewType: AliPlayerViewTypeForAndroid.textureview,
+            ),
+          ),
+          if (showCheckIn)
+            Positioned(
+              top: 10,
+              left: 12,
+              child: _LiveRoomCheckInButton(
+                palette: palette,
+                checkIn: checkIn,
+                isHost: isHost,
+                onPressed: isHost ? null : _confirmCheckIn,
+                onShown: () => _recordCheckInButtonDisplayed(checkIn.deadline),
+              ),
+            ),
+          if (room != null && isHost && (room.raisedHandCount ?? 0) > 0)
+            Positioned(
+              top: 14,
+              left: showCheckIn ? 94 : 12,
+              child: _RaisedHandIndicator(
+                count: room.raisedHandCount!,
+                onPressed: () => unawaited(_showRaisedHandRequests()),
+              ),
+            ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 8,
+            height: math.min(360.0, constraints.maxHeight * .52),
+            child: _RoomChatHistory(
+              palette: palette,
+              liveMessages: _chatBuffer.messages,
+              hasLive: widget.live != null,
+              scrollToLatestSignal: _scrollToLatestSignal,
+              showEmptyState: false,
+              isScreenShareOverlay: true,
+            ),
+          ),
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            top: 12,
+            right: 8,
+            width: panelWidth,
+            height: _shareMembersExpanded ? panelHeight : 146,
+            child: Container(
+              decoration: BoxDecoration(
+                color: _black.withValues(
+                  alpha: _shareMembersExpanded ? .34 : .22,
+                ),
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: _white.withValues(alpha: .10)),
+              ),
+              child: Column(
+                children: [
+                  if (_shareMembersExpanded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: Text(
+                        '成员 ${room?.participantCount ?? 0}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: palette.primaryText.withValues(alpha: .9),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: _shareMembersExpanded
+                          ? uniqueParticipants.length
+                          : math.min(2, uniqueParticipants.length),
+                      itemBuilder: (context, index) {
+                        final participant = uniqueParticipants[index];
+                        final isHostParticipant =
+                            participant.userId == room?.host.userId;
+                        var muted = participant.muted;
+                        if (participant.role == 'listener') {
+                          muted = true;
+                        } else if (isHostParticipant && isHost) {
+                          muted = _muted || participant.muted;
+                        } else if (participant.userId == room?.viewerUserId) {
+                          muted = _muted;
+                        }
+                        final speaking =
+                            !muted &&
+                            _liveKitSpeakingParticipantIds.contains(
+                              participant.userId.toString(),
+                            );
+                        final role = switch (participant.role) {
+                          'host' => '主持人',
+                          'cohost' => '联席主持',
+                          'speaker' => '发言人',
+                          _ => '听众',
+                        };
+                        return _AliyunShareMemberTile(
+                          participant: participant,
+                          role: role,
+                          isHost: isHostParticipant,
+                          muted: muted,
+                          speaking: speaking,
+                          palette: palette,
+                          compact: !_shareMembersExpanded,
+                        );
+                      },
+                    ),
+                  ),
+                  CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(44, 38),
+                    onPressed: () => setState(
+                      () => _shareMembersExpanded = !_shareMembersExpanded,
+                    ),
+                    child: Icon(
+                      _shareMembersExpanded
+                          ? CupertinoIcons.chevron_up
+                          : CupertinoIcons.chevron_down,
+                      color: palette.primaryText.withValues(alpha: .9),
+                      size: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
   Widget _buildRoom(BuildContext context) {
     final palette = widget.palette;
     final live = widget.live;
@@ -104,7 +272,11 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         right: _LiveRoomHeaderActions(
           palette: palette,
           count: room?.participantCount,
-          onMembers: _showMembers,
+          onMembers: hasAliyunVideo
+              ? () => setState(
+                  () => _shareMembersExpanded = !_shareMembersExpanded,
+                )
+              : _showMembers,
           onCopyDiagnostics: () => unawaited(_copyCheckInDiagnostics()),
           onMore: isHost ? _showHostActions : null,
         ),
@@ -129,6 +301,14 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                   },
                   child: LayoutBuilder(
                     builder: (context, constraints) {
+                      if (hasAliyunVideo) {
+                        return _buildAliyunShareStage(
+                          context: context,
+                          palette: palette,
+                          room: room,
+                          isHost: isHost,
+                        );
+                      }
                       const overviewChatGap = 6.0;
                       const minChatHeight = 160.0;
                       const screenShareHeight = 202.0;

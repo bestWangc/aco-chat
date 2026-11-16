@@ -1027,6 +1027,100 @@ class _LiveRoomParticipantCard extends StatelessWidget {
   }
 }
 
+class _AliyunShareMemberTile extends StatelessWidget {
+  const _AliyunShareMemberTile({
+    required this.participant,
+    required this.role,
+    required this.isHost,
+    required this.muted,
+    required this.speaking,
+    required this.palette,
+    this.compact = false,
+  });
+
+  final LiveParticipant participant;
+  final String role;
+  final bool isHost;
+  final bool muted;
+  final bool speaking;
+  final AcoPalette palette;
+  final bool compact;
+
+  double get _avatarSize => compact ? (isHost ? 46 : 36) : (isHost ? 42 : 34);
+
+  Widget _statusBadge() {
+    final badgeSize = _avatarSize * .4;
+    if (speaking) return _SpeakingBadge(size: badgeSize);
+    final showMuted = isHost ? muted : participant.role != 'speaker' || muted;
+    if (showMuted) return _MutedMicrophoneBadge(size: badgeSize);
+    return _LiveMicrophoneBadge(size: badgeSize);
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: compact ? (isHost ? 56 : 48) : 76,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            AcoAvatar(
+              size: _avatarSize,
+              assetPath: _liveRoomListenerAvatarAsset,
+              imageUrl: participant.avatarUrl,
+            ),
+            Positioned(right: -2, bottom: -2, child: _statusBadge()),
+          ],
+        ),
+        if (!compact) ...[
+          const SizedBox(height: 5),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              participant.nickname,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: 10,
+                height: 1.1,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  role,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: palette.mutedText,
+                    fontSize: 9,
+                    height: 1.1,
+                  ),
+                ),
+              ),
+              if (participant.handRaised) ...[
+                const SizedBox(width: 2),
+                Icon(
+                  CupertinoIcons.hand_raised_fill,
+                  color: _accentGreen,
+                  size: 9,
+                ),
+              ],
+            ],
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
 class _LiveRoomNetworkStatusChip extends StatelessWidget {
   const _LiveRoomNetworkStatusChip({
     required this.wsReconnecting,
@@ -1201,18 +1295,22 @@ class _LiveRoomNetworkNotice extends StatelessWidget {
 }
 
 class _MutedMicrophoneBadge extends StatelessWidget {
-  const _MutedMicrophoneBadge();
+  const _MutedMicrophoneBadge({this.size = 21});
+
+  final double size;
 
   @override
   Widget build(BuildContext context) => Image.asset(
     'assets/icons/live_mic_disabled.png',
-    width: 21,
+    width: size,
     fit: BoxFit.contain,
   );
 }
 
 class _SpeakingBadge extends StatefulWidget {
-  const _SpeakingBadge();
+  const _SpeakingBadge({this.size = 21});
+
+  final double size;
 
   @override
   State<_SpeakingBadge> createState() => _SpeakingBadgeState();
@@ -1240,17 +1338,19 @@ class _SpeakingBadgeState extends State<_SpeakingBadge>
       opacity: .58 + (_controller.value - .72) / .4 * .42,
       child: Transform.scale(scale: _controller.value, child: child),
     ),
-    child: const _LiveMicrophoneBadge(),
+    child: _LiveMicrophoneBadge(size: widget.size),
   );
 }
 
 class _LiveMicrophoneBadge extends StatelessWidget {
-  const _LiveMicrophoneBadge();
+  const _LiveMicrophoneBadge({this.size = 21});
+
+  final double size;
 
   @override
   Widget build(BuildContext context) => Image.asset(
     'assets/icons/live_mic_enabled.png',
-    width: 21,
+    width: size,
     fit: BoxFit.contain,
   );
 }

@@ -78,12 +78,16 @@ class _RoomChatHistory extends StatefulWidget {
     required this.hasLive,
     required this.scrollToLatestSignal,
     this.liveMessages,
+    this.showEmptyState = true,
+    this.isScreenShareOverlay = false,
   });
 
   final AcoPalette palette;
   final bool hasLive;
   final int scrollToLatestSignal;
   final List<LiveMessage>? liveMessages;
+  final bool showEmptyState;
+  final bool isScreenShareOverlay;
 
   @override
   State<_RoomChatHistory> createState() => _RoomChatHistoryState();
@@ -117,6 +121,7 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
   Widget build(BuildContext context) {
     final roomMessages = widget.liveMessages;
     if (roomMessages == null || roomMessages.isEmpty) {
+      if (!widget.showEmptyState) return const SizedBox.shrink();
       return Center(
         child: Text(
           widget.hasLive ? '还没有弹幕，来说点什么吧。' : '请选择会议后查看弹幕。',
@@ -145,6 +150,7 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
           imageName: message.imageName,
           identity: message.identity,
           staffIdentity: message.staffIdentity,
+          isScreenShareOverlay: widget.isScreenShareOverlay,
         );
       },
     );
@@ -624,6 +630,7 @@ class _RoomMessage extends StatelessWidget {
     this.imageName,
     required this.identity,
     required this.staffIdentity,
+    this.isScreenShareOverlay = false,
   });
 
   final AcoPalette palette;
@@ -634,6 +641,7 @@ class _RoomMessage extends StatelessWidget {
   final String? imageName;
   final int identity;
   final int staffIdentity;
+  final bool isScreenShareOverlay;
 
   @override
   Widget build(BuildContext context) {
@@ -651,17 +659,23 @@ class _RoomMessage extends StatelessWidget {
       fontWeight: isSystemMessage ? FontWeight.w500 : FontWeight.w400,
       height: 1.2,
     );
+    final Color bubbleColor;
+    if (!palette.dark) {
+      bubbleColor = palette.surfaceRaised;
+    } else if (isScreenShareOverlay) {
+      bubbleColor = const Color(0xA6555555);
+    } else {
+      bubbleColor = const Color(0xFF3D3D3D);
+    }
     final decoration = isSystemMessage
         ? BoxDecoration(
             color: palette.accent.withValues(alpha: .12),
             border: Border.all(color: palette.accent.withValues(alpha: .28)),
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(isScreenShareOverlay ? 10 : 16),
           )
         : BoxDecoration(
-            color: palette.dark
-                ? const Color(0xFF3D3D3D)
-                : palette.surfaceRaised,
-            borderRadius: BorderRadius.circular(18),
+            color: bubbleColor,
+            borderRadius: BorderRadius.circular(isScreenShareOverlay ? 10 : 18),
           );
     final maxBubbleWidth = math.min(
       320.0,

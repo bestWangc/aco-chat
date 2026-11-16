@@ -168,6 +168,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _roomSnapshotCalibrationInFlight = false;
   bool _screenBroadcastStarting = false;
   bool _screenBroadcasting = false;
+  bool _shareMembersExpanded = false;
   bool _aliyunPlaybackLoading = false;
   int _aliyunPlaybackRetryCount = 0;
   FlutterAliplayer? _aliyunLivePlayer;
@@ -1236,6 +1237,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     final player = _aliyunLivePlayer;
     if (url == null) {
       _aliyunPlayerViewAttached = false;
+      _shareMembersExpanded = false;
       if (player != null) await player.stop();
     } else if (_aliyunPlayerViewAttached) {
       await _prepareAliyunPlayback(player!, url);
