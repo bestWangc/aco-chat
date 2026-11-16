@@ -278,7 +278,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 )
               : _showMembers,
           onCopyDiagnostics: () => unawaited(_copyCheckInDiagnostics()),
-          onMore: isHost ? _showHostActions : null,
+          onMore: _showRoomActions,
         ),
         child: Stack(
           children: [

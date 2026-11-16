@@ -1848,8 +1848,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     );
   }
 
-  void _showHostActions() {
+  void _showRoomActions() {
     final room = _room;
+    final isHost = _isLiveHostRole(room?.viewerRole);
+    final live = widget.live;
     showCupertinoModalPopup<void>(
       context: context,
       builder: (sheetContext) => CupertinoTheme(
@@ -1859,8 +1861,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         ),
         child: CupertinoActionSheet(
           actions: [
-            if (defaultTargetPlatform == TargetPlatform.android ||
-                defaultTargetPlatform == TargetPlatform.iOS)
+            if (live != null)
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_shareLive(live));
+                },
+                child: _hostActionLabel('分享会议'),
+              ),
+            if (isHost &&
+                (defaultTargetPlatform == TargetPlatform.android ||
+                    defaultTargetPlatform == TargetPlatform.iOS))
               CupertinoActionSheetAction(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
@@ -1874,7 +1885,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                   _screenBroadcasting ? '停止屏幕共享' : '共享屏幕给观众',
                 ),
               ),
-            if (!_transferringHost)
+            if (isHost && !_transferringHost)
               CupertinoActionSheetAction(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
@@ -1882,7 +1893,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 },
                 child: _hostActionLabel('转让主持人'),
               ),
-            if (room?.checkIn == null)
+            if (isHost && room?.checkIn == null)
               CupertinoActionSheetAction(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
@@ -1890,20 +1901,34 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 },
                 child: _hostActionLabel('发起签到'),
               ),
-            CupertinoActionSheetAction(
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.of(sheetContext).pop();
-                unawaited(_confirmEndLive());
-              },
-              child: _hostActionLabel('结束会议'),
-            ),
+            if (isHost)
+              CupertinoActionSheetAction(
+                isDestructiveAction: true,
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_confirmEndLive());
+                },
+                child: _hostActionLabel('结束会议'),
+              ),
           ],
           cancelButton: CupertinoActionSheetAction(
             onPressed: () => Navigator.of(sheetContext).pop(),
             child: _hostActionLabel('取消'),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _shareLive(LiveSession live) async {
+    final time = live.scheduledAt?.toLocal();
+    final timeLine = time == null
+        ? ''
+        : '\n会议时间：${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    await SharePlus.instance.share(
+      ShareParams(
+        text:
+            '邀请你参加 Aco Chat 会议\n会议主题：${live.title}$timeLine\n会议号：${live.id}\n点击链接入会：${AppConfig.websiteUrl}/meeting/${live.id}',
       ),
     );
   }
