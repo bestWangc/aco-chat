@@ -42,6 +42,9 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Aliyun SDK licenses and local keys must stay out of source control.
+/aliyun_license/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile

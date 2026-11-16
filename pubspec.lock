@@ -437,6 +437,14 @@ packages:
       relative: true
     source: path
     version: "0.0.1"
+  flutter_aliplayer:
+    dependency: "direct main"
+    description:
+      name: flutter_aliplayer
+      sha256: "5c546044eb5405f863f05c808787754fb2be7e5871f362411c94f962f5ec92fa"
+      url: "https://pub.dev"
+    source: hosted
+    version: "7.11.0-interactivelive"
   flutter_animate:
     dependency: transitive
     description:

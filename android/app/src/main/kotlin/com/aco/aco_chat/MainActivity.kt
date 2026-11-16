@@ -33,6 +33,11 @@ class MainActivity : FlutterFragmentActivity() {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/aliyun-screen-capture")
             .setMethodCallHandler { call, result ->
+                if (call.method == "stop") {
+                    stopService(Intent(this, ScreenCaptureForegroundService::class.java))
+                    result.success(null)
+                    return@setMethodCallHandler
+                }
                 if (call.method != "request") {
                     result.notImplemented()
                     return@setMethodCallHandler
@@ -252,6 +257,10 @@ class MainActivity : FlutterFragmentActivity() {
         val result = pendingScreenCaptureResult ?: return
         pendingScreenCaptureResult = null
         if (resultCode == Activity.RESULT_OK && data != null) {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, ScreenCaptureForegroundService::class.java),
+            )
             LivePushConfig.setMediaProjectionPermissionResultData(data)
             result.success(true)
         } else {

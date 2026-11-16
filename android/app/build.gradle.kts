@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -7,7 +9,26 @@ plugins {
 val androidApplicationId = providers.gradleProperty("acoApplicationId").orNull
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
-    ?: "com.aco.aco_chat"
+    ?: "com.kzparty.chat.aca.cac"
+
+val aliyunLicenseProperties = Properties()
+val aliyunLicensePropertiesFile = rootProject.file("../aliyun_license/android/android.properties")
+if (aliyunLicensePropertiesFile.exists()) {
+    aliyunLicensePropertiesFile.inputStream().use(aliyunLicenseProperties::load)
+}
+val aliyunLicenseKey = aliyunLicenseProperties.getProperty("licenseKey", "").trim()
+val aliyunLicenseDirectory = rootProject.file("../aliyun_license/android")
+val generatedAliyunLicenseAssets = layout.buildDirectory.dir("generated/aliyunLicenseAssets")
+val copyAliyunLicense = tasks.register<Copy>("copyAliyunLicense") {
+    val certificates = aliyunLicenseDirectory.listFiles()
+        ?.filter { it.isFile && it.name.startsWith("AliVideoCert-") && it.extension == "crt" }
+        .orEmpty()
+    if (certificates.size == 1) {
+        from(certificates.single())
+        into(generatedAliyunLicenseAssets.map { it.dir("cert") })
+        rename { "AliVideoCert.crt" }
+    }
+}
 
 android {
     namespace = "com.aco.aco_chat"
@@ -30,13 +51,19 @@ android {
         targetSdk = 37
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["aliyunLicenseKey"] = aliyunLicenseKey
     }
+
+    sourceSets.getByName("main").assets.srcDir(generatedAliyunLicenseAssets)
 
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("debug").apply {
+                isV1SigningEnabled = true
+                isV2SigningEnabled = true
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -45,6 +72,10 @@ android {
             )
         }
     }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(copyAliyunLicense)
 }
 
 kotlin {

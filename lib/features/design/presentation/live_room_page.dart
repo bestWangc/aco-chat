@@ -162,13 +162,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Timer? _hostHeartbeatTimer;
   Timer? _aliyunStreamPollTimer;
   Timer? _aliyunStreamHeartbeatTimer;
+  Timer? _aliyunPlaybackRetryTimer;
   Timer? _roomSnapshotCalibrationTimer;
   Timer? _checkInDiagnosticPersistTimer;
   bool _roomSnapshotCalibrationInFlight = false;
   bool _screenBroadcastStarting = false;
   bool _screenBroadcasting = false;
   bool _aliyunPlaybackLoading = false;
-  VideoPlayerController? _aliyunLiveVideo;
+  int _aliyunPlaybackRetryCount = 0;
+  FlutterAliplayer? _aliyunLivePlayer;
+  String? _aliyunLivePlayUrl;
+  bool _aliyunPlayerViewAttached = false;
   final AliyunScreenBroadcast _aliyunScreenBroadcast = AliyunScreenBroadcast();
   final List<String> _checkInDiagnosticEntries = <String>[];
   late final Future<void> _checkInDiagnosticsReady;
@@ -1177,15 +1181,19 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _aliyunPlaybackLoading = true;
     try {
       final urls = await _accountSession.aliyunLiveStreamUrls(live.id);
-      if (urls['is_pushing'] != true) {
-        final old = _aliyunLiveVideo;
-        _aliyunLiveVideo = null;
-        await old?.dispose();
-        if (mounted && old != null) setState(() {});
+      final isPushing = urls['is_pushing'] == true;
+      final url = urls['play_url'] as String?;
+      final parsedUrl = url == null ? null : Uri.tryParse(url);
+      debugPrint(
+        'Aliyun playback API: isPushing=$isPushing '
+        'playUrlPresent=${url?.isNotEmpty == true} '
+        'host=${parsedUrl?.host} path=${parsedUrl?.path}',
+      );
+      if (!isPushing) {
+        await _setAliyunPlaybackUrl(null);
         return;
       }
-      final url = urls['play_url'] as String?;
-      final currentUrl = _aliyunLiveVideo?.dataSource;
+      final currentUrl = _aliyunLivePlayUrl;
       final sameStream =
           currentUrl != null &&
           url != null &&
@@ -1207,23 +1215,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           (sameStream && !signatureNeedsRefresh)) {
         return;
       }
-      final old = _aliyunLiveVideo;
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
-      try {
-        await controller.initialize();
-        await controller.setLooping(true);
-        await controller.play();
-        if (!mounted) {
-          await controller.dispose();
-          return;
-        }
-        _aliyunLiveVideo = controller;
-        await old?.dispose();
-        setState(() {});
-      } on Object {
-        await controller.dispose();
-        rethrow;
-      }
+      await _setAliyunPlaybackUrl(url);
     } on AccountApiException catch (error) {
       if (error.statusCode == 404 || error.statusCode == 503) {
         _aliyunStreamPollTimer?.cancel();
@@ -1234,6 +1226,90 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     } finally {
       _aliyunPlaybackLoading = false;
     }
+  }
+
+  Future<void> _setAliyunPlaybackUrl(String? url) async {
+    if (!mounted || _aliyunLivePlayUrl == url) return;
+    _aliyunPlaybackRetryTimer?.cancel();
+    _aliyunPlaybackRetryCount = 0;
+    _aliyunLivePlayUrl = url;
+    final player = _aliyunLivePlayer;
+    if (url == null) {
+      _aliyunPlayerViewAttached = false;
+      if (player != null) await player.stop();
+    } else if (_aliyunPlayerViewAttached) {
+      await _prepareAliyunPlayback(player!, url);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onAliyunPlayerViewCreated(int viewId) {
+    final player = _aliyunLivePlayer ??=
+        FlutterAliPlayerFactory.createAliPlayer();
+    player.setOnPrepared((_) {
+      debugPrint('Aliyun player prepared');
+      unawaited(player.play());
+    });
+    player.setOnRenderingStart((_) {
+      debugPrint('Aliyun player rendered first frame');
+      _aliyunPlaybackRetryTimer?.cancel();
+      _aliyunPlaybackRetryCount = 0;
+    });
+    player.setOnError((code, extra, message, _) {
+      debugPrint(
+        'Aliyun player error: code=$code extra=$extra message=$message',
+      );
+      _scheduleAliyunPlaybackRetry(player);
+    });
+    unawaited(_attachAliyunPlayerView(player, viewId));
+  }
+
+  Future<void> _attachAliyunPlayerView(
+    FlutterAliplayer player,
+    int viewId,
+  ) async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // The Android plugin never completes the setPlayerView MethodChannel call.
+      unawaited(player.setPlayerView(viewId));
+    } else {
+      await player.setPlayerView(viewId);
+    }
+    _aliyunPlayerViewAttached = true;
+    final url = _aliyunLivePlayUrl;
+    if (url != null) await _prepareAliyunPlayback(player, url);
+  }
+
+  Future<void> _prepareAliyunPlayback(
+    FlutterAliplayer player,
+    String url,
+  ) async {
+    final parsedUrl = Uri.tryParse(url);
+    debugPrint(
+      'Aliyun player preparing: host=${parsedUrl?.host} path=${parsedUrl?.path}',
+    );
+    try {
+      await player.stop();
+      await player.setUrl(url);
+      await player.prepare();
+      debugPrint('Aliyun player prepare requested');
+    } on Object catch (error) {
+      debugPrint('Aliyun player prepare failed: $error');
+      rethrow;
+    }
+  }
+
+  void _scheduleAliyunPlaybackRetry(FlutterAliplayer player) {
+    final url = _aliyunLivePlayUrl;
+    if (url == null || _aliyunPlaybackRetryCount >= 3) return;
+    _aliyunPlaybackRetryTimer?.cancel();
+    final retry = ++_aliyunPlaybackRetryCount;
+    _aliyunPlaybackRetryTimer = Timer(Duration(seconds: retry * 4), () {
+      if (!mounted || !_aliyunPlayerViewAttached || _aliyunLivePlayUrl != url) {
+        return;
+      }
+      debugPrint('Aliyun player retry: attempt=$retry');
+      unawaited(_prepareAliyunPlayback(player, url));
+    });
   }
 
   Future<void> _confirmEndLive() async {
@@ -1993,8 +2069,12 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     _hostHeartbeatTimer?.cancel();
     _aliyunStreamPollTimer?.cancel();
     _aliyunStreamHeartbeatTimer?.cancel();
+    _aliyunPlaybackRetryTimer?.cancel();
     unawaited(_aliyunScreenBroadcast.stop());
-    unawaited(_aliyunLiveVideo?.dispose());
+    final aliyunPlayer = _aliyunLivePlayer;
+    if (aliyunPlayer != null) {
+      unawaited(aliyunPlayer.stop().then((_) => aliyunPlayer.release()));
+    }
     _roomSnapshotCalibrationTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     _chatBuffer.dispose();

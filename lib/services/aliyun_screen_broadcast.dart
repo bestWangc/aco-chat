@@ -102,7 +102,8 @@ class AliyunScreenBroadcast {
       try {
         await pusher.destroy();
       } finally {
-        if (defaultTargetPlatform == TargetPlatform.iOS) {
+        if (defaultTargetPlatform == TargetPlatform.android ||
+            defaultTargetPlatform == TargetPlatform.iOS) {
           await _androidCaptureChannel.invokeMethod<void>('stop');
         }
       }
@@ -147,7 +148,8 @@ class AliyunScreenBroadcast {
         }
       }
     } finally {
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
+      if (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS) {
         await _androidCaptureChannel.invokeMethod<void>('stop');
       }
     }

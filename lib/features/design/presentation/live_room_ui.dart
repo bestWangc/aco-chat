@@ -86,8 +86,8 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
       room: room,
       isHost: isHost,
     );
-    final aliyunVideo = _aliyunLiveVideo;
-    final hasAliyunVideo = aliyunVideo?.value.isInitialized == true;
+    final aliyunPlayUrl = _aliyunLivePlayUrl;
+    final hasAliyunVideo = aliyunPlayUrl != null;
 
     return PopScope(
       canPop: _allowPop,
@@ -148,7 +148,16 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                                 aspectRatio: 16 / 9,
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: VideoPlayer(aliyunVideo!),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) =>
+                                        AliPlayerView(
+                                          onCreated: _onAliyunPlayerViewCreated,
+                                          x: 0,
+                                          y: 0,
+                                          width: constraints.maxWidth,
+                                          height: constraints.maxHeight,
+                                        ),
+                                  ),
                                 ),
                               ),
                             ),

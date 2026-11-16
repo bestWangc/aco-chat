@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
@@ -37,6 +38,12 @@
         android:icon="@mipmap/ic_launcher"
         android:enableOnBackInvokedCallback="true"
         tools:replace="android:allowBackup,android:appComponentFactory,android:label">
+        <meta-data
+            android:name="com.aliyun.alivc_license.licensekey"
+            android:value="${aliyunLicenseKey}" />
+        <meta-data
+            android:name="com.aliyun.alivc_license.licensefile"
+            android:value="assets/cert/AliVideoCert.crt" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -69,6 +76,10 @@
             android:name=".LiveAudioForegroundService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback|microphone" />
+        <service
+            android:name=".ScreenCaptureForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
         <service
             android:name=".ChatKeepAliveService"
             android:exported="false"
