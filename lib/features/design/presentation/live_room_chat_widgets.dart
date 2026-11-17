@@ -136,7 +136,9 @@ class _RoomChatHistoryState extends State<_RoomChatHistory> {
       key: const Key('room-chat-history'),
       controller: _scrollController,
       reverse: true,
-      padding: const EdgeInsets.fromLTRB(24, 0, 18, 14),
+      padding: widget.isScreenShareOverlay
+          ? const EdgeInsets.fromLTRB(10, 20, 8, 8)
+          : const EdgeInsets.fromLTRB(24, 0, 18, 14),
       itemCount: roomMessages.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
       itemBuilder: (_, index) {
@@ -271,6 +273,9 @@ class _RoomComposer extends StatelessWidget {
     required this.palette,
     required this.controller,
     required this.chatMuted,
+    required this.showDanmakuToggle,
+    required this.danmakuVisible,
+    required this.onToggleDanmaku,
     required this.onEmojiPressed,
     required this.onImagePressed,
     required this.sendingImage,
@@ -280,6 +285,9 @@ class _RoomComposer extends StatelessWidget {
   final AcoPalette palette;
   final TextEditingController controller;
   final bool chatMuted;
+  final bool showDanmakuToggle;
+  final bool danmakuVisible;
+  final VoidCallback onToggleDanmaku;
   final VoidCallback onEmojiPressed;
   final VoidCallback onImagePressed;
   final bool sendingImage;
@@ -299,34 +307,26 @@ class _RoomComposer extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SizedBox(
-              width: 42,
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: chatMuted || sendingImage ? null : onImagePressed,
-                child: sendingImage
-                    ? CupertinoActivityIndicator(color: textColor)
-                    : Icon(CupertinoIcons.photo, color: textColor, size: 20),
-              ),
-            ),
-            SizedBox(
-              width: 42,
-              child: CupertinoButton(
-                padding: EdgeInsets.zero,
-                minimumSize: Size.zero,
-                onPressed: chatMuted ? null : onEmojiPressed,
-                child: ColorFiltered(
-                  colorFilter: ColorFilter.mode(textColor, BlendMode.srcIn),
-                  child: Image.asset(
-                    'assets/icons/live_room_emoji.png',
-                    width: 20,
-                    height: 20,
-                    filterQuality: FilterQuality.high,
+            if (showDanmakuToggle)
+              SizedBox(
+                width: 46,
+                child: Semantics(
+                  button: true,
+                  label: danmakuVisible ? '关闭弹幕' : '开启弹幕',
+                  child: CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    minimumSize: Size.zero,
+                    onPressed: onToggleDanmaku,
+                    child: Icon(
+                      danmakuVisible
+                          ? Icons.closed_caption
+                          : Icons.closed_caption_off,
+                      color: textColor,
+                      size: 24,
+                    ),
                   ),
                 ),
               ),
-            ),
             Expanded(
               child: CupertinoTextField(
                 key: const Key('room-message-input'),
@@ -335,7 +335,10 @@ class _RoomComposer extends StatelessWidget {
                 enabled: !chatMuted,
                 textInputAction: TextInputAction.send,
                 cursorColor: palette.accent,
-                padding: const EdgeInsets.only(right: 14),
+                padding: EdgeInsets.only(
+                  left: showDanmakuToggle ? 2 : 14,
+                  right: 14,
+                ),
                 placeholder: chatMuted
                     ? appText(context, '全员禁言中')
                     : appText(context, '说点什么...'),
@@ -354,6 +357,34 @@ class _RoomComposer extends StatelessWidget {
                 decoration: const BoxDecoration(color: _transparent),
               ),
             ),
+            SizedBox(
+              width: 32,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: chatMuted || sendingImage ? null : onImagePressed,
+                child: sendingImage
+                    ? CupertinoActivityIndicator(color: textColor)
+                    : Icon(CupertinoIcons.photo, color: textColor, size: 20),
+              ),
+            ),
+            SizedBox(
+              width: 32,
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: Size.zero,
+                onPressed: chatMuted ? null : onEmojiPressed,
+                child: ColorFiltered(
+                  colorFilter: ColorFilter.mode(textColor, BlendMode.srcIn),
+                  child: Image.asset(
+                    'assets/icons/live_room_emoji.png',
+                    width: 20,
+                    height: 20,
+                    filterQuality: FilterQuality.high,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -367,6 +398,9 @@ class _RoomBottomBar extends StatelessWidget {
     required this.muted,
     required this.canSpeak,
     required this.audioMuted,
+    required this.showDanmakuToggle,
+    required this.danmakuVisible,
+    required this.onToggleDanmaku,
     required this.showHandControl,
     required this.handRaised,
     required this.chatMuted,
@@ -383,6 +417,9 @@ class _RoomBottomBar extends StatelessWidget {
   final bool muted;
   final bool canSpeak;
   final bool audioMuted;
+  final bool showDanmakuToggle;
+  final bool danmakuVisible;
+  final VoidCallback onToggleDanmaku;
   final bool showHandControl;
   final bool handRaised;
   final bool chatMuted;
@@ -440,6 +477,9 @@ class _RoomBottomBar extends StatelessWidget {
                   palette: palette,
                   controller: controller,
                   chatMuted: chatMuted,
+                  showDanmakuToggle: showDanmakuToggle,
+                  danmakuVisible: danmakuVisible,
+                  onToggleDanmaku: onToggleDanmaku,
                   onEmojiPressed: onEmojiPressed,
                   onImagePressed: onImagePressed,
                   sendingImage: sendingImage,
@@ -512,6 +552,7 @@ class _RoomControl extends StatelessWidget {
     required this.onPressed,
     this.large = false,
     this.iconSize,
+    this.subtle = false,
   });
 
   final IconData? icon;
@@ -523,6 +564,7 @@ class _RoomControl extends StatelessWidget {
   final VoidCallback? onPressed;
   final bool large;
   final double? iconSize;
+  final bool subtle;
 
   Widget _buildIcon(double size) {
     final image = iconImage;
@@ -565,19 +607,26 @@ class _RoomControl extends StatelessWidget {
           onPressed: onPressed,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: Color.lerp(background, _black, .28),
+              color: subtle
+                  ? background.withValues(alpha: .5)
+                  : Color.lerp(background, _black, .28),
               shape: BoxShape.circle,
+              border: subtle
+                  ? Border.all(color: foreground.withValues(alpha: .16))
+                  : null,
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(6),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: background,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(child: iconWidget),
-              ),
-            ),
+            child: subtle
+                ? Center(child: iconWidget)
+                : Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: background,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(child: iconWidget),
+                    ),
+                  ),
           ),
         ),
       ),

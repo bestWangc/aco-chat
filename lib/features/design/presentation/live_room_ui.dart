@@ -67,6 +67,11 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
       final uniqueParticipants = participants
           .where((participant) => seenUserIds.add(participant.userId))
           .toList(growable: false);
+      final raisedHandCount = room?.raisedHandCount ?? 0;
+      final showHandControl =
+          room != null && !_canManageLiveMicrophones(room.viewerRole);
+      final canRaiseHand = room?.canRaiseHand == true;
+      final collapsedPanelHeight = showHandControl ? 194.0 : 146.0;
       final checkIn = room?.checkIn;
       final showCheckIn =
           checkIn != null &&
@@ -87,48 +92,37 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
               aliPlayerViewType: AliPlayerViewTypeForAndroid.textureview,
             ),
           ),
-          if (showCheckIn)
-            Positioned(
-              top: 10,
-              left: 12,
-              child: _LiveRoomCheckInButton(
-                palette: palette,
-                checkIn: checkIn,
-                isHost: isHost,
-                onPressed: isHost ? null : _confirmCheckIn,
-                onShown: () => _recordCheckInButtonDisplayed(checkIn.deadline),
-              ),
-            ),
-          if (room != null && isHost && (room.raisedHandCount ?? 0) > 0)
+          if (room != null && isHost && raisedHandCount > 0)
             Positioned(
               top: 14,
               left: showCheckIn ? 94 : 12,
               child: _RaisedHandIndicator(
-                count: room.raisedHandCount!,
+                count: raisedHandCount,
                 onPressed: () => unawaited(_showRaisedHandRequests()),
               ),
             ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 8,
-            height: math.min(360.0, constraints.maxHeight * .52),
-            child: _RoomChatHistory(
-              palette: palette,
-              liveMessages: _chatBuffer.messages,
-              hasLive: widget.live != null,
-              scrollToLatestSignal: _scrollToLatestSignal,
-              showEmptyState: false,
-              isScreenShareOverlay: true,
+          if (_danmakuVisible)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: _RoomChatHistory(
+                palette: palette,
+                liveMessages: _chatBuffer.messages,
+                hasLive: widget.live != null,
+                scrollToLatestSignal: _scrollToLatestSignal,
+                showEmptyState: false,
+                isScreenShareOverlay: true,
+              ),
             ),
-          ),
           AnimatedPositioned(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOut,
             top: 12,
             right: 8,
             width: panelWidth,
-            height: _shareMembersExpanded ? panelHeight : 146,
+            height: _shareMembersExpanded ? panelHeight : collapsedPanelHeight,
             child: Container(
               decoration: BoxDecoration(
                 color: _black.withValues(
@@ -139,6 +133,22 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
               ),
               child: Column(
                 children: [
+                  if (showHandControl)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: _RoomControl(
+                        iconAsset: 'assets/icons/live_hand.png',
+                        label: _handRaised ? '已举手' : '举手',
+                        background: palette.surfaceRaised,
+                        foreground: palette.primaryText,
+                        onPressed: canRaiseHand && !_handRaised
+                            ? _raiseHand
+                            : null,
+                        large: false,
+                        iconSize: 20,
+                        subtle: true,
+                      ),
+                    ),
                   if (_shareMembersExpanded)
                     Padding(
                       padding: const EdgeInsets.only(top: 6),
@@ -205,13 +215,30 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                           ? CupertinoIcons.chevron_up
                           : CupertinoIcons.chevron_down,
                       color: palette.primaryText.withValues(alpha: .9),
-                      size: 14,
+                      size: 18,
                     ),
                   ),
                 ],
               ),
             ),
           ),
+          if (showCheckIn)
+            Positioned(
+              top: 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: _LiveRoomCheckInButton(
+                  palette: palette,
+                  checkIn: checkIn,
+                  isHost: isHost,
+                  size: 92,
+                  onPressed: isHost ? null : _confirmCheckIn,
+                  onShown: () =>
+                      _recordCheckInButtonDisplayed(checkIn.deadline),
+                ),
+              ),
+            ),
         ],
       );
     },
@@ -277,7 +304,6 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                   () => _shareMembersExpanded = !_shareMembersExpanded,
                 )
               : _showMembers,
-          onCopyDiagnostics: () => unawaited(_copyCheckInDiagnostics()),
           onMore: _showRoomActions,
         ),
         child: Stack(
@@ -397,7 +423,11 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 muted: _muted,
                 canSpeak: canSpeak,
                 audioMuted: audioMuted,
-                showHandControl: !canManageMicrophones,
+                showDanmakuToggle: hasAliyunVideo,
+                danmakuVisible: _danmakuVisible,
+                onToggleDanmaku: () =>
+                    setState(() => _danmakuVisible = !_danmakuVisible),
+                showHandControl: !canManageMicrophones && !hasAliyunVideo,
                 handRaised: _handRaised,
                 chatMuted: chatMuted,
                 onMic: canToggleMicrophone ? _toggleMicrophone : null,

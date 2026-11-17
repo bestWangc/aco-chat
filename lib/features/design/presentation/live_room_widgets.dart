@@ -112,6 +112,7 @@ class _LiveRoomCheckInButton extends StatefulWidget {
     required this.isHost,
     required this.onPressed,
     this.onShown,
+    this.size,
   });
 
   final AcoPalette palette;
@@ -119,6 +120,7 @@ class _LiveRoomCheckInButton extends StatefulWidget {
   final bool isHost;
   final VoidCallback? onPressed;
   final VoidCallback? onShown;
+  final double? size;
 
   @override
   State<_LiveRoomCheckInButton> createState() => _LiveRoomCheckInButtonState();
@@ -170,6 +172,8 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
     final palette = widget.palette;
     final checkIn = widget.checkIn;
     final checked = checkIn.viewerChecked;
+    final buttonSize = widget.size ?? 72.0;
+    final hostButtonSize = widget.size ?? 76.0;
     final remaining = checkIn.deadline.difference(DateTime.now());
     final expired = remaining <= Duration.zero;
     final enabled = !checked && !expired && widget.onPressed != null;
@@ -191,8 +195,8 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
       return Semantics(
         label: '签到进行中，已签到 ${checkIn.checkedInCount} 人，剩余 $minutes:$seconds',
         child: Container(
-          width: 76,
-          height: 76,
+          width: hostButtonSize,
+          height: hostButtonSize,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -262,7 +266,7 @@ class _LiveRoomCheckInButtonState extends State<_LiveRoomCheckInButton> {
         behavior: HitTestBehavior.opaque,
         onTap: enabled ? widget.onPressed : null,
         child: SizedBox.square(
-          dimension: 72,
+          dimension: buttonSize,
           child: Stack(
             alignment: Alignment.center,
             children: [
@@ -510,14 +514,12 @@ class _LiveRoomHeaderActions extends StatelessWidget {
     required this.palette,
     required this.count,
     required this.onMembers,
-    required this.onCopyDiagnostics,
     this.onMore,
   });
 
   final AcoPalette palette;
   final int? count;
   final VoidCallback onMembers;
-  final VoidCallback onCopyDiagnostics;
   final VoidCallback? onMore;
 
   // Provided livestream viewer-count glyph.
@@ -580,13 +582,6 @@ class _LiveRoomHeaderActions extends StatelessWidget {
             ],
           ),
         ),
-      ),
-      AcoIconButton(
-        icon: CupertinoIcons.doc_text,
-        palette: palette,
-        label: '复制日志',
-        onPressed: onCopyDiagnostics,
-        size: 18,
       ),
       if (onMore != null)
         CupertinoButton(

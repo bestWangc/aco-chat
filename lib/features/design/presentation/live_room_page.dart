@@ -129,6 +129,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   bool _muted = false;
   bool _handRaised = false;
+  bool _danmakuVisible = true;
   bool _emojiPickerVisible = false;
   bool _sending = false;
   bool _sendingImage = false;
@@ -1768,22 +1769,6 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           : 'unknown';
     } catch (_) {
       return 'invalid_json';
-    }
-  }
-
-  Future<void> _copyCheckInDiagnostics() async {
-    await _checkInDiagnosticsReady;
-    await _persistCheckInDiagnostics();
-    final diagnosticText = [
-      'live_check_in_diagnostics timestamps=UTC',
-      'app_version=${AppConfig.appVersion}',
-      'live_id=${widget.live?.id ?? 'unknown'}',
-      'websocket_messages_received=$_realtimeMessageCount',
-      ..._checkInDiagnosticEntries,
-    ].join('\n');
-    await Clipboard.setData(ClipboardData(text: diagnosticText));
-    if (mounted) {
-      _showNotice(context, '已复制', '签到诊断日志已复制，请发送给客服。');
     }
   }
 
