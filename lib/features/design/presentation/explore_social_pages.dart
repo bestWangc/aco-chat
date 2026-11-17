@@ -1,5 +1,11 @@
 part of 'aco_design_shell.dart';
 
+String _friendDisplayName(FriendContact friend) {
+  if (friend.remark.isNotEmpty) return friend.remark;
+  if (friend.nickname.isNotEmpty) return friend.nickname;
+  return friend.accountId;
+}
+
 class _SocialMessagesPage extends StatefulWidget {
   const _SocialMessagesPage({
     required this.palette,
@@ -321,7 +327,11 @@ class _SocialGlobalSearchResultsState
     OpenIMChatRepository.pendingConversation = ConversationInfo(
       conversationID: 'si_${friend.accountId}',
       userID: friend.accountId,
-      showName: friend.nickname.isEmpty ? friend.accountId : friend.nickname,
+      showName: friend.remark.isNotEmpty
+          ? friend.remark
+          : friend.nickname.isEmpty
+          ? friend.accountId
+          : friend.nickname,
       faceURL: friend.avatarUrl,
     );
     widget.onOpen(AcoScreen.chatV1);
@@ -352,9 +362,7 @@ class _SocialGlobalSearchResultsState
           for (final friend in _friendResults)
             _ContactListTile(
               palette: widget.palette,
-              name: friend.nickname.isEmpty
-                  ? friend.accountId
-                  : friend.nickname,
+              name: _friendDisplayName(friend),
               avatarUrl: friend.avatarUrl,
               identity: friend.identity,
               staffIdentity: friend.staffIdentity,
@@ -636,7 +644,7 @@ class _ContactsPageState extends State<_ContactsPage> {
     return _alphabetInitial.hasMatch(initial) ? initial : '#';
   }
 
-  String _displayNameOf(FriendContact friend) =>
+  String _friendName(FriendContact friend) =>
       friend.nickname.isEmpty ? friend.accountId : friend.nickname;
 
   void _scrollToSection(String letter) {
@@ -807,7 +815,7 @@ class _ContactsPageState extends State<_ContactsPage> {
                           padding: const EdgeInsets.symmetric(horizontal: 18),
                           child: _ContactListTile(
                             palette: widget.palette,
-                            name: _displayNameOf(friend),
+                            name: _friendDisplayName(friend),
                             avatarUrl: friend.avatarUrl,
                             identity: friend.identity,
                             staffIdentity: friend.staffIdentity,
@@ -848,7 +856,7 @@ class _ContactsPageState extends State<_ContactsPage> {
   }
 
   Future<void> _openFriend(BuildContext context, FriendContact friend) async {
-    final name = _displayNameOf(friend);
+    final name = _friendName(friend);
     // The index is in the root overlay, outside this route's Navigator.
     // Remove it while a contact detail page is visible.
     _alphabetOverlay?.remove();
@@ -858,11 +866,13 @@ class _ContactsPageState extends State<_ContactsPage> {
         builder: (_) => _ContactDetailPage(
           palette: widget.palette,
           name: name,
-          onMessagePressed: () {
+          accountID: friend.accountId,
+          remark: friend.remark,
+          onMessagePressed: (displayName) {
             OpenIMChatRepository.pendingConversation = ConversationInfo(
               conversationID: 'si_${friend.accountId}',
               userID: friend.accountId,
-              showName: name,
+              showName: displayName,
             );
             final navigator = Navigator.of(context);
             navigator.pop();
@@ -872,7 +882,7 @@ class _ContactsPageState extends State<_ContactsPage> {
         ),
       ),
     );
-    if (mounted) setState(() {});
+    if (mounted) setState(() => _friends = _loadFriends());
   }
 }
 
@@ -1389,7 +1399,9 @@ class _OpenIMConversationListState extends State<_OpenIMConversationList> {
             final friend = profiles[conversation.userID];
             if (friend != null) {
               if (friend.nickname.isNotEmpty) {
-                conversation.showName = friend.nickname;
+                conversation.showName = friend.remark.isNotEmpty
+                    ? friend.remark
+                    : friend.nickname;
               }
               if (friend.avatarUrl.isNotEmpty) {
                 conversation.faceURL = friend.avatarUrl;

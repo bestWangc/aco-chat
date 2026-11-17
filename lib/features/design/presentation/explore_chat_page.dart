@@ -42,6 +42,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
   DateTime? _voiceRecordingStartedAt;
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
   final Map<String, Message> _messagesByClientMsgID = <String, Message>{};
+  final Map<String, String> _friendRemarksByUserID = <String, String>{};
   Future<void>? _loadFuture;
   String? _error;
   String? _resolvedConversationID;
@@ -135,6 +136,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
   void initState() {
     super.initState();
     _loadFuture = _loadHistory();
+    if (_isGroup) unawaited(_loadFriendRemarks());
     OpenIMChatRepository.conversationReady.addListener(_onReady);
     OpenIMChatRepository.messageNotifier.addListener(_onMessage);
     _chatScrollController.addListener(_onChatScroll);
@@ -327,7 +329,11 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       final matches = friends.where((friend) => friend.accountId == userID);
       if (matches.isEmpty) return false;
       final friend = matches.first;
-      if (friend.nickname.isNotEmpty) _resolvedPeerName = friend.nickname;
+      if (friend.remark.isNotEmpty) {
+        _resolvedPeerName = friend.remark;
+      } else if (friend.nickname.isNotEmpty) {
+        _resolvedPeerName = friend.nickname;
+      }
       if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
       _resolvedPeerIdentity = friend.identity;
       _resolvedPeerStaffIdentity = friend.staffIdentity;
@@ -338,6 +344,87 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     } finally {
       client.close();
     }
+  }
+
+  Future<void> _loadFriendRemarks() async {
+    final client = AccountApiClient();
+    try {
+      final friends = await AccountSession(client).listFriends();
+      if (!mounted) return;
+      setState(() {
+        _friendRemarksByUserID
+          ..clear()
+          ..addEntries(
+            friends
+                .where((friend) => friend.remark.isNotEmpty)
+                .map((friend) => MapEntry(friend.accountId, friend.remark)),
+          );
+      });
+    } catch (error) {
+      debugPrint('[API] chat friend remarks load failed: $error');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _openSenderProfile({
+    required String? userID,
+    required String? nickname,
+    required String? avatarUrl,
+  }) async {
+    final accountID = userID?.trim();
+    if (accountID == null || accountID.isEmpty) return;
+
+    final client = AccountApiClient();
+    var displayName = nickname?.trim() ?? '';
+    var resolvedAvatarUrl = avatarUrl?.trim() ?? '';
+    var remark = '';
+    var isFriend = false;
+    try {
+      final session = AccountSession(client);
+      final profile = await session.profileByAccountId(accountID);
+      final friends = await session.listFriends();
+      if (profile.nickname.trim().isNotEmpty) {
+        displayName = profile.nickname.trim();
+      }
+      if (profile.avatarUrl.trim().isNotEmpty) {
+        resolvedAvatarUrl = profile.avatarUrl.trim();
+      }
+      for (final friend in friends) {
+        if (friend.accountId != accountID || friend.status != 'accepted') {
+          continue;
+        }
+        isFriend = true;
+        remark = friend.remark;
+        if (friend.nickname.trim().isNotEmpty) {
+          displayName = friend.nickname.trim();
+        }
+        if (friend.avatarUrl.trim().isNotEmpty) {
+          resolvedAvatarUrl = friend.avatarUrl.trim();
+        }
+        break;
+      }
+    } catch (error) {
+      debugPrint('[API] sender profile load failed: $error');
+    } finally {
+      client.close();
+    }
+
+    if (!mounted) return;
+    if (displayName.isEmpty) displayName = accountID;
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (profileContext) => _ContactDetailPage(
+          palette: widget.palette,
+          name: displayName,
+          accountID: accountID,
+          remark: remark,
+          avatarUrl: resolvedAvatarUrl,
+          isFriend: isFriend,
+          onMessagePressed: (_) => Navigator.of(profileContext).pop(),
+        ),
+      ),
+    );
   }
 
   Future<void> _loadHistory() async {
@@ -765,6 +852,8 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     Message? sourceMessage,
   ) {
     if (!_isGroup || message.mine || sourceMessage == null) return null;
+    final remark = _friendRemarksByUserID[sourceMessage.sendID]?.trim();
+    if (remark?.isNotEmpty == true) return remark;
     final nickname = sourceMessage.senderNickname?.trim();
     return nickname?.isNotEmpty == true ? nickname : sourceMessage.sendID;
   }
@@ -1644,6 +1733,19 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                             userID: sourceMessage?.sendID,
                                             nickname:
                                                 sourceMessage?.senderNickname,
+                                          )
+                                        : null,
+                                    onAvatarTap: !message.mine
+                                        ? () => _openSenderProfile(
+                                            userID:
+                                                sourceMessage?.sendID ??
+                                                widget.peerUserID,
+                                            nickname:
+                                                sourceMessage?.senderNickname ??
+                                                _peerName,
+                                            avatarUrl: _isGroup
+                                                ? sourceMessage?.senderFaceUrl
+                                                : _resolvedPeerAvatar,
                                           )
                                         : null,
                                   ),
@@ -2587,6 +2689,7 @@ class _ChatMessage extends StatelessWidget {
     this.avatarUrl,
     this.ownAvatarUrl,
     this.onAvatarLongPress,
+    this.onAvatarTap,
   });
 
   final AcoPalette palette;
@@ -2615,6 +2718,7 @@ class _ChatMessage extends StatelessWidget {
   final String? avatarUrl;
   final String? ownAvatarUrl;
   final VoidCallback? onAvatarLongPress;
+  final VoidCallback? onAvatarTap;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -2628,6 +2732,7 @@ class _ChatMessage extends StatelessWidget {
           children: [
             if (!mine) ...[
               GestureDetector(
+                onTap: onAvatarTap,
                 onLongPress: onAvatarLongPress,
                 child: AcoAvatar(size: 40, imageUrl: avatarUrl),
               ),

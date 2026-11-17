@@ -769,7 +769,7 @@ class _FigmaNavItemState extends State<_FigmaNavItem> {
               ],
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 13),
           Text(
             appText(context, _navLabels[index]),
             textAlign: TextAlign.center,

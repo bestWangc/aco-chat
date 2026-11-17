@@ -73,6 +73,7 @@ class FriendContact {
     required this.nickname,
     required this.avatarUrl,
     required this.status,
+    this.remark = '',
     this.initial = '#',
     this.identity = 0,
     this.staffIdentity = 0,
@@ -82,6 +83,7 @@ class FriendContact {
   final String nickname;
   final String avatarUrl;
   final String status;
+  final String remark;
   final String initial;
   final int identity;
   final int staffIdentity;
@@ -91,6 +93,7 @@ class FriendContact {
     nickname: (json['nickname'] as String?)?.trim() ?? '',
     avatarUrl: (json['avatar_url'] as String?) ?? '',
     status: (json['status'] as String?) ?? 'accepted',
+    remark: (json['remark'] as String?)?.trim() ?? '',
     initial: (json['initial'] as String?) ?? '#',
     identity: (json['identity'] as num?)?.toInt() ?? 0,
     staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
@@ -389,6 +392,7 @@ class LiveSession {
     required this.id,
     required this.title,
     required this.coverUrl,
+    this.backgroundId = 'lb_1',
     this.hostAvatarUrl = '',
     required this.access,
     required this.status,
@@ -404,6 +408,7 @@ class LiveSession {
   final int id;
   final String title;
   final String coverUrl;
+  final String backgroundId;
   final String hostAvatarUrl;
   final String access;
   final String status;
@@ -419,6 +424,7 @@ class LiveSession {
     id: _jsonInt(json['id']),
     title: json['title'] as String,
     coverUrl: json['cover_url'] as String,
+    backgroundId: json['background_id'] as String? ?? 'lb_1',
     hostAvatarUrl: json['host_avatar_url'] as String? ?? '',
     hostNickname: json['host_nickname'] as String? ?? '',
     hostIdentity: (json['host_identity'] as num?)?.toInt() ?? 0,

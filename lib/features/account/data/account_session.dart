@@ -263,6 +263,15 @@ class AccountSession {
     return _apiClient.listFriends(token: await _requireToken());
   }
 
+  Future<void> updateFriendRemark({
+    required String accountID,
+    required String remark,
+  }) async => _apiClient.updateFriendRemark(
+    accountID: accountID,
+    remark: remark,
+    token: await _requireToken(),
+  );
+
   Future<List<FriendContact>> listFriendRequests() async {
     return _apiClient.listFriendRequests(token: await _requireToken());
   }
@@ -324,6 +333,7 @@ class AccountSession {
   Future<LiveSession> createLive({
     required String title,
     required Uint8List coverBytes,
+    String backgroundId = 'lb_1',
     required String access,
     String? joinPassword,
     DateTime? scheduledAt,
@@ -336,6 +346,7 @@ class AccountSession {
     return _apiClient.createLive(
       title: title,
       coverUrl: coverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
@@ -347,6 +358,7 @@ class AccountSession {
     required int liveId,
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     Uint8List? coverBytes,
     required String access,
     String? joinPassword,
@@ -360,6 +372,7 @@ class AccountSession {
       liveId: liveId,
       title: title,
       coverUrl: resolvedCoverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,

@@ -354,6 +354,19 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<void> updateFriendRemark({
+    required String accountID,
+    required String remark,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('friends/${Uri.encodeComponent(accountID)}/remark'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'remark': remark}),
+    );
+    _body(response);
+  }
+
   Future<List<FriendContact>> listFriendRequests({
     required String token,
   }) async {
@@ -860,6 +873,7 @@ class AccountApiClient {
   Future<LiveSession> createLive({
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     required String access,
     required String token,
     String? joinPassword,
@@ -868,6 +882,7 @@ class AccountApiClient {
     final body = _livePayload(
       title: title,
       coverUrl: coverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
@@ -884,6 +899,7 @@ class AccountApiClient {
     required int liveId,
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     required String access,
     required String token,
     String? joinPassword,
@@ -892,6 +908,7 @@ class AccountApiClient {
     final body = _livePayload(
       title: title,
       coverUrl: coverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
@@ -1288,6 +1305,7 @@ class AccountApiClient {
   Map<String, Object?> _livePayload({
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     required String access,
     String? joinPassword,
     DateTime? scheduledAt,
@@ -1295,6 +1313,7 @@ class AccountApiClient {
     final body = <String, Object?>{
       'title': title,
       'cover_url': coverUrl,
+      'background_id': backgroundId,
       'access': access,
     };
     if (joinPassword != null) body['join_password'] = joinPassword;

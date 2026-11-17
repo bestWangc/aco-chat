@@ -401,11 +401,8 @@ class _RoomBottomBar extends StatelessWidget {
     required this.showDanmakuToggle,
     required this.danmakuVisible,
     required this.onToggleDanmaku,
-    required this.showHandControl,
-    required this.handRaised,
     required this.chatMuted,
     required this.onMic,
-    required this.onHand,
     required this.controller,
     required this.onEmojiPressed,
     required this.onImagePressed,
@@ -420,11 +417,8 @@ class _RoomBottomBar extends StatelessWidget {
   final bool showDanmakuToggle;
   final bool danmakuVisible;
   final VoidCallback onToggleDanmaku;
-  final bool showHandControl;
-  final bool handRaised;
   final bool chatMuted;
   final VoidCallback? onMic;
-  final VoidCallback? onHand;
   final TextEditingController controller;
   final VoidCallback onEmojiPressed;
   final VoidCallback onImagePressed;
@@ -486,17 +480,6 @@ class _RoomBottomBar extends StatelessWidget {
                   onSubmitted: onSubmitted,
                 ),
               ),
-              if (showHandControl) ...[
-                const SizedBox(width: 8),
-                _RoomControl(
-                  iconAsset: 'assets/icons/live_hand.png',
-                  label: handRaised ? '已举手' : '举手',
-                  background: palette.surfaceRaised,
-                  foreground: palette.primaryText,
-                  onPressed: handRaised ? null : onHand,
-                  large: true,
-                ),
-              ],
               const SizedBox(width: 8),
               _RoomControl(
                 icon: _micIcon,

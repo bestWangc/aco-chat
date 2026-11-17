@@ -175,6 +175,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   FlutterAliplayer? _aliyunLivePlayer;
   String? _aliyunLivePlayUrl;
   bool _aliyunPlayerViewAttached = false;
+  bool _aliyunFrameSnapshotRequested = false;
   final AliyunScreenBroadcast _aliyunScreenBroadcast = AliyunScreenBroadcast();
   final List<String> _checkInDiagnosticEntries = <String>[];
   late final Future<void> _checkInDiagnosticsReady;
@@ -1127,6 +1128,8 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
           '无法开始屏幕共享',
           error is StateError
               ? error.message
+              : error is TimeoutException
+              ? '屏幕推流连接超时，请检查网络后重试。'
               : error is UnsupportedError
               ? error.message.toString()
               : '请检查系统屏幕录制权限后重试。',
@@ -1179,12 +1182,24 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _refreshAliyunPlayback() async {
     final live = widget.live;
-    if (live == null || _leaving || _aliyunPlaybackLoading) return;
+    if (live == null || _leaving) return;
+    if (_screenBroadcasting || _isLiveHostRole(_room?.viewerRole)) {
+      await _setAliyunPlaybackUrl(null);
+      return;
+    }
+    if (_aliyunPlaybackLoading) return;
     _aliyunPlaybackLoading = true;
     try {
       final urls = await _accountSession.aliyunLiveStreamUrls(live.id);
+      if (_screenBroadcasting || _isLiveHostRole(_room?.viewerRole)) {
+        await _setAliyunPlaybackUrl(null);
+        return;
+      }
       final isPushing = urls['is_pushing'] == true;
       final url = urls['play_url'] as String?;
+      if (kDebugMode && url != null && url.isNotEmpty) {
+        debugPrint('Aliyun debug play URL: $url');
+      }
       final parsedUrl = url == null ? null : Uri.tryParse(url);
       debugPrint(
         'Aliyun playback API: isPushing=$isPushing '
@@ -1232,6 +1247,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   Future<void> _setAliyunPlaybackUrl(String? url) async {
     if (!mounted || _aliyunLivePlayUrl == url) return;
+    _aliyunFrameSnapshotRequested = false;
     _aliyunPlaybackRetryTimer?.cancel();
     _aliyunPlaybackRetryCount = 0;
     _aliyunLivePlayUrl = url;
@@ -1257,6 +1273,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       debugPrint('Aliyun player rendered first frame');
       _aliyunPlaybackRetryTimer?.cancel();
       _aliyunPlaybackRetryCount = 0;
+      unawaited(_captureAliyunDecodedFrame(player));
     });
     player.setOnError((code, extra, message, _) {
       debugPrint(
@@ -1265,6 +1282,23 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       _scheduleAliyunPlaybackRetry(player);
     });
     unawaited(_attachAliyunPlayerView(player, viewId));
+  }
+
+  Future<void> _captureAliyunDecodedFrame(FlutterAliplayer player) async {
+    if (!kDebugMode || _aliyunFrameSnapshotRequested) return;
+    _aliyunFrameSnapshotRequested = true;
+    try {
+      final directory = await getTemporaryDirectory();
+      final path =
+          '${directory.path}/aliyun-decoded-frame-${DateTime.now().millisecondsSinceEpoch}.png';
+      player.setOnSnapShot((snapshotPath, _) {
+        debugPrint('Aliyun decoded frame snapshot saved: $snapshotPath');
+      });
+      await player.snapshot(path);
+      debugPrint('Aliyun decoded frame snapshot requested: $path');
+    } on Object catch (error) {
+      debugPrint('Aliyun decoded frame snapshot failed: $error');
+    }
   }
 
   Future<void> _attachAliyunPlayerView(
@@ -1867,7 +1901,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                   }
                 },
                 child: _hostActionLabel(
-                  _screenBroadcasting ? '停止屏幕共享' : '共享屏幕给观众',
+                  _screenBroadcasting ? '停止屏幕共享' : '共享屏幕',
                 ),
               ),
             if (isHost && !_transferringHost)

@@ -5,108 +5,174 @@ part of 'aco_design_shell.dart';
 // ignore_for_file: invalid_use_of_protected_member
 
 extension _VoiceRoomUi on _VoiceRoomPageState {
-  Widget? _buildRoomOverview({
-    required AcoPalette palette,
-    required LiveRoom? room,
-    required bool isHost,
-  }) {
+  void _recordRoomCheckInState(LiveRoom? room, bool isHost) {
     if (_emojiPickerVisible) {
       _recordCheckInButtonState(
         room,
         isHost: isHost,
         hiddenReason: 'emoji_picker_open',
       );
-      return null;
+      return;
     }
     _recordCheckInButtonState(room, isHost: isHost);
-    if (room != null) {
-      return _LiveRoomOverview(
-        palette: palette,
-        room: room,
-        isHost: isHost,
-        // The initial room snapshot and the local LiveKit state can arrive in
-        // either order. Treat either source reporting mute as authoritative so
-        // a muted host avatar never falls back to the grey "not speaking"
-        // treatment during entry or immediately after toggling.
-        hostMuted: isHost ? (_muted || room.host.muted) : room.host.muted,
-        viewerMuted: _muted,
-        checkingIn: _checkingIn,
-        speakingParticipantIds: _liveKitSpeakingParticipantIds,
-        onCheckIn: _confirmCheckIn,
-        onCheckInButtonShown: _recordCheckInButtonDisplayed,
-        onShowRaisedHandRequests: () => unawaited(_showRaisedHandRequests()),
-        // Member mute/unmute is managed from the members list. Keep avatars
-        // display-only so tapping one does not open an action sheet.
-        onSpeakerTap: null,
-      );
-    }
-    if (_roomLoading) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 48),
-        child: CupertinoActivityIndicator(),
-      );
-    }
-    return null;
   }
 
-  Widget _buildAliyunShareStage({
-    required BuildContext context,
+  double _meetingSidebarWidth(double maxWidth) =>
+      (maxWidth * .15).clamp(58.0, 68.0).toDouble();
+
+  Widget _buildMeetingParticipantsSidebar({
+    required AcoPalette palette,
+    required LiveRoom? room,
+    required bool isHost,
+    required BoxConstraints constraints,
+  }) {
+    final panelWidth = _meetingSidebarWidth(constraints.maxWidth);
+    final panelHeight = math.min(420.0, constraints.maxHeight * .62);
+    final participants = room == null
+        ? const <LiveParticipant>[]
+        : <LiveParticipant>[room.host, ...room.speakers, ...room.listeners];
+    final seenUserIds = <int>{};
+    final uniqueParticipants = participants
+        .where((participant) => seenUserIds.add(participant.userId))
+        .toList(growable: false);
+    final showHandControl =
+        room != null && !_canManageLiveMicrophones(room.viewerRole);
+    final canRaiseHand = room?.canRaiseHand == true;
+    final collapsedPanelHeight = showHandControl ? 194.0 : 146.0;
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      top: 12,
+      right: 8,
+      width: panelWidth,
+      height: _shareMembersExpanded ? panelHeight : collapsedPanelHeight,
+      child: Container(
+        decoration: BoxDecoration(
+          color: _black.withValues(alpha: _shareMembersExpanded ? .34 : .22),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: _white.withValues(alpha: .10)),
+        ),
+        child: Column(
+          children: [
+            if (showHandControl)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: _RoomControl(
+                  iconAsset: 'assets/icons/live_hand.png',
+                  label: _handRaised ? '已举手' : '举手',
+                  background: palette.surfaceRaised,
+                  foreground: palette.primaryText,
+                  onPressed: canRaiseHand && !_handRaised ? _raiseHand : null,
+                  large: false,
+                  iconSize: 20,
+                  subtle: true,
+                ),
+              ),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: _shareMembersExpanded
+                    ? uniqueParticipants.length
+                    : math.min(2, uniqueParticipants.length),
+                itemBuilder: (context, index) {
+                  final participant = uniqueParticipants[index];
+                  final isHostParticipant =
+                      participant.userId == room?.host.userId;
+                  var muted = participant.muted;
+                  if (participant.role == 'listener') {
+                    muted = true;
+                  } else if (isHostParticipant && isHost) {
+                    muted = _muted || participant.muted;
+                  } else if (participant.userId == room?.viewerUserId) {
+                    muted = _muted;
+                  }
+                  final speaking =
+                      !muted &&
+                      _liveKitSpeakingParticipantIds.contains(
+                        participant.userId.toString(),
+                      );
+                  final role = switch (participant.role) {
+                    'host' => '主持人',
+                    'cohost' => '联席主持',
+                    'speaker' => '发言人',
+                    _ => '听众',
+                  };
+                  return _AliyunShareMemberTile(
+                    participant: participant,
+                    role: role,
+                    isHost: isHostParticipant,
+                    muted: muted,
+                    speaking: speaking,
+                    palette: palette,
+                    compact: !_shareMembersExpanded,
+                  );
+                },
+              ),
+            ),
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(44, 38),
+              onPressed: () => setState(
+                () => _shareMembersExpanded = !_shareMembersExpanded,
+              ),
+              child: Icon(
+                _shareMembersExpanded
+                    ? CupertinoIcons.chevron_up
+                    : CupertinoIcons.chevron_down,
+                color: palette.primaryText.withValues(alpha: .9),
+                size: 18,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMeetingStage({
+    required bool hasAliyunVideo,
     required AcoPalette palette,
     required LiveRoom? room,
     required bool isHost,
   }) => LayoutBuilder(
     builder: (context, constraints) {
-      final panelWidth = (constraints.maxWidth * .15)
-          .clamp(58.0, 68.0)
-          .toDouble();
-      final panelHeight = math.min(420.0, constraints.maxHeight * .62);
-      final participants = room == null
-          ? const <LiveParticipant>[]
-          : <LiveParticipant>[room.host, ...room.speakers, ...room.listeners];
-      final seenUserIds = <int>{};
-      final uniqueParticipants = participants
-          .where((participant) => seenUserIds.add(participant.userId))
-          .toList(growable: false);
-      final raisedHandCount = room?.raisedHandCount ?? 0;
-      final showHandControl =
-          room != null && !_canManageLiveMicrophones(room.viewerRole);
-      final canRaiseHand = room?.canRaiseHand == true;
-      final collapsedPanelHeight = showHandControl ? 194.0 : 146.0;
       final checkIn = room?.checkIn;
       final showCheckIn =
+          !_emojiPickerVisible &&
           checkIn != null &&
           _checkInIsActive(checkIn) &&
           (isHost || (!_checkingIn && !checkIn.viewerChecked));
+      final raisedHandCount = room?.raisedHandCount ?? 0;
 
       return Stack(
         clipBehavior: Clip.hardEdge,
         children: [
-          const Positioned.fill(child: ColoredBox(color: _black)),
-          Positioned.fill(
-            child: AliPlayerView(
-              onCreated: _onAliyunPlayerViewCreated,
-              x: 0,
-              y: 0,
-              width: constraints.maxWidth,
-              height: constraints.maxHeight,
-              aliPlayerViewType: AliPlayerViewTypeForAndroid.textureview,
-            ),
-          ),
-          if (room != null && isHost && raisedHandCount > 0)
-            Positioned(
-              top: 14,
-              left: showCheckIn ? 94 : 12,
-              child: _RaisedHandIndicator(
-                count: raisedHandCount,
-                onPressed: () => unawaited(_showRaisedHandRequests()),
+          if (hasAliyunVideo) ...[
+            const Positioned.fill(child: ColoredBox(color: _black)),
+            Positioned.fill(
+              child: AliPlayerView(
+                onCreated: _onAliyunPlayerViewCreated,
+                x: 0,
+                y: 0,
+                width: constraints.maxWidth,
+                height: constraints.maxHeight,
+                aliPlayerViewType: AliPlayerViewTypeForAndroid.surfaceview,
               ),
             ),
-          if (_danmakuVisible)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: 0,
-              bottom: 0,
+            if (_danmakuVisible)
+              Positioned.fill(
+                child: _RoomChatHistory(
+                  palette: palette,
+                  liveMessages: _chatBuffer.messages,
+                  hasLive: widget.live != null,
+                  scrollToLatestSignal: _scrollToLatestSignal,
+                  showEmptyState: false,
+                  isScreenShareOverlay: true,
+                ),
+              ),
+          ] else if (_danmakuVisible)
+            Positioned.fill(
               child: _RoomChatHistory(
                 palette: palette,
                 liveMessages: _chatBuffer.messages,
@@ -116,111 +182,20 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 isScreenShareOverlay: true,
               ),
             ),
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOut,
-            top: 12,
-            right: 8,
-            width: panelWidth,
-            height: _shareMembersExpanded ? panelHeight : collapsedPanelHeight,
-            child: Container(
-              decoration: BoxDecoration(
-                color: _black.withValues(
-                  alpha: _shareMembersExpanded ? .34 : .22,
-                ),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: _white.withValues(alpha: .10)),
-              ),
-              child: Column(
-                children: [
-                  if (showHandControl)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: _RoomControl(
-                        iconAsset: 'assets/icons/live_hand.png',
-                        label: _handRaised ? '已举手' : '举手',
-                        background: palette.surfaceRaised,
-                        foreground: palette.primaryText,
-                        onPressed: canRaiseHand && !_handRaised
-                            ? _raiseHand
-                            : null,
-                        large: false,
-                        iconSize: 20,
-                        subtle: true,
-                      ),
-                    ),
-                  if (_shareMembersExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        '成员 ${room?.participantCount ?? 0}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: palette.primaryText.withValues(alpha: .9),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: _shareMembersExpanded
-                          ? uniqueParticipants.length
-                          : math.min(2, uniqueParticipants.length),
-                      itemBuilder: (context, index) {
-                        final participant = uniqueParticipants[index];
-                        final isHostParticipant =
-                            participant.userId == room?.host.userId;
-                        var muted = participant.muted;
-                        if (participant.role == 'listener') {
-                          muted = true;
-                        } else if (isHostParticipant && isHost) {
-                          muted = _muted || participant.muted;
-                        } else if (participant.userId == room?.viewerUserId) {
-                          muted = _muted;
-                        }
-                        final speaking =
-                            !muted &&
-                            _liveKitSpeakingParticipantIds.contains(
-                              participant.userId.toString(),
-                            );
-                        final role = switch (participant.role) {
-                          'host' => '主持人',
-                          'cohost' => '联席主持',
-                          'speaker' => '发言人',
-                          _ => '听众',
-                        };
-                        return _AliyunShareMemberTile(
-                          participant: participant,
-                          role: role,
-                          isHost: isHostParticipant,
-                          muted: muted,
-                          speaking: speaking,
-                          palette: palette,
-                          compact: !_shareMembersExpanded,
-                        );
-                      },
-                    ),
-                  ),
-                  CupertinoButton(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(44, 38),
-                    onPressed: () => setState(
-                      () => _shareMembersExpanded = !_shareMembersExpanded,
-                    ),
-                    child: Icon(
-                      _shareMembersExpanded
-                          ? CupertinoIcons.chevron_up
-                          : CupertinoIcons.chevron_down,
-                      color: palette.primaryText.withValues(alpha: .9),
-                      size: 18,
-                    ),
-                  ),
-                ],
+          if (room != null && isHost && raisedHandCount > 0)
+            Positioned(
+              top: showCheckIn ? 14 : 44,
+              left: showCheckIn ? 94 : 12,
+              child: _RaisedHandIndicator(
+                count: raisedHandCount,
+                onPressed: () => unawaited(_showRaisedHandRequests()),
               ),
             ),
+          _buildMeetingParticipantsSidebar(
+            palette: palette,
+            room: room,
+            isHost: isHost,
+            constraints: constraints,
           ),
           if (showCheckIn)
             Positioned(
@@ -276,13 +251,12 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
     final bottomOverlayInset =
         _roomBottomBarHeight +
         (_emojiPickerVisible ? _roomEmojiPickerHeight : 0);
-    final roomOverview = _buildRoomOverview(
-      palette: palette,
-      room: room,
-      isHost: isHost,
-    );
+    _recordRoomCheckInState(room, isHost);
     final aliyunPlayUrl = _aliyunLivePlayUrl;
-    final hasAliyunVideo = aliyunPlayUrl != null;
+    final hasAliyunVideo =
+        aliyunPlayUrl != null && !isHost && !_screenBroadcasting;
+    final hasMeetingBackground =
+        !hasAliyunVideo && (live?.backgroundId.isNotEmpty ?? false);
 
     return PopScope(
       canPop: _allowPop,
@@ -299,193 +273,191 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
         right: _LiveRoomHeaderActions(
           palette: palette,
           count: room?.participantCount,
-          onMembers: hasAliyunVideo
-              ? () => setState(
-                  () => _shareMembersExpanded = !_shareMembersExpanded,
-                )
-              : _showMembers,
+          onMembers: _showMembers,
           onMore: _showRoomActions,
         ),
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            Positioned.fill(
-              child: Padding(
-                padding: EdgeInsets.only(bottom: bottomOverlayInset),
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    _dismissKeyboard();
-                    if (_emojiPickerVisible) {
-                      setState(() => _emojiPickerVisible = false);
-                    }
-                  },
-                  onPanDown: (_) {
-                    if (_emojiPickerVisible) {
-                      setState(() => _emojiPickerVisible = false);
-                    }
-                    _dismissKeyboard();
-                  },
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      if (hasAliyunVideo) {
-                        return _buildAliyunShareStage(
-                          context: context,
-                          palette: palette,
-                          room: room,
-                          isHost: isHost,
-                        );
-                      }
-                      const overviewChatGap = 6.0;
-                      const minChatHeight = 160.0;
-                      const screenShareHeight = 202.0;
-                      final overviewMaxHeight = math.max(
-                        0.0,
-                        constraints.maxHeight -
-                            overviewChatGap -
-                            minChatHeight -
-                            (hasAliyunVideo ? screenShareHeight : 0),
-                      );
-                      return Column(
-                        children: [
-                          if (hasAliyunVideo)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: AspectRatio(
-                                aspectRatio: 16 / 9,
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) =>
-                                        AliPlayerView(
-                                          onCreated: _onAliyunPlayerViewCreated,
-                                          x: 0,
-                                          y: 0,
-                                          width: constraints.maxWidth,
-                                          height: constraints.maxHeight,
-                                        ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          if (roomOverview != null)
-                            ConstrainedBox(
-                              constraints: BoxConstraints(
-                                maxHeight: overviewMaxHeight,
-                              ),
-                              child: SingleChildScrollView(
-                                primary: false,
-                                child: roomOverview,
-                              ),
-                            ),
-                          const SizedBox(height: overviewChatGap),
-                          Expanded(
-                            child: _RoomChatHistory(
-                              palette: palette,
-                              liveMessages: _chatBuffer.messages,
-                              hasLive: live != null,
-                              scrollToLatestSignal: _scrollToLatestSignal,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+            ColoredBox(color: palette.background),
+            if (hasMeetingBackground)
+              Positioned.fill(
+                child: Image.asset(
+                  _meetingBackgroundAssetPath(live!.backgroundId),
+                  fit: BoxFit.cover,
+                  alignment: Alignment.center,
+                ),
+              ),
+            if (hasMeetingBackground)
+              Positioned.fill(
+                child: ColoredBox(
+                  color: palette.dark
+                      ? const Color(0x66000000)
+                      : const Color(0x99FFFFFF),
+                ),
+              ),
+            Stack(
+              children: [
+                Positioned.fill(
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomOverlayInset),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        _dismissKeyboard();
+                        if (_emojiPickerVisible) {
+                          setState(() => _emojiPickerVisible = false);
+                        }
+                      },
+                      onPanDown: (_) {
+                        if (_emojiPickerVisible) {
+                          setState(() => _emojiPickerVisible = false);
+                        }
+                        _dismissKeyboard();
+                      },
+                      child: _buildMeetingStage(
+                        hasAliyunVideo: hasAliyunVideo,
+                        palette: palette,
+                        room: room,
+                        isHost: isHost,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            if (_handRaiseNoticeVisible)
-              const Center(child: _LiveRoomInfoNotice()),
-            Positioned(
-              top: 8,
-              left: 18,
-              child: _LiveRoomNetworkStatusChip(
-                wsReconnecting: _networkReconnecting,
-                liveKitConnecting: _liveKitConnecting,
-                liveKitConnected: _liveKitRoom != null,
-                liveKitReconnecting: _liveKitReconnecting,
-                liveKitReconnectStopped: _liveKitReconnectStopped,
-              ),
-            ),
-            if (_networkReconnecting ||
-                _liveKitConnecting ||
-                _liveKitReconnecting)
-              _LiveRoomNetworkNotice(
-                wsReconnecting: _networkReconnecting,
-                liveKitConnecting: _liveKitConnecting,
-                liveKitReconnecting: _liveKitReconnecting,
-              ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: _emojiPickerVisible ? _roomEmojiPickerHeight : 0,
-              child: _RoomBottomBar(
-                palette: palette,
-                muted: _muted,
-                canSpeak: canSpeak,
-                audioMuted: audioMuted,
-                showDanmakuToggle: hasAliyunVideo,
-                danmakuVisible: _danmakuVisible,
-                onToggleDanmaku: () =>
-                    setState(() => _danmakuVisible = !_danmakuVisible),
-                showHandControl: !canManageMicrophones && !hasAliyunVideo,
-                handRaised: _handRaised,
-                chatMuted: chatMuted,
-                onMic: canToggleMicrophone ? _toggleMicrophone : null,
-                onHand: room?.canRaiseHand == true ? _raiseHand : null,
-                controller: _messageController,
-                onEmojiPressed: _toggleEmojiPicker,
-                onImagePressed: _pickAndSendImage,
-                sendingImage: _sendingImage,
-                onSubmitted: _sendMessage,
-              ),
-            ),
-            if (_emojiPickerVisible)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: _AcoEmojiPicker(
-                  palette: palette,
-                  controller: _messageController,
-                  onEmojiSelected: () =>
-                      setState(() => _emojiPickerVisible = false),
+                Positioned(
+                  top: 8,
+                  left: 18,
+                  child: _LiveRoomNetworkStatusChip(
+                    wsReconnecting: _networkReconnecting,
+                    liveKitConnecting: _liveKitConnecting,
+                    liveKitConnected: _liveKitRoom != null,
+                    liveKitReconnecting: _liveKitReconnecting,
+                    liveKitReconnectStopped: _liveKitReconnectStopped,
+                  ),
                 ),
-              ),
-            Positioned.fill(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                child: _reentryCoolingDown
-                    ? ColoredBox(
-                        key: const ValueKey('live-room-reentry-cooldown'),
-                        color: Color(0xE6000000),
-                        child: Center(
-                          child: Column(
+                if (isHost && _screenBroadcasting)
+                  Positioned(
+                    top: 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: _black.withValues(alpha: .62),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: _white.withValues(alpha: .12),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const CupertinoActivityIndicator(radius: 14),
-                              const SizedBox(height: 14),
-                              Text(
-                                '正在准备重新进入会议',
-                                style: TextStyle(
-                                  color: _white,
-                                  fontSize: AcoTypography.bodyEmphasis,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              const Icon(
+                                CupertinoIcons.rectangle_on_rectangle,
+                                color: Color(0xFF9BEF00),
+                                size: 15,
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(width: 6),
                               Text(
-                                '请稍候 $_reentryCooldownSeconds 秒',
+                                '正在共享屏幕',
                                 style: TextStyle(
-                                  color: _white.withValues(alpha: .72),
-                                  fontSize: AcoTypography.bodySmall,
+                                  color: _white.withValues(alpha: .95),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                      )
-                    : const SizedBox.shrink(),
-              ),
+                      ),
+                    ),
+                  ),
+                if (_handRaiseNoticeVisible)
+                  const Center(child: _LiveRoomInfoNotice()),
+                if (_networkReconnecting ||
+                    _liveKitConnecting ||
+                    _liveKitReconnecting)
+                  _LiveRoomNetworkNotice(
+                    wsReconnecting: _networkReconnecting,
+                    liveKitConnecting: _liveKitConnecting,
+                    liveKitReconnecting: _liveKitReconnecting,
+                  ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: _emojiPickerVisible ? _roomEmojiPickerHeight : 0,
+                  child: _RoomBottomBar(
+                    palette: palette,
+                    muted: _muted,
+                    canSpeak: canSpeak,
+                    audioMuted: audioMuted,
+                    showDanmakuToggle: true,
+                    danmakuVisible: _danmakuVisible,
+                    onToggleDanmaku: () =>
+                        setState(() => _danmakuVisible = !_danmakuVisible),
+                    chatMuted: chatMuted,
+                    onMic: canToggleMicrophone ? _toggleMicrophone : null,
+                    controller: _messageController,
+                    onEmojiPressed: _toggleEmojiPicker,
+                    onImagePressed: _pickAndSendImage,
+                    sendingImage: _sendingImage,
+                    onSubmitted: _sendMessage,
+                  ),
+                ),
+                if (_emojiPickerVisible)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: _AcoEmojiPicker(
+                      palette: palette,
+                      controller: _messageController,
+                      onEmojiSelected: () =>
+                          setState(() => _emojiPickerVisible = false),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: _reentryCoolingDown
+                        ? ColoredBox(
+                            key: const ValueKey('live-room-reentry-cooldown'),
+                            color: const Color(0xE6000000),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const CupertinoActivityIndicator(radius: 14),
+                                  const SizedBox(height: 14),
+                                  Text(
+                                    '正在准备重新进入会议',
+                                    style: TextStyle(
+                                      color: _white,
+                                      fontSize: AcoTypography.bodyEmphasis,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '请稍候 $_reentryCooldownSeconds 秒',
+                                    style: TextStyle(
+                                      color: _white.withValues(alpha: .72),
+                                      fontSize: AcoTypography.bodySmall,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

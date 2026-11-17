@@ -1,46 +1,121 @@
 part of 'aco_design_shell.dart';
 
-class _ContactDetailPage extends StatelessWidget {
+class _ContactDetailPage extends StatefulWidget {
   const _ContactDetailPage({
     required this.palette,
     required this.name,
+    required this.accountID,
+    required this.remark,
     required this.onMessagePressed,
+    this.avatarUrl = '',
+    this.isFriend = true,
   });
 
   final AcoPalette palette;
   final String name;
-  final VoidCallback onMessagePressed;
+  final String accountID;
+  final String remark;
+  final ValueChanged<String> onMessagePressed;
+  final String avatarUrl;
+  final bool isFriend;
 
-  String get _handle => '@${name.toLowerCase().replaceAll(' ', '_')}';
+  @override
+  State<_ContactDetailPage> createState() => _ContactDetailPageState();
+}
+
+class _ContactDetailPageState extends State<_ContactDetailPage> {
+  late String _remark;
+  bool _savingRemark = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _remark = widget.remark;
+  }
+
+  String get _handle => widget.isFriend
+      ? '@${widget.name.toLowerCase().replaceAll(' ', '_')}'
+      : '账号：${widget.accountID}';
+
+  Future<void> _editRemark() async {
+    if (_savingRemark) return;
+    final controller = TextEditingController(text: _remark);
+    final enteredRemark = await showCupertinoDialog<String>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('设置备注'),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: CupertinoTextField(
+            autofocus: true,
+            controller: controller,
+            maxLength: 64,
+            placeholder: '输入备注',
+          ),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (enteredRemark == null || enteredRemark.trim() == _remark) return;
+
+    final remark = enteredRemark.trim();
+    setState(() => _savingRemark = true);
+    final client = AccountApiClient();
+    try {
+      await AccountSession(
+        client,
+      ).updateFriendRemark(accountID: widget.accountID, remark: remark);
+      if (mounted) setState(() => _remark = remark);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '保存备注失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '保存备注失败', '请检查网络后重试。');
+    } finally {
+      client.close();
+      if (mounted) setState(() => _savingRemark = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) => CupertinoPageScaffold(
-    backgroundColor: palette.background,
+    backgroundColor: widget.palette.background,
     child: AcoSafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           AcoPageHeader(
-            palette: palette,
-            title: '好友详情',
+            palette: widget.palette,
+            title: widget.isFriend ? '好友详情' : '个人资料',
             onBack: () => Navigator.of(context).maybePop(),
           ),
           const SizedBox(height: 18),
           Row(
             children: [
-              const AcoAvatar(size: 70),
+              AcoAvatar(size: 70, imageUrl: widget.avatarUrl),
               const SizedBox(width: 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      widget.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: palette.primaryText,
+                        color: widget.palette.primaryText,
                         fontSize: AcoTypography.title,
                         fontWeight: FontWeight.w700,
                       ),
@@ -49,7 +124,7 @@ class _ContactDetailPage extends StatelessWidget {
                     Text(
                       _handle,
                       style: TextStyle(
-                        color: palette.mutedText,
+                        color: widget.palette.mutedText,
                         fontSize: AcoTypography.body,
                       ),
                     ),
@@ -59,15 +134,30 @@ class _ContactDetailPage extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 30),
+          if (widget.isFriend) ...[
+            _ContactDetailActionRow(
+              palette: widget.palette,
+              icon: CupertinoIcons.pencil,
+              label: _savingRemark
+                  ? '保存中...'
+                  : _remark.isEmpty
+                  ? '设置备注'
+                  : '备注：$_remark',
+              onTap: () => unawaited(_editRemark()),
+            ),
+            const SizedBox(height: 8),
+          ],
           _ContactDetailActionRow(
-            palette: palette,
+            palette: widget.palette,
             icon: CupertinoIcons.chat_bubble,
             label: '发消息',
-            onTap: onMessagePressed,
+            onTap: () => widget.onMessagePressed(
+              _remark.isEmpty ? widget.name : _remark,
+            ),
           ),
           const SizedBox(height: 8),
           _ContactDetailActionRow(
-            palette: palette,
+            palette: widget.palette,
             icon: CupertinoIcons.phone,
             label: '音频通话',
             onTap: () => _showNotice(context, '音频通话', '通话功能暂未开放。'),

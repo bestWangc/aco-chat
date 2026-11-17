@@ -94,6 +94,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/images/meetings/
     - assets/images/dapps/
     - assets/images/dapps/trustwallet/
     - assets/images/identity_badges/

@@ -61,6 +61,11 @@ class AliyunScreenBroadcast {
       debugPrint('Aliyun screen push: initializing native engine');
       await pusher.initLivePusher();
       debugPrint('Aliyun screen push: native engine initialized');
+      final pushStarted = Completer<void>();
+      final pushStartedFuture = pushStarted.future.timeout(
+        const Duration(seconds: 20),
+        onTimeout: () => throw TimeoutException('屏幕推流连接超时'),
+      );
       pusher.setOnSDKError(
         (code, description) => debugPrint(
           'Aliyun screen push SDK error: code=$code description=$description',
@@ -71,12 +76,19 @@ class AliyunScreenBroadcast {
           'Aliyun screen push system error: code=$code description=$description',
         ),
       );
-      pusher.setOnPushStarted(() => debugPrint('Aliyun screen push connected'));
-      pusher.setOnConnectFail(
-        (code, description) => debugPrint(
-          'Aliyun screen push connect failed: code=$code description=$description',
-        ),
-      );
+      pusher.setOnPushStarted(() {
+        debugPrint('Aliyun screen push connected');
+        if (!pushStarted.isCompleted) pushStarted.complete();
+      });
+      pusher.setOnConnectFail((code, description) {
+        debugPrint(
+          'Aliyun screen push connect failed: '
+          'code=$code description=$description',
+        );
+        if (!pushStarted.isCompleted) {
+          pushStarted.completeError(StateError('推流连接失败（$code）：$description'));
+        }
+      });
       debugPrint('Aliyun screen push: registering SDK callbacks');
       await pusher.setErrorDelegate();
       await pusher.setInfoDelegate();
@@ -95,6 +107,7 @@ class AliyunScreenBroadcast {
         'Aliyun screen push starting: host=${Uri.tryParse(pushUrl)?.host}',
       );
       await pusher.startPushWithURL(pushUrl);
+      await pushStartedFuture;
       _pusher = pusher;
     } on Object catch (error, stackTrace) {
       debugPrint('Aliyun screen push start failed: $error');

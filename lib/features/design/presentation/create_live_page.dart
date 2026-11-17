@@ -1,5 +1,24 @@
 part of 'aco_design_shell.dart';
 
+const _meetingBackgroundIds = <String>[
+  'lb_1',
+  'lb_2',
+  'lb_3',
+  'lb_4',
+  'lb_5',
+  'lb_6',
+  'lb_7',
+  'lb_8',
+  'lb_9',
+  'lb_10',
+  '',
+];
+
+String _meetingBackgroundAssetPath(String id) {
+  final extension = id == 'lb_1' || id == 'lb_2' ? 'jpg' : 'png';
+  return 'assets/images/meetings/$id.$extension';
+}
+
 class _CreateLivePage extends StatefulWidget {
   const _CreateLivePage({
     required this.palette,
@@ -23,6 +42,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   final _titleController = TextEditingController();
   DateTime? _scheduledAt;
   Uint8List? _coverBytes;
+  String _backgroundId = 'lb_1';
   String? _joinPassword;
   bool _submitting = false;
   bool _coverChanged = false;
@@ -35,6 +55,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     final live = widget.live;
     if (live != null) {
       _titleController.text = live.title;
+      _backgroundId = live.backgroundId;
       _scheduledAt = live.scheduledAt;
       _joinPassword = live.access == 'password' ? '' : null;
     }
@@ -68,6 +89,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
           title: title,
           coverUrl: live.coverUrl,
           coverBytes: _coverChanged ? _coverBytes : null,
+          backgroundId: _backgroundId,
           access: _joinPassword == null ? 'open' : 'password',
           joinPassword: _joinPassword?.isEmpty == true ? null : _joinPassword,
           scheduledAt: _scheduledAt,
@@ -76,6 +98,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
         createdLive = await session.createLive(
           title: title,
           coverBytes: coverBytes,
+          backgroundId: _backgroundId,
           access: _joinPassword == null ? 'open' : 'password',
           joinPassword: _joinPassword,
           scheduledAt: _scheduledAt,
@@ -397,6 +420,83 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                   onTap: _selectJoinAccess,
                 ),
                 const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '选择背景',
+                    style: TextStyle(
+                      color: palette.primaryText,
+                      fontSize: AcoTypography.body,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 174,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _meetingBackgroundIds.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) {
+                      final backgroundId = _meetingBackgroundIds[index];
+                      final selected = _backgroundId == backgroundId;
+                      return Semantics(
+                        button: true,
+                        selected: selected,
+                        label: backgroundId.isEmpty
+                            ? '无背景'
+                            : '会议背景 ${index + 1}',
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _backgroundId = backgroundId),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 140),
+                            width: 102,
+                            padding: EdgeInsets.all(selected ? 3 : 0),
+                            decoration: BoxDecoration(
+                              border: selected
+                                  ? Border.all(color: palette.accent, width: 3)
+                                  : null,
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(9),
+                              child: backgroundId.isEmpty
+                                  ? ColoredBox(
+                                      color: palette.surfaceRaised,
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            CupertinoIcons.nosign,
+                                            color: palette.mutedText,
+                                            size: 28,
+                                          ),
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            '无背景',
+                                            style: TextStyle(
+                                              color: palette.primaryText,
+                                              fontSize: AcoTypography.caption,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : Image.asset(
+                                      _meetingBackgroundAssetPath(backgroundId),
+                                      fit: BoxFit.cover,
+                                    ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
                 CupertinoButton(
                   padding: EdgeInsets.zero,
                   onPressed: _selectCover,
