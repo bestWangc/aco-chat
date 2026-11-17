@@ -1,3 +1,6 @@
+import chat.aco.build.AliyunScreenCapturePatch
+import com.android.build.api.instrumentation.FramesComputationMode
+import com.android.build.api.instrumentation.InstrumentationScope
 import java.util.Properties
 
 plugins {
@@ -10,6 +13,18 @@ val androidApplicationId = providers.gradleProperty("acoApplicationId").orNull
     ?.trim()
     ?.takeIf { it.isNotEmpty() }
     ?: "com.kzparty.chat.aca.cac"
+
+androidComponents {
+    onVariants(selector().all()) { variant ->
+        variant.instrumentation.transformClassesWith(
+            AliyunScreenCapturePatch::class.java,
+            InstrumentationScope.ALL,
+        ) {}
+        variant.instrumentation.setAsmFramesComputationMode(
+            FramesComputationMode.COMPUTE_FRAMES_FOR_INSTRUMENTED_METHODS,
+        )
+    }
+}
 
 val aliyunLicenseProperties = Properties()
 val aliyunLicensePropertiesFile = rootProject.file("../aliyun_license/android/android.properties")
