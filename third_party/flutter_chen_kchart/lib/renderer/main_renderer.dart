@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../entity/candle_entity.dart';
 import '../k_chart_widget.dart' show MainState;
+import '../utils/data_util.dart';
 import 'base_chart_renderer.dart';
 
 enum VerticalTextAlignment { left, right }
@@ -43,14 +44,14 @@ class MainRenderer extends BaseChartRenderer<CandleEntity> {
     this.maDayList = const [5, 10, 20],
     String Function(double)? numberFormatter,
   }) : super(
-         chartRect: mainRect,
-         maxValue: maxValue,
-         minValue: minValue,
-         topPadding: topPadding,
-         fixedLength: fixedLength,
-         numberFormatter: numberFormatter,
-         gridColor: chartColors.gridColor,
-       ) {
+          chartRect: mainRect,
+          maxValue: maxValue,
+          minValue: minValue,
+          topPadding: topPadding,
+          fixedLength: fixedLength,
+          numberFormatter: numberFormatter,
+          gridColor: chartColors.gridColor,
+        ) {
     mCandleWidth = this.chartStyle.candleWidth;
     mCandleLineWidth = this.chartStyle.candleLineWidth;
     mLinePaint = Paint()
@@ -75,8 +76,8 @@ class MainRenderer extends BaseChartRenderer<CandleEntity> {
   void drawText(Canvas canvas, CandleEntity data, double x) {
     if (isLine == true) return;
     TextSpan? span;
-    if (state == MainState.MA) {
-      span = TextSpan(children: _createMATextSpan(data));
+    if (state == MainState.MA || state == MainState.EMA) {
+      span = TextSpan(children: _createMovingAverageTextSpan(data));
     } else if (state == MainState.BOLL) {
       span = TextSpan(
         children: [
@@ -104,15 +105,22 @@ class MainRenderer extends BaseChartRenderer<CandleEntity> {
     tp.paint(canvas, Offset(x, chartRect.top - topPadding));
   }
 
-  List<InlineSpan> _createMATextSpan(CandleEntity data) {
-    List<InlineSpan> result = [];
-    for (int i = 0; i < (data.maValueList?.length ?? 0); i++) {
-      if (data.maValueList?[i] != 0) {
-        var item = TextSpan(
-          text: "MA${maDayList[i]}:${format(data.maValueList![i])}    ",
-          style: getTextStyle(this.chartColors.getMAColor(i)),
+  List<double>? _movingAverageValues(CandleEntity data) =>
+      state == MainState.EMA ? data.emaValueList : data.maValueList;
+
+  List<InlineSpan> _createMovingAverageTextSpan(CandleEntity data) {
+    final values = _movingAverageValues(data) ?? const <double>[];
+    final label = state == MainState.EMA ? 'EMA' : 'MA';
+    final periods = state == MainState.EMA ? DataUtil.emaPeriods : maDayList;
+    final result = <InlineSpan>[];
+    for (int i = 0; i < values.length; i++) {
+      if (values[i] != 0) {
+        result.add(
+          TextSpan(
+            text: "$label${periods[i]}:${format(values[i])}    ",
+            style: getTextStyle(chartColors.getMAColor(i)),
+          ),
         );
-        result.add(item);
       }
     }
     return result;
@@ -131,8 +139,8 @@ class MainRenderer extends BaseChartRenderer<CandleEntity> {
       drawPolyline(lastPoint.close, curPoint.close, canvas, lastX, curX);
     } else {
       drawCandle(curPoint, canvas, curX);
-      if (state == MainState.MA) {
-        drawMaLine(lastPoint, curPoint, canvas, lastX, curX);
+      if (state == MainState.MA || state == MainState.EMA) {
+        drawMovingAverageLine(lastPoint, curPoint, canvas, lastX, curX);
       } else if (state == MainState.BOLL) {
         drawBollLine(lastPoint, curPoint, canvas, lastX, curX);
       }
@@ -175,23 +183,22 @@ class MainRenderer extends BaseChartRenderer<CandleEntity> {
     );
 
     //画阴影
-    mLineFillShader ??=
-        LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          tileMode: TileMode.clamp,
-          colors: [
-            this.chartColors.lineFillColor,
-            this.chartColors.lineFillInsideColor,
-          ],
-        ).createShader(
-          Rect.fromLTRB(
-            chartRect.left,
-            chartRect.top,
-            chartRect.right,
-            chartRect.bottom,
-          ),
-        );
+    mLineFillShader ??= LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      tileMode: TileMode.clamp,
+      colors: [
+        this.chartColors.lineFillColor,
+        this.chartColors.lineFillInsideColor,
+      ],
+    ).createShader(
+      Rect.fromLTRB(
+        chartRect.left,
+        chartRect.top,
+        chartRect.right,
+        chartRect.bottom,
+      ),
+    );
     mLineFillPaint..shader = mLineFillShader;
 
     mLineFillPath ??= Path();
@@ -219,21 +226,20 @@ class MainRenderer extends BaseChartRenderer<CandleEntity> {
     mLinePath!.reset();
   }
 
-  void drawMaLine(
+  void drawMovingAverageLine(
     CandleEntity lastPoint,
     CandleEntity curPoint,
     Canvas canvas,
     double lastX,
     double curX,
   ) {
-    for (int i = 0; i < (curPoint.maValueList?.length ?? 0); i++) {
-      if (i == 3) {
-        break;
-      }
-      if (lastPoint.maValueList?[i] != 0) {
+    final previous = _movingAverageValues(lastPoint) ?? const <double>[];
+    final current = _movingAverageValues(curPoint) ?? const <double>[];
+    for (int i = 0; i < 3 && i < current.length && i < previous.length; i++) {
+      if (previous[i] != 0) {
         drawLine(
-          lastPoint.maValueList?[i],
-          curPoint.maValueList?[i],
+          previous[i],
+          current[i],
           canvas,
           lastX,
           curX,

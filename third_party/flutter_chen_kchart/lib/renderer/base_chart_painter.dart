@@ -127,7 +127,9 @@ abstract class BaseChartPainter extends CustomPainter {
       drawMaxAndMin(canvas);
       drawNowPrice(canvas);
 
-      if (shouldShowCrossLine || isLongPress == true || (isTapShowInfoDialog && isOnTap)) {
+      if (shouldShowCrossLine ||
+          isLongPress == true ||
+          (isTapShowInfoDialog && isOnTap)) {
         drawCrossLine(canvas, size);
         drawCrossLineText(canvas, size);
       }
@@ -210,9 +212,11 @@ abstract class BaseChartPainter extends CustomPainter {
 
   void getMainMaxMinValue(KLineEntity item, int i) {
     double maxPrice, minPrice;
-    if (mainState == MainState.MA) {
-      maxPrice = max(item.high, _findMaxMA(item.maValueList ?? [0]));
-      minPrice = min(item.low, _findMinMA(item.maValueList ?? [0]));
+    if (mainState == MainState.MA || mainState == MainState.EMA) {
+      final values =
+          mainState == MainState.EMA ? item.emaValueList : item.maValueList;
+      maxPrice = max(item.high, _findMaxMA(values ?? [0]));
+      minPrice = min(item.low, _findMinMA(values ?? [0]));
     } else if (mainState == MainState.BOLL) {
       maxPrice = max(item.up ?? 0, item.high);
       minPrice = min(item.dn ?? 0, item.low);

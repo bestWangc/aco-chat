@@ -181,29 +181,12 @@ class _HyperliquidContractKlinePageState
   }
 
   void _selectIndicator(String indicator) {
-    if (indicator == 'EMA') {
-      unawaited(
-        showCupertinoDialog<void>(
-          context: context,
-          builder: (context) => CupertinoAlertDialog(
-            title: const Text('EMA'),
-            content: const Text('当前图表组件暂不支持 EMA 指标'),
-            actions: [
-              CupertinoDialogAction(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('知道了'),
-              ),
-            ],
-          ),
-        ),
-      );
-      return;
-    }
     setState(() => _selectedIndicator = indicator);
   }
 
   MainState get _mainState => switch (_selectedIndicator) {
     'MA' => MainState.MA,
+    'EMA' => MainState.EMA,
     'BOLL' => MainState.BOLL,
     _ => MainState.NONE,
   };
@@ -423,7 +406,6 @@ class _HyperliquidContractKlinePageState
           _KlineIndicatorLabel(
             indicator,
             selected: indicator == _selectedIndicator,
-            supported: indicator != 'EMA',
             onPressed: () => _selectIndicator(indicator),
           ),
       ],
@@ -575,13 +557,11 @@ class _KlineIndicatorLabel extends StatelessWidget {
   const _KlineIndicatorLabel(
     this.label, {
     required this.selected,
-    required this.supported,
     required this.onPressed,
   });
 
   final String label;
   final bool selected;
-  final bool supported;
   final VoidCallback onPressed;
 
   @override
@@ -595,11 +575,7 @@ class _KlineIndicatorLabel extends StatelessWidget {
         label,
         textAlign: TextAlign.center,
         style: TextStyle(
-          color: selected
-              ? _white
-              : supported
-              ? const Color(0xFF868686)
-              : const Color(0xFF555555),
+          color: selected ? _white : const Color(0xFF868686),
           fontSize: 13,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
         ),

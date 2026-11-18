@@ -3,9 +3,12 @@ import 'dart:math';
 import '../entity/index.dart';
 
 class DataUtil {
+  static const emaPeriods = [12, 26];
+
   static calculate(List<KLineEntity> dataList,
       [List<int> maDayList = const [5, 10, 20], int n = 20, k = 2]) {
     calcMA(dataList, maDayList);
+    calcEMA(dataList);
     calcBOLL(dataList, n, k);
     calcVolumeMA(dataList);
     calcKDJ(dataList);
@@ -36,6 +39,24 @@ class DataUtil {
           }
         }
       }
+    }
+  }
+
+  static void calcEMA(
+    List<KLineEntity> dataList, [
+    List<int> periods = emaPeriods,
+  ]) {
+    if (periods.any((period) => period <= 0)) {
+      throw ArgumentError.value(periods, 'periods', 'Must be positive');
+    }
+    if (dataList.isEmpty) return;
+    final values = List<double>.filled(periods.length, dataList.first.close);
+    for (final entity in dataList) {
+      for (var i = 0; i < periods.length; i++) {
+        final alpha = 2 / (periods[i] + 1);
+        values[i] += alpha * (entity.close - values[i]);
+      }
+      entity.emaValueList = List<double>.of(values);
     }
   }
 
