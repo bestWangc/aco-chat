@@ -17,6 +17,7 @@ class _ChatMoreSettingsPage extends StatefulWidget {
     required this.messages,
     required this.onMessageTap,
     required this.onClearMessages,
+    required this.onSelectMessages,
   });
 
   final AcoPalette palette;
@@ -28,6 +29,7 @@ class _ChatMoreSettingsPage extends StatefulWidget {
   final List<_ChatHistoryMessage> messages;
   final ValueChanged<_ChatHistoryMessage> onMessageTap;
   final Future<void> Function() onClearMessages;
+  final VoidCallback onSelectMessages;
 
   @override
   State<_ChatMoreSettingsPage> createState() => _ChatMoreSettingsPageState();
@@ -514,6 +516,15 @@ class _ChatMoreSettingsPageState extends State<_ChatMoreSettingsPage> {
                   ),
                 ),
               ),
+            ),
+            const SizedBox(height: 6),
+            _ChatSettingsActionRow(
+              palette: widget.palette,
+              label: '选择聊天记录',
+              onTap: () {
+                Navigator.of(context).pop();
+                widget.onSelectMessages();
+              },
             ),
             const SizedBox(height: 6),
             _ChatSettingsToggleRow(

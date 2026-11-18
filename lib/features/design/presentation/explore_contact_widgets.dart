@@ -30,8 +30,10 @@ class _ContactDetailPageState extends State<_ContactDetailPage> {
   @override
   void initState() {
     super.initState();
-    _remark = widget.remark;
+    _remark = widget.remark.trim();
   }
+
+  String get _displayName => _remark.isEmpty ? widget.name : _remark;
 
   String get _handle => widget.isFriend
       ? '@${widget.name.toLowerCase().replaceAll(' ', '_')}'
@@ -68,9 +70,10 @@ class _ContactDetailPageState extends State<_ContactDetailPage> {
       ),
     );
     controller.dispose();
-    if (enteredRemark == null || enteredRemark.trim() == _remark) return;
-
+    if (enteredRemark == null) return;
     final remark = enteredRemark.trim();
+    if (remark == _remark) return;
+
     setState(() => _savingRemark = true);
     final client = AccountApiClient();
     try {
@@ -111,7 +114,7 @@ class _ContactDetailPageState extends State<_ContactDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.name,
+                      _displayName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -120,6 +123,18 @@ class _ContactDetailPageState extends State<_ContactDetailPage> {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    if (_remark.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '昵称：${widget.name}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.palette.mutedText,
+                          fontSize: AcoTypography.body,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 6),
                     Text(
                       _handle,
@@ -138,11 +153,7 @@ class _ContactDetailPageState extends State<_ContactDetailPage> {
             _ContactDetailActionRow(
               palette: widget.palette,
               icon: CupertinoIcons.pencil,
-              label: _savingRemark
-                  ? '保存中...'
-                  : _remark.isEmpty
-                  ? '设置备注'
-                  : '备注：$_remark',
+              label: _savingRemark ? '保存中...' : '设置备注',
               onTap: () => unawaited(_editRemark()),
             ),
             const SizedBox(height: 8),
@@ -151,9 +162,7 @@ class _ContactDetailPageState extends State<_ContactDetailPage> {
             palette: widget.palette,
             icon: CupertinoIcons.chat_bubble,
             label: '发消息',
-            onTap: () => widget.onMessagePressed(
-              _remark.isEmpty ? widget.name : _remark,
-            ),
+            onTap: () => widget.onMessagePressed(_displayName),
           ),
           const SizedBox(height: 8),
           _ContactDetailActionRow(

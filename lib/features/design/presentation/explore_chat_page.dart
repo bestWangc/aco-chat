@@ -43,6 +43,9 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
   final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
   final Map<String, Message> _messagesByClientMsgID = <String, Message>{};
   final Map<String, String> _friendRemarksByUserID = <String, String>{};
+  final Set<String> _selectedMessageIDs = <String>{};
+  bool _selectingMessages = false;
+  bool _deletingMessages = false;
   Future<void>? _loadFuture;
   String? _error;
   String? _resolvedConversationID;
@@ -281,7 +284,79 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     if (!mounted) return;
     setState(() {
       _chatHistory.removeWhere((item) => item.clientMsgID == clientMsgID);
+      _selectedMessageIDs.remove(clientMsgID);
     });
+  }
+
+  void _startSelectingMessages() {
+    _messageFocusNode.unfocus();
+    _hidePanels();
+    setState(() {
+      _selectingMessages = true;
+      _selectedMessageIDs.clear();
+    });
+  }
+
+  void _cancelSelectingMessages() {
+    if (_deletingMessages) return;
+    setState(() {
+      _selectingMessages = false;
+      _selectedMessageIDs.clear();
+    });
+  }
+
+  void _toggleMessageSelection(String clientMsgID) {
+    if (_deletingMessages) return;
+    setState(() {
+      if (!_selectedMessageIDs.remove(clientMsgID)) {
+        _selectedMessageIDs.add(clientMsgID);
+      }
+    });
+  }
+
+  Future<void> _deleteSelectedMessages() async {
+    final conversationID = _currentConversationID;
+    if (_deletingMessages ||
+        _selectedMessageIDs.isEmpty ||
+        conversationID == null ||
+        conversationID.isEmpty) {
+      return;
+    }
+    final ids = _selectedMessageIDs.toList();
+    setState(() => _deletingMessages = true);
+    try {
+      final confirmed = await showAcoConfirmDialog(
+        context: context,
+        title: '删除聊天记录',
+        message: '删除选中的 ${ids.length} 条消息？仅删除当前设备上的记录，此操作无法恢复。',
+        confirmLabel: '删除',
+        isDestructive: true,
+        isDefaultAction: false,
+      );
+      if (!confirmed || !mounted) return;
+      var failedCount = 0;
+      for (final id in ids) {
+        try {
+          await OpenIM.iMManager.messageManager.deleteMessageFromLocalStorage(
+            conversationID: conversationID,
+            clientMsgID: id,
+          );
+          _removeTrackedMessage(id);
+        } catch (error) {
+          failedCount++;
+          debugPrint('[OpenIM] delete message failed: $error');
+        }
+      }
+      OpenIMChatRepository.conversationRevision.value++;
+      if (!mounted) return;
+      if (failedCount == 0) {
+        setState(() => _selectingMessages = false);
+      } else {
+        _showNotice(context, '部分消息删除失败', '$failedCount 条消息未删除，请重试。');
+      }
+    } finally {
+      if (mounted) setState(() => _deletingMessages = false);
+    }
   }
 
   Future<void> _markCurrentConversationAsRead() async {
@@ -1561,65 +1636,124 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     }
   }
 
+  Widget _selectableMessage(_ChatHistoryMessage message, Widget child) {
+    if (!_selectingMessages) return child;
+    final id = message.clientMsgID;
+    final canSelect = id != null && id.isNotEmpty;
+    final selected = _selectedMessageIDs.contains(id);
+    return Semantics(
+      checked: selected,
+      enabled: canSelect && !_deletingMessages,
+      label: '选择消息',
+      child: GestureDetector(
+        key: ValueKey('select-message-$id'),
+        behavior: HitTestBehavior.opaque,
+        onTap: canSelect && !_deletingMessages
+            ? () => _toggleMessageSelection(id)
+            : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(
+                  selected
+                      ? CupertinoIcons.checkmark_circle_fill
+                      : CupertinoIcons.circle,
+                  size: 24,
+                  color: selected
+                      ? widget.palette.accentForeground
+                      : widget.palette.mutedText,
+                ),
+              ),
+              Expanded(child: IgnorePointer(child: child)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_selectingMessages,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && _selectingMessages) _cancelSelectingMessages();
+    },
+    child: _buildChatContent(context),
+  );
+
+  Widget _buildChatContent(BuildContext context) {
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     final compactBottomBar = _isPanelVisible || keyboardInset > 0;
     return _DetailScaffold(
       palette: widget.palette,
-      titleWidget: _ChatHeaderTitle(
-        palette: widget.palette,
-        name: _peerName,
-        identity: _resolvedPeerIdentity,
-        staffIdentity: _resolvedPeerStaffIdentity,
-      ),
+      onBack: _selectingMessages ? _cancelSelectingMessages : null,
+      title: _selectingMessages ? '已选择 ${_selectedMessageIDs.length} 条' : null,
+      titleWidget: _selectingMessages
+          ? null
+          : _ChatHeaderTitle(
+              palette: widget.palette,
+              name: _peerName,
+              identity: _resolvedPeerIdentity,
+              staffIdentity: _resolvedPeerStaffIdentity,
+            ),
       headerRightPadding: 4,
-      right: Semantics(
-        button: true,
-        label: '更多',
-        child: CupertinoButton(
-          padding: EdgeInsets.zero,
-          minimumSize: const Size(51, 30),
-          onPressed: () async {
-            final exitedGroup = await Navigator.of(context).push<bool>(
-              _AcoPageRoute<bool>(
-                builder: (_) => CupertinoPageScaffold(
-                  backgroundColor: widget.palette.background,
-                  child: AcoSafeArea(
-                    left: false,
-                    right: false,
-                    bottom: false,
-                    child: ColoredBox(
-                      color: widget.palette.background,
-                      child: SizedBox.expand(
-                        child: _ChatMoreSettingsPage(
-                          palette: widget.palette,
-                          peerName: _peerName,
-                          peerUserID: widget.peerUserID,
-                          groupID: widget.groupID,
-                          conversationID: _currentConversationID,
-                          onBlockChanged: (blocked) => _peerIsBlocked = blocked,
-                          messages: _chatHistory,
-                          onMessageTap: _focusMessage,
-                          onClearMessages: _clearCurrentConversationMessages,
+      right: _selectingMessages
+          ? CupertinoButton(
+              onPressed: _deletingMessages ? null : _cancelSelectingMessages,
+              child: const Text('取消'),
+            )
+          : Semantics(
+              button: true,
+              label: '更多',
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(51, 30),
+                onPressed: () async {
+                  final exitedGroup = await Navigator.of(context).push<bool>(
+                    _AcoPageRoute<bool>(
+                      builder: (_) => CupertinoPageScaffold(
+                        backgroundColor: widget.palette.background,
+                        child: AcoSafeArea(
+                          left: false,
+                          right: false,
+                          bottom: false,
+                          child: ColoredBox(
+                            color: widget.palette.background,
+                            child: SizedBox.expand(
+                              child: _ChatMoreSettingsPage(
+                                palette: widget.palette,
+                                peerName: _peerName,
+                                peerUserID: widget.peerUserID,
+                                groupID: widget.groupID,
+                                conversationID: _currentConversationID,
+                                onBlockChanged: (blocked) =>
+                                    _peerIsBlocked = blocked,
+                                messages: _chatHistory,
+                                onMessageTap: _focusMessage,
+                                onClearMessages:
+                                    _clearCurrentConversationMessages,
+                                onSelectMessages: _startSelectingMessages,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
+                  );
+                  if (exitedGroup != true || !mounted) return;
+                  Navigator.of(this.context).pop();
+                },
+                child: Image.asset(
+                  'assets/icons/chat_more_mark.png',
+                  width: 26,
+                  height: 8,
+                  fit: BoxFit.contain,
                 ),
               ),
-            );
-            if (exitedGroup != true || !mounted) return;
-            Navigator.of(this.context).pop();
-          },
-          child: Image.asset(
-            'assets/icons/chat_more_mark.png',
-            width: 26,
-            height: 8,
-            fit: BoxFit.contain,
-          ),
-        ),
-      ),
+            ),
       child: Stack(
         children: [
           AnimatedPadding(
@@ -1693,61 +1827,66 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                         ),
                                       ),
                                     ),
-                                  _ChatMessage(
-                                    palette: widget.palette,
-                                    text: message.text,
-                                    imageBytes: message.imageBytes,
-                                    imagePath: message.imagePath,
-                                    imageUrl: message.imageUrl,
-                                    previewImageUrl: message.previewImageUrl,
-                                    shouldCacheThumbnail:
-                                        message.shouldCacheThumbnail,
-                                    soundPath: message.soundPath,
-                                    soundUrl: message.soundUrl,
-                                    soundDuration: message.soundDuration,
-                                    videoPath: message.videoPath,
-                                    videoUrl: message.videoUrl,
-                                    videoSnapshotPath:
-                                        message.videoSnapshotPath,
-                                    videoSnapshotUrl: message.videoSnapshotUrl,
-                                    videoDuration: message.videoDuration,
-                                    fileName: message.fileName,
-                                    fileUrl: message.fileUrl,
-                                    fileSize: message.fileSize,
-                                    filePath: message.filePath,
-                                    isVoiceCallRecord:
-                                        message.isVoiceCallRecord,
-                                    sendFailed: message.sendFailed,
-                                    mine: message.mine,
-                                    senderName: _senderNameForMessage(
-                                      message,
-                                      sourceMessage,
+                                  _selectableMessage(
+                                    message,
+                                    _ChatMessage(
+                                      palette: widget.palette,
+                                      text: message.text,
+                                      imageBytes: message.imageBytes,
+                                      imagePath: message.imagePath,
+                                      imageUrl: message.imageUrl,
+                                      previewImageUrl: message.previewImageUrl,
+                                      shouldCacheThumbnail:
+                                          message.shouldCacheThumbnail,
+                                      soundPath: message.soundPath,
+                                      soundUrl: message.soundUrl,
+                                      soundDuration: message.soundDuration,
+                                      videoPath: message.videoPath,
+                                      videoUrl: message.videoUrl,
+                                      videoSnapshotPath:
+                                          message.videoSnapshotPath,
+                                      videoSnapshotUrl:
+                                          message.videoSnapshotUrl,
+                                      videoDuration: message.videoDuration,
+                                      fileName: message.fileName,
+                                      fileUrl: message.fileUrl,
+                                      fileSize: message.fileSize,
+                                      filePath: message.filePath,
+                                      isVoiceCallRecord:
+                                          message.isVoiceCallRecord,
+                                      sendFailed: message.sendFailed,
+                                      mine: message.mine,
+                                      senderName: _senderNameForMessage(
+                                        message,
+                                        sourceMessage,
+                                      ),
+                                      avatarUrl: _isGroup
+                                          ? sourceMessage?.senderFaceUrl ??
+                                                _resolvedPeerAvatar
+                                          : _resolvedPeerAvatar,
+                                      ownAvatarUrl: widget.ownAvatarUrl,
+                                      onAvatarLongPress: _isGroup
+                                          ? () => _mentionMessageSender(
+                                              userID: sourceMessage?.sendID,
+                                              nickname:
+                                                  sourceMessage?.senderNickname,
+                                            )
+                                          : null,
+                                      onAvatarTap: !message.mine
+                                          ? () => _openSenderProfile(
+                                              userID:
+                                                  sourceMessage?.sendID ??
+                                                  widget.peerUserID,
+                                              nickname:
+                                                  sourceMessage
+                                                      ?.senderNickname ??
+                                                  _peerName,
+                                              avatarUrl: _isGroup
+                                                  ? sourceMessage?.senderFaceUrl
+                                                  : _resolvedPeerAvatar,
+                                            )
+                                          : null,
                                     ),
-                                    avatarUrl: _isGroup
-                                        ? sourceMessage?.senderFaceUrl ??
-                                              _resolvedPeerAvatar
-                                        : _resolvedPeerAvatar,
-                                    ownAvatarUrl: widget.ownAvatarUrl,
-                                    onAvatarLongPress: _isGroup
-                                        ? () => _mentionMessageSender(
-                                            userID: sourceMessage?.sendID,
-                                            nickname:
-                                                sourceMessage?.senderNickname,
-                                          )
-                                        : null,
-                                    onAvatarTap: !message.mine
-                                        ? () => _openSenderProfile(
-                                            userID:
-                                                sourceMessage?.sendID ??
-                                                widget.peerUserID,
-                                            nickname:
-                                                sourceMessage?.senderNickname ??
-                                                _peerName,
-                                            avatarUrl: _isGroup
-                                                ? sourceMessage?.senderFaceUrl
-                                                : _resolvedPeerAvatar,
-                                          )
-                                        : null,
                                   ),
                                 ],
                               ),
@@ -1758,43 +1897,64 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                     ),
                   ),
                 ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: widget.palette.dark
-                        ? const Color(0xFF1E1D1B)
-                        : widget.palette.surface,
-                    border: Border(
-                      top: BorderSide(color: widget.palette.border),
-                    ),
-                  ),
-                  child: AcoSafeArea(
+                if (_selectingMessages)
+                  AcoSafeArea(
                     top: false,
-                    bottom: !compactBottomBar,
-                    minimum: compactBottomBar
-                        ? EdgeInsets.zero
-                        : const EdgeInsets.only(bottom: 20),
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        8,
-                        5,
-                        8,
-                        compactBottomBar ? 5 : 8,
+                    child: CupertinoButton(
+                      onPressed:
+                          _deletingMessages || _selectedMessageIDs.isEmpty
+                          ? null
+                          : _deleteSelectedMessages,
+                      child: _deletingMessages
+                          ? const CupertinoActivityIndicator()
+                          : Text(
+                              '删除（${_selectedMessageIDs.length}）',
+                              style: TextStyle(
+                                color: _selectedMessageIDs.isEmpty
+                                    ? widget.palette.mutedText
+                                    : CupertinoColors.destructiveRed,
+                              ),
+                            ),
+                    ),
+                  )
+                else
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: widget.palette.dark
+                          ? const Color(0xFF1E1D1B)
+                          : widget.palette.surface,
+                      border: Border(
+                        top: BorderSide(color: widget.palette.border),
                       ),
-                      child: _ChatComposer(
-                        palette: widget.palette,
-                        controller: _messageController,
-                        focusNode: _messageFocusNode,
-                        voiceInputActive: _voiceInputActive,
-                        onVoicePressed: _toggleVoiceInput,
-                        onRecordingChanged: _setVoiceRecording,
-                        onEmojiPressed: _toggleEmojiPicker,
-                        onMorePressed: _toggleMorePanel,
-                        onInputTapped: _hidePanels,
-                        onSubmit: _sendText,
+                    ),
+                    child: AcoSafeArea(
+                      top: false,
+                      bottom: !compactBottomBar,
+                      minimum: compactBottomBar
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.only(bottom: 20),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          8,
+                          5,
+                          8,
+                          compactBottomBar ? 5 : 8,
+                        ),
+                        child: _ChatComposer(
+                          palette: widget.palette,
+                          controller: _messageController,
+                          focusNode: _messageFocusNode,
+                          voiceInputActive: _voiceInputActive,
+                          onVoicePressed: _toggleVoiceInput,
+                          onRecordingChanged: _setVoiceRecording,
+                          onEmojiPressed: _toggleEmojiPicker,
+                          onMorePressed: _toggleMorePanel,
+                          onInputTapped: _hidePanels,
+                          onSubmit: _sendText,
+                        ),
                       ),
                     ),
                   ),
-                ),
                 if (_emojiPickerVisible)
                   _AcoEmojiPicker(
                     palette: widget.palette,

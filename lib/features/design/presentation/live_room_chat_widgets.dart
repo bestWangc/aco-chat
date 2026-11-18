@@ -656,25 +656,55 @@ Future<void> _showLiveRoomMessageActions(
   BuildContext context,
   LongPressStartDetails details,
   String text,
+  AcoPalette palette,
 ) async {
   final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
   final localPosition = overlay.globalToLocal(details.globalPosition);
+  final topInset = MediaQuery.paddingOf(context).top + 8;
   final position = RelativeRect.fromRect(
-    ui.Rect.fromLTWH(localPosition.dx, localPosition.dy, 1, 1),
+    ui.Rect.fromLTWH(
+      localPosition.dx,
+      math.max(topInset, localPosition.dy - 64),
+      1,
+      1,
+    ),
     ui.Offset.zero & overlay.size,
   );
   final action = await showMenu<String>(
     context: context,
     position: position,
+    color: palette.surfaceRaised,
+    surfaceTintColor: Colors.transparent,
+    elevation: 8,
+    shadowColor: _black.withValues(alpha: .24),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: BorderSide(color: palette.primaryText.withValues(alpha: .1)),
+    ),
+    constraints: const BoxConstraints(minWidth: 112, maxWidth: 160),
+    menuPadding: EdgeInsets.zero,
     items: [
       PopupMenuItem<String>(
         value: 'copy',
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.copy, size: 20),
-            const SizedBox(width: 12),
-            Text(appText(context, '复制')),
+            Icon(
+              CupertinoIcons.doc_on_doc,
+              size: 18,
+              color: palette.primaryText,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              appText(context, '复制'),
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),
@@ -756,8 +786,9 @@ class _RoomMessage extends StatelessWidget {
       alignment: isSystemMessage ? Alignment.center : Alignment.centerLeft,
       child: GestureDetector(
         onLongPressStart: canCopyText
-            ? (details) =>
-                  unawaited(_showLiveRoomMessageActions(context, details, text))
+            ? (details) => unawaited(
+                _showLiveRoomMessageActions(context, details, text, palette),
+              )
             : null,
         child: Container(
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
