@@ -267,6 +267,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
         shouldCacheThumbnail: messageFromOpenIM.shouldCacheThumbnail,
       );
     }
+    if (mine) unawaited(_retainSentMedia(historyMessage));
     if (!mounted) return false;
     setState(() {
       if (index < 0) {
@@ -276,6 +277,52 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       }
     });
     return index < 0;
+  }
+
+  Future<void> _retainSentMedia(_ChatHistoryMessage message) async {
+    final accountID = OpenIMChatRepository.currentUserID;
+    if (accountID == null) return;
+    final attachments = [
+      (
+        url: message.previewImageUrl ?? message.imageUrl,
+        kind: 'image',
+        path: message.imagePath,
+        bytes: message.imageBytes,
+      ),
+      (
+        url: message.soundUrl,
+        kind: 'audio',
+        path: message.soundPath,
+        bytes: null,
+      ),
+      (
+        url: message.videoUrl,
+        kind: 'video',
+        path: message.videoPath,
+        bytes: null,
+      ),
+      (url: message.fileUrl, kind: 'file', path: message.filePath, bytes: null),
+    ];
+    for (final attachment in attachments) {
+      final url = attachment.url;
+      if (url == null || url.isEmpty) continue;
+      final source = attachment.path == null ? null : File(attachment.path!);
+      try {
+        if (attachment.bytes == null &&
+            (source == null || !await source.exists())) {
+          continue;
+        }
+        await _ChatMediaCache.load(
+          url,
+          kind: attachment.kind,
+          source: source,
+          bytes: attachment.bytes,
+          accountID: accountID,
+        );
+      } catch (error) {
+        debugPrint('[Chat] retain sent media failed: $error');
+      }
+    }
   }
 
   void _removeTrackedMessage(String? clientMsgID) {
@@ -2966,14 +3013,12 @@ class _ChatMessage extends StatelessWidget {
       final previewUrl = previewImageUrl ?? imageUrl!;
       return _image(
         context,
-        shouldCacheThumbnail
-            ? _CachedChatThumbnail(url: imageUrl!, palette: palette)
-            : AcoNetworkImage(
-                url: imageUrl!,
-                fit: BoxFit.contain,
-                errorWidget: (context, url, error) =>
-                    _ImageUnavailable(palette: palette),
-              ),
+        _CachedChatThumbnail(
+          url: imageUrl!,
+          palette: palette,
+          kind: shouldCacheThumbnail ? 'thumbnail' : 'image',
+          originalUrl: previewUrl,
+        ),
         maxWidth: maxWidth,
         previewImage: CachedNetworkImageProvider(previewUrl),
         imageUrl: previewUrl,
@@ -3033,23 +3078,37 @@ class _ChatMessage extends StatelessWidget {
   Future<void> _openChatFile(BuildContext context) async {
     final url = fileUrl;
     if (url == null || url.isEmpty) return;
-    final extension = (fileName ?? '').split('.').last.toLowerCase();
-    if (const {'mp4', 'mov', 'm4v', 'avi', 'webm', 'mkv'}.contains(extension)) {
-      await Navigator.of(context).push<void>(
-        CupertinoPageRoute<void>(
-          builder: (_) => _ChatVideoPlayerPage(
-            videoPath: mine ? filePath : null,
-            videoUrl: _chatFileUrl(url),
-            useLocalFile: mine,
-            fileName: fileName ?? 'video.mp4',
-          ),
-        ),
+    try {
+      final file = await _ChatMediaCache.load(
+        _chatFileUrl(url),
+        kind: 'file',
+        source: mine && filePath != null ? File(filePath!) : null,
       );
-      return;
-    }
-    final uri = Uri.tryParse(_chatFileUrl(url));
-    if (uri == null ||
-        !await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      if (!context.mounted) return;
+      final extension = (fileName ?? '').split('.').last.toLowerCase();
+      if (const {
+        'mp4',
+        'mov',
+        'm4v',
+        'avi',
+        'webm',
+        'mkv',
+      }.contains(extension)) {
+        await Navigator.of(context).push<void>(
+          CupertinoPageRoute<void>(
+            builder: (_) => _ChatVideoPlayerPage(
+              videoPath: file.path,
+              useLocalFile: true,
+              fileName: fileName ?? 'video.mp4',
+            ),
+          ),
+        );
+      } else {
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(file.path, name: fileName)]),
+        );
+      }
+    } catch (_) {
       if (context.mounted) _showNotice(context, '文件打开失败', '请稍后重试。');
     }
   }
@@ -3064,9 +3123,11 @@ class _ChatMessage extends StatelessWidget {
         final candidate = File(localPath);
         if (await candidate.exists()) localFile = candidate;
       }
-      final file =
-          localFile ??
-          await _ChatMediaCache.load(_chatFileUrl(url), kind: 'file');
+      final file = await _ChatMediaCache.load(
+        _chatFileUrl(url),
+        kind: 'file',
+        source: localFile,
+      );
       final mimeType = switch ((fileName ?? '').split('.').last.toLowerCase()) {
         'pdf' => 'application/pdf',
         'mp4' => 'video/mp4',
@@ -3173,6 +3234,7 @@ class _ChatMessage extends StatelessWidget {
             image: previewImage,
             imageBytes: imageBytes,
             imageUrl: imageUrl,
+            persistLocally: true,
           ),
         ),
       ),
@@ -3507,14 +3569,10 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
               await File(path).exists()
           ? File(path)
           : null;
-      final cachedFile = localFile == null && url?.isNotEmpty == true
-          ? await _ChatMediaCache.load(url!, kind: 'video')
-          : null;
-      final controller = localFile != null
-          ? VideoPlayerController.file(localFile)
-          : cachedFile != null
-          ? VideoPlayerController.file(cachedFile)
-          : null;
+      final file = url?.isNotEmpty == true
+          ? await _ChatMediaCache.load(url!, kind: 'video', source: localFile)
+          : localFile;
+      final controller = file == null ? null : VideoPlayerController.file(file);
       if (controller == null) throw StateError('视频地址无效');
       await controller.initialize();
       if (!mounted) {
@@ -3619,8 +3677,10 @@ class _ChatImagePreview extends StatefulWidget {
     required this.image,
     this.imageBytes,
     this.imageUrl,
+    this.persistLocally = false,
   });
 
+  final bool persistLocally;
   final ImageProvider image;
   final Uint8List? imageBytes;
   final String? imageUrl;
@@ -3632,6 +3692,21 @@ class _ChatImagePreview extends StatefulWidget {
 class _ChatImagePreviewState extends State<_ChatImagePreview> {
   bool _saving = false;
 
+  Future<File>? _storedImage;
+
+  @override
+  void initState() {
+    super.initState();
+    final url = widget.imageUrl;
+    if (widget.persistLocally && url != null && url.isNotEmpty) {
+      _storedImage = _ChatMediaCache.load(
+        url,
+        kind: 'image',
+        bytes: widget.imageBytes,
+      );
+    }
+  }
+
   Future<void> _save() async {
     if (_saving) return;
     setState(() => _saving = true);
@@ -3640,9 +3715,13 @@ class _ChatImagePreviewState extends State<_ChatImagePreview> {
       final url = widget.imageUrl;
       if (url != null && url.isNotEmpty) {
         try {
-          final response = await http.get(Uri.parse(url));
-          if (response.statusCode != 200) throw Exception('下载失败');
-          bytes = response.bodyBytes;
+          if (_storedImage != null) {
+            bytes = await (await _storedImage!).readAsBytes();
+          } else {
+            final response = await http.get(Uri.parse(url));
+            if (response.statusCode != 200) throw Exception('下载失败');
+            bytes = response.bodyBytes;
+          }
         } catch (_) {
           if (bytes == null) rethrow;
         }
@@ -3681,7 +3760,23 @@ class _ChatImagePreviewState extends State<_ChatImagePreview> {
             child: InteractiveViewer(
               minScale: 1,
               maxScale: 4,
-              child: Image(image: widget.image, fit: BoxFit.contain),
+              child: _storedImage == null
+                  ? Image(image: widget.image, fit: BoxFit.contain)
+                  : FutureBuilder<File>(
+                      future: _storedImage,
+                      builder: (context, snapshot) {
+                        final file = snapshot.data;
+                        if (file != null)
+                          return Image.file(file, fit: BoxFit.contain);
+                        if (snapshot.hasError) {
+                          return const Text(
+                            '图片暂时无法打开',
+                            style: TextStyle(color: _white),
+                          );
+                        }
+                        return const CupertinoActivityIndicator();
+                      },
+                    ),
             ),
           ),
           Positioned(
@@ -3807,7 +3902,17 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
     final path = widget.path;
     if (path?.isNotEmpty == true) {
       final exists = await File(path!).exists();
-      if (exists) return DeviceFileSource(path);
+      if (exists) {
+        final url = widget.url;
+        final file = url?.isNotEmpty == true
+            ? await _ChatMediaCache.load(
+                url!,
+                kind: 'audio',
+                source: File(path),
+              )
+            : File(path);
+        return DeviceFileSource(file.path);
+      }
     }
 
     final url = widget.url;

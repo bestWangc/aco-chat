@@ -1,120 +1,51 @@
 part of 'aco_design_shell.dart';
 
 final class _ChatMediaCache {
-  static const _retention = Duration(days: 30);
-  static const _maxBytes = 300 * 1024 * 1024;
-  static const _cleanupInterval = Duration(hours: 6);
-  static Future<Directory>? _directoryFuture;
-  static Future<void>? _cleanupFuture;
-  static DateTime? _lastCleanup;
-  static Timer? _cleanupTimer;
-  static final Map<String, Future<File>> _inFlight = {};
+  static final Map<String, Future<ChatMediaStore>> _stores = {};
 
-  static Future<File> load(String url, {required String kind}) {
-    final key = '$kind:$url';
-    return _inFlight[key] ??= _load(key, url, kind);
-  }
-
-  static Future<File> _load(String key, String url, String kind) async {
-    try {
-      final directory = await _directory();
-      _scheduleCleanup(directory);
-      final extension = _extensionFromUrl(url);
-      final file = File('${directory.path}/${_fileName(url)}_$kind$extension');
-      if (await _isFresh(file)) return file;
-      final response = await http
-          .get(Uri.parse(_httpsUrl(url)))
-          .timeout(const Duration(seconds: 20));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty) {
-        throw HttpException('媒体下载失败: ${response.statusCode}');
-      }
-      await file.writeAsBytes(response.bodyBytes, flush: true);
-      return file;
-    } finally {
-      _inFlight.remove(key);
+  static Future<File> load(
+    String url, {
+    required String kind,
+    File? source,
+    List<int>? bytes,
+    String? originalUrl,
+    String? accountID,
+  }) async {
+    final userID = accountID ?? OpenIMChatRepository.currentUserID;
+    if (userID == null || userID.isEmpty) throw StateError('聊天账号未登录');
+    final store = await (_stores[userID] ??= _createStore(userID));
+    if (originalUrl != null && originalUrl.isNotEmpty) {
+      final original = await store.find(
+        _downloadUrl(originalUrl),
+        kind: 'image',
+      );
+      if (original != null) return original;
     }
+    return store.load(
+      _downloadUrl(url),
+      kind: kind,
+      legacyUrl: url,
+      source: source,
+      bytes: bytes,
+    );
   }
 
-  static Future<Directory> _directory() =>
-      _directoryFuture ??= getTemporaryDirectory().then((root) async {
-        final directory = await Directory(
-          '${root.path}/chat-media',
-        ).create(recursive: true);
-        _cleanupTimer ??= Timer.periodic(
-          _cleanupInterval,
-          (_) => _scheduleCleanup(directory),
-        );
-        return directory;
-      });
-  static Future<bool> _isFresh(File file) async =>
-      await file.exists() &&
-      DateTime.now().difference(await file.lastModified()) <= _retention;
-  static Future<void> _cleanup(Directory directory) async {
-    try {
-      final files = <File>[];
-      await for (final entity in directory.list()) {
-        if (entity is! File) continue;
-        if (await _isFresh(entity)) {
-          files.add(entity);
-        } else {
-          await entity.delete();
-        }
-      }
-      var total = 0;
-      final sizes = <File, int>{};
-      for (final file in files) {
-        final size = await file.length();
-        sizes[file] = size;
-        total += size;
-      }
-      if (total > _maxBytes) {
-        files.sort(
-          (a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()),
-        );
-        for (final file in files) {
-          if (total <= _maxBytes) break;
-          await file.delete();
-          total -= sizes[file] ?? 0;
-        }
-      }
-    } catch (error) {
-      debugPrint('[Chat] media cache cleanup failed: $error');
-    }
-  }
-
-  static void _scheduleCleanup(Directory directory) {
-    final now = DateTime.now();
-    if (_cleanupFuture != null ||
-        (_lastCleanup != null &&
-            now.difference(_lastCleanup!) < _cleanupInterval)) {
-      return;
-    }
-    _lastCleanup = now;
-    _cleanupFuture = _cleanup(
-      directory,
-    ).whenComplete(() => _cleanupFuture = null);
-  }
-
-  static String _httpsUrl(String url) {
-    final uri = Uri.tryParse(url);
-    return uri != null &&
-            uri.scheme == 'http' &&
-            AppConfig.isOpenIMHost(uri.host)
+  static String _downloadUrl(String url) {
+    final parsed = Uri.parse(url);
+    final uri = parsed.hasScheme
+        ? parsed
+        : Uri.parse(const AppConfig().apiBaseUrl).resolveUri(parsed);
+    return uri.scheme == 'http' && AppConfig.isOpenIMHost(uri.host)
         ? uri.replace(scheme: 'https').toString()
-        : url;
+        : uri.toString();
   }
 
-  static String _fileName(String value) {
-    var hash = 0xcbf29ce484222325;
-    for (final unit in value.codeUnits) {
-      hash = (hash ^ unit) * 0x100000001b3 & 0xFFFFFFFFFFFFFFFF;
-    }
-    return hash.toRadixString(16);
-  }
-
-  static String _extensionFromUrl(String url) {
-    final path = Uri.tryParse(url)?.path ?? '';
-    final name = path.split('/').last;
-    return RegExp(r'\.[a-zA-Z0-9]{1,8}$').firstMatch(name)?.group(0) ?? '';
+  static Future<ChatMediaStore> _createStore(String userID) async {
+    final root = await getApplicationSupportDirectory();
+    final account = base64Url.encode(utf8.encode(userID));
+    return ChatMediaStore(
+      directory: Directory('${root.path}/chat-media/$account'),
+      legacyDirectory: await getTemporaryDirectory(),
+    );
   }
 }

@@ -14,6 +14,7 @@ import 'package:aco_chat/core/localization/localized_text.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
+import 'package:aco_chat/features/chat/data/chat_media_store.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
