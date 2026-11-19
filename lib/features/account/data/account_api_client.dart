@@ -921,6 +921,14 @@ class AccountApiClient {
     return LiveSession.fromJson(_body(response));
   }
 
+  Future<void> deleteLive({required int liveId, required String token}) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/delete'),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode != 204) _body(response);
+  }
+
   Future<List<LiveMessage>> listLiveMessages({
     required int liveId,
     required String token,

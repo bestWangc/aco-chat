@@ -1201,12 +1201,14 @@ class _LiveCard extends StatelessWidget {
     this.onTap,
     this.onEdit,
     this.onShare,
+    this.onDelete,
   });
   final AcoPalette palette;
   final LiveSession session;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
   final VoidCallback? onShare;
+  final VoidCallback? onDelete;
 
   String? get _scheduledStartLabel {
     final scheduledAt = session.scheduledAt;
@@ -1390,6 +1392,16 @@ class _LiveCard extends StatelessWidget {
                 label: '修改会议',
                 size: 20,
                 onPressed: onEdit!,
+              ),
+            ],
+            if (onDelete != null) ...[
+              const SizedBox(width: 6),
+              AcoIconButton(
+                icon: CupertinoIcons.delete,
+                palette: palette,
+                label: '删除预约会议',
+                size: 20,
+                onPressed: onDelete!,
               ),
             ],
           ],

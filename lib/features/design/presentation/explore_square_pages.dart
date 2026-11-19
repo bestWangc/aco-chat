@@ -343,6 +343,49 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     }
   }
 
+  Future<void> _deleteScheduledLive(LiveSession session) async {
+    final confirmed = await showCupertinoDialog<bool>(
+      context: context,
+      builder: (dialogContext) => CupertinoAlertDialog(
+        title: const Text('删除预约会议'),
+        content: const Text('删除后无法恢复，确定删除这场预约会议吗？'),
+        actions: [
+          CupertinoDialogAction(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          CupertinoDialogAction(
+            isDestructiveAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await widget.walletLoginFuture;
+      await AccountSession(_apiClient).deleteLive(session.id);
+      if (!mounted) return;
+      setState(() {
+        _loadedLives = _loadedLives
+            ?.where((item) => item.id != session.id)
+            .toList(growable: false);
+        _meetingSearchResults = _meetingSearchResults
+            ?.where((item) => item.id != session.id)
+            .toList(growable: false);
+      });
+    } catch (error) {
+      if (mounted) {
+        _showNotice(
+          context,
+          '删除失败',
+          error is AccountApiException ? error.localizedMessage : '请检查网络后重试。',
+        );
+      }
+    }
+  }
+
   Future<void> _openPostDetail(SquarePost post) async {
     final updatedPost = await Navigator.of(context).push<SquarePost>(
       _AcoPageRoute<SquarePost>(
@@ -750,6 +793,9 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
             },
             onEdit: session.canEdit && session.status == 'scheduled'
                 ? () => _editLive(session)
+                : null,
+            onDelete: session.canEdit && session.status == 'scheduled'
+                ? () => _deleteScheduledLive(session)
                 : null,
           ),
         );

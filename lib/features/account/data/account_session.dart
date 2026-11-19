@@ -380,6 +380,9 @@ class AccountSession {
     );
   }
 
+  Future<void> deleteLive(int liveId) async =>
+      _apiClient.deleteLive(liveId: liveId, token: await _requireToken());
+
   Future<List<LiveMessage>> listLiveMessages(int liveId, {int? after}) async =>
       _apiClient.listLiveMessages(
         liveId: liveId,
