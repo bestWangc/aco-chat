@@ -536,13 +536,13 @@ class _WalletHomeState extends State<_WalletHome> {
     const secondaryActionBorderWidth = 8.0;
     final primaryActionBackground = isDark
         ? _accentGreen
-        : const Color(0xFF1A1A1A);
+        : const Color(0xFF000000);
     final primaryActionForeground = isDark
         ? _walletActionForeground
         : const Color(0xFFFFFFFF);
     final primaryActionBorderColor = isDark
         ? const Color(0xFF6D9800)
-        : const Color(0xFF000000);
+        : const Color(0x66000000);
     final secondaryActionBorderColor = isDark
         ? const Color(0xFF9E9E9E)
         : const Color(0xFFD2D6DC);
