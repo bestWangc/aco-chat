@@ -8,7 +8,7 @@ import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
-import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/app/presentation/aco_app_shell.dart';
 import 'package:aco_chat/features/live/domain/meeting_link.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
@@ -616,7 +616,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
             ),
           ),
           home: _walletConfigured
-              ? AcoDesignShell(
+              ? AcoAppShell(
                   language: _language,
                   onLanguageChanged: _setLanguage,
                   themeNotifier: _isDark,

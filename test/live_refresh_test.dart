@@ -1,4 +1,4 @@
-import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/app/presentation/aco_app_shell.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_test/flutter_test.dart';
 
