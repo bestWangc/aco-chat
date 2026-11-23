@@ -61,7 +61,7 @@ class _ChatComposer extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: palette.dark
                         ? const Color(0xFF2C2C2C)
-                        : palette.inputSurface,
+                        : const Color(0xFFFFFFFF),
                     border: Border.all(color: palette.border, width: 0.25),
                     borderRadius: BorderRadius.circular(8),
                   ),

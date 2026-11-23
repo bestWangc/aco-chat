@@ -1190,8 +1190,8 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textStyle = TextStyle(
-      color: mine ? _black : _white,
-      height: 1.4,
+      color: mine ? _black : (palette.dark ? _white : palette.primaryText),
+      height: 1.2,
       fontSize: 16,
     );
     final textWidget = SelectableText(
@@ -1207,9 +1207,11 @@ class _Bubble extends StatelessWidget {
       return ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 390),
         child: CustomPaint(
-          painter: const _OtherBubblePainter(),
+          painter: _OtherBubblePainter(
+            color: _chatIncomingBubbleColor(palette),
+          ),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
             child: textWidget,
           ),
         ),
@@ -1218,9 +1220,9 @@ class _Bubble extends StatelessWidget {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 390),
       child: CustomPaint(
-        painter: const _MineBubblePainter(),
+        painter: _MineBubblePainter(color: _chatOutgoingBubbleColor(palette)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 18, 8),
+          padding: const EdgeInsets.fromLTRB(12, 10, 18, 10),
           child: textWidget,
         ),
       ),

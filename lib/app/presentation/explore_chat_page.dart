@@ -1,5 +1,11 @@
 part of 'aco_app_shell.dart';
 
+Color _chatOutgoingBubbleColor(AcoPalette palette) =>
+    palette.dark ? const Color(0xFF28B561) : const Color(0xFF97EA68);
+
+Color _chatIncomingBubbleColor(AcoPalette palette) =>
+    palette.dark ? const Color(0xFF2C2C2C) : const Color(0xFFEFEFEF);
+
 class _ChatPage extends StatefulWidget {
   const _ChatPage({
     required this.palette,
@@ -3273,10 +3279,10 @@ class _ChatFileBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     final foreground = mine ? _black : palette.primaryText;
     final secondary = mine ? const Color(0xFF5E5E5E) : palette.mutedText;
-    final incomingBackground = palette.dark
-        ? const Color(0xFF2C2C2C)
-        : palette.surfaceRaised;
-    final background = mine ? const Color(0xFF28B561) : incomingBackground;
+    final incomingBackground = _chatIncomingBubbleColor(palette);
+    final background = mine
+        ? _chatOutgoingBubbleColor(palette)
+        : incomingBackground;
     final icon = name.toLowerCase().endsWith('.pdf')
         ? CupertinoIcons.doc_text_fill
         : CupertinoIcons.doc_fill;
@@ -3357,10 +3363,10 @@ class _VoiceCallRecordBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final foreground = mine ? _black : palette.primaryText;
-    final incomingBackground = palette.dark
-        ? const Color(0xFF2C2C2C)
-        : palette.surfaceRaised;
-    final background = mine ? const Color(0xFF28B561) : incomingBackground;
+    final incomingBackground = _chatIncomingBubbleColor(palette);
+    final background = mine
+        ? _chatOutgoingBubbleColor(palette)
+        : incomingBackground;
     return CustomPaint(
       painter: mine
           ? _MineBubblePainter(color: background)
@@ -3428,9 +3434,7 @@ class _ChatVideoBubble extends StatelessWidget {
         : null;
     final hasLocalSnapshot = localSnapshot?.existsSync() == true;
     final hasNetwork = networkSnapshot != null;
-    final incomingBackground = palette.dark
-        ? const Color(0xFF2C2C2C)
-        : palette.surfaceRaised;
+    final incomingBackground = _chatIncomingBubbleColor(palette);
     return Semantics(
       button: true,
       label: '播放视频消息，$duration秒',
@@ -3450,7 +3454,9 @@ class _ChatVideoBubble extends StatelessWidget {
           child: Container(
             width: 215,
             height: 150,
-            color: mine ? const Color(0xFF28B561) : incomingBackground,
+            color: mine
+                ? _chatOutgoingBubbleColor(palette)
+                : incomingBackground,
             child: Stack(
               fit: StackFit.expand,
               children: [
@@ -3766,8 +3772,9 @@ class _ChatImagePreviewState extends State<_ChatImagePreview> {
                       future: _storedImage,
                       builder: (context, snapshot) {
                         final file = snapshot.data;
-                        if (file != null)
+                        if (file != null) {
                           return Image.file(file, fit: BoxFit.contain);
+                        }
                         if (snapshot.hasError) {
                           return const Text(
                             '图片暂时无法打开',
@@ -3966,11 +3973,9 @@ class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
   @override
   Widget build(BuildContext context) {
     final foreground = widget.mine ? _black : widget.palette.primaryText;
-    final incomingBackground = widget.palette.dark
-        ? const Color(0xFF2C2C2C)
-        : widget.palette.surfaceRaised;
+    final incomingBackground = _chatIncomingBubbleColor(widget.palette);
     final background = widget.mine
-        ? const Color(0xFF28B561)
+        ? _chatOutgoingBubbleColor(widget.palette)
         : incomingBackground;
     return Semantics(
       button: true,
