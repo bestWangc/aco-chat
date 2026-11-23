@@ -226,9 +226,15 @@ class AccountSession {
   Future<SquarePost> createPost({
     required String content,
     required List<Uint8List> images,
+    Uint8List? video,
+    String videoFilename = 'post-video.mp4',
+    int videoDurationSeconds = 0,
   }) async => _apiClient.createPost(
     content: content,
     images: images,
+    video: video,
+    videoFilename: videoFilename,
+    videoDurationSeconds: videoDurationSeconds,
     token: await _requireToken(),
   );
 

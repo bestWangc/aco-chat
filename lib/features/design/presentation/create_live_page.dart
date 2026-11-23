@@ -37,7 +37,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
   // Covers are resized and JPEG-compressed by image_picker before upload. Keep
   // a smaller client-side limit so mobile users do not waste bandwidth on
   // unnecessarily large originals (the API still enforces its 5 MB limit).
-  static const _maxCoverSizeBytes = 3 * 1024 * 1024;
+  static const _maxCoverSizeBytes = 200 * 1024 * 1024;
 
   final _titleController = TextEditingController();
   DateTime? _scheduledAt;
@@ -229,7 +229,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
     final bytes = await image.readAsBytes();
     if (!mounted) return;
     if (bytes.lengthInBytes > _maxCoverSizeBytes) {
-      _showNotice(context, '图片过大', '请选择小于 3 MB 的会议封面。');
+      _showNotice(context, '图片过大', '请选择 200 MB 以内的会议封面。');
       return;
     }
 

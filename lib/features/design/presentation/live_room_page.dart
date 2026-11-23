@@ -105,7 +105,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   static const _liveKitReentryCooldown = Duration(seconds: 5);
   static const _liveKitFallbackUrl = 'wss://api.aco.chat';
   static const _chatImageType = 'image';
-  static const _maxChatImageBytes = 10 * 1024 * 1024;
+  static const _maxChatImageBytes = 200 * 1024 * 1024;
   static const _maxChatImageUrlLength = 400;
   static const _maxChatImageNameLength = 120;
   static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
@@ -254,6 +254,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       },
     );
     WidgetsBinding.instance.addObserver(this);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_setPictureInPictureEnabled(true));
+    }
     _refreshLiveRoomWakelock();
     _apiClient = AccountApiClient();
     _accountSession = AccountSession(_apiClient);
@@ -1265,8 +1268,15 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   void _onAliyunPlayerViewCreated(int viewId) {
     final player = _aliyunLivePlayer ??=
         FlutterAliPlayerFactory.createAliPlayer();
-    player.setOnPrepared((_) {
+    player.setOnPrepared((_) async {
       debugPrint('Aliyun player prepared');
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        try {
+          await player.setPictureInPictureEnableForIOS(true);
+        } on Object catch (error) {
+          debugPrint('Aliyun PiP could not be enabled: $error');
+        }
+      }
       unawaited(player.play());
     });
     player.setOnRenderingStart((_) {
@@ -2107,6 +2117,9 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
 
   @override
   void dispose() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_setPictureInPictureEnabled(false));
+    }
     unawaited(_setLiveRoomWakelock(false));
     _checkInDiagnosticPersistTimer?.cancel();
     unawaited(_persistCheckInDiagnostics());
@@ -2268,7 +2281,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       if (image == null) return;
       final bytes = await image.readAsBytes();
       if (bytes.length > _maxChatImageBytes) {
-        if (mounted) _showNotice(context, '图片过大', '请选择 10 MB 以内的图片。');
+        if (mounted) _showNotice(context, '图片过大', '请选择 200 MB 以内的图片。');
         return;
       }
       if (!mounted) return;
@@ -2409,5 +2422,31 @@ Future<void> _setLiveRoomWakelock(bool enabled) async {
     // do not provide the wakelock platform channel.
   } catch (_) {
     // Failing to keep the screen awake must not interrupt the live room.
+  }
+}
+
+const _pictureInPictureChannel = MethodChannel(
+  'aco/live-room-picture-in-picture',
+);
+
+Future<void> _setPictureInPictureEnabled(bool enabled) async {
+  try {
+    await _pictureInPictureChannel.invokeMethod<void>('setEnabled', {
+      'enabled': enabled,
+    });
+  } on MissingPluginException {
+    // Native PiP is available only in the Android app.
+  } on PlatformException {
+    // Backgrounding the meeting must continue even if PiP cannot be enabled.
+  }
+}
+
+Future<void> _enterPictureInPicture() async {
+  try {
+    await _pictureInPictureChannel.invokeMethod<bool>('enter');
+  } on MissingPluginException {
+    // Native PiP is available only in the Android app.
+  } on PlatformException {
+    // Keep the meeting active if the system refuses PiP.
   }
 }

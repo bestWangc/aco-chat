@@ -274,6 +274,9 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
           palette: palette,
           count: room?.participantCount,
           onMembers: _showMembers,
+          onMinimize: defaultTargetPlatform == TargetPlatform.android
+              ? () => unawaited(_enterPictureInPicture())
+              : null,
           onMore: _showRoomActions,
         ),
         child: Stack(

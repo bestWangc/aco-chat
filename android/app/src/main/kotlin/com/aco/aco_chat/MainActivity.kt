@@ -2,6 +2,7 @@ package com.aco.aco_chat
 
 import android.Manifest
 import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.view.WindowManager
+import android.util.Rational
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -21,6 +23,7 @@ import io.flutter.plugin.common.MethodChannel
 import com.alivc.livepush.LivePushConfig
 
 class MainActivity : FlutterFragmentActivity() {
+    private var liveRoomPictureInPictureEnabled = false
     private data class PendingStorageSave(
         val save: () -> Unit,
         val deny: () -> Unit,
@@ -31,6 +34,17 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/live-room-picture-in-picture")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setEnabled" -> {
+                        liveRoomPictureInPictureEnabled = call.argument<Boolean>("enabled") ?: false
+                        result.success(null)
+                    }
+                    "enter" -> result.success(enterLiveRoomPictureInPicture())
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/aliyun-screen-capture")
             .setMethodCallHandler { call, result ->
                 if (call.method == "stop") {
@@ -248,6 +262,29 @@ class MainActivity : FlutterFragmentActivity() {
                     ),
                 )
             }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (liveRoomPictureInPictureEnabled) enterLiveRoomPictureInPicture()
+    }
+
+    private fun enterLiveRoomPictureInPicture(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            !packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) {
+            return false
+        }
+        return try {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(9, 16))
+                .build()
+            enterPictureInPictureMode(params)
+        } catch (_: IllegalStateException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
+        }
     }
 
     @Deprecated("Deprecated in Android, retained for the MediaProjection consent flow")

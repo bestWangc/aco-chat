@@ -776,6 +776,13 @@ class _PostCard extends StatelessWidget {
                     thumbnailUrls: post.thumbnailUrls,
                   ),
                 ],
+                if (post.videoUrl?.isNotEmpty == true) ...[
+                  const SizedBox(height: 18),
+                  _PostVideoPlayer(
+                    videoUrl: _liveCoverUrl(post.videoUrl!),
+                    palette: palette,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 Align(
                   alignment: Alignment.centerRight,
@@ -913,6 +920,106 @@ class _PostImageGallery extends StatelessWidget {
     Navigator.of(context).push<void>(
       _AcoPageRoute<void>(
         builder: (_) => _PostImagePreview(imageUrl: _liveCoverUrl(imageUrl)),
+      ),
+    );
+  }
+}
+
+class _PostVideoPlayer extends StatefulWidget {
+  const _PostVideoPlayer({required this.videoUrl, required this.palette});
+
+  final String videoUrl;
+  final AcoPalette palette;
+
+  @override
+  State<_PostVideoPlayer> createState() => _PostVideoPlayerState();
+}
+
+class _PostVideoPlayerState extends State<_PostVideoPlayer> {
+  VideoPlayerController? _controller;
+  bool _loading = false;
+
+  Future<void> _togglePlayback() async {
+    final current = _controller;
+    if (current != null) {
+      if (current.value.isPlaying) {
+        await current.pause();
+      } else {
+        await current.play();
+      }
+      if (mounted) setState(() {});
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final controller = VideoPlayerController.networkUrl(
+        Uri.parse(widget.videoUrl),
+      );
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      _controller = controller;
+      await controller.play();
+      setState(() {});
+    } catch (_) {
+      if (mounted) showAcoAlertNotice(context, '视频播放失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return GestureDetector(
+      onTap: _loading ? null : _togglePlayback,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AspectRatio(
+          aspectRatio: controller?.value.isInitialized == true
+              ? controller!.value.aspectRatio
+              : 16 / 9,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (controller?.value.isInitialized == true)
+                VideoPlayer(controller!)
+              else
+                ColoredBox(
+                  color: widget.palette.surface,
+                  child: const Center(
+                    child: Icon(
+                      CupertinoIcons.video_camera,
+                      color: CupertinoColors.white,
+                      size: 44,
+                    ),
+                  ),
+                ),
+              if (controller?.value.isPlaying != true)
+                ColoredBox(color: const Color(0x22000000)),
+              if (_loading || controller == null || !controller.value.isPlaying)
+                Center(
+                  child: _loading
+                      ? const CupertinoActivityIndicator(
+                          color: CupertinoColors.white,
+                        )
+                      : const Icon(
+                          CupertinoIcons.play_circle_fill,
+                          color: CupertinoColors.white,
+                          size: 48,
+                        ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

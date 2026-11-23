@@ -12,4 +12,20 @@ void main() {
       '872086106522627',
     );
   });
+
+  test('parses a video-only square post', () {
+    final post = SquarePost.fromJson({
+      'id': 42,
+      'content': '视频动态',
+      'author': {'user_id': 7, 'nickname': '作者'},
+      'images': <String>[],
+      'video_url': '/uploads/post-video.mp4',
+      'video_duration_seconds': 15,
+      'created_at': '2026-11-20T08:00:00Z',
+    });
+
+    expect(post.imageUrls, isEmpty);
+    expect(post.videoUrl, '/uploads/post-video.mp4');
+    expect(post.videoDurationSeconds, 15);
+  });
 }

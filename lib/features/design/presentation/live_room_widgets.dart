@@ -514,12 +514,14 @@ class _LiveRoomHeaderActions extends StatelessWidget {
     required this.palette,
     required this.count,
     required this.onMembers,
+    this.onMinimize,
     this.onMore,
   });
 
   final AcoPalette palette;
   final int? count;
   final VoidCallback onMembers;
+  final VoidCallback? onMinimize;
   final VoidCallback? onMore;
 
   // Provided livestream viewer-count glyph.
@@ -583,6 +585,20 @@ class _LiveRoomHeaderActions extends StatelessWidget {
           ),
         ),
       ),
+      if (onMinimize != null)
+        CupertinoButton(
+          padding: EdgeInsets.zero,
+          minimumSize: const Size(36, 44),
+          onPressed: onMinimize,
+          child: Semantics(
+            label: '缩小会议窗口',
+            child: Icon(
+              CupertinoIcons.arrow_down_right,
+              color: palette.primaryText,
+              size: 18,
+            ),
+          ),
+        ),
       if (onMore != null)
         CupertinoButton(
           padding: EdgeInsets.zero,

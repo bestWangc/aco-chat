@@ -711,12 +711,22 @@ class AccountApiClient {
   Future<SquarePost> createPost({
     required String content,
     required List<Uint8List> images,
+    Uint8List? video,
+    String videoFilename = 'post-video.mp4',
+    int videoDurationSeconds = 0,
     required String token,
   }) async {
     final request = http.MultipartRequest('POST', _uri('posts'))
       ..headers['x-app-version'] = AppConfig.appVersion
       ..headers['authorization'] = 'Bearer $token'
       ..fields['content'] = content;
+    if (video != null) {
+      request
+        ..fields['video_duration_seconds'] = '$videoDurationSeconds'
+        ..files.add(
+          http.MultipartFile.fromBytes('video', video, filename: videoFilename),
+        );
+    }
     for (var index = 0; index < images.length; index++) {
       request.files.add(
         http.MultipartFile.fromBytes(

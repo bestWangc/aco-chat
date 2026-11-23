@@ -23,7 +23,7 @@ class _ChatPage extends StatefulWidget {
 }
 
 class _ChatPageState extends State<_ChatPage> with RouteAware {
-  static const _chatImageMaxBytes = 1536 * 1024;
+  static const _chatImageMaxBytes = 200 * 1024 * 1024;
   static const _messageTimeGap = Duration(hours: 1);
 
   final _messageController = TextEditingController();
@@ -1000,7 +1000,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       final photoSize = await photo.length();
       if (photoSize > _chatImageMaxBytes) {
         if (mounted) {
-          _showNotice(context, '图片过大', '请重新选择一张不超过 1.5 MB 的图片。');
+          _showNotice(context, '图片过大', '请选择 200 MB 以内的图片。');
         }
         return;
       }
@@ -1107,8 +1107,8 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       if (picked == null) return;
       videoFile = File(picked.path);
       final size = await picked.length();
-      if (size <= 0 || size > 50 * 1024 * 1024) {
-        if (mounted) _showNotice(context, '视频过大', '请选择不超过 50 MB 的视频。');
+      if (size <= 0 || size > 200 * 1024 * 1024) {
+        if (mounted) _showNotice(context, '视频过大', '请选择 200 MB 以内的视频。');
         return;
       }
       if (target == null || target.isEmpty) return;
@@ -1271,8 +1271,8 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     final target = _conversationTarget;
     if (picked == null || target == null || target.isEmpty) return;
     final bytes = await picked.readAsBytes();
-    if (bytes.length > 50 * 1024 * 1024) {
-      if (mounted) _showNotice(context, '文件过大', '请选择不超过 50 MB 的文件。');
+    if (bytes.length > 200 * 1024 * 1024) {
+      if (mounted) _showNotice(context, '文件过大', '请选择 200 MB 以内的文件。');
       return;
     }
     if (!_chatAccessGranted || !OpenIMChatRepository.conversationReady.value) {

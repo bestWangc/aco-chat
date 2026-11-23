@@ -1324,6 +1324,13 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           thumbnailUrls: widget.post.thumbnailUrls,
         ),
       ],
+      if (widget.post.videoUrl?.isNotEmpty == true) ...[
+        const SizedBox(height: 18),
+        _PostVideoPlayer(
+          videoUrl: _liveCoverUrl(widget.post.videoUrl!),
+          palette: widget.palette,
+        ),
+      ],
       const SizedBox(height: 20),
       Row(
         mainAxisAlignment: MainAxisAlignment.end,
@@ -1468,6 +1475,8 @@ class _PublishPostPageState extends State<_PublishPostPage> {
   final _textController = TextEditingController();
   final _imagePicker = ImagePicker();
   final List<_PublishPhoto> _photos = [];
+  _PublishVideo? _video;
+  _PostMediaMode _mediaMode = _PostMediaMode.photos;
   var _pickingPhotos = false;
   var _submitting = false;
 
@@ -1504,11 +1513,53 @@ class _PublishPostPageState extends State<_PublishPostPage> {
         }),
       );
       if (!mounted) return;
-      setState(() => _photos.addAll(photos));
+      setState(() {
+        _video = null;
+        _photos.addAll(photos);
+      });
     } catch (_) {
       if (mounted) {
         _showNotice(context, '选择照片失败', '请检查照片权限后重试。');
       }
+    } finally {
+      if (mounted) setState(() => _pickingPhotos = false);
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    if (_pickingPhotos || _video != null) return;
+    setState(() => _pickingPhotos = true);
+    try {
+      final file = await _imagePicker.pickVideo(
+        source: ImageSource.gallery,
+        maxDuration: const Duration(minutes: 5),
+      );
+      if (file == null) return;
+      if (await file.length() > 200 * 1024 * 1024) {
+        if (mounted) _showNotice(context, '视频过大', '请选择 200 MB 以内的视频。');
+        return;
+      }
+      final controller = VideoPlayerController.file(File(file.path));
+      await controller.initialize();
+      final duration = controller.value.duration.inSeconds;
+      await controller.dispose();
+      final bytes = await file.readAsBytes();
+      if (duration > 300) {
+        if (mounted) _showNotice(context, '视频过长', '请选择 5 分钟以内的视频。');
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          _photos.clear();
+          _video = _PublishVideo(
+            file: file,
+            bytes: bytes,
+            durationSeconds: duration,
+          );
+        });
+      }
+    } catch (_) {
+      if (mounted) _showNotice(context, '选择视频失败', '请选择可播放的 MP4 或 MOV 视频。');
     } finally {
       if (mounted) setState(() => _pickingPhotos = false);
     }
@@ -1529,10 +1580,14 @@ class _PublishPostPageState extends State<_PublishPostPage> {
     setState(() => _photos.removeAt(index));
   }
 
+  void _removeVideo() => setState(() => _video = null);
+
   Future<void> _publish() async {
     if (_submitting) return;
-    if (_textController.text.trim().isEmpty && _photos.isEmpty) {
-      _showNotice(context, '无法发布', '请输入内容或选择照片。');
+    if (_textController.text.trim().isEmpty &&
+        _photos.isEmpty &&
+        _video == null) {
+      _showNotice(context, '无法发布', '请输入内容或选择照片、视频。');
       return;
     }
     final apiClient = AccountApiClient();
@@ -1542,6 +1597,9 @@ class _PublishPostPageState extends State<_PublishPostPage> {
       await AccountSession(apiClient).createPost(
         content: _textController.text.trim(),
         images: _photos.map((photo) => photo.bytes).toList(growable: false),
+        video: _video?.bytes,
+        videoFilename: _video?.file.name ?? 'post-video.mp4',
+        videoDurationSeconds: _video?.durationSeconds ?? 0,
       );
       if (mounted) Navigator.of(context).pop(true);
     } on AccountApiException catch (error) {
@@ -1619,34 +1677,57 @@ class _PublishPostPageState extends State<_PublishPostPage> {
             ),
           ),
           const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '照片',
-                style: TextStyle(
-                  color: widget.palette.primaryText,
-                  fontSize: AcoTypography.body,
-                  fontWeight: FontWeight.w600,
-                ),
+          CupertinoSlidingSegmentedControl<_PostMediaMode>(
+            groupValue: _mediaMode,
+            children: const {
+              _PostMediaMode.photos: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('照片'),
               ),
-              Text(
-                '${_photos.length}/$_maxPhotoCount',
-                style: TextStyle(
-                  color: widget.palette.mutedText,
-                  fontSize: AcoTypography.bodySmall,
-                ),
+              _PostMediaMode.video: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Text('视频'),
               ),
-            ],
+            },
+            onValueChanged: (mode) {
+              if (!_submitting && !_pickingPhotos && mode != null) {
+                setState(() => _mediaMode = mode);
+              }
+            },
           ),
           const SizedBox(height: 10),
-          _PublishPhotoGrid(
-            palette: widget.palette,
-            photos: _photos,
-            isPicking: _pickingPhotos,
-            onAdd: _pickPhotos,
-            onRemove: _removePhoto,
-          ),
+          if (_mediaMode == _PostMediaMode.photos)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    '${_photos.length}/$_maxPhotoCount',
+                    style: TextStyle(
+                      color: widget.palette.mutedText,
+                      fontSize: AcoTypography.bodySmall,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _PublishPhotoGrid(
+                  palette: widget.palette,
+                  photos: _photos,
+                  isPicking: _pickingPhotos,
+                  onAdd: _pickPhotos,
+                  onRemove: _removePhoto,
+                ),
+              ],
+            )
+          else
+            _PublishVideoTile(
+              palette: widget.palette,
+              video: _video,
+              isPicking: _pickingPhotos,
+              onAdd: _pickVideo,
+              onRemove: _removeVideo,
+            ),
         ],
       ),
     ),
@@ -1658,6 +1739,130 @@ class _PublishPhoto {
 
   final XFile file;
   final Uint8List bytes;
+}
+
+enum _PostMediaMode { photos, video }
+
+class _PublishVideo {
+  const _PublishVideo({
+    required this.file,
+    required this.bytes,
+    required this.durationSeconds,
+  });
+
+  final XFile file;
+  final Uint8List bytes;
+  final int durationSeconds;
+}
+
+class _PublishVideoTile extends StatelessWidget {
+  const _PublishVideoTile({
+    required this.palette,
+    required this.video,
+    required this.isPicking,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  final AcoPalette palette;
+  final _PublishVideo? video;
+  final bool isPicking;
+  final VoidCallback onAdd;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: video == null && !isPicking ? onAdd : null,
+    child: AspectRatio(
+      aspectRatio: 16 / 9,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (video == null)
+              ColoredBox(
+                color: palette.inputSurface,
+                child: Center(
+                  child: isPicking
+                      ? const CupertinoActivityIndicator()
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              CupertinoIcons.video_camera,
+                              color: palette.mutedText,
+                              size: 30,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              '选择视频（最长 5 分钟，200 MB 以内）',
+                              style: TextStyle(color: palette.mutedText),
+                            ),
+                          ],
+                        ),
+                ),
+              )
+            else
+              ColoredBox(
+                color: const Color(0xFF202020),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        CupertinoIcons.video_camera,
+                        color: Color(0xFFFFFFFF),
+                        size: 32,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        '${video!.durationSeconds} 秒',
+                        style: const TextStyle(color: Color(0xFFFFFFFF)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            if (video != null) ...[
+              const ColoredBox(color: Color(0x33000000)),
+              Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.play_circle_fill,
+                      color: Color(0xFFFFFFFF),
+                      size: 40,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${video!.durationSeconds} 秒',
+                      style: const TextStyle(color: Color(0xFFFFFFFF)),
+                    ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 8,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.all(6),
+                  color: const Color(0xAA000000),
+                  onPressed: onRemove,
+                  child: const Icon(
+                    CupertinoIcons.xmark,
+                    color: Color(0xFFFFFFFF),
+                    size: 14,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _PublishPhotoGrid extends StatelessWidget {
