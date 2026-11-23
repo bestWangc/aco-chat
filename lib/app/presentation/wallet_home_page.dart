@@ -534,7 +534,15 @@ class _WalletHomeState extends State<_WalletHome> {
     const actionRadius = 29.0;
     const primaryActionBorderWidth = 8.0;
     const secondaryActionBorderWidth = 8.0;
-    const primaryActionBorderColor = Color(0xFF6D9800);
+    final primaryActionBackground = isDark
+        ? _accentGreen
+        : const Color(0xFF1A1A1A);
+    final primaryActionForeground = isDark
+        ? _walletActionForeground
+        : const Color(0xFFFFFFFF);
+    final primaryActionBorderColor = isDark
+        ? const Color(0xFF6D9800)
+        : const Color(0xFF000000);
     final secondaryActionBorderColor = isDark
         ? const Color(0xFF9E9E9E)
         : const Color(0xFFD2D6DC);
@@ -689,8 +697,8 @@ class _WalletHomeState extends State<_WalletHome> {
                           palette: widget.palette,
                           height: 58,
                           fontSize: 15,
-                          backgroundColor: _accentGreen,
-                          foregroundColor: _walletActionForeground,
+                          backgroundColor: primaryActionBackground,
+                          foregroundColor: primaryActionForeground,
                           radius: actionRadius,
                           borderColor: primaryActionBorderColor,
                           borderWidth: primaryActionBorderWidth,
