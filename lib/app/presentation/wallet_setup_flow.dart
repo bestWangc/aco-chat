@@ -1,8 +1,7 @@
 part of 'aco_app_shell.dart';
 
 const _walletSetupBottomButtonWidth = 399.0;
-const _walletSetupBottomButtonHeight = 66.0;
-const _walletImportBottomButtonHeight = 56.0;
+const _walletSetupBottomButtonHeight = 56.0;
 const _walletSetupButtonLayerPadding = 8.0;
 
 class _WalletSetupFlow extends StatefulWidget {
@@ -80,11 +79,11 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   @override
   Widget build(BuildContext context) {
     final palette = AcoPalette(widget.dark);
-    final useLightImportButtonStyle =
-        !palette.dark && widget.mode == _WalletSetupMode.import;
-    final buttonHeight = _isImporting
-        ? _walletImportBottomButtonHeight
-        : _walletSetupBottomButtonHeight;
+    final useLightWalletButtonStyle =
+        !palette.dark &&
+        (widget.mode == _WalletSetupMode.import ||
+            (_isCreating && (_step == 1 || _isVerificationStep)));
+    const buttonHeight = _walletSetupBottomButtonHeight;
     return ColoredBox(
       color: palette.background,
       child: AcoSafeArea(
@@ -177,22 +176,20 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                             filled: true,
                             palette: palette,
                             backgroundImageAsset: null,
-                            backgroundColor: useLightImportButtonStyle
+                            backgroundColor: useLightWalletButtonStyle
                                 ? _black
                                 : palette.accent,
-                            borderColor: useLightImportButtonStyle
+                            borderColor: useLightWalletButtonStyle
                                 ? _black
                                 : palette.accent,
-                            layerColor: useLightImportButtonStyle
+                            layerColor: useLightWalletButtonStyle
                                 ? const Color(0xFF383838)
                                 : palette.accent.withValues(alpha: .35),
-                            textColor: useLightImportButtonStyle
+                            textColor: useLightWalletButtonStyle
                                 ? palette.accent
-                                : palette.dark
-                                ? _black
-                                : _white,
+                                : null,
                             preserveDisabledAppearance:
-                                useLightImportButtonStyle,
+                                useLightWalletButtonStyle,
                             height: buttonHeight,
                             fontSize: _isImporting
                                 ? 17.5
