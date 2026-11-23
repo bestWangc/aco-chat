@@ -589,7 +589,7 @@ class _GroupExitButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(24),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(5),
+          padding: const EdgeInsets.all(8),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: const Color(0xFFEB4B6E),
