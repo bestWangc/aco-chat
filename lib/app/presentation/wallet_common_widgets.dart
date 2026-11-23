@@ -12,6 +12,7 @@ class _DetailScaffold extends StatelessWidget {
     this.headerTopPadding = 0,
     this.headerRightPadding = 28,
     this.titleFontSize = AcoTypography.bodyEmphasis,
+    this.headerBackgroundColor,
   });
   final AcoPalette palette;
   final Widget child;
@@ -23,25 +24,29 @@ class _DetailScaffold extends StatelessWidget {
   final double headerTopPadding;
   final double headerRightPadding;
   final double titleFontSize;
+  final Color? headerBackgroundColor;
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Padding(
-        padding: EdgeInsets.fromLTRB(
-          8,
-          headerTopPadding,
-          headerRightPadding,
-          0,
-        ),
-        child: AcoPageHeader(
-          palette: palette,
-          title: title == null ? null : appText(context, title!),
-          titleWidget: titleWidget,
-          right: right,
-          titleFollowsBack: titleFollowsBack,
-          titleFontSize: titleFontSize,
-          backButtonOffset: Offset.zero,
-          onBack: onBack ?? () => Navigator.of(context).maybePop(),
+      ColoredBox(
+        color: headerBackgroundColor ?? palette.background,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            8,
+            headerTopPadding,
+            headerRightPadding,
+            0,
+          ),
+          child: AcoPageHeader(
+            palette: palette,
+            title: title == null ? null : appText(context, title!),
+            titleWidget: titleWidget,
+            right: right,
+            titleFollowsBack: titleFollowsBack,
+            titleFontSize: titleFontSize,
+            backButtonOffset: Offset.zero,
+            onBack: onBack ?? () => Navigator.of(context).maybePop(),
+          ),
         ),
       ),
       Expanded(child: child),

@@ -1742,6 +1742,9 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     final compactBottomBar = _isPanelVisible || keyboardInset > 0;
     return _DetailScaffold(
       palette: widget.palette,
+      headerBackgroundColor: widget.palette.dark
+          ? widget.palette.background
+          : const Color(0xFFEFEFEF),
       onBack: _selectingMessages ? _cancelSelectingMessages : null,
       title: _selectingMessages ? '已选择 ${_selectedMessageIDs.length} 条' : null,
       titleWidget: _selectingMessages
@@ -1800,8 +1803,10 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                   Navigator.of(this.context).pop();
                 },
                 child: Image.asset(
-                  'assets/icons/chat_more_mark.png',
-                  width: 26,
+                  widget.palette.dark
+                      ? 'assets/icons/chat_more_mark.png'
+                      : 'assets/icons/chat_more_mark_light.png',
+                  width: 28,
                   height: 8,
                   fit: BoxFit.contain,
                 ),
