@@ -401,7 +401,11 @@ class _SocialMessageTile extends StatelessWidget {
             right: 0,
             bottom: 0,
             height: 0.17,
-            child: ColoredBox(color: palette.border),
+            child: ColoredBox(
+              color: palette.dark
+                  ? palette.border
+                  : const Color(0xFF8C8B8B),
+            ),
           ),
         ],
       ),
