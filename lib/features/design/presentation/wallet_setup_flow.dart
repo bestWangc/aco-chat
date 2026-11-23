@@ -173,8 +173,24 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                             loading: _isCompletingWalletSetup,
                             filled: true,
                             palette: palette,
-                            backgroundImageAsset:
-                                'assets/images/wallet-bottom-button.png',
+                            backgroundImageAsset: _isImporting && !palette.dark
+                                ? null
+                                : 'assets/images/wallet-bottom-button.png',
+                            backgroundColor: _isImporting && !palette.dark
+                                ? _black
+                                : null,
+                            borderColor: _isImporting && !palette.dark
+                                ? _black
+                                : null,
+                            layerColor: _isImporting && !palette.dark
+                                ? const Color(0xFF383838)
+                                : null,
+                            layerPadding: _isImporting && !palette.dark ? 8 : 3,
+                            textColor: _isImporting && !palette.dark
+                                ? palette.accent
+                                : null,
+                            preserveDisabledAppearance:
+                                _isImporting && !palette.dark,
                             height: buttonHeight,
                             fontSize: _isImporting
                                 ? 17.5
@@ -375,7 +391,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
     style: TextStyle(color: palette.primaryText),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: palette.inputSurface,
+      color: palette.dark ? palette.inputSurface : const Color(0xFFEFEFEF),
       borderRadius: BorderRadius.circular(20),
     ),
   );
@@ -740,7 +756,12 @@ class _WalletSetupButton extends StatelessWidget {
     this.fontSize = AcoTypography.titleLarge,
     this.fontWeight = FontWeight.w600,
     this.backgroundImageAsset,
+    this.backgroundColor,
+    this.borderColor,
+    this.layerColor,
+    this.layerPadding = 3,
     this.textColor,
+    this.preserveDisabledAppearance = false,
     this.loading = false,
     super.key,
   });
@@ -754,12 +775,19 @@ class _WalletSetupButton extends StatelessWidget {
   final double fontSize;
   final FontWeight fontWeight;
   final String? backgroundImageAsset;
+  final Color? backgroundColor;
+  final Color? borderColor;
+  final Color? layerColor;
+  final double layerPadding;
   final Color? textColor;
+  final bool preserveDisabledAppearance;
   final bool loading;
 
-  Color get _backgroundColor => filled ? palette.accent : _transparent;
+  Color get _backgroundColor =>
+      backgroundColor ?? (filled ? palette.accent : _transparent);
 
-  Color get _borderColor => filled ? palette.accent : palette.mutedText;
+  Color get _borderColor =>
+      borderColor ?? (filled ? palette.accent : palette.mutedText);
 
   Color get _foregroundColor {
     if (textColor != null) return textColor!;
@@ -829,9 +857,9 @@ class _WalletSetupButton extends StatelessWidget {
     } else if (hasLayeredSurface) {
       buttonContent = Container(
         height: buttonHeight,
-        padding: const EdgeInsets.all(3),
+        padding: EdgeInsets.all(layerPadding),
         decoration: BoxDecoration(
-          color: palette.accent.withValues(alpha: .35),
+          color: layerColor ?? palette.accent.withValues(alpha: .35),
           borderRadius: BorderRadius.circular(buttonHeight / 2),
         ),
         child: content,
@@ -839,7 +867,7 @@ class _WalletSetupButton extends StatelessWidget {
     }
 
     return Opacity(
-      opacity: enabled || loading ? 1 : .42,
+      opacity: enabled || loading || preserveDisabledAppearance ? 1 : .42,
       child: CupertinoButton(
         padding: EdgeInsets.zero,
         minimumSize: Size(double.infinity, buttonHeight ?? 0),
