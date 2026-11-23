@@ -2,6 +2,7 @@ part of 'aco_design_shell.dart';
 
 const _walletSetupBottomButtonWidth = 399.0;
 const _walletSetupBottomButtonHeight = 66.0;
+const _walletImportBottomButtonHeight = 56.0;
 
 class _WalletSetupFlow extends StatefulWidget {
   const _WalletSetupFlow({
@@ -78,6 +79,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
   @override
   Widget build(BuildContext context) {
     final palette = AcoPalette(widget.dark);
+    final buttonHeight = _isImporting
+        ? _walletImportBottomButtonHeight
+        : _walletSetupBottomButtonHeight;
     return ColoredBox(
       color: palette.background,
       child: AcoSafeArea(
@@ -116,7 +120,9 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                                 fontSize: _isImporting
                                     ? 31
                                     : AcoTypography.displaySmall,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: _isImporting
+                                    ? FontWeight.w500
+                                    : FontWeight.w700,
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -127,7 +133,8 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                                 fontSize: _isImporting
                                     ? 15
                                     : AcoTypography.body,
-                                height: 1.55,
+                                letterSpacing: _isImporting ? -0.2 : 0,
+                                height: _isImporting ? 1.35 : 1.55,
                               ),
                             ),
                             const SizedBox(height: 32),
@@ -148,7 +155,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                     Center(
                       child: LayoutBuilder(
                         builder: (context, constraints) => SizedBox(
-                          height: _walletSetupBottomButtonHeight,
+                          height: buttonHeight,
                           width: math.min(
                             _walletSetupBottomButtonWidth,
                             constraints.maxWidth,
@@ -168,7 +175,7 @@ class _WalletSetupFlowState extends State<_WalletSetupFlow> {
                             palette: palette,
                             backgroundImageAsset:
                                 'assets/images/wallet-bottom-button.png',
-                            height: _walletSetupBottomButtonHeight,
+                            height: buttonHeight,
                             fontSize: _isImporting
                                 ? 17.5
                                 : AcoTypography.bodyEmphasis,
