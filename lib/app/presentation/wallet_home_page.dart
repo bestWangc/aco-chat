@@ -529,23 +529,24 @@ class _WalletHomeState extends State<_WalletHome> {
     final isDark = widget.palette.dark;
     final actionSurface = isDark
         ? _walletActionSurface
-        : const Color(0xFFFFFFFF);
+        : const Color(0xFFEAEAEA);
     final actionForeground = _walletActionForeground;
     const actionRadius = 29.0;
+    const actionButtonHeight = 50.0;
     const primaryActionBorderWidth = 8.0;
     const secondaryActionBorderWidth = 8.0;
     final primaryActionBackground = isDark
         ? _accentGreen
-        : const Color(0xFF000000);
+        : const Color(0xFF0B0B0B);
     final primaryActionForeground = isDark
         ? _walletActionForeground
-        : const Color(0xFFFFFFFF);
+        : _accentGreen;
     final primaryActionBorderColor = isDark
         ? const Color(0xFF6D9800)
-        : const Color(0x33000000);
+        : const Color(0xFF3A3A3A);
     final secondaryActionBorderColor = isDark
         ? const Color(0xFF9E9E9E)
-        : const Color(0xFFD2D6DC);
+        : const Color(0xFFF5F5F5);
     final networkLabel = widget.selectedChain.displayLabel;
     // Wallet dimensions are fixed logical pixels. Flex layouts below
     // provide adaptation without scaling an entire artboard at runtime.
@@ -695,12 +696,15 @@ class _WalletHomeState extends State<_WalletHome> {
                         child: _OutlineButton(
                           label: appText(context, '发送资产'),
                           palette: widget.palette,
-                          height: 58,
+                          height: actionButtonHeight,
                           fontSize: 15,
                           backgroundColor: primaryActionBackground,
                           foregroundColor: primaryActionForeground,
                           radius: actionRadius,
                           borderColor: primaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : primaryActionBorderColor,
                           borderWidth: primaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: _showSendTokenPicker,
@@ -712,12 +716,15 @@ class _WalletHomeState extends State<_WalletHome> {
                           label: appText(context, '接收资产'),
                           icon: null,
                           palette: widget.palette,
-                          height: 58,
+                          height: actionButtonHeight,
                           fontSize: 15,
                           backgroundColor: actionSurface,
                           foregroundColor: actionForeground,
                           radius: actionRadius,
                           borderColor: secondaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : secondaryActionBorderColor,
                           borderWidth: secondaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: () => widget.onOpen(AcoScreen.receive),
@@ -736,7 +743,7 @@ class _WalletHomeState extends State<_WalletHome> {
                           label: appText(context, '闪兑&跨链'),
                           icon: CupertinoIcons.bolt_fill,
                           palette: widget.palette,
-                          height: 58,
+                          height: actionButtonHeight,
                           fontSize: 15,
                           leadingImageAsset:
                               'assets/icons/wallet_swap_action.png',
@@ -746,6 +753,9 @@ class _WalletHomeState extends State<_WalletHome> {
                           foregroundColor: actionForeground,
                           radius: actionRadius,
                           borderColor: secondaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : secondaryActionBorderColor,
                           borderWidth: secondaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: () => widget.onOpen(AcoScreen.dexToken),
@@ -757,7 +767,7 @@ class _WalletHomeState extends State<_WalletHome> {
                           label: appText(context, '扫码'),
                           icon: CupertinoIcons.qrcode_viewfinder,
                           palette: widget.palette,
-                          height: 58,
+                          height: actionButtonHeight,
                           fontSize: 15,
                           leadingAsset: 'assets/icons/source_scan.svg',
                           iconSize: 13.5,
@@ -766,6 +776,9 @@ class _WalletHomeState extends State<_WalletHome> {
                           foregroundColor: actionForeground,
                           radius: actionRadius,
                           borderColor: secondaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : secondaryActionBorderColor,
                           borderWidth: secondaryActionBorderWidth,
                           fontWeight: FontWeight.w500,
                           onPressed: () => widget.onOpen(AcoScreen.scan),

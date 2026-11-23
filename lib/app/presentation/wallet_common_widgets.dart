@@ -104,6 +104,7 @@ class _OutlineButton extends StatelessWidget {
     this.backgroundColor,
     this.foregroundColor,
     this.borderColor,
+    this.outerBackgroundColor,
     this.borderWidth = 0,
     this.radius = 8,
     this.fontWeight = FontWeight.w600,
@@ -121,6 +122,7 @@ class _OutlineButton extends StatelessWidget {
   final Color? backgroundColor;
   final Color? foregroundColor;
   final Color? borderColor;
+  final Color? outerBackgroundColor;
   final double borderWidth;
   final double radius;
   final FontWeight fontWeight;
@@ -133,60 +135,71 @@ class _OutlineButton extends StatelessWidget {
     final foreground = foregroundColor ?? palette.primaryText;
     final hasLeading =
         leadingAsset != null || leadingImageAsset != null || icon != null;
+    final content = Center(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (leadingAsset != null)
+            SvgPicture.asset(
+              leadingAsset!,
+              width: iconSize,
+              height: iconSize,
+              colorFilter: ColorFilter.mode(foreground, BlendMode.srcIn),
+            )
+          else if (leadingImageAsset != null)
+            Image.asset(leadingImageAsset!, width: iconSize, height: iconSize)
+          else if (icon != null) Icon(icon, color: foreground, size: iconSize),
+          if (hasLeading) SizedBox(width: iconGap),
+          Flexible(
+            child: Text(
+              appText(context, label),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              softWrap: false,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: foreground,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    final inner = DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor ?? palette.surface,
+        borderRadius: BorderRadius.circular(
+          outerBackgroundColor == null ? radius : radius - borderWidth,
+        ),
+        border: outerBackgroundColor == null && borderWidth > 0
+            ? Border.all(
+                color: borderColor ?? palette.border,
+                width: borderWidth,
+              )
+            : null,
+      ),
+      child: content,
+    );
+    final buttonContent = outerBackgroundColor == null
+        ? inner
+        : DecoratedBox(
+            decoration: BoxDecoration(
+              color: outerBackgroundColor,
+              borderRadius: BorderRadius.circular(radius),
+            ),
+            child: Padding(
+              padding: EdgeInsets.all(borderWidth),
+              child: inner,
+            ),
+          );
     return SizedBox(
       height: height,
       child: CupertinoButton(
         padding: EdgeInsets.zero,
         onPressed: onPressed,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: backgroundColor ?? palette.surface,
-            borderRadius: BorderRadius.circular(radius),
-            border: borderWidth > 0
-                ? Border.all(
-                    color: borderColor ?? palette.border,
-                    width: borderWidth,
-                  )
-                : null,
-          ),
-          child: Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (leadingAsset != null)
-                  SvgPicture.asset(
-                    leadingAsset!,
-                    width: iconSize,
-                    height: iconSize,
-                    colorFilter: ColorFilter.mode(foreground, BlendMode.srcIn),
-                  )
-                else if (leadingImageAsset != null)
-                  Image.asset(
-                    leadingImageAsset!,
-                    width: iconSize,
-                    height: iconSize,
-                  )
-                else if (icon != null)
-                  Icon(icon, color: foreground, size: iconSize),
-                if (hasLeading) SizedBox(width: iconGap),
-                Flexible(
-                  child: Text(
-                    appText(context, label),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    softWrap: false,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: foreground,
-                      fontSize: fontSize,
-                      fontWeight: fontWeight,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+        child: buttonContent,
       ),
     );
   }
