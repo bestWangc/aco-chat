@@ -2836,7 +2836,7 @@ class _ChatMorePanel extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: palette.dark
                           ? const Color(0xFF2C2C2C)
-                          : palette.surfaceRaised,
+                          : const Color(0xFFFFFFFF),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: Center(
