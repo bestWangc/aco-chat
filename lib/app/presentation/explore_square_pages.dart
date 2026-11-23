@@ -2275,14 +2275,18 @@ class _MessageListSearchField extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) => Container(
-    height: 34,
-    padding: const EdgeInsets.symmetric(horizontal: 12),
-    decoration: BoxDecoration(
-      color: palette.dark ? const Color(0xFF191919) : const Color(0xFFF1F2F3),
-      borderRadius: BorderRadius.circular(16),
-    ),
-    child: Row(
+  Widget build(BuildContext context) {
+    final searchTextColor = palette.dark
+        ? palette.mutedText
+        : const Color(0xFF5B5B5B);
+    return Container(
+      height: 34,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: palette.dark ? const Color(0xFF191919) : const Color(0xFFEFEFEF),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
       children: [
         Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
         const SizedBox(width: 7),
@@ -2294,11 +2298,11 @@ class _MessageListSearchField extends StatelessWidget {
             cursorColor: palette.accent,
             placeholder: appText(context, '搜索'),
             placeholderStyle: TextStyle(
-              color: palette.mutedText,
+              color: searchTextColor,
               fontSize: AcoTypography.caption,
             ),
             style: TextStyle(
-              color: palette.primaryText,
+              color: searchTextColor,
               fontSize: AcoTypography.caption,
             ),
             decoration: null,
@@ -2326,8 +2330,9 @@ class _MessageListSearchField extends StatelessWidget {
           },
         ),
       ],
-    ),
-  );
+      ),
+    );
+  }
 }
 
 class _MessageHeaderLabel extends StatelessWidget {
