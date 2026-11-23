@@ -313,10 +313,10 @@ class _SocialMessageTile extends StatelessWidget {
               child: ListTile(
                 contentPadding: EdgeInsets.zero,
                 minVerticalPadding: 0,
-                minLeadingWidth: 54,
+                minLeadingWidth: 52,
                 horizontalTitleGap: 12,
                 leading: groupAvatarUrls == null
-                    ? AcoAvatar(size: 54, imageUrl: avatarUrl)
+                    ? AcoAvatar(size: 52, imageUrl: avatarUrl)
                     : _GroupConversationAvatar(
                         palette: palette,
                         imageUrls: groupAvatarUrls!,
@@ -397,7 +397,7 @@ class _SocialMessageTile extends StatelessWidget {
             ),
           ),
           Positioned(
-            left: 66,
+            left: 64,
             right: 0,
             bottom: 0,
             height: 0.17,
@@ -431,8 +431,8 @@ class _GroupConversationAvatar extends StatelessWidget {
         : imageUrls.take(4).cast<String?>().toList(growable: false);
     return ClipOval(
       child: Container(
-        width: 54,
-        height: 54,
+        width: 52,
+        height: 52,
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(color: palette.surfaceRaised),
         child: avatars.length == 1
