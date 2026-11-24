@@ -148,7 +148,8 @@ class _OutlineButton extends StatelessWidget {
             )
           else if (leadingImageAsset != null)
             Image.asset(leadingImageAsset!, width: iconSize, height: iconSize)
-          else if (icon != null) Icon(icon, color: foreground, size: iconSize),
+          else if (icon != null)
+            Icon(icon, color: foreground, size: iconSize),
           if (hasLeading) SizedBox(width: iconGap),
           Flexible(
             child: Text(
@@ -189,10 +190,7 @@ class _OutlineButton extends StatelessWidget {
               color: outerBackgroundColor,
               borderRadius: BorderRadius.circular(radius),
             ),
-            child: Padding(
-              padding: EdgeInsets.all(borderWidth),
-              child: inner,
-            ),
+            child: Padding(padding: EdgeInsets.all(borderWidth), child: inner),
           );
     return SizedBox(
       height: height,
@@ -207,12 +205,14 @@ class _OutlineButton extends StatelessWidget {
 
 class _WalletTabs extends StatelessWidget {
   const _WalletTabs({
+    required this.palette,
     required this.selected,
     required this.onChanged,
     required this.addButtonLink,
     required this.onAddToken,
   });
 
+  final AcoPalette palette;
   final int selected;
   final ValueChanged<int> onChanged;
   final LayerLink addButtonLink;
@@ -225,12 +225,18 @@ class _WalletTabs extends StatelessWidget {
         child: Row(
           children: [
             _WalletTab(
+              palette: palette,
               label: appText(context, '资产'),
               selected: selected == 0,
               onPressed: () => onChanged(0),
             ),
             const SizedBox(width: 22),
-            _WalletTab(label: 'NFT', selected: selected == 1, onPressed: null),
+            _WalletTab(
+              palette: palette,
+              label: 'NFT',
+              selected: selected == 1,
+              onPressed: null,
+            ),
           ],
         ),
       ),
@@ -265,70 +271,85 @@ class _WalletTabs extends StatelessWidget {
 
 class _WalletTab extends StatelessWidget {
   const _WalletTab({
+    required this.palette,
     required this.label,
     required this.selected,
     required this.onPressed,
   });
 
+  final AcoPalette palette;
   final String label;
   final bool selected;
   final VoidCallback? onPressed;
 
   @override
-  Widget build(BuildContext context) => CupertinoButton(
-    padding: EdgeInsets.zero,
-    minimumSize: Size.zero,
-    onPressed: onPressed,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: selected ? const Color(0xFF141414) : _transparent,
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Padding(
-            padding: selected ? const EdgeInsets.all(5) : EdgeInsets.zero,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFF292929) : _transparent,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
+  Widget build(BuildContext context) {
+    final selectedOuterColor = palette.dark
+        ? const Color(0xFF141414)
+        : const Color(0xFFF5F5F5);
+    final selectedInnerColor = palette.dark
+        ? const Color(0xFF292929)
+        : const Color(0xFFEAEAEA);
+    final selectedTextColor = palette.dark ? _white : _walletActionForeground;
+    return CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: selected ? selectedOuterColor : _transparent,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Padding(
+              padding: selected ? const EdgeInsets.all(5) : EdgeInsets.zero,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: selected ? selectedInnerColor : _transparent,
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Transform.translate(
-                  offset: const Offset(0, 2),
-                  child: Text(
-                    appText(context, label),
-                    style: TextStyle(
-                      color: selected ? _white : _walletHeaderMuted,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                      fontSize: 16,
-                      height: 1,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  child: Transform.translate(
+                    offset: const Offset(0, 2),
+                    child: Text(
+                      appText(context, label),
+                      style: TextStyle(
+                        color: selected
+                            ? selectedTextColor
+                            : _walletHeaderMuted,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                        fontSize: 14,
+                        height: 1,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        AnimatedContainer(
-          key: selected ? const Key('wallet-tab-selection-indicator') : null,
-          duration: const Duration(milliseconds: 160),
-          width: selected ? 16 : 0,
-          height: 3,
-          decoration: BoxDecoration(
-            color: selected ? _walletHeaderLime : _transparent,
-            borderRadius: BorderRadius.circular(3),
+          const SizedBox(height: 8),
+          AnimatedContainer(
+            key: selected ? const Key('wallet-tab-selection-indicator') : null,
+            duration: const Duration(milliseconds: 160),
+            width: selected ? 16 : 0,
+            height: 3,
+            decoration: BoxDecoration(
+              color: selected ? _walletHeaderLime : _transparent,
+              borderRadius: BorderRadius.circular(3),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
 }
 
 class _SectionTabs extends StatelessWidget {

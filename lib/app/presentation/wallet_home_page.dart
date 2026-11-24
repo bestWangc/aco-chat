@@ -604,7 +604,9 @@ class _WalletHomeState extends State<_WalletHome> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: _walletHeaderMuted,
+                                        color: isDark
+                                            ? _walletHeaderMuted
+                                            : widget.palette.primaryText,
                                         fontSize: 17.5,
                                         fontWeight: FontWeight.w400,
                                         height: 1,
@@ -634,10 +636,11 @@ class _WalletHomeState extends State<_WalletHome> {
                           behavior: HitTestBehavior.opaque,
                           onTap: () => widget.onOpen(AcoScreen.walletChains),
                           child: Transform.translate(
-                            offset: const Offset(-16, 4),
+                            offset: const Offset(0, 4),
                             child: SizedBox(
                               width: _walletHeaderNetworkWidth,
                               child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
                                   Container(
                                     width: 11,
@@ -648,7 +651,7 @@ class _WalletHomeState extends State<_WalletHome> {
                                     ),
                                   ),
                                   SizedBox(width: 6.52),
-                                  Expanded(
+                                  Flexible(
                                     child: Text(
                                       networkLabel,
                                       maxLines: 1,
@@ -787,13 +790,14 @@ class _WalletHomeState extends State<_WalletHome> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 45),
+                const SizedBox(height: 24),
               ],
             ),
           ),
           Padding(
             padding: const EdgeInsets.only(left: 47, right: 16),
             child: _WalletTabs(
+              palette: widget.palette,
               selected: _selectedTab,
               onChanged: (index) => setState(() => _selectedTab = index),
               addButtonLink: _walletActionsLink,
