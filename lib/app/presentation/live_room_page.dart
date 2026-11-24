@@ -1922,7 +1922,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
                 },
                 child: _hostActionLabel('转让主持人'),
               ),
-            if (isHost && room?.checkIn == null)
+            if (isHost && !_checkInIsActive(room?.checkIn))
               CupertinoActionSheetAction(
                 onPressed: () {
                   Navigator.of(sheetContext).pop();
