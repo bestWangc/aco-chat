@@ -1774,13 +1774,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('发布动态'), findsOneWidget);
+    expect(find.byType(CupertinoSlidingSegmentedControl), findsNothing);
+    expect(find.text('0/9'), findsOneWidget);
+    expect(find.text('添加照片或视频'), findsOneWidget);
+    await tester.tap(find.text('添加照片或视频'));
+    await tester.pumpAndSettle();
     expect(find.text('照片'), findsOneWidget);
     expect(find.text('视频'), findsOneWidget);
-    expect(find.text('0/9'), findsOneWidget);
-    expect(find.text('添加照片'), findsOneWidget);
-    await tester.tap(find.text('视频'));
+    await tester.tap(find.text('取消'));
     await tester.pumpAndSettle();
-    expect(find.text('选择视频（最长 5 分钟，200 MB 以内）'), findsOneWidget);
+    expect(find.text('选择视频（最长 5 分钟，200 MB 以内）'), findsNothing);
   });
 
   testWidgets('refreshes the live list after a newly created room closes', (

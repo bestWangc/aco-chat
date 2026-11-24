@@ -1476,7 +1476,6 @@ class _PublishPostPageState extends State<_PublishPostPage> {
   final _imagePicker = ImagePicker();
   final List<_PublishPhoto> _photos = [];
   _PublishVideo? _video;
-  _PostMediaMode _mediaMode = _PostMediaMode.photos;
   var _pickingPhotos = false;
   var _submitting = false;
 
@@ -1488,81 +1487,93 @@ class _PublishPostPageState extends State<_PublishPostPage> {
     super.dispose();
   }
 
-  Future<void> _pickPhotos() async {
-    final remaining = _maxPhotoCount - _photos.length;
-    if (remaining <= 0 || _pickingPhotos) return;
+  Future<void> _pickVideo() async => _pickMedia(_PickMediaAction.video);
+
+  Future<void> _pickMedia(_PickMediaAction action) async {
+    if (_pickingPhotos) return;
+    if (action == _PickMediaAction.photos) {
+      final remaining = _maxPhotoCount - _photos.length;
+      if (remaining <= 0) return;
+    } else if (_video != null) {
+      return;
+    }
 
     setState(() => _pickingPhotos = true);
     try {
-      // image_picker performs the resize and JPEG compression before the
-      // files are returned, so the in-memory previews are already smaller.
-      final picked = remaining == 1
-          ? await _pickSinglePhoto()
-          : await _imagePicker.pickMultiImage(
-              maxWidth: _photoMaxDimension,
-              maxHeight: _photoMaxDimension,
-              imageQuality: _photoQuality,
-              limit: remaining,
-              requestFullMetadata: false,
-            );
-      final selected = picked.take(remaining).toList(growable: false);
-      final photos = await Future.wait(
-        selected.map((photo) async {
-          final bytes = await photo.readAsBytes();
-          return _PublishPhoto(file: photo, bytes: bytes);
-        }),
-      );
-      if (!mounted) return;
-      setState(() {
-        _video = null;
-        _photos.addAll(photos);
-      });
+      if (action == _PickMediaAction.photos) {
+        await _pickPhotosInternal();
+      } else {
+        await _pickVideoInternal();
+      }
     } catch (_) {
       if (mounted) {
-        _showNotice(context, '选择照片失败', '请检查照片权限后重试。');
+        final isPhoto = action == _PickMediaAction.photos;
+        _showNotice(
+          context,
+          isPhoto ? '选择照片失败' : '选择视频失败',
+          isPhoto ? '请检查照片权限后重试。' : '请选择可播放的 MP4 或 MOV 视频。',
+        );
       }
     } finally {
       if (mounted) setState(() => _pickingPhotos = false);
     }
   }
 
-  Future<void> _pickVideo() async {
-    if (_pickingPhotos || _video != null) return;
-    setState(() => _pickingPhotos = true);
-    try {
-      final file = await _imagePicker.pickVideo(
-        source: ImageSource.gallery,
-        maxDuration: const Duration(minutes: 5),
-      );
-      if (file == null) return;
-      if (await file.length() > 200 * 1024 * 1024) {
-        if (mounted) _showNotice(context, '视频过大', '请选择 200 MB 以内的视频。');
-        return;
-      }
-      final controller = VideoPlayerController.file(File(file.path));
-      await controller.initialize();
-      final duration = controller.value.duration.inSeconds;
-      await controller.dispose();
-      final bytes = await file.readAsBytes();
-      if (duration > 300) {
-        if (mounted) _showNotice(context, '视频过长', '请选择 5 分钟以内的视频。');
-        return;
-      }
-      if (mounted) {
-        setState(() {
-          _photos.clear();
-          _video = _PublishVideo(
-            file: file,
-            bytes: bytes,
-            durationSeconds: duration,
+  Future<void> _pickPhotosInternal() async {
+    final remaining = _maxPhotoCount - _photos.length;
+    // image_picker performs the resize and JPEG compression before the
+    // files are returned, so the in-memory previews are already smaller.
+    final picked = remaining == 1
+        ? await _pickSinglePhoto()
+        : await _imagePicker.pickMultiImage(
+            maxWidth: _photoMaxDimension,
+            maxHeight: _photoMaxDimension,
+            imageQuality: _photoQuality,
+            limit: remaining,
+            requestFullMetadata: false,
           );
-        });
-      }
-    } catch (_) {
-      if (mounted) _showNotice(context, '选择视频失败', '请选择可播放的 MP4 或 MOV 视频。');
-    } finally {
-      if (mounted) setState(() => _pickingPhotos = false);
+    final selected = picked.take(remaining).toList(growable: false);
+    final photos = await Future.wait(
+      selected.map((photo) async {
+        final bytes = await photo.readAsBytes();
+        return _PublishPhoto(file: photo, bytes: bytes);
+      }),
+    );
+    if (!mounted) return;
+    setState(() {
+      _video = null;
+      _photos.addAll(photos);
+    });
+  }
+
+  Future<void> _pickVideoInternal() async {
+    final file = await _imagePicker.pickVideo(
+      source: ImageSource.gallery,
+      maxDuration: const Duration(minutes: 5),
+    );
+    if (file == null) return;
+    if (await file.length() > 200 * 1024 * 1024) {
+      if (mounted) _showNotice(context, '视频过大', '请选择 200 MB 以内的视频。');
+      return;
     }
+    final controller = VideoPlayerController.file(File(file.path));
+    await controller.initialize();
+    final duration = controller.value.duration.inSeconds;
+    await controller.dispose();
+    final bytes = await file.readAsBytes();
+    if (duration > 300) {
+      if (mounted) _showNotice(context, '视频过长', '请选择 5 分钟以内的视频。');
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _photos.clear();
+      _video = _PublishVideo(
+        file: file,
+        bytes: bytes,
+        durationSeconds: duration,
+      );
+    });
   }
 
   Future<List<XFile>> _pickSinglePhoto() async {
@@ -1578,6 +1589,47 @@ class _PublishPostPageState extends State<_PublishPostPage> {
 
   void _removePhoto(int index) {
     setState(() => _photos.removeAt(index));
+  }
+
+  Future<void> _addMedia() async {
+    if (_pickingPhotos || _submitting || _video != null) {
+      return;
+    }
+    final action = await showCupertinoModalPopup<_PickMediaAction>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text(
+          '添加照片或视频',
+          style: TextStyle(fontSize: AcoTypography.caption),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                Navigator.of(sheetContext).pop(_PickMediaAction.photos),
+            child: const Text(
+              '照片',
+              style: TextStyle(fontSize: AcoTypography.body),
+            ),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () =>
+                Navigator.of(sheetContext).pop(_PickMediaAction.video),
+            child: const Text(
+              '视频',
+              style: TextStyle(fontSize: AcoTypography.body),
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(fontSize: AcoTypography.body),
+          ),
+        ),
+      ),
+    );
+    if (action != null) await _pickMedia(action);
   }
 
   void _removeVideo() => setState(() => _video = null);
@@ -1677,32 +1729,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
             ),
           ),
           const SizedBox(height: 16),
-          CupertinoSlidingSegmentedControl<_PostMediaMode>(
-            groupValue: _mediaMode,
-            children: {
-              _PostMediaMode.photos: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text(
-                  '照片',
-                  style: TextStyle(color: widget.palette.primaryText),
-                ),
-              ),
-              _PostMediaMode.video: Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text(
-                  '视频',
-                  style: TextStyle(color: widget.palette.primaryText),
-                ),
-              ),
-            },
-            onValueChanged: (mode) {
-              if (!_submitting && !_pickingPhotos && mode != null) {
-                setState(() => _mediaMode = mode);
-              }
-            },
-          ),
-          const SizedBox(height: 10),
-          if (_mediaMode == _PostMediaMode.photos)
+          if (_video == null)
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -1721,7 +1748,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
                   palette: widget.palette,
                   photos: _photos,
                   isPicking: _pickingPhotos,
-                  onAdd: _pickPhotos,
+                  onAdd: _addMedia,
                   onRemove: _removePhoto,
                 ),
               ],
@@ -1747,7 +1774,7 @@ class _PublishPhoto {
   final Uint8List bytes;
 }
 
-enum _PostMediaMode { photos, video }
+enum _PickMediaAction { photos, video }
 
 class _PublishVideo {
   const _PublishVideo({
@@ -1993,7 +2020,7 @@ class _AddPhotoTile extends StatelessWidget {
                   ),
                   const SizedBox(height: 5),
                   Text(
-                    '添加照片',
+                    '添加照片或视频',
                     style: TextStyle(
                       color: palette.mutedText,
                       fontSize: AcoTypography.bodySmall,
