@@ -357,6 +357,9 @@ String _changeValue(Map<String, dynamic> base, Map<String, dynamic> token) {
 }
 
 class DexRankingApiClient {
+  static const _endpointDiscoveryTimeout = Duration(seconds: 3);
+  static const _rankingRequestTimeout = Duration(seconds: 10);
+
   DexRankingApiClient({http.Client? httpClient, Uri? baseUri})
     : _client = httpClient ?? http.Client(),
       _configBaseUri = baseUri ?? Uri.parse(const AppConfig().apiBaseUrl);
@@ -389,11 +392,13 @@ class DexRankingApiClient {
           'requestId=$requestId list request method=POST url=$uri '
           'body=$requestBody',
         );
-        final response = await _client.post(
-          uri,
-          headers: const {'content-type': 'application/json'},
-          body: requestBody,
-        );
+        final response = await _client
+            .post(
+              uri,
+              headers: const {'content-type': 'application/json'},
+              body: requestBody,
+            )
+            .timeout(_rankingRequestTimeout);
         _writeDexLog(
           'requestId=$requestId list response status=${response.statusCode} '
           'url=$uri body=${response.body}',
@@ -579,24 +584,27 @@ class DexRankingApiClient {
 
   Future<List<Uri>> _resolveRankingUris() async {
     if (_rankingUris != null) return _rankingUris!;
+    final fallback = defaultRankingURLs.map(Uri.parse).toList();
     try {
-      final response = await _client.get(_apiUri('dex/ranking-endpoint'));
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        final values = _jsonMap(response.body)['urls'];
-        if (values is List) {
-          final uris = values
-              .whereType<String>()
-              .map(Uri.tryParse)
-              .whereType<Uri>()
-              .where((uri) => uri.scheme == 'https' || uri.scheme == 'http')
-              .toList(growable: false);
-          if (uris.isNotEmpty) return _rankingUris = uris;
-        }
+      final response = await _client
+          .get(_apiUri('dex/ranking-endpoint'))
+          .timeout(_endpointDiscoveryTimeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return _rankingUris = fallback;
       }
+      final values = _jsonMap(response.body)['urls'];
+      if (values is! List) return _rankingUris = fallback;
+      final uris = values
+          .whereType<String>()
+          .map(Uri.tryParse)
+          .whereType<Uri>()
+          .where((uri) => uri.scheme == 'https' || uri.scheme == 'http')
+          .toList(growable: false);
+      return _rankingUris = uris.isEmpty ? fallback : uris;
     } catch (_) {
       // Existing releases retain the last-known provider as an offline fallback.
+      return _rankingUris = fallback;
     }
-    return _rankingUris = defaultRankingURLs.map(Uri.parse).toList();
   }
 
   Future<List<Uri>> _resolveKlineUris() async {
