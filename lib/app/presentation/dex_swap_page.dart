@@ -972,21 +972,26 @@ class _DexSwapContentState extends State<_DexSwapContent> {
               ),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
-              padding: const EdgeInsets.all(9),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: palette.accent.withValues(alpha: .6),
-                borderRadius: BorderRadius.circular(34),
+                color: palette.dark
+                    ? palette.accent.withValues(alpha: .6)
+                    : const Color(0xFF393939),
+                borderRadius: BorderRadius.circular(29),
               ),
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(25),
+                borderRadius: BorderRadius.circular(21),
                 child: AcoLimeButton(
                   label: _loading ? '获取报价中…' : '兑换',
                   onPressed: () {
                     if (!_loading) _requestQuote(context);
                   },
-                  height: 42,
+                  height: 34,
                   fontSize: 16,
-                  backgroundColor: palette.accent,
+                  backgroundColor: palette.dark
+                      ? palette.accent
+                      : const Color(0xFF0B0B0B),
+                  foregroundColor: palette.dark ? _black : _accentGreen,
                 ),
               ),
             ),

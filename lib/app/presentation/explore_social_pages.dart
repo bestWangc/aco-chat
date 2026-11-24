@@ -965,6 +965,9 @@ class _AddFriendPageState extends State<_AddFriendPage> {
           CupertinoSearchTextField(
             controller: _controller,
             placeholder: appText(context, '搜索用户名或 UID'),
+            style: widget.palette.dark
+                ? null
+                : TextStyle(color: widget.palette.primaryText),
             onChanged: _search,
             onSubmitted: _search,
           ),
@@ -990,6 +993,7 @@ class _AddFriendPageState extends State<_AddFriendPage> {
                           : profile.nickname,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: widget.palette.primaryText),
                     ),
                   ),
                   if (_identityBadgeAsset(profile.identity) != null ||
@@ -1014,7 +1018,10 @@ class _AddFriendPageState extends State<_AddFriendPage> {
                     ),
                 ],
               ),
-              subtitle: Text('${profile.username} · UID ${profile.accountId}'),
+              subtitle: Text(
+                '${profile.username} · UID ${profile.accountId}',
+                style: TextStyle(color: widget.palette.mutedText),
+              ),
               trailing: CupertinoButton(
                 padding: EdgeInsets.zero,
                 onPressed: _sent.contains(profile.accountId)

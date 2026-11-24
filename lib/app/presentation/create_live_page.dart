@@ -618,7 +618,9 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: canConfirm
-                          ? palette.accent.withValues(alpha: .45)
+                          ? (palette.dark
+                                ? palette.accent.withValues(alpha: .45)
+                                : const Color(0xFF393939))
                           : _createLiveCardColor(palette),
                       borderRadius: BorderRadius.circular(24),
                     ),
@@ -627,7 +629,9 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                       child: DecoratedBox(
                         decoration: BoxDecoration(
                           color: canConfirm
-                              ? palette.accent
+                              ? (palette.dark
+                                    ? palette.accent
+                                    : const Color(0xFF0B0B0B))
                               : _createLiveCardColor(palette),
                           borderRadius: BorderRadius.circular(19),
                         ),
@@ -641,7 +645,9 @@ class _CreateLivePageState extends State<_CreateLivePage> {
                                     _isEditing ? '保存' : '确认',
                                     style: TextStyle(
                                       color: canConfirm
-                                          ? _black
+                                          ? (palette.dark
+                                                ? _black
+                                                : _accentGreen)
                                           : palette.mutedText,
                                       fontSize: AcoTypography.body,
                                       fontWeight: FontWeight.w700,
@@ -663,7 +669,7 @@ class _CreateLivePageState extends State<_CreateLivePage> {
 }
 
 Color _createLiveCardColor(AcoPalette palette) =>
-    palette.dark ? const Color(0xFF161616) : const Color(0xFFFFFFFF);
+    palette.dark ? const Color(0xFF161616) : const Color(0xFFF6F6F6);
 
 class _CreateLiveRow extends StatelessWidget {
   const _CreateLiveRow({

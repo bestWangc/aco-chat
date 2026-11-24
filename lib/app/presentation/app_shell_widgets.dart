@@ -1025,6 +1025,7 @@ class AcoLimeButton extends StatelessWidget {
     this.height,
     this.fontSize = AcoTypography.bodySmall,
     this.backgroundColor = _lime,
+    this.foregroundColor = _black,
     this.fontWeight = FontWeight.w700,
     super.key,
   });
@@ -1035,6 +1036,7 @@ class AcoLimeButton extends StatelessWidget {
   final double? height;
   final double fontSize;
   final Color backgroundColor;
+  final Color foregroundColor;
   final FontWeight fontWeight;
 
   @override
@@ -1042,7 +1044,7 @@ class AcoLimeButton extends StatelessWidget {
     height: height ?? (compact ? 36 : 42),
     child: shad.ShadButton(
       backgroundColor: backgroundColor,
-      foregroundColor: _black,
+      foregroundColor: foregroundColor,
       padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16),
       onPressed: onPressed,
       child: Row(
@@ -1050,7 +1052,7 @@ class AcoLimeButton extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           if (icon != null) ...[
-            Icon(icon, color: _black, size: 17),
+            Icon(icon, color: foregroundColor, size: 17),
             const SizedBox(width: 5),
           ],
           Text(

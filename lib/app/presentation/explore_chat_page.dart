@@ -4389,7 +4389,10 @@ class _GroupMentionPanelState extends State<_GroupMentionPanel> {
                     _memberName(member),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: _white, fontSize: 17),
+                    style: TextStyle(
+                      color: widget.palette.primaryText,
+                      fontSize: 17,
+                    ),
                   ),
                 ),
                 if (identityAsset != null || staffAsset != null)
