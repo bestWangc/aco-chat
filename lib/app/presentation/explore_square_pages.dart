@@ -1679,14 +1679,20 @@ class _PublishPostPageState extends State<_PublishPostPage> {
           const SizedBox(height: 16),
           CupertinoSlidingSegmentedControl<_PostMediaMode>(
             groupValue: _mediaMode,
-            children: const {
+            children: {
               _PostMediaMode.photos: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text('照片'),
+                child: Text(
+                  '照片',
+                  style: TextStyle(color: widget.palette.primaryText),
+                ),
               ),
               _PostMediaMode.video: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Text('视频'),
+                child: Text(
+                  '视频',
+                  style: TextStyle(color: widget.palette.primaryText),
+                ),
               ),
             },
             onValueChanged: (mode) {
