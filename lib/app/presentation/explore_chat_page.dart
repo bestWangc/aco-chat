@@ -259,6 +259,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
   Future<void> _showMessageActions(
     _ChatHistoryMessage message,
     Message? sourceMessage,
+    BuildContext anchorContext,
   ) async {
     if (sourceMessage == null || message.isSystem) return;
     final canCopy = message.text.trim().isNotEmpty;
@@ -270,19 +271,46 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       barrierLabel: '消息操作',
       barrierColor: const Color(0x33000000),
       transitionDuration: const Duration(milliseconds: 160),
-      pageBuilder: (context, animation, secondaryAnimation) => SafeArea(
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 150),
-            child: _ChatMessageActionPanel(
-              canCopy: canCopy,
-              canRevoke: canRevoke,
-              onSelected: (value) => Navigator.pop(context, value),
-            ),
-          ),
-        ),
-      ),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        final renderBox = anchorContext.findRenderObject() as RenderBox?;
+        final anchor = renderBox?.localToGlobal(Offset.zero);
+        final anchorSize = renderBox?.size ?? Size.zero;
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final actionCount = (canCopy ? 1 : 0) + (canRevoke ? 1 : 0);
+            final panelWidth = actionCount * 68.0 + 12;
+            const panelHeight = 82.0;
+            final left =
+                ((anchor?.dx ?? (constraints.maxWidth - panelWidth) / 2) +
+                        anchorSize.width / 2 -
+                        panelWidth / 2)
+                    .clamp(8.0, constraints.maxWidth - panelWidth - 8.0);
+            final aboveTop =
+                (anchor?.dy ?? constraints.maxHeight / 2) - panelHeight - 6;
+            final pointerOnTop = aboveTop < MediaQuery.paddingOf(context).top;
+            final top = pointerOnTop
+                ? (anchor?.dy ?? 0) + anchorSize.height + 6
+                : aboveTop;
+            return Stack(
+              children: [
+                Positioned(
+                  left: left,
+                  top: top.clamp(
+                    MediaQuery.paddingOf(context).top + 4,
+                    constraints.maxHeight - panelHeight - 4,
+                  ),
+                  child: _ChatMessageActionPanel(
+                    canCopy: canCopy,
+                    canRevoke: canRevoke,
+                    pointerOnTop: pointerOnTop,
+                    onSelected: (value) => Navigator.pop(context, value),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
       transitionBuilder: (context, animation, secondaryAnimation, child) =>
           FadeTransition(opacity: animation, child: child),
     );
@@ -2006,74 +2034,81 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                       ),
                                     )
                                   else
-                                    GestureDetector(
-                                      onLongPress: _selectingMessages
-                                          ? null
-                                          : () => _showMessageActions(
+                                    Builder(
+                                      builder: (anchorContext) => GestureDetector(
+                                        onLongPress: _selectingMessages
+                                            ? null
+                                            : () => _showMessageActions(
+                                                message,
+                                                sourceMessage,
+                                                anchorContext,
+                                              ),
+                                        child: _selectableMessage(
+                                          message,
+                                          _ChatMessage(
+                                            palette: widget.palette,
+                                            text: message.text,
+                                            imageBytes: message.imageBytes,
+                                            imagePath: message.imagePath,
+                                            imageUrl: message.imageUrl,
+                                            previewImageUrl:
+                                                message.previewImageUrl,
+                                            shouldCacheThumbnail:
+                                                message.shouldCacheThumbnail,
+                                            soundPath: message.soundPath,
+                                            soundUrl: message.soundUrl,
+                                            soundDuration:
+                                                message.soundDuration,
+                                            videoPath: message.videoPath,
+                                            videoUrl: message.videoUrl,
+                                            videoSnapshotPath:
+                                                message.videoSnapshotPath,
+                                            videoSnapshotUrl:
+                                                message.videoSnapshotUrl,
+                                            videoDuration:
+                                                message.videoDuration,
+                                            fileName: message.fileName,
+                                            fileUrl: message.fileUrl,
+                                            fileSize: message.fileSize,
+                                            filePath: message.filePath,
+                                            isVoiceCallRecord:
+                                                message.isVoiceCallRecord,
+                                            sendFailed: message.sendFailed,
+                                            mine: message.mine,
+                                            senderName: _senderNameForMessage(
                                               message,
                                               sourceMessage,
                                             ),
-                                      child: _selectableMessage(
-                                        message,
-                                        _ChatMessage(
-                                          palette: widget.palette,
-                                          text: message.text,
-                                          imageBytes: message.imageBytes,
-                                          imagePath: message.imagePath,
-                                          imageUrl: message.imageUrl,
-                                          previewImageUrl:
-                                              message.previewImageUrl,
-                                          shouldCacheThumbnail:
-                                              message.shouldCacheThumbnail,
-                                          soundPath: message.soundPath,
-                                          soundUrl: message.soundUrl,
-                                          soundDuration: message.soundDuration,
-                                          videoPath: message.videoPath,
-                                          videoUrl: message.videoUrl,
-                                          videoSnapshotPath:
-                                              message.videoSnapshotPath,
-                                          videoSnapshotUrl:
-                                              message.videoSnapshotUrl,
-                                          videoDuration: message.videoDuration,
-                                          fileName: message.fileName,
-                                          fileUrl: message.fileUrl,
-                                          fileSize: message.fileSize,
-                                          filePath: message.filePath,
-                                          isVoiceCallRecord:
-                                              message.isVoiceCallRecord,
-                                          sendFailed: message.sendFailed,
-                                          mine: message.mine,
-                                          senderName: _senderNameForMessage(
-                                            message,
-                                            sourceMessage,
+                                            avatarUrl: _isGroup
+                                                ? sourceMessage
+                                                          ?.senderFaceUrl ??
+                                                      _resolvedPeerAvatar
+                                                : _resolvedPeerAvatar,
+                                            ownAvatarUrl: widget.ownAvatarUrl,
+                                            onAvatarLongPress: _isGroup
+                                                ? () => _mentionMessageSender(
+                                                    userID:
+                                                        sourceMessage?.sendID,
+                                                    nickname: sourceMessage
+                                                        ?.senderNickname,
+                                                  )
+                                                : null,
+                                            onAvatarTap: !message.mine
+                                                ? () => _openSenderProfile(
+                                                    userID:
+                                                        sourceMessage?.sendID ??
+                                                        widget.peerUserID,
+                                                    nickname:
+                                                        sourceMessage
+                                                            ?.senderNickname ??
+                                                        _peerName,
+                                                    avatarUrl: _isGroup
+                                                        ? sourceMessage
+                                                              ?.senderFaceUrl
+                                                        : _resolvedPeerAvatar,
+                                                  )
+                                                : null,
                                           ),
-                                          avatarUrl: _isGroup
-                                              ? sourceMessage?.senderFaceUrl ??
-                                                    _resolvedPeerAvatar
-                                              : _resolvedPeerAvatar,
-                                          ownAvatarUrl: widget.ownAvatarUrl,
-                                          onAvatarLongPress: _isGroup
-                                              ? () => _mentionMessageSender(
-                                                  userID: sourceMessage?.sendID,
-                                                  nickname: sourceMessage
-                                                      ?.senderNickname,
-                                                )
-                                              : null,
-                                          onAvatarTap: !message.mine
-                                              ? () => _openSenderProfile(
-                                                  userID:
-                                                      sourceMessage?.sendID ??
-                                                      widget.peerUserID,
-                                                  nickname:
-                                                      sourceMessage
-                                                          ?.senderNickname ??
-                                                      _peerName,
-                                                  avatarUrl: _isGroup
-                                                      ? sourceMessage
-                                                            ?.senderFaceUrl
-                                                      : _resolvedPeerAvatar,
-                                                )
-                                              : null,
                                         ),
                                       ),
                                     ),
@@ -3012,11 +3047,13 @@ class _ChatMessageActionPanel extends StatelessWidget {
   const _ChatMessageActionPanel({
     required this.canCopy,
     required this.canRevoke,
+    required this.pointerOnTop,
     required this.onSelected,
   });
 
   final bool canCopy;
   final bool canRevoke;
+  final bool pointerOnTop;
   final ValueChanged<String> onSelected;
 
   @override
@@ -3028,13 +3065,18 @@ class _ChatMessageActionPanel extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (pointerOnTop)
+          CustomPaint(
+            size: const Size(16, 8),
+            painter: _ChatActionPointerPainter(pointsUp: true),
+          ),
         DecoratedBox(
           decoration: BoxDecoration(
             color: const Color(0xFF4B4B4B),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3055,10 +3097,11 @@ class _ChatMessageActionPanel extends StatelessWidget {
             ),
           ),
         ),
-        CustomPaint(
-          size: const Size(16, 8),
-          painter: _ChatActionPointerPainter(),
-        ),
+        if (!pointerOnTop)
+          CustomPaint(
+            size: const Size(16, 8),
+            painter: _ChatActionPointerPainter(),
+          ),
       ],
     );
   }
@@ -3077,18 +3120,18 @@ class _ChatMessageActionItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => CupertinoButton(
-    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
-    minimumSize: const Size(66, 72),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+    minimumSize: const Size(58, 68),
     onPressed: onPressed,
     child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: const Color(0xFFFFFFFF), size: 27),
-        const SizedBox(height: 7),
+        Icon(icon, color: const Color(0xFFFFFFFF), size: 23),
+        const SizedBox(height: 4),
         Text(
           label,
-          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 14),
+          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12),
         ),
       ],
     ),
@@ -3096,18 +3139,23 @@ class _ChatMessageActionItem extends StatelessWidget {
 }
 
 class _ChatActionPointerPainter extends CustomPainter {
+  _ChatActionPointerPainter({this.pointsUp = false});
+
+  final bool pointsUp;
+
   @override
   void paint(Canvas canvas, Size size) {
     final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..lineTo(size.width, 0)
+      ..moveTo(0, pointsUp ? size.height : 0)
+      ..lineTo(size.width / 2, pointsUp ? 0 : size.height)
+      ..lineTo(size.width, pointsUp ? size.height : 0)
       ..close();
     canvas.drawPath(path, Paint()..color = const Color(0xFF4B4B4B));
   }
 
   @override
-  bool shouldRepaint(covariant _ChatActionPointerPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _ChatActionPointerPainter oldDelegate) =>
+      pointsUp != oldDelegate.pointsUp;
 }
 
 class _ChatMessage extends StatelessWidget {
