@@ -299,7 +299,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                     MediaQuery.paddingOf(context).top + 4,
                     constraints.maxHeight - panelHeight - 4,
                   ),
-                  child: _ChatMessageActionPanel(
+                  child: _ChatMessageActionPopup(
                     canCopy: canCopy,
                     canRevoke: canRevoke,
                     pointerOnTop: pointerOnTop,
@@ -3043,8 +3043,8 @@ class _ChatMorePanel extends StatelessWidget {
   }
 }
 
-class _ChatMessageActionPanel extends StatelessWidget {
-  const _ChatMessageActionPanel({
+class _ChatMessageActionPopup extends StatelessWidget {
+  const _ChatMessageActionPopup({
     required this.canCopy,
     required this.canRevoke,
     required this.pointerOnTop,
