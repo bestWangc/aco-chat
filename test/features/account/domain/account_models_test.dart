@@ -20,12 +20,14 @@ void main() {
       'author': {'user_id': 7, 'nickname': '作者'},
       'images': <String>[],
       'video_url': '/uploads/post-video.mp4',
+      'video_thumbnail_url': '/uploads/post-video-thumbnail.jpg',
       'video_duration_seconds': 15,
       'created_at': '2026-11-20T08:00:00Z',
     });
 
     expect(post.imageUrls, isEmpty);
     expect(post.videoUrl, '/uploads/post-video.mp4');
+    expect(post.videoThumbnailUrl, '/uploads/post-video-thumbnail.jpg');
     expect(post.videoDurationSeconds, 15);
   });
 }

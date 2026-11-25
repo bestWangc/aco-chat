@@ -712,6 +712,7 @@ class AccountApiClient {
     required String content,
     required List<Uint8List> images,
     Uint8List? video,
+    Uint8List? videoThumbnail,
     String videoFilename = 'post-video.mp4',
     int videoDurationSeconds = 0,
     required String token,
@@ -726,6 +727,15 @@ class AccountApiClient {
         ..files.add(
           http.MultipartFile.fromBytes('video', video, filename: videoFilename),
         );
+      if (videoThumbnail != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'video_thumbnail',
+            videoThumbnail,
+            filename: 'post-video-thumbnail.jpg',
+          ),
+        );
+      }
     }
     for (var index = 0; index < images.length; index++) {
       request.files.add(

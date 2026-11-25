@@ -1328,6 +1328,9 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         const SizedBox(height: 18),
         _PostVideoPlayer(
           videoUrl: _liveCoverUrl(widget.post.videoUrl!),
+          thumbnailUrl: widget.post.videoThumbnailUrl == null
+              ? null
+              : _liveCoverUrl(widget.post.videoThumbnailUrl!),
           palette: widget.palette,
         ),
       ],
@@ -1476,6 +1479,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
   final _imagePicker = ImagePicker();
   final List<_PublishPhoto> _photos = [];
   _PublishVideo? _video;
+  Uint8List? _videoThumbnail;
   var _pickingPhotos = false;
   var _submitting = false;
 
@@ -1542,6 +1546,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
     if (!mounted) return;
     setState(() {
       _video = null;
+      _videoThumbnail = null;
       _photos.addAll(photos);
     });
   }
@@ -1561,6 +1566,18 @@ class _PublishPostPageState extends State<_PublishPostPage> {
     final duration = controller.value.duration.inSeconds;
     await controller.dispose();
     final bytes = await file.readAsBytes();
+    final thumbnailPath = await video_thumbnail.VideoThumbnail.thumbnailFile(
+      video: file.path,
+      imageFormat: video_thumbnail.ImageFormat.JPEG,
+      maxHeight: 640,
+      quality: 75,
+    );
+    if (thumbnailPath == null || thumbnailPath.isEmpty) {
+      throw StateError('cannot generate video thumbnail');
+    }
+    final thumbnailFile = File(thumbnailPath);
+    final thumbnail = await thumbnailFile.readAsBytes();
+    await thumbnailFile.delete();
     if (duration > 300) {
       if (mounted) _showNotice(context, '视频过长', '请选择 5 分钟以内的视频。');
       return;
@@ -1573,6 +1590,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
         bytes: bytes,
         durationSeconds: duration,
       );
+      _videoThumbnail = thumbnail;
     });
   }
 
@@ -1632,7 +1650,10 @@ class _PublishPostPageState extends State<_PublishPostPage> {
     if (action != null) await _pickMedia(action);
   }
 
-  void _removeVideo() => setState(() => _video = null);
+  void _removeVideo() => setState(() {
+    _video = null;
+    _videoThumbnail = null;
+  });
 
   Future<void> _publish() async {
     if (_submitting) return;
@@ -1650,6 +1671,7 @@ class _PublishPostPageState extends State<_PublishPostPage> {
         content: _textController.text.trim(),
         images: _photos.map((photo) => photo.bytes).toList(growable: false),
         video: _video?.bytes,
+        videoThumbnail: _videoThumbnail,
         videoFilename: _video?.file.name ?? 'post-video.mp4',
         videoDurationSeconds: _video?.durationSeconds ?? 0,
       );
@@ -1839,23 +1861,6 @@ class _PublishVideoTile extends StatelessWidget {
             else
               ColoredBox(
                 color: const Color(0xFF202020),
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        CupertinoIcons.video_camera,
-                        color: Color(0xFFFFFFFF),
-                        size: 32,
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${video!.durationSeconds} 秒',
-                        style: const TextStyle(color: Color(0xFFFFFFFF)),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             if (video != null) ...[
               const ColoredBox(color: Color(0x33000000)),

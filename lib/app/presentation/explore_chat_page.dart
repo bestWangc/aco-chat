@@ -3651,13 +3651,21 @@ class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
     backgroundColor: const Color(0xFF000000),
     navigationBar: CupertinoNavigationBar(
       backgroundColor: const Color(0xCC000000),
+      leading: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Icon(CupertinoIcons.xmark, color: Color(0xFFFFFFFF)),
+      ),
       middle: const Text('视频', style: TextStyle(color: Color(0xFFFFFFFF))),
       trailing: CupertinoButton(
         padding: EdgeInsets.zero,
         onPressed: _saving ? null : _saveVideo,
         child: _saving
             ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
-            : const Text('保存', style: TextStyle(color: Color(0xFFFFFFFF))),
+            : const Icon(
+                CupertinoIcons.arrow_down_to_line,
+                color: Color(0xFFFFFFFF),
+              ),
       ),
     ),
     child: AcoSafeArea(

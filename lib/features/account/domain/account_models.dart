@@ -241,6 +241,7 @@ class SquarePost {
     required this.imageUrls,
     required this.thumbnailUrls,
     this.videoUrl,
+    this.videoThumbnailUrl,
     this.videoDurationSeconds = 0,
     required this.replyCount,
     required this.likeCount,
@@ -260,6 +261,7 @@ class SquarePost {
   final List<String> imageUrls;
   final List<String> thumbnailUrls;
   final String? videoUrl;
+  final String? videoThumbnailUrl;
   final int videoDurationSeconds;
   final int replyCount;
   final int likeCount;
@@ -284,6 +286,7 @@ class SquarePost {
     imageUrls: imageUrls,
     thumbnailUrls: thumbnailUrls,
     videoUrl: videoUrl,
+    videoThumbnailUrl: videoThumbnailUrl,
     videoDurationSeconds: videoDurationSeconds,
     replyCount: replyCount ?? this.replyCount,
     likeCount: likeCount ?? this.likeCount,
@@ -309,6 +312,7 @@ class SquarePost {
           .whereType<String>()
           .toList(growable: false),
       videoUrl: json['video_url'] as String?,
+      videoThumbnailUrl: json['video_thumbnail_url'] as String?,
       videoDurationSeconds:
           (json['video_duration_seconds'] as num?)?.toInt() ?? 0,
       replyCount: (json['reply_count'] as num?)?.toInt() ?? 0,
