@@ -19,8 +19,10 @@ final class OpenIMChatRepository implements ChatRepository {
       ValueNotifier<int>(0);
   static final ValueNotifier<Message?> messageNotifier =
       ValueNotifier<Message?>(null);
-  static final ValueNotifier<RevokedInfo?> revokedMessageNotifier =
+  static final ValueNotifier<RevokedInfo?> _revokedMessageNotifier =
       ValueNotifier<RevokedInfo?>(null);
+  static ValueNotifier<RevokedInfo?> get revokedMessageNotifier =>
+      _revokedMessageNotifier;
   static final ValueNotifier<bool> messageUnreadNotifier = ValueNotifier<bool>(
     false,
   );
