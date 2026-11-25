@@ -280,11 +280,16 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
             final actionCount = (canCopy ? 1 : 0) + (canRevoke ? 1 : 0);
             final panelWidth = actionCount * 68.0 + 12;
             const panelHeight = 82.0;
-            final left =
-                ((anchor?.dx ?? (constraints.maxWidth - panelWidth) / 2) +
-                        anchorSize.width / 2 -
-                        panelWidth / 2)
-                    .clamp(8.0, constraints.maxWidth - panelWidth - 8.0);
+            // The anchor is the complete message row (avatar included). Use
+            // the bubble edge nearest the opposite side as the pointer target.
+            const bubbleExtent = 215.0;
+            final bubbleEdge = message.mine
+                ? (anchor?.dx ?? 0) + anchorSize.width - 46 - bubbleExtent
+                : (anchor?.dx ?? 0) + 46 + bubbleExtent;
+            final left = (bubbleEdge - panelWidth / 2).clamp(
+              8.0,
+              constraints.maxWidth - panelWidth - 8.0,
+            );
             final aboveTop =
                 (anchor?.dy ?? constraints.maxHeight / 2) - panelHeight - 6;
             final pointerOnTop = aboveTop < MediaQuery.paddingOf(context).top;
