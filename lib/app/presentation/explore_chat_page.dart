@@ -65,6 +65,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
   bool _markMessagesAsReadDirty = false;
   bool _chatAccessGranted = false;
   bool _peerIsBlocked = false;
+  final Set<String> _revokedMessageIDs = <String>{};
   bool _mentionVisible = false;
   bool _mentionPickerOpen = false;
   bool _mentionLoading = false;
@@ -148,6 +149,7 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     if (_isGroup) unawaited(_loadFriendRemarks());
     OpenIMChatRepository.conversationReady.addListener(_onReady);
     OpenIMChatRepository.messageNotifier.addListener(_onMessage);
+    OpenIMChatRepository.revokedMessageNotifier.addListener(_onMessageRevoked);
     _chatScrollController.addListener(_onChatScroll);
     _messageController.addListener(_onComposerChanged);
   }
@@ -210,6 +212,105 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     final added = _upsertDisplayedMessage(message, mine: mine);
     unawaited(_markCurrentConversationAsRead());
     if (added) _scrollToBottom();
+  }
+
+  void _onMessageRevoked() {
+    _applyRevokedMessage(OpenIMChatRepository.revokedMessageNotifier.value);
+  }
+
+  void _applyRevokedMessage(RevokedInfo? info) {
+    final id = info?.clientMsgID;
+    if (!mounted || id == null || id.isEmpty) return;
+    final source = _messagesByClientMsgID[id];
+    if (source == null ||
+        !_isMessageInCurrentConversation(source) ||
+        _revokedMessageIDs.contains(id)) {
+      return;
+    }
+    _revokedMessageIDs.add(id);
+    final index = _chatHistory.indexWhere((item) => item.clientMsgID == id);
+    if (index < 0) return;
+    final name = info?.revokerNickname?.trim().isNotEmpty == true
+        ? info!.revokerNickname!.trim()
+        : (source.senderNickname?.trim().isNotEmpty == true
+              ? source.senderNickname!.trim()
+              : (source.sendID == OpenIMChatRepository.currentUserID
+                    ? '你'
+                    : '对方'));
+    setState(() {
+      _chatHistory[index] = _ChatHistoryMessage.system(
+        '$name撤回了一条消息',
+        timestamp: source.sendTime ?? source.createTime,
+      );
+    });
+  }
+
+  bool _canRevoke(Message message) {
+    if (message.sendID != OpenIMChatRepository.currentUserID) return false;
+    final sentAt = message.sendTime ?? message.createTime;
+    if (sentAt == null || sentAt <= 0) return false;
+    final millis = sentAt < 100000000000 ? sentAt * 1000 : sentAt;
+    return DateTime.now().difference(
+          DateTime.fromMillisecondsSinceEpoch(millis),
+        ) <=
+        const Duration(minutes: 2);
+  }
+
+  Future<void> _showMessageActions(
+    _ChatHistoryMessage message,
+    Message? sourceMessage,
+  ) async {
+    if (sourceMessage == null || message.isSystem) return;
+    final canCopy = message.text.trim().isNotEmpty;
+    final canRevoke = _canRevoke(sourceMessage);
+    if (!canCopy && !canRevoke) return;
+    final action = await showCupertinoModalPopup<String>(
+      context: context,
+      builder: (context) => CupertinoActionSheet(
+        actions: [
+          if (canCopy)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, 'copy'),
+              child: const Text('复制'),
+            ),
+          if (canRevoke)
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.pop(context, 'revoke'),
+              child: const Text('撤回'),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: message.text));
+      return;
+    }
+    final conversationID = _currentConversationID;
+    final id = sourceMessage.clientMsgID;
+    if (conversationID == null || id == null || !_canRevoke(sourceMessage)) {
+      return;
+    }
+    try {
+      await OpenIM.iMManager.messageManager.revokeMessage(
+        conversationID: conversationID,
+        clientMsgID: id,
+      );
+      _applyRevokedMessage(
+        RevokedInfo(
+          clientMsgID: id,
+          revokerID: OpenIMChatRepository.currentUserID,
+          revokerNickname: '你',
+        ),
+      );
+    } catch (error) {
+      if (mounted) _showNotice(context, '撤回失败', '消息发送超过 2 分钟或网络异常，请稍后重试。');
+      debugPrint('[OpenIM] revoke message failed: $error');
+    }
   }
 
   void _rememberMessage(Message message) {
@@ -903,6 +1004,9 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     _setRouteVisible(false);
     OpenIMChatRepository.conversationReady.removeListener(_onReady);
     OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
+    OpenIMChatRepository.revokedMessageNotifier.removeListener(
+      _onMessageRevoked,
+    );
     _chatScrollController.removeListener(_onChatScroll);
     _messageController.removeListener(_onComposerChanged);
     _messageController.dispose();
@@ -1885,67 +1989,93 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                         ),
                                       ),
                                     ),
-                                  _selectableMessage(
-                                    message,
-                                    _ChatMessage(
-                                      palette: widget.palette,
-                                      text: message.text,
-                                      imageBytes: message.imageBytes,
-                                      imagePath: message.imagePath,
-                                      imageUrl: message.imageUrl,
-                                      previewImageUrl: message.previewImageUrl,
-                                      shouldCacheThumbnail:
-                                          message.shouldCacheThumbnail,
-                                      soundPath: message.soundPath,
-                                      soundUrl: message.soundUrl,
-                                      soundDuration: message.soundDuration,
-                                      videoPath: message.videoPath,
-                                      videoUrl: message.videoUrl,
-                                      videoSnapshotPath:
-                                          message.videoSnapshotPath,
-                                      videoSnapshotUrl:
-                                          message.videoSnapshotUrl,
-                                      videoDuration: message.videoDuration,
-                                      fileName: message.fileName,
-                                      fileUrl: message.fileUrl,
-                                      fileSize: message.fileSize,
-                                      filePath: message.filePath,
-                                      isVoiceCallRecord:
-                                          message.isVoiceCallRecord,
-                                      sendFailed: message.sendFailed,
-                                      mine: message.mine,
-                                      senderName: _senderNameForMessage(
-                                        message,
-                                        sourceMessage,
+                                  if (message.isSystem)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 2,
                                       ),
-                                      avatarUrl: _isGroup
-                                          ? sourceMessage?.senderFaceUrl ??
-                                                _resolvedPeerAvatar
-                                          : _resolvedPeerAvatar,
-                                      ownAvatarUrl: widget.ownAvatarUrl,
-                                      onAvatarLongPress: _isGroup
-                                          ? () => _mentionMessageSender(
-                                              userID: sourceMessage?.sendID,
-                                              nickname:
-                                                  sourceMessage?.senderNickname,
-                                            )
-                                          : null,
-                                      onAvatarTap: !message.mine
-                                          ? () => _openSenderProfile(
-                                              userID:
-                                                  sourceMessage?.sendID ??
-                                                  widget.peerUserID,
-                                              nickname:
-                                                  sourceMessage
-                                                      ?.senderNickname ??
-                                                  _peerName,
-                                              avatarUrl: _isGroup
-                                                  ? sourceMessage?.senderFaceUrl
-                                                  : _resolvedPeerAvatar,
-                                            )
-                                          : null,
+                                      child: Center(
+                                        child: Text(
+                                          message.text,
+                                          style: TextStyle(
+                                            color: widget.palette.mutedText,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    GestureDetector(
+                                      onLongPress: _selectingMessages
+                                          ? null
+                                          : () => _showMessageActions(
+                                              message,
+                                              sourceMessage,
+                                            ),
+                                      child: _selectableMessage(
+                                        message,
+                                        _ChatMessage(
+                                          palette: widget.palette,
+                                          text: message.text,
+                                          imageBytes: message.imageBytes,
+                                          imagePath: message.imagePath,
+                                          imageUrl: message.imageUrl,
+                                          previewImageUrl:
+                                              message.previewImageUrl,
+                                          shouldCacheThumbnail:
+                                              message.shouldCacheThumbnail,
+                                          soundPath: message.soundPath,
+                                          soundUrl: message.soundUrl,
+                                          soundDuration: message.soundDuration,
+                                          videoPath: message.videoPath,
+                                          videoUrl: message.videoUrl,
+                                          videoSnapshotPath:
+                                              message.videoSnapshotPath,
+                                          videoSnapshotUrl:
+                                              message.videoSnapshotUrl,
+                                          videoDuration: message.videoDuration,
+                                          fileName: message.fileName,
+                                          fileUrl: message.fileUrl,
+                                          fileSize: message.fileSize,
+                                          filePath: message.filePath,
+                                          isVoiceCallRecord:
+                                              message.isVoiceCallRecord,
+                                          sendFailed: message.sendFailed,
+                                          mine: message.mine,
+                                          senderName: _senderNameForMessage(
+                                            message,
+                                            sourceMessage,
+                                          ),
+                                          avatarUrl: _isGroup
+                                              ? sourceMessage?.senderFaceUrl ??
+                                                    _resolvedPeerAvatar
+                                              : _resolvedPeerAvatar,
+                                          ownAvatarUrl: widget.ownAvatarUrl,
+                                          onAvatarLongPress: _isGroup
+                                              ? () => _mentionMessageSender(
+                                                  userID: sourceMessage?.sendID,
+                                                  nickname: sourceMessage
+                                                      ?.senderNickname,
+                                                )
+                                              : null,
+                                          onAvatarTap: !message.mine
+                                              ? () => _openSenderProfile(
+                                                  userID:
+                                                      sourceMessage?.sendID ??
+                                                      widget.peerUserID,
+                                                  nickname:
+                                                      sourceMessage
+                                                          ?.senderNickname ??
+                                                      _peerName,
+                                                  avatarUrl: _isGroup
+                                                      ? sourceMessage
+                                                            ?.senderFaceUrl
+                                                      : _resolvedPeerAvatar,
+                                                )
+                                              : null,
+                                        ),
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             );

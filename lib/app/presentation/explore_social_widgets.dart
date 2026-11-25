@@ -52,6 +52,31 @@ class _ChatHistoryMessage {
        fileSize = null,
        filePath = null;
 
+  const _ChatHistoryMessage.system(this.text, {this.timestamp})
+    : mine = false,
+      clientMsgID = null,
+      isVoiceCallRecord = false,
+      sendFailed = false,
+      imageBytes = null,
+      imagePath = null,
+      imageUrl = null,
+      previewImageUrl = null,
+      shouldCacheThumbnail = false,
+      soundPath = null,
+      soundUrl = null,
+      soundDuration = null,
+      videoPath = null,
+      videoUrl = null,
+      videoSnapshotPath = null,
+      videoSnapshotUrl = null,
+      videoDuration = null,
+      fileName = null,
+      fileUrl = null,
+      fileSize = null,
+      filePath = null;
+
+  bool get isSystem => clientMsgID == null && !mine && text.isNotEmpty;
+
   const _ChatHistoryMessage.image({
     required this.mine,
     this.clientMsgID,
