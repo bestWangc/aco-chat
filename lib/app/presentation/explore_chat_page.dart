@@ -283,9 +283,13 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
             // The anchor is the complete message row (avatar included). Use
             // the bubble edge nearest the opposite side as the pointer target.
             const bubbleExtent = 215.0;
+            final rowLeft = anchorSize.width > 100 ? (anchor?.dx ?? 0) : 0.0;
+            final rowWidth = anchorSize.width > 100
+                ? anchorSize.width
+                : constraints.maxWidth;
             final bubbleEdge = message.mine
-                ? (anchor?.dx ?? 0) + anchorSize.width - 46 - bubbleExtent
-                : (anchor?.dx ?? 0) + 46 + bubbleExtent;
+                ? rowLeft + rowWidth - 46 - bubbleExtent
+                : rowLeft + 46 + bubbleExtent;
             final left = (bubbleEdge - panelWidth / 2).clamp(
               8.0,
               constraints.maxWidth - panelWidth - 8.0,
