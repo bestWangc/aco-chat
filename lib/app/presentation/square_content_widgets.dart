@@ -1161,11 +1161,13 @@ class _Bubble extends StatelessWidget {
     required this.text,
     required this.mine,
     this.onTextSelected,
+    this.enableSelection = true,
   });
   final AcoPalette palette;
   final String text;
   final bool mine;
   final ValueChanged<String>? onTextSelected;
+  final bool enableSelection;
   @override
   Widget build(BuildContext context) {
     final textStyle = TextStyle(
@@ -1173,15 +1175,17 @@ class _Bubble extends StatelessWidget {
       height: 1.2,
       fontSize: 16,
     );
-    final textWidget = SelectableText(
-      text,
-      style: textStyle,
-      onSelectionChanged: (selection, _) {
-        if (!selection.isCollapsed) {
-          onTextSelected?.call(selection.textInside(text));
-        }
-      },
-    );
+    final textWidget = enableSelection
+        ? SelectableText(
+            text,
+            style: textStyle,
+            onSelectionChanged: (selection, _) {
+              if (!selection.isCollapsed) {
+                onTextSelected?.call(selection.textInside(text));
+              }
+            },
+          )
+        : Text(text, style: textStyle);
     if (!mine) {
       return ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 390),
