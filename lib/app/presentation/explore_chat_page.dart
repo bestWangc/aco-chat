@@ -264,26 +264,27 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     final canCopy = message.text.trim().isNotEmpty;
     final canRevoke = _canRevoke(sourceMessage);
     if (!canCopy && !canRevoke) return;
-    final action = await showCupertinoModalPopup<String>(
+    final action = await showGeneralDialog<String>(
       context: context,
-      builder: (context) => CupertinoActionSheet(
-        actions: [
-          if (canCopy)
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(context, 'copy'),
-              child: const Text('复制'),
+      barrierDismissible: true,
+      barrierLabel: '消息操作',
+      barrierColor: const Color(0x33000000),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (context, animation, secondaryAnimation) => SafeArea(
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 150),
+            child: _ChatMessageActionPanel(
+              canCopy: canCopy,
+              canRevoke: canRevoke,
+              onSelected: (value) => Navigator.pop(context, value),
             ),
-          if (canRevoke)
-            CupertinoActionSheetAction(
-              onPressed: () => Navigator.pop(context, 'revoke'),
-              child: const Text('撤回'),
-            ),
-        ],
-        cancelButton: CupertinoActionSheetAction(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
+          ),
         ),
       ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
     );
     if (!mounted || action == null) return;
     if (action == 'copy') {
@@ -3005,6 +3006,108 @@ class _ChatMorePanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ChatMessageActionPanel extends StatelessWidget {
+  const _ChatMessageActionPanel({
+    required this.canCopy,
+    required this.canRevoke,
+    required this.onSelected,
+  });
+
+  final bool canCopy;
+  final bool canRevoke;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <(String, IconData, String)>[
+      if (canCopy) ('copy', CupertinoIcons.doc, '复制'),
+      if (canRevoke) ('revoke', CupertinoIcons.arrow_uturn_left, '撤回'),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF4B4B4B),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < actions.length; index++) ...[
+                  if (index > 0)
+                    const SizedBox(
+                      width: 1,
+                      height: 54,
+                      child: ColoredBox(color: Color(0x33777777)),
+                    ),
+                  _ChatMessageActionItem(
+                    icon: actions[index].$2,
+                    label: actions[index].$3,
+                    onPressed: () => onSelected(actions[index].$1),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        CustomPaint(
+          size: const Size(16, 8),
+          painter: _ChatActionPointerPainter(),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChatMessageActionItem extends StatelessWidget {
+  const _ChatMessageActionItem({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+    minimumSize: const Size(66, 72),
+    onPressed: onPressed,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: const Color(0xFFFFFFFF), size: 27),
+        const SizedBox(height: 7),
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 14),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ChatActionPointerPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFF4B4B4B));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChatActionPointerPainter oldDelegate) => false;
 }
 
 class _ChatMessage extends StatelessWidget {
