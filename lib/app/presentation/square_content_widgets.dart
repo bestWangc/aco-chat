@@ -1335,6 +1335,100 @@ class _LiveCard extends StatelessWidget {
   Color get _statusBackground =>
       _isLive ? palette.accent : _statusColor.withValues(alpha: 0.14);
 
+  Future<void> _showMoreMenu(BuildContext context) async {
+    final buttonBox = context.findRenderObject() as RenderBox?;
+    final overlayBox =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (buttonBox == null || overlayBox == null) return;
+    const popupWidth = 132.0;
+    final buttonTopLeft = buttonBox.localToGlobal(
+      Offset.zero,
+      ancestor: overlayBox,
+    );
+    final maxLeft = math.max(8.0, overlayBox.size.width - popupWidth - 8);
+    final left = math.min(
+      maxLeft,
+      math.max(8.0, buttonTopLeft.dx + buttonBox.size.width - popupWidth),
+    );
+    final actionCount =
+        1 + (onEdit == null ? 0 : 1) + (onDelete == null ? 0 : 1);
+    final menuHeight = actionCount * 48.0;
+    final maxTop = math.max(8.0, overlayBox.size.height - menuHeight);
+    final top = math.min(maxTop, buttonTopLeft.dy + buttonBox.size.height + 4);
+    final action = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '关闭会议操作菜单',
+      barrierColor: const Color(0x33000000),
+      transitionDuration: const Duration(milliseconds: 120),
+      pageBuilder: (dialogContext, _, _) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => Navigator.of(dialogContext).pop(),
+            ),
+          ),
+          Positioned(
+            left: left,
+            top: top,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: palette.surfaceRaised,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: palette.border),
+              ),
+              child: SizedBox(
+                width: popupWidth,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _menuItem(dialogContext, 'share', '分享'),
+                    if (onEdit != null) _menuItem(dialogContext, 'edit', '编辑'),
+                    if (onDelete != null)
+                      _menuItem(
+                        dialogContext,
+                        'delete',
+                        '删除',
+                        destructive: true,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
+    );
+    if (action == 'share') onShare?.call();
+    if (action == 'edit') onEdit?.call();
+    if (action == 'delete') onDelete?.call();
+  }
+
+  Widget _menuItem(
+    BuildContext context,
+    String value,
+    String label, {
+    bool destructive = false,
+  }) => CupertinoButton(
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    minimumSize: Size.zero,
+    onPressed: () => Navigator.of(context).pop(value),
+    child: Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: destructive
+              ? CupertinoColors.destructiveRed
+              : palette.primaryText,
+          fontSize: AcoTypography.body,
+        ),
+      ),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final scheduledStartLabel = _scheduledStartLabel;
@@ -1371,40 +1465,55 @@ class _LiveCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 5),
-                    Text(
-                      '会议号：${session.id}',
-                      style: TextStyle(
-                        color: palette.mutedText,
-                        fontSize: AcoTypography.caption,
-                      ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          '会议号：${session.id}',
+                          style: TextStyle(
+                            color: palette.mutedText,
+                            fontSize: AcoTypography.caption,
+                          ),
+                        ),
+                        if (session.hostNickname.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 170,
+                                ),
+                                child: Text(
+                                  '主持人：${session.hostNickname}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: palette.primaryText,
+                                    fontSize: AcoTypography.caption,
+                                  ),
+                                ),
+                              ),
+                              if (session.hostIdentity > 0 ||
+                                  session.hostStaffIdentity > 0) ...[
+                                const SizedBox(width: 4),
+                                _PostIdentityBadges(
+                                  identity: session.hostIdentity,
+                                  staffIdentity: session.hostStaffIdentity,
+                                ),
+                              ],
+                            ],
+                          ),
+                      ],
                     ),
                     if (session.status.isNotEmpty) ...[
                       const SizedBox(height: 5),
-                      Row(
-                        mainAxisSize: MainAxisSize.max,
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 5,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          if (session.hostNickname.isNotEmpty) ...[
-                            Flexible(
-                              child: Text(
-                                session.hostNickname,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: palette.primaryText,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            if (session.hostIdentity > 0 ||
-                                session.hostStaffIdentity > 0) ...[
-                              const SizedBox(width: 4),
-                              _PostIdentityBadges(
-                                identity: session.hostIdentity,
-                                staffIdentity: session.hostStaffIdentity,
-                              ),
-                            ],
-                            const SizedBox(width: 6),
-                          ],
                           Container(
                             padding: EdgeInsets.symmetric(
                               horizontal: 7,
@@ -1426,7 +1535,6 @@ class _LiveCard extends StatelessWidget {
                             ),
                           ),
                           if (session.canExportCheckIns) ...[
-                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 7,
@@ -1437,7 +1545,7 @@ class _LiveCard extends StatelessWidget {
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
-                                '我的会议',
+                                '我的',
                                 style: TextStyle(
                                   color: palette.accentForeground,
                                   fontSize: AcoTypography.caption,
@@ -1447,8 +1555,8 @@ class _LiveCard extends StatelessWidget {
                             ),
                           ],
                           if (scheduledStartLabel != null) ...[
-                            const SizedBox(width: 7),
-                            Flexible(
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 150),
                               child: Text(
                                 scheduledStartLabel,
                                 maxLines: 2,
@@ -1468,34 +1576,20 @@ class _LiveCard extends StatelessWidget {
                 ),
               ),
             ),
-            if (onShare != null)
-              AcoIconButton(
-                icon: CupertinoIcons.share,
-                palette: palette,
-                label: '分享会议',
-                size: 20,
-                onPressed: onShare!,
+            if (onShare != null || onEdit != null || onDelete != null)
+              Builder(
+                builder: (menuContext) => CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(36, 36),
+                  onPressed: () => unawaited(_showMoreMenu(menuContext)),
+                  child: Image.asset(
+                    'assets/icons/post_more_indicator.png',
+                    width: 20,
+                    filterQuality: FilterQuality.high,
+                    semanticLabel: '更多操作',
+                  ),
+                ),
               ),
-            if (onEdit != null) ...[
-              const SizedBox(width: 6),
-              AcoIconButton(
-                icon: CupertinoIcons.pencil,
-                palette: palette,
-                label: '修改会议',
-                size: 20,
-                onPressed: onEdit!,
-              ),
-            ],
-            if (onDelete != null) ...[
-              const SizedBox(width: 6),
-              AcoIconButton(
-                icon: CupertinoIcons.delete,
-                palette: palette,
-                label: '删除预约会议',
-                size: 20,
-                onPressed: onDelete!,
-              ),
-            ],
           ],
         ),
         if (session.coverUrl.isNotEmpty) ...[

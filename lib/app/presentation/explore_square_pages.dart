@@ -30,7 +30,7 @@ class _SquareFeedPage extends StatefulWidget {
 class _SquareFeedPageState extends State<_SquareFeedPage>
     with WidgetsBindingObserver {
   static const _contentHorizontalInset = 35.0;
-  static const _liveListHorizontalInset = 25.0;
+  static const _liveListHorizontalInset = 16.0;
   static const _liveRecommendationGap = 12.0;
   static const _liveRecommendationScrollInterval = Duration(milliseconds: 20);
   static const _liveRecommendationScrollPixelsPerTick = 1.0;
@@ -546,22 +546,15 @@ class _SquareFeedPageState extends State<_SquareFeedPage>
     if (!mounted || initialRoom == null) return;
     Navigator.of(context)
         .push<Object?>(
-          _AcoPageRoute<Object?>(
-            builder: (_) => CupertinoPageScaffold(
-              backgroundColor: widget.palette.background,
-              resizeToAvoidBottomInset: true,
-              child: AcoSafeArea(
-                bottom: false,
-                child: ColoredBox(
-                  color: widget.palette.background,
-                  child: _VoiceRoomPage(
-                    palette: widget.palette,
-                    live: session,
-                    joinPassword: joinPassword,
-                    initialRoom: initialRoom,
-                  ),
-                ),
-              ),
+          _buildLiveRoomRoute<Object?>(
+            palette: widget.palette,
+            title: session.title,
+            roomBuilder: (onMinimize) => _VoiceRoomPage(
+              palette: widget.palette,
+              live: session,
+              joinPassword: joinPassword,
+              initialRoom: initialRoom,
+              onMinimizeRequested: onMinimize,
             ),
           ),
         )
@@ -1859,9 +1852,7 @@ class _PublishVideoTile extends StatelessWidget {
                 ),
               )
             else
-              ColoredBox(
-                color: const Color(0xFF202020),
-              ),
+              ColoredBox(color: const Color(0xFF202020)),
             if (video != null) ...[
               const ColoredBox(color: Color(0x33000000)),
               Center(
@@ -2325,49 +2316,49 @@ class _MessageListSearchField extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
-      children: [
-        Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
-        const SizedBox(width: 7),
-        Expanded(
-          child: CupertinoTextField(
-            controller: controller,
-            maxLines: 1,
-            textInputAction: TextInputAction.search,
-            cursorColor: palette.accent,
-            placeholder: appText(context, '搜索'),
-            placeholderStyle: TextStyle(
-              color: searchTextColor,
-              fontSize: AcoTypography.caption,
-            ),
-            style: TextStyle(
-              color: searchTextColor,
-              fontSize: AcoTypography.caption,
-            ),
-            decoration: null,
-            padding: EdgeInsets.zero,
-            onChanged: onChanged,
-          ),
-        ),
-        ValueListenableBuilder<TextEditingValue>(
-          valueListenable: controller,
-          builder: (context, value, _) {
-            if (value.text.isEmpty) return const SizedBox.shrink();
-            return CupertinoButton(
-              padding: EdgeInsets.zero,
-              minimumSize: const Size(28, 28),
-              onPressed: () {
-                controller.clear();
-                onChanged('');
-              },
-              child: Icon(
-                CupertinoIcons.clear_circled_solid,
-                color: palette.mutedText,
-                size: 17,
+        children: [
+          Icon(CupertinoIcons.search, color: palette.mutedText, size: 18),
+          const SizedBox(width: 7),
+          Expanded(
+            child: CupertinoTextField(
+              controller: controller,
+              maxLines: 1,
+              textInputAction: TextInputAction.search,
+              cursorColor: palette.accent,
+              placeholder: appText(context, '搜索'),
+              placeholderStyle: TextStyle(
+                color: searchTextColor,
+                fontSize: AcoTypography.caption,
               ),
-            );
-          },
-        ),
-      ],
+              style: TextStyle(
+                color: searchTextColor,
+                fontSize: AcoTypography.caption,
+              ),
+              decoration: null,
+              padding: EdgeInsets.zero,
+              onChanged: onChanged,
+            ),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(28, 28),
+                onPressed: () {
+                  controller.clear();
+                  onChanged('');
+                },
+                child: Icon(
+                  CupertinoIcons.clear_circled_solid,
+                  color: palette.mutedText,
+                  size: 17,
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }

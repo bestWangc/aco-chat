@@ -274,9 +274,11 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
           palette: palette,
           count: room?.participantCount,
           onMembers: _showMembers,
-          onMinimize: defaultTargetPlatform == TargetPlatform.android
-              ? () => unawaited(_enterPictureInPicture())
-              : null,
+          onMinimize: switch (defaultTargetPlatform) {
+            TargetPlatform.android => () => unawaited(_enterPictureInPicture()),
+            TargetPlatform.iOS => widget.onMinimizeRequested,
+            _ => null,
+          },
           onMore: _showRoomActions,
         ),
         child: Stack(

@@ -26,6 +26,130 @@ class _AcoPageRoute<T> extends CupertinoPageRoute<T> {
   }
 }
 
+class _AcoLiveRoomRoute<T> extends PageRouteBuilder<T> {
+  _AcoLiveRoomRoute({required WidgetBuilder builder})
+    : super(
+        opaque: false,
+        barrierColor: null,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            builder(context),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            child,
+      );
+}
+
+class _LiveRoomOverlay extends StatefulWidget {
+  const _LiveRoomOverlay({
+    required this.palette,
+    required this.title,
+    required this.roomBuilder,
+  });
+  final AcoPalette palette;
+  final String title;
+  final Widget Function(VoidCallback onMinimize) roomBuilder;
+
+  @override
+  State<_LiveRoomOverlay> createState() => _LiveRoomOverlayState();
+}
+
+class _LiveRoomOverlayState extends State<_LiveRoomOverlay> {
+  bool _minimized = false;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Offstage(
+        offstage: _minimized,
+        child: widget.roomBuilder(() => setState(() => _minimized = true)),
+      ),
+      if (_minimized)
+        Positioned(
+          right: 16,
+          bottom: 24,
+          child: SafeArea(
+            top: false,
+            left: false,
+            child: GestureDetector(
+              onTap: () => setState(() => _minimized = false),
+              child: Container(
+                width: 236,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: widget.palette.dark
+                      ? const Color(0xFF262626)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.waveform,
+                      size: 20,
+                      color: Color(0xFFA6FF00),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.title.isEmpty ? '会议' : widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.palette.primaryText,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      CupertinoIcons.arrow_up_left,
+                      size: 16,
+                      color: widget.palette.mutedText,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+Route<T> _buildLiveRoomRoute<T>({
+  required AcoPalette palette,
+  required String title,
+  required Widget Function(VoidCallback? onMinimize) roomBuilder,
+}) {
+  Widget buildPage(VoidCallback? onMinimize) => CupertinoPageScaffold(
+    backgroundColor: palette.background,
+    resizeToAvoidBottomInset: true,
+    child: AcoSafeArea(bottom: false, child: roomBuilder(onMinimize)),
+  );
+
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return _AcoLiveRoomRoute<T>(
+      builder: (_) => _LiveRoomOverlay(
+        palette: palette,
+        title: title,
+        roomBuilder: buildPage,
+      ),
+    );
+  }
+  return _AcoPageRoute<T>(builder: (_) => buildPage(null));
+}
+
 class AcoScreenPage extends StatelessWidget {
   const AcoScreenPage({
     required this.screen,

@@ -73,11 +73,13 @@ class _VoiceRoomPage extends StatefulWidget {
     this.live,
     this.joinPassword,
     this.initialRoom,
+    this.onMinimizeRequested,
   });
   final AcoPalette palette;
   final LiveSession? live;
   final String? joinPassword;
   final LiveRoom? initialRoom;
+  final VoidCallback? onMinimizeRequested;
 
   @override
   State<_VoiceRoomPage> createState() => _VoiceRoomPageState();

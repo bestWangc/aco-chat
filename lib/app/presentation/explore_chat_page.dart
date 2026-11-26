@@ -265,6 +265,9 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
     final canCopy = message.text.trim().isNotEmpty;
     final canRevoke = _canRevoke(sourceMessage);
     if (!canCopy && !canRevoke) return;
+    final anchorBox = anchorContext.findRenderObject() as RenderBox?;
+    final anchorOrigin = anchorBox?.localToGlobal(Offset.zero);
+    final anchorSize = anchorBox?.size ?? Size.zero;
     final action = await showGeneralDialog<String>(
       context: context,
       barrierDismissible: true,
@@ -272,33 +275,23 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       barrierColor: const Color(0x33000000),
       transitionDuration: const Duration(milliseconds: 160),
       pageBuilder: (context, animation, secondaryAnimation) {
-        final renderBox = anchorContext.findRenderObject() as RenderBox?;
-        final anchor = renderBox?.localToGlobal(Offset.zero);
-        final anchorSize = renderBox?.size ?? Size.zero;
         return LayoutBuilder(
           builder: (context, constraints) {
             final actionCount = (canCopy ? 1 : 0) + (canRevoke ? 1 : 0);
             final panelWidth = actionCount * 68.0 + 12;
             const panelHeight = 82.0;
-            // The anchor is the complete message row (avatar included). Use
-            // the bubble edge nearest the opposite side as the pointer target.
-            const bubbleExtent = 215.0;
-            final rowLeft = anchorSize.width > 100 ? (anchor?.dx ?? 0) : 0.0;
-            final rowWidth = anchorSize.width > 100
-                ? anchorSize.width
-                : constraints.maxWidth;
-            final bubbleEdge = message.mine
-                ? rowLeft + rowWidth - 46 - bubbleExtent
-                : rowLeft + 46 + bubbleExtent;
-            final left = (bubbleEdge - panelWidth / 2).clamp(
-              8.0,
-              constraints.maxWidth - panelWidth - 8.0,
-            );
+            final left =
+                ((anchorOrigin?.dx ?? 0) +
+                        anchorSize.width / 2 -
+                        panelWidth / 2)
+                    .clamp(8.0, constraints.maxWidth - panelWidth - 8.0);
             final aboveTop =
-                (anchor?.dy ?? constraints.maxHeight / 2) - panelHeight - 6;
+                (anchorOrigin?.dy ?? constraints.maxHeight / 2) -
+                panelHeight -
+                6;
             final pointerOnTop = aboveTop < MediaQuery.paddingOf(context).top;
             final top = pointerOnTop
-                ? (anchor?.dy ?? 0) + anchorSize.height + 6
+                ? (anchorOrigin?.dy ?? 0) + anchorSize.height + 6
                 : aboveTop;
             return Stack(
               children: [
@@ -328,14 +321,24 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
       await Clipboard.setData(ClipboardData(text: message.text));
       return;
     }
-    final conversationID = _currentConversationID;
     final id = sourceMessage.clientMsgID;
-    if (conversationID == null || id == null || !_canRevoke(sourceMessage)) {
+    final target = _conversationTarget;
+    if (target == null ||
+        target.isEmpty ||
+        id == null ||
+        !_canRevoke(sourceMessage)) {
       return;
     }
     try {
+      final conversation = await OpenIM.iMManager.conversationManager
+          .getOneConversation(
+            sourceID: target,
+            sessionType: _isGroup
+                ? ConversationType.superGroup
+                : ConversationType.single,
+          );
       await OpenIM.iMManager.messageManager.revokeMessage(
-        conversationID: conversationID,
+        conversationID: conversation.conversationID,
         clientMsgID: id,
       );
       _applyRevokedMessage(
@@ -2043,82 +2046,75 @@ class _ChatPageState extends State<_ChatPage> with RouteAware {
                                       ),
                                     )
                                   else
-                                    Builder(
-                                      builder: (anchorContext) => GestureDetector(
+                                    _selectableMessage(
+                                      message,
+                                      _ChatMessage(
+                                        palette: widget.palette,
+                                        text: message.text,
+                                        imageBytes: message.imageBytes,
+                                        imagePath: message.imagePath,
+                                        imageUrl: message.imageUrl,
+                                        previewImageUrl:
+                                            message.previewImageUrl,
+                                        shouldCacheThumbnail:
+                                            message.shouldCacheThumbnail,
+                                        soundPath: message.soundPath,
+                                        soundUrl: message.soundUrl,
+                                        soundDuration: message.soundDuration,
+                                        videoPath: message.videoPath,
+                                        videoUrl: message.videoUrl,
+                                        videoSnapshotPath:
+                                            message.videoSnapshotPath,
+                                        videoSnapshotUrl:
+                                            message.videoSnapshotUrl,
+                                        videoDuration: message.videoDuration,
+                                        fileName: message.fileName,
+                                        fileUrl: message.fileUrl,
+                                        fileSize: message.fileSize,
+                                        filePath: message.filePath,
+                                        isVoiceCallRecord:
+                                            message.isVoiceCallRecord,
+                                        sendFailed: message.sendFailed,
+                                        mine: message.mine,
+                                        senderName: _senderNameForMessage(
+                                          message,
+                                          sourceMessage,
+                                        ),
+                                        avatarUrl: _isGroup
+                                            ? sourceMessage?.senderFaceUrl ??
+                                                  _resolvedPeerAvatar
+                                            : _resolvedPeerAvatar,
+                                        ownAvatarUrl: widget.ownAvatarUrl,
+                                        onAvatarLongPress: _isGroup
+                                            ? () => _mentionMessageSender(
+                                                userID: sourceMessage?.sendID,
+                                                nickname: sourceMessage
+                                                    ?.senderNickname,
+                                              )
+                                            : null,
+                                        onAvatarTap: !message.mine
+                                            ? () => _openSenderProfile(
+                                                userID:
+                                                    sourceMessage?.sendID ??
+                                                    widget.peerUserID,
+                                                nickname:
+                                                    sourceMessage
+                                                        ?.senderNickname ??
+                                                    _peerName,
+                                                avatarUrl: _isGroup
+                                                    ? sourceMessage
+                                                          ?.senderFaceUrl
+                                                    : _resolvedPeerAvatar,
+                                              )
+                                            : null,
                                         onLongPress: _selectingMessages
                                             ? null
-                                            : () => _showMessageActions(
-                                                message,
-                                                sourceMessage,
-                                                anchorContext,
-                                              ),
-                                        child: _selectableMessage(
-                                          message,
-                                          _ChatMessage(
-                                            palette: widget.palette,
-                                            text: message.text,
-                                            imageBytes: message.imageBytes,
-                                            imagePath: message.imagePath,
-                                            imageUrl: message.imageUrl,
-                                            previewImageUrl:
-                                                message.previewImageUrl,
-                                            shouldCacheThumbnail:
-                                                message.shouldCacheThumbnail,
-                                            soundPath: message.soundPath,
-                                            soundUrl: message.soundUrl,
-                                            soundDuration:
-                                                message.soundDuration,
-                                            videoPath: message.videoPath,
-                                            videoUrl: message.videoUrl,
-                                            videoSnapshotPath:
-                                                message.videoSnapshotPath,
-                                            videoSnapshotUrl:
-                                                message.videoSnapshotUrl,
-                                            videoDuration:
-                                                message.videoDuration,
-                                            fileName: message.fileName,
-                                            fileUrl: message.fileUrl,
-                                            fileSize: message.fileSize,
-                                            filePath: message.filePath,
-                                            isVoiceCallRecord:
-                                                message.isVoiceCallRecord,
-                                            sendFailed: message.sendFailed,
-                                            mine: message.mine,
-                                            senderName: _senderNameForMessage(
-                                              message,
-                                              sourceMessage,
-                                            ),
-                                            avatarUrl: _isGroup
-                                                ? sourceMessage
-                                                          ?.senderFaceUrl ??
-                                                      _resolvedPeerAvatar
-                                                : _resolvedPeerAvatar,
-                                            ownAvatarUrl: widget.ownAvatarUrl,
-                                            onAvatarLongPress: _isGroup
-                                                ? () => _mentionMessageSender(
-                                                    userID:
-                                                        sourceMessage?.sendID,
-                                                    nickname: sourceMessage
-                                                        ?.senderNickname,
-                                                  )
-                                                : null,
-                                            onAvatarTap: !message.mine
-                                                ? () => _openSenderProfile(
-                                                    userID:
-                                                        sourceMessage?.sendID ??
-                                                        widget.peerUserID,
-                                                    nickname:
-                                                        sourceMessage
-                                                            ?.senderNickname ??
-                                                        _peerName,
-                                                    avatarUrl: _isGroup
-                                                        ? sourceMessage
-                                                              ?.senderFaceUrl
-                                                        : _resolvedPeerAvatar,
-                                                  )
-                                                : null,
-                                          ),
-                                        ),
+                                            : (bubbleContext) =>
+                                                  _showMessageActions(
+                                                    message,
+                                                    sourceMessage,
+                                                    bubbleContext,
+                                                  ),
                                       ),
                                     ),
                                 ],
@@ -3198,6 +3194,7 @@ class _ChatMessage extends StatelessWidget {
     this.ownAvatarUrl,
     this.onAvatarLongPress,
     this.onAvatarTap,
+    this.onLongPress,
   });
 
   final AcoPalette palette;
@@ -3227,6 +3224,7 @@ class _ChatMessage extends StatelessWidget {
   final String? ownAvatarUrl;
   final VoidCallback? onAvatarLongPress;
   final VoidCallback? onAvatarTap;
+  final ValueChanged<BuildContext>? onLongPress;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -3277,7 +3275,18 @@ class _ChatMessage extends StatelessWidget {
                         ),
                       ),
                     ],
-                    _copyableMessageBody(context, maxWidth: maxBubbleWidth),
+                    Builder(
+                      builder: (bubbleContext) => GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onLongPress: onLongPress == null
+                            ? null
+                            : () => onLongPress!(bubbleContext),
+                        child: _copyableMessageBody(
+                          context,
+                          maxWidth: maxBubbleWidth,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

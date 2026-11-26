@@ -659,20 +659,13 @@ class _AcoAppShellState extends State<AcoAppShell> {
           setState(() => _liveListRevision++);
           if (created is! LiveSession || created.status != 'live') return;
           await Navigator.of(context).push<bool>(
-            _AcoPageRoute<bool>(
-              builder: (_) => CupertinoPageScaffold(
-                backgroundColor: AcoPalette(_isDark.value).background,
-                resizeToAvoidBottomInset: true,
-                child: AcoSafeArea(
-                  bottom: false,
-                  child: ColoredBox(
-                    color: AcoPalette(_isDark.value).background,
-                    child: _VoiceRoomPage(
-                      palette: AcoPalette(_isDark.value),
-                      live: created,
-                    ),
-                  ),
-                ),
+            _buildLiveRoomRoute<bool>(
+              palette: AcoPalette(_isDark.value),
+              title: created.title,
+              roomBuilder: (onMinimize) => _VoiceRoomPage(
+                palette: AcoPalette(_isDark.value),
+                live: created,
+                onMinimizeRequested: onMinimize,
               ),
             ),
           );
