@@ -252,7 +252,10 @@ private final class AliyunBroadcastPicker: NSObject, FlutterPlatformView {
 
   init(frame: CGRect) {
     picker = RPSystemBroadcastPickerView(frame: frame)
-    picker.preferredExtension = "com.meimeidacios.app.AcoScreenBroadcast"
+    if let bundleIdentifier = Bundle.main.bundleIdentifier {
+      picker.preferredExtension = "\(bundleIdentifier).AcoScreenBroadcast"
+      NSLog("[AcoScreenBroadcast] picker extension=%@", picker.preferredExtension ?? "")
+    }
     picker.showsMicrophoneButton = false
     super.init()
   }

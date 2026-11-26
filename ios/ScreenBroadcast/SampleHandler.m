@@ -10,8 +10,17 @@ static NSString * const AcoScreenBroadcastAppGroup = @"group.com.meimeidacios.ap
 @implementation SampleHandler
 
 - (void)broadcastStartedWithSetupInfo:(NSDictionary<NSString *, NSObject *> *)setupInfo {
+  NSLog(@"[AcoScreenBroadcast] broadcast started, extension=%@ appGroup=%@",
+        NSBundle.mainBundle.bundleIdentifier, AcoScreenBroadcastAppGroup);
   [[AlivcReplayKitExt sharedInstance] setAppGroup:AcoScreenBroadcastAppGroup];
   NSUserDefaults *sharedDefaults = [[NSUserDefaults alloc] initWithSuiteName:AcoScreenBroadcastAppGroup];
+  if (sharedDefaults == nil) {
+    NSError *error = [NSError errorWithDomain:@"AcoScreenBroadcast"
+                                         code:2
+                                     userInfo:@{NSLocalizedDescriptionKey: @"无法访问会议屏幕共享配置"}];
+    [self finishBroadcastWithError:error];
+    return;
+  }
   [sharedDefaults setBool:YES forKey:@"aco.aliyun.broadcast.active"];
   [sharedDefaults setBool:NO forKey:@"aco.aliyun.broadcast.stop_requested"];
   [sharedDefaults synchronize];
@@ -47,6 +56,8 @@ static NSString * const AcoScreenBroadcastAppGroup = @"group.com.meimeidacios.ap
 }
 
 - (void)broadcastFinished {
+  NSLog(@"[AcoScreenBroadcast] broadcast finished, extension=%@",
+        NSBundle.mainBundle.bundleIdentifier);
   if (self.stopTimer) {
     dispatch_source_cancel(self.stopTimer);
     self.stopTimer = nil;

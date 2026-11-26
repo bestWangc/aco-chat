@@ -17,10 +17,10 @@
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>AlivcEnv</key>
-	<string>SEA</string>
-	<key>AlivcLicenseKey_SEA</key>
-	<string>$(ALIVC_LICENSE_KEY_SEA)</string>
-	<key>AlivcLicenseFile_SEA</key>
+	<string>CN</string>
+	<key>AlivcLicenseKey_CN</key>
+	<string>$(ALIVC_LICENSE_KEY_CN)</string>
+	<key>AlivcLicenseFile_CN</key>
 	<string>AliVideoCert.crt</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
