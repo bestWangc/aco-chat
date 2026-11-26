@@ -58,11 +58,9 @@ class AlivcLiveBase {
   /// [baseListener] param [result] 校验licence结果[AlivcLiveLicenseCheckResultCodeSuccess]成功，其他表示失败
   ///
   /// [baseListener] param [reason] 校验licence失败原因
-  static void setListener(AlivcLiveBaseListener baseListener) {
+  static Future<void> setListener(AlivcLiveBaseListener baseListener) async {
     _onLiveBaseListener = baseListener;
-    _liveBaseMethodChannel.invokeMethod(
-      'setListener',
-    );
+    await _liveBaseMethodChannel.invokeMethod<void>('setObserver');
   }
 
   /// 获取SDK版本号

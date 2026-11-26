@@ -109,7 +109,17 @@
 // SDK Licence 校验接口回调
 - (void)onLicenceCheck:(AlivcLiveLicenseCheckResultCode)result Reason:(NSString *)reason {
     NSString *resultCode = [NSString stringWithFormat:@"%ld", result];
-    self.eventSink(@{LivePusherEventChannelDefMethod:@"onLicenceCheck", LivePusherEventChannelDefLicenceCheckResult:resultCode, LivePusherEventChannelDefLicenceCheckReason: reason});
+    FlutterEventSink eventSink = self.eventSink;
+    if (eventSink) {
+        NSDictionary *event = @{
+            LivePusherEventChannelDefMethod: @"onLicenceCheck",
+            LivePusherEventChannelDefLicenceCheckResult: resultCode,
+            LivePusherEventChannelDefLicenceCheckReason: reason ?: @"",
+        };
+        dispatch_async(dispatch_get_main_queue(), ^{
+            eventSink(event);
+        });
+    }
 }
 
 @end

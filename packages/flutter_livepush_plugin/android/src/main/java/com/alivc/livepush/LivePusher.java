@@ -181,6 +181,10 @@ public class LivePusher {
                 break;
             case "destroy":
                 mAlivcLivePusher.destroy();
+                // AlivcLivePusher cannot be initialized again after destroy.
+                // Recreate the wrapper so a later host transfer can start a
+                // fresh screen-share push in the same Flutter process.
+                mAlivcLivePusher = new AlivcLivePusher();
                 destroyBeautyManager();
                 result.success(null);
                 break;

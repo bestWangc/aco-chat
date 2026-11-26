@@ -375,6 +375,10 @@
     int callback = -1;
     if (self.livePusher) {
         callback = [self.livePusher startScreenCapture:appGroup];
+        NSLog(@"[AcoScreenBroadcast] startScreenCapture appGroup=%@ mode=%ld result=%d",
+              appGroup, (long)self.configFactory.config.livePushMode, callback);
+    } else {
+        NSLog(@"[AcoScreenBroadcast] startScreenCapture failed: pusher is not initialized");
     }
     result(@(callback));
 }

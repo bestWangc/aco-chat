@@ -5,7 +5,6 @@ import android.content.Context;
 import com.alivc.live.pusher.AlivcLiveBase;
 import com.alivc.live.pusher.AlivcLiveBaseListener;
 import com.alivc.live.pusher.AlivcLivePushConstants;
-import com.alivc.live.pusher.AlivcLivePushInstance;
 import com.alivc.live.pusher.AlivcLivePushLogLevel;
 
 import java.util.HashMap;
@@ -46,7 +45,6 @@ public class LiveBase {
                 result.success(sdkVersion);
                 break;
             case "registerSDK":
-                AlivcLivePushInstance.loadInstance(mContext);
                 AlivcLiveBase.registerSDK();
                 result.success(null);
                 break;

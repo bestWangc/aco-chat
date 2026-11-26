@@ -56,7 +56,8 @@ dependencies:
   livekit_client: ^2.11.0
   flutter_livepush_plugin:
     path: packages/flutter_livepush_plugin
-  flutter_aliplayer: 7.11.0-interactivelive
+  flutter_aliplayer:
+    path: packages/flutter_aliplayer
   lpinyin: ^2.0.3
   flutter_openim_sdk:
     path: third_party/flutter_openim_sdk

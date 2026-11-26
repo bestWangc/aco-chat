@@ -140,6 +140,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   bool _roomLoading = false;
   bool _leaving = false;
   bool _allowPop = false;
+  bool _isInPictureInPicture = false;
   bool _closingRoom = false;
   bool _handRaiseNoticeVisible = false;
   bool _networkReconnecting = false;
@@ -177,6 +178,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   FlutterAliplayer? _aliyunLivePlayer;
   String? _aliyunLivePlayUrl;
   bool _aliyunPlayerViewAttached = false;
+  bool _aliyunVideoRendered = false;
   bool _aliyunFrameSnapshotRequested = false;
   final AliyunScreenBroadcast _aliyunScreenBroadcast = AliyunScreenBroadcast();
   final List<String> _checkInDiagnosticEntries = <String>[];
@@ -256,6 +258,18 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       },
     );
     WidgetsBinding.instance.addObserver(this);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _pictureInPictureChannel.setMethodCallHandler((call) async {
+        if (call.method != 'changed' || !mounted) return;
+        final arguments = call.arguments;
+        final inPictureInPicture = arguments is Map
+            ? arguments['isInPictureInPictureMode'] == true
+            : false;
+        if (inPictureInPicture != _isInPictureInPicture) {
+          setState(() => _isInPictureInPicture = inPictureInPicture);
+        }
+      });
+    }
     if (defaultTargetPlatform == TargetPlatform.android) {
       unawaited(_setPictureInPictureEnabled(true));
     }
@@ -535,6 +549,10 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
         _applySpeakerLists(speakers, listeners, removed: removed);
       case LiveHostTransferredEvent(:final viewerRole, :final host):
         _applyHostTransfer(viewerRole, host);
+      case LiveScreenShareChangedEvent(:final active):
+        if (active && mounted && _room?.viewerRole != 'host') {
+          showAcoAlertNotice(context, '屏幕共享', '主持人已开始屏幕共享。');
+        }
     }
   }
 
@@ -655,6 +673,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       LiveSpeakerListsChangedEvent() => 'speakers',
       LiveHostTransferredEvent() => 'host_transfer',
       LiveHostAbsentEvent() => 'host_presence',
+      LiveScreenShareChangedEvent() => 'screen_share',
     };
   }
 
@@ -1253,6 +1272,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   Future<void> _setAliyunPlaybackUrl(String? url) async {
     if (!mounted || _aliyunLivePlayUrl == url) return;
     _aliyunFrameSnapshotRequested = false;
+    _aliyunVideoRendered = false;
     _aliyunPlaybackRetryTimer?.cancel();
     _aliyunPlaybackRetryCount = 0;
     _aliyunLivePlayUrl = url;
@@ -1268,6 +1288,14 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   }
 
   void _onAliyunPlayerViewCreated(int viewId) {
+    unawaited(_initializeAliyunPlayer(viewId));
+  }
+
+  Future<void> _initializeAliyunPlayer(int viewId) async {
+    // The bundled certificate is issued for Aliyun's CN environment.
+    // Set this before creating any player so the native SDK validates the
+    // certificate against the matching root key.
+    await FlutterAliPlayerGlobalSettings.setGlobalEnvironment(1);
     final player = _aliyunLivePlayer ??=
         FlutterAliPlayerFactory.createAliPlayer();
     player.setOnPrepared((_) async {
@@ -1283,6 +1311,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     });
     player.setOnRenderingStart((_) {
       debugPrint('Aliyun player rendered first frame');
+      _aliyunVideoRendered = true;
       _aliyunPlaybackRetryTimer?.cancel();
       _aliyunPlaybackRetryCount = 0;
       unawaited(_captureAliyunDecodedFrame(player));
@@ -1291,9 +1320,38 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
       debugPrint(
         'Aliyun player error: code=$code extra=$extra message=$message',
       );
+      // License failures are deterministic. Retrying only repeats the same
+      // authorization error until the app is restarted and obscures the
+      // actual configuration problem.
+      final errorText = '${message ?? ''} ${extra ?? ''}'.toLowerCase();
+      if (errorText.contains('license') ||
+          errorText.contains('licence') ||
+          errorText.contains('authorization failed')) {
+        _aliyunPlaybackRetryTimer?.cancel();
+        return;
+      }
       _scheduleAliyunPlaybackRetry(player);
     });
     unawaited(_attachAliyunPlayerView(player, viewId));
+  }
+
+  Future<void> _startIOSPictureInPicture() async {
+    if (!_aliyunVideoRendered) {
+      if (mounted) {
+        _showNotice(context, '无法开启画中画', '当前没有可用的屏幕画面。');
+      }
+      return;
+    }
+    final player = _aliyunLivePlayer;
+    if (player == null) {
+      _showNotice(context, '无法开启画中画', '当前没有可用的屏幕画面。');
+      return;
+    }
+    try {
+      await player.startPictureInPictureForIOS();
+    } on Object catch (error) {
+      debugPrint('Aliyun iOS PiP start failed: $error');
+    }
   }
 
   Future<void> _captureAliyunDecodedFrame(FlutterAliplayer player) async {
@@ -2054,8 +2112,11 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     if (!shouldTransfer || !mounted) return;
     setState(() => _transferringHost = true);
     try {
-      await _accountSession.transferLiveHost(live.id, speaker.userId);
+      // Release the single Aliyun ingest before changing ownership. After the
+      // transfer the former host is a listener and cannot clear the stream's
+      // host-only active state on the server.
       await _stopScreenBroadcast();
+      await _accountSession.transferLiveHost(live.id, speaker.userId);
       // The room snapshot may briefly retain the old role. Record the
       // successful transfer immediately so leaving cannot end the live.
       _hostTransferred = true;
@@ -2120,6 +2181,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   @override
   void dispose() {
     if (defaultTargetPlatform == TargetPlatform.android) {
+      _pictureInPictureChannel.setMethodCallHandler(null);
       unawaited(_setPictureInPictureEnabled(false));
     }
     unawaited(_setLiveRoomWakelock(false));
@@ -2408,7 +2470,61 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
   @override
   Widget build(BuildContext context) {
     _refreshLiveRoomWakelock();
+    if (_isInPictureInPicture) return _buildPictureInPictureRoom(context);
     return _buildRoom(context);
+  }
+
+  Widget _buildPictureInPictureRoom(BuildContext context) {
+    final title = widget.live?.title.trim();
+    final participantCount = _room?.participantCount ?? 0;
+    return ColoredBox(
+      color: const Color(0xFF111111),
+      child: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.waveform,
+                      color: Color(0xFFA6FF00),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: constraints.maxWidth - 32,
+                      child: Text(
+                        title?.isNotEmpty == true ? title! : '语音房',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$participantCount 人 · ${_muted ? '已静音' : '麦克风开启'}',
+                      style: const TextStyle(
+                        color: Color(0xFFB8B8B8),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

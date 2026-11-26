@@ -58,7 +58,11 @@ import os
 import re
 from pathlib import Path
 
-omitted_plugins = {'huijing_ads_plugin', 'flutter_livepush_plugin'}
+omitted_plugins = {
+    'huijing_ads_plugin',
+    'flutter_livepush_plugin',
+    'flutter_aliplayer',
+}
 plugins_path = Path('.flutter-plugins-dependencies')
 plugins = json.loads(plugins_path.read_text())
 ios_plugins = plugins.get('plugins', {}).get('ios', [])
@@ -73,6 +77,7 @@ registrant = registrant_path.read_text()
 for plugin, header, klass in (
     ('huijing_ads_plugin', 'HuijingAdsPlugin', 'HuijingAdsPlugin'),
     ('flutter_livepush_plugin', 'LivePushPlugin', 'LivePushPlugin'),
+    ('flutter_aliplayer', 'FlutterAliplayerPlugin', 'FlutterAliplayerPlugin'),
 ):
     registrant, import_count = re.subn(
         rf'#if __has_include\(<{plugin}/{header}\.h>\)\n'

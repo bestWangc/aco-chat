@@ -276,7 +276,7 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
           onMembers: _showMembers,
           onMinimize: switch (defaultTargetPlatform) {
             TargetPlatform.android => () => unawaited(_enterPictureInPicture()),
-            TargetPlatform.iOS => widget.onMinimizeRequested,
+            TargetPlatform.iOS => () => unawaited(_startIOSPictureInPicture()),
             _ => null,
           },
           onMore: _showRoomActions,
@@ -370,6 +370,48 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                               const SizedBox(width: 6),
                               Text(
                                 '正在共享屏幕',
+                                style: TextStyle(
+                                  color: _white.withValues(alpha: .95),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                if (isHost && _screenBroadcastStarting)
+                  Positioned(
+                    top: 8,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: _black.withValues(alpha: .72),
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 7,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(
+                                width: 13,
+                                height: 13,
+                                child: CupertinoActivityIndicator(
+                                  color: _white,
+                                  radius: 7,
+                                ),
+                              ),
+                              const SizedBox(width: 7),
+                              Text(
+                                '正在启动屏幕共享',
                                 style: TextStyle(
                                   color: _white.withValues(alpha: .95),
                                   fontSize: 13,

@@ -175,6 +175,15 @@ final class LiveHostTransferredEvent extends LiveRealtimeEvent {
   final LiveParticipant? host;
 }
 
+final class LiveScreenShareChangedEvent extends LiveRealtimeEvent {
+  const LiveScreenShareChangedEvent(
+    this.active, {
+    super.eventVersion,
+    super.versionScope,
+  });
+  final bool active;
+}
+
 abstract final class LiveRealtimeEventParser {
   static LiveRealtimeEvent? parse(Object? rawEvent) {
     final payload = switch (rawEvent) {
@@ -409,6 +418,15 @@ abstract final class LiveRealtimeEventParser {
             eventVersion: eventVersion,
             versionScope: versionScope,
           );
+        case 'room.screen_share_changed':
+          final active = decoded['screen_share'];
+          return active is bool
+              ? LiveScreenShareChangedEvent(
+                  active,
+                  eventVersion: eventVersion,
+                  versionScope: versionScope,
+                )
+              : null;
         default:
           return null;
       }

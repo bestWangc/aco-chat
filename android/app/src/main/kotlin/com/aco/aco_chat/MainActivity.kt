@@ -24,6 +24,7 @@ import com.alivc.livepush.LivePushConfig
 
 class MainActivity : FlutterFragmentActivity() {
     private var liveRoomPictureInPictureEnabled = false
+    private var pictureInPictureChannel: MethodChannel? = null
     private data class PendingStorageSave(
         val save: () -> Unit,
         val deny: () -> Unit,
@@ -34,8 +35,11 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/live-room-picture-in-picture")
-            .setMethodCallHandler { call, result ->
+        pictureInPictureChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "aco/live-room-picture-in-picture",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
                 when (call.method) {
                     "setEnabled" -> {
                         liveRoomPictureInPictureEnabled = call.argument<Boolean>("enabled") ?: false
@@ -45,6 +49,7 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/aliyun-screen-capture")
             .setMethodCallHandler { call, result ->
                 if (call.method == "stop") {
@@ -266,7 +271,17 @@ class MainActivity : FlutterFragmentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (liveRoomPictureInPictureEnabled) enterLiveRoomPictureInPicture()
+        if (liveRoomPictureInPictureEnabled && !isInPictureInPictureMode) {
+            enterLiveRoomPictureInPicture()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+        pictureInPictureChannel?.invokeMethod(
+            "changed",
+            mapOf("isInPictureInPictureMode" to isInPictureInPictureMode),
+        )
     }
 
     private fun enterLiveRoomPictureInPicture(): Boolean {

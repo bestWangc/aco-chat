@@ -99,6 +99,7 @@ import 'package:shadcn_ui/shadcn_ui.dart' as shad;
 import 'package:video_player/video_player.dart';
 import 'package:flutter_aliplayer/flutter_aliplayer.dart' hide TrackType;
 import 'package:flutter_aliplayer/flutter_aliplayer_factory.dart';
+import 'package:flutter_aliplayer/flutter_aliplayer_global_setting.dart';
 import 'package:aco_chat/services/aliyun_screen_broadcast.dart';
 
 import 'package:video_thumbnail/video_thumbnail.dart' as video_thumbnail;
