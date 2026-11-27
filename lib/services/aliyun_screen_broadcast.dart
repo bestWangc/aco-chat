@@ -252,12 +252,10 @@ class _AliyunBroadcastPickerDialogState
 
   @override
   Widget build(BuildContext context) => CupertinoAlertDialog(
-    title: const Text('开始屏幕共享'),
+    title: const Text('开始分享'),
     content: Column(
       children: [
         const SizedBox(height: 12),
-        const Text('点下方系统按钮，选择“开始直播”。'),
-        const SizedBox(height: 18),
         Center(
           child: SizedBox(
             width: 72,
