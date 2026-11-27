@@ -10,7 +10,7 @@ class AcoPalette {
   Color get accent => const Color(0xFFA6DE00);
   Color get accentForeground => dark ? accent : const Color(0xFF557A00);
   Color get background =>
-      dark ? const Color(0xFF000000) : const Color(0xFFF5F6F8);
+      dark ? const Color(0xFF000000) : const Color(0xFFFFFFFF);
   Color get surface => dark ? const Color(0xFF3A3A3A) : const Color(0xFFF4F4F4);
   Color get surfaceRaised =>
       dark ? const Color(0xFF222222) : const Color(0xFFEDEDED);

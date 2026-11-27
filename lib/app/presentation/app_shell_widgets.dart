@@ -1,0 +1,1586 @@
+part of 'aco_app_shell.dart';
+
+class _AcoPageRoute<T> extends CupertinoPageRoute<T> {
+  _AcoPageRoute({required super.builder});
+
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final backgroundColor = CupertinoTheme.of(context).scaffoldBackgroundColor;
+    return ColoredBox(
+      color: backgroundColor,
+      child: super.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      ),
+    );
+  }
+}
+
+class _AcoLiveRoomRoute<T> extends PageRouteBuilder<T> {
+  _AcoLiveRoomRoute({required WidgetBuilder builder})
+    : super(
+        opaque: false,
+        barrierColor: null,
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            builder(context),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            child,
+      );
+}
+
+class _LiveRoomOverlay extends StatefulWidget {
+  const _LiveRoomOverlay({
+    required this.palette,
+    required this.title,
+    required this.roomBuilder,
+  });
+  final AcoPalette palette;
+  final String title;
+  final Widget Function(VoidCallback onMinimize) roomBuilder;
+
+  @override
+  State<_LiveRoomOverlay> createState() => _LiveRoomOverlayState();
+}
+
+class _LiveRoomOverlayState extends State<_LiveRoomOverlay> {
+  bool _minimized = false;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      Offstage(
+        offstage: _minimized,
+        child: widget.roomBuilder(() => setState(() => _minimized = true)),
+      ),
+      if (_minimized)
+        Positioned(
+          right: 16,
+          bottom: 24,
+          child: SafeArea(
+            top: false,
+            left: false,
+            child: GestureDetector(
+              onTap: () => setState(() => _minimized = false),
+              child: Container(
+                width: 236,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: widget.palette.dark
+                      ? const Color(0xFF262626)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x33000000),
+                      blurRadius: 18,
+                      offset: Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.waveform,
+                      size: 20,
+                      color: Color(0xFFA6FF00),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.title.isEmpty ? '会议' : widget.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: widget.palette.primaryText,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Icon(
+                      CupertinoIcons.arrow_up_left,
+                      size: 16,
+                      color: widget.palette.mutedText,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
+
+Route<T> _buildLiveRoomRoute<T>({
+  required AcoPalette palette,
+  required String title,
+  required Widget Function(VoidCallback? onMinimize) roomBuilder,
+}) {
+  Widget buildPage(VoidCallback? onMinimize) => CupertinoPageScaffold(
+    backgroundColor: palette.background,
+    resizeToAvoidBottomInset: true,
+    child: AcoSafeArea(bottom: false, child: roomBuilder(onMinimize)),
+  );
+
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    return _AcoLiveRoomRoute<T>(
+      builder: (_) => _LiveRoomOverlay(
+        palette: palette,
+        title: title,
+        roomBuilder: buildPage,
+      ),
+    );
+  }
+  return _AcoPageRoute<T>(builder: (_) => buildPage(null));
+}
+
+class AcoScreenPage extends StatelessWidget {
+  const AcoScreenPage({
+    required this.screen,
+    required this.dark,
+    required this.isRoot,
+    required this.onOpen,
+    required this.onThemeToggle,
+    this.onWalletReady,
+    this.onWalletSelected,
+    this.onWalletDeleted,
+    this.onWalletTotalChanged,
+    this.displayName,
+    this.accountId,
+    this.chatUserID,
+    this.chatGroupID,
+    this.chatName,
+    this.chatConversationID,
+    this.walletLoginFuture,
+    this.username,
+    this.avatarUrl,
+    this.identity = 0,
+    this.staffIdentity = 0,
+    this.walletIdentity,
+    this.walletSecretStore,
+    this.walletName = 'Wallet1',
+    this.walletTotals = const <String, double>{},
+    this.onWalletNameChanged,
+    this.walletChainIndex = 0,
+    this.walletAssetRevision = 0,
+    this.onWalletChainSelected,
+    this.initialDexSection = 1,
+    this.transferToken,
+    this.onSendTokenSelected,
+    this.selectedAsset,
+    this.walletTransactionService,
+    this.onAssetSelected,
+    this.onDisplayNameChanged,
+    this.onUsernameChanged,
+    this.onAvatarUrlChanged,
+    this.language = '简体中文',
+    this.liveListRevision = 0,
+    this.onLanguageChanged,
+    this.live,
+    this.initialLives,
+    this.hasAppUpdate = false,
+    this.onOpenAppUpdate,
+    super.key,
+  });
+
+  final AcoScreen screen;
+  final bool dark;
+  final bool isRoot;
+  final ValueChanged<AcoScreen> onOpen;
+  final VoidCallback onThemeToggle;
+  final Future<void> Function(WalletIdentity, String)? onWalletReady;
+  final Future<void> Function(WalletIdentity)? onWalletSelected;
+  final Future<void> Function(WalletIdentity)? onWalletDeleted;
+  final ValueChanged<double>? onWalletTotalChanged;
+  final String? displayName;
+  final String? accountId;
+  final String? chatUserID;
+  final String? chatGroupID;
+  final String? chatName;
+  final String? chatConversationID;
+  final Future<AccountProfile?>? walletLoginFuture;
+  final String? username;
+  final String? avatarUrl;
+  final int identity;
+  final int staffIdentity;
+  final WalletIdentity? walletIdentity;
+  final WalletSecretStore? walletSecretStore;
+  final String walletName;
+  final Map<String, double> walletTotals;
+  final Future<void> Function(String name)? onWalletNameChanged;
+  final int walletChainIndex;
+  final int walletAssetRevision;
+  final ValueChanged<int>? onWalletChainSelected;
+  final int initialDexSection;
+  final TransferToken? transferToken;
+  final ValueChanged<TransferToken>? onSendTokenSelected;
+  final WalletBalance? selectedAsset;
+  final WalletTransactionService? walletTransactionService;
+  final ValueChanged<WalletBalance>? onAssetSelected;
+  final ValueChanged<String>? onDisplayNameChanged;
+  final ValueChanged<String>? onUsernameChanged;
+  final ValueChanged<String>? onAvatarUrlChanged;
+  final String language;
+  final int liveListRevision;
+  final ValueChanged<String>? onLanguageChanged;
+  final LiveSession? live;
+  final List<LiveSession>? initialLives;
+  final bool hasAppUpdate;
+  final Future<bool> Function()? onOpenAppUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AcoPalette(dark);
+    final currentDisplayName = displayName;
+    final currentAccountId = accountId;
+    final currentUsername = username;
+    final isProfileUnavailable =
+        currentDisplayName == null ||
+        currentAccountId == null ||
+        currentUsername == null;
+    final VoidCallback? profileOnBack = isRoot
+        ? null
+        : () => Navigator.of(context).maybePop();
+    final VoidCallback secondaryProfileOnBack = () =>
+        Navigator.of(context).maybePop();
+    final page = switch (screen) {
+      AcoScreen.walletHome => _WalletHome(
+        key: ValueKey('wallet-home-$walletAssetRevision'),
+        palette: palette,
+        onOpen: onOpen,
+        walletIdentity: walletIdentity,
+        walletLoginFuture: walletLoginFuture,
+        walletName: walletName,
+        onTotalBalanceChanged: onWalletTotalChanged,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+        onSendTokenSelected: onSendTokenSelected ?? (_) {},
+        onAssetSelected: onAssetSelected ?? (_) {},
+      ),
+      AcoScreen.walletChains => _WalletChains(
+        palette: palette,
+        onOpen: onOpen,
+        walletIdentity: walletIdentity,
+        walletName: walletName,
+        walletTotals: walletTotals,
+        selectedChain: walletChainIndex,
+        onChainSelected: onWalletChainSelected ?? (_) {},
+        onWalletSelected: onWalletSelected ?? (_) async {},
+      ),
+      AcoScreen.walletSwitcher => _WalletChains(
+        palette: palette,
+        onOpen: onOpen,
+        walletIdentity: walletIdentity,
+        walletName: walletName,
+        walletTotals: walletTotals,
+        selectedChain: walletChainIndex,
+        onChainSelected: onWalletChainSelected ?? (_) {},
+        onWalletSelected: onWalletSelected ?? (_) async {},
+      ),
+      AcoScreen.walletSetupCreate => _WalletSetupFlow(
+        dark: dark,
+        mode: _WalletSetupMode.create,
+        requireSecuritySetup: false,
+        passwordWalletIdentity: walletIdentity,
+        onBack: () => Navigator.of(context).pop(),
+        onComplete: onWalletReady ?? (_, _) async {},
+      ),
+      AcoScreen.walletSetupImport => _WalletSetupFlow(
+        dark: dark,
+        mode: _WalletSetupMode.import,
+        requireSecuritySetup: false,
+        passwordWalletIdentity: walletIdentity,
+        onBack: () => Navigator.of(context).pop(),
+        onComplete: onWalletReady ?? (_, _) async {},
+      ),
+      AcoScreen.assetDetail => _AssetDetail(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+        walletName: walletName,
+        onWalletNameChanged: onWalletNameChanged,
+        onWalletDeleted: onWalletDeleted,
+        onOpen: onOpen,
+      ),
+      AcoScreen.tokenDetail =>
+        selectedAsset == null
+            ? const _ComingSoonPage()
+            : _TokenDetailPage(
+                palette: palette,
+                balance: selectedAsset!,
+                walletIdentity: walletIdentity,
+                selectedChain: _supportedWalletChains[walletChainIndex],
+                onOpen: onOpen,
+                transactionService: walletTransactionService,
+                onSendTokenSelected: onSendTokenSelected,
+              ),
+      AcoScreen.backupMnemonic => _BackupMnemonicFlow(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        secretStore: walletSecretStore ?? SecureWalletSecretStore(),
+      ),
+      AcoScreen.exportPrivateKey => _BackupMnemonicFlow(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        secretStore: walletSecretStore ?? SecureWalletSecretStore(),
+        exportType: _SensitiveExportType.privateKey,
+      ),
+      AcoScreen.send => _SendTransferPage(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        secretStore: walletSecretStore ?? SecureWalletSecretStore(),
+        token:
+            transferToken ??
+            _transferTokensForChain(
+              _supportedWalletChains[walletChainIndex],
+            ).first,
+      ),
+      AcoScreen.receive => _ReceivePage(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+      ),
+      AcoScreen.scan => _ScanPage(
+        palette: palette,
+        currentAccountId: currentAccountId,
+      ),
+      AcoScreen.addTokenV1 => _AddTokenPage(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+      ),
+      AcoScreen.addTokenV2 => _AddTokenPage(
+        palette: palette,
+        walletIdentity: walletIdentity,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+      ),
+      AcoScreen.dexToken => _DexTokenPage(
+        palette: palette,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+        walletIdentity: walletIdentity,
+        avatarUrl: avatarUrl ?? '',
+        onOpen: onOpen,
+        initialSection: initialDexSection,
+      ),
+      AcoScreen.browserDiscover => _BrowserDiscoverPage(
+        palette: palette,
+        onOpen: onOpen,
+        selectedChain: _supportedWalletChains[walletChainIndex],
+        walletIdentity: walletIdentity,
+        onChainSelected: onWalletChainSelected ?? (_) {},
+      ),
+      AcoScreen.marketOverview => _MarketOverviewPage(palette: palette),
+      AcoScreen.squareFeed => _SquareFeedPage(
+        palette: palette,
+        onOpen: onOpen,
+        avatarUrl: avatarUrl,
+        identity: identity,
+        staffIdentity: staffIdentity,
+        walletLoginFuture: walletLoginFuture,
+        liveListRevision: liveListRevision,
+        initialLives: initialLives,
+      ),
+      AcoScreen.socialMessages => _SocialMessagesPage(
+        palette: palette,
+        onOpen: onOpen,
+        avatarUrl: avatarUrl,
+      ),
+      AcoScreen.chatV1 => _ChatPage(
+        palette: palette,
+        version: 1,
+        ownAvatarUrl: avatarUrl,
+        peerUserID: chatUserID,
+        groupID: chatGroupID,
+        peerName: chatName,
+        conversationID: chatConversationID,
+      ),
+      AcoScreen.chatV2 => _ChatPage(
+        palette: palette,
+        version: 2,
+        ownAvatarUrl: avatarUrl,
+        peerUserID: chatUserID,
+        groupID: chatGroupID,
+        peerName: chatName,
+        conversationID: chatConversationID,
+      ),
+      AcoScreen.liveStream => _LiveStreamPage(palette: palette, onOpen: onOpen),
+      AcoScreen.voiceRoom => _VoiceRoomPage(palette: palette, live: live),
+      AcoScreen.mining => _MiningPage(palette: palette),
+      AcoScreen.profile =>
+        isProfileUnavailable
+            ? _ProfileUnavailablePage(palette: palette, onBack: profileOnBack)
+            : _ProfilePage(
+                palette: palette,
+                onOpen: onOpen,
+                displayName: currentDisplayName,
+                accountId: currentAccountId,
+                username: currentUsername,
+                identity: identity,
+                staffIdentity: staffIdentity,
+                avatarUrl: avatarUrl ?? '',
+                hasAppUpdate: hasAppUpdate,
+                onOpenAppUpdate: onOpenAppUpdate ?? () async => false,
+                onBack: profileOnBack,
+              ),
+      AcoScreen.profileEdit =>
+        isProfileUnavailable
+            ? _ProfileUnavailablePage(
+                palette: palette,
+                onBack: secondaryProfileOnBack,
+              )
+            : _ProfileEditPage(
+                palette: palette,
+                initialName: currentDisplayName,
+                initialUsername: currentUsername,
+                accountId: currentAccountId,
+                initialAvatarUrl: avatarUrl ?? '',
+                onDisplayNameChanged: onDisplayNameChanged,
+                onUsernameChanged: onUsernameChanged,
+                onAvatarUrlChanged: onAvatarUrlChanged,
+              ),
+      AcoScreen.profileQr =>
+        isProfileUnavailable
+            ? _ProfileUnavailablePage(
+                palette: palette,
+                onBack: secondaryProfileOnBack,
+              )
+            : _ProfileQrPage(
+                palette: palette,
+                displayName: currentDisplayName,
+                accountId: currentAccountId,
+                username: currentUsername,
+                avatarUrl: avatarUrl ?? '',
+                onBack: secondaryProfileOnBack,
+              ),
+      AcoScreen.profileTheme => _ThemeSettingsPage(
+        palette: palette,
+        dark: dark,
+        onThemeToggle: onThemeToggle,
+      ),
+      AcoScreen.profileLanguage => _LanguageSettingsPage(
+        palette: palette,
+        initialLanguage: language,
+        onLanguageChanged: onLanguageChanged,
+      ),
+      AcoScreen.comingSoon => const _ComingSoonPage(),
+      AcoScreen.createLive => _CreateLivePage(
+        palette: palette,
+        walletLoginFuture: walletLoginFuture,
+      ),
+    };
+
+    return AcoSafeAreaPage(
+      backgroundColor: dark && screen == AcoScreen.walletHome
+          ? _black
+          : palette.background,
+      applyTopSafeArea: !isRoot,
+      child: page,
+    );
+  }
+}
+
+/// Shared full-size viewport for every design page.
+/// Secondary pages receive the top inset here; child pages must not add a
+/// second SafeArea or their content will be pushed down twice on notched
+/// devices.
+class AcoSafeAreaPage extends StatelessWidget {
+  const AcoSafeAreaPage({
+    required this.child,
+    required this.backgroundColor,
+    required this.applyTopSafeArea,
+    super.key,
+  });
+
+  final Widget child;
+  final Color backgroundColor;
+  final bool applyTopSafeArea;
+
+  @override
+  Widget build(BuildContext context) => SizedBox.expand(
+    child: ColoredBox(
+      color: backgroundColor,
+      child: _AcoViewport(
+        child: AcoSafeArea(
+          top: applyTopSafeArea,
+          minimum: EdgeInsets.zero,
+          left: false,
+          right: false,
+          bottom: false,
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
+/// The only SafeArea entry point used by design pages and overlays.
+class AcoSafeArea extends StatelessWidget {
+  const AcoSafeArea({
+    required this.child,
+    this.top = true,
+    this.bottom = true,
+    this.left = true,
+    this.right = true,
+    this.maintainBottomViewPadding = false,
+    this.minimum = EdgeInsets.zero,
+    super.key,
+  });
+
+  final Widget child;
+  final bool top;
+  final bool bottom;
+  final bool left;
+  final bool right;
+  final bool maintainBottomViewPadding;
+  final EdgeInsets minimum;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    top: top,
+    bottom: bottom,
+    left: left,
+    right: right,
+    maintainBottomViewPadding: maintainBottomViewPadding,
+    minimum: minimum,
+    child: child,
+  );
+}
+
+class _AcoViewport extends StatelessWidget {
+  const _AcoViewport({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => ScrollConfiguration(
+    behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+    child: child,
+  );
+}
+
+class AcoBottomNav extends StatelessWidget {
+  const AcoBottomNav({
+    required this.selected,
+    required this.dark,
+    required this.onSelected,
+    this.showSocialBadge = false,
+    this.backgroundColor,
+    super.key,
+  });
+
+  final int selected;
+  final bool dark;
+  final ValueChanged<int> onSelected;
+  final bool showSocialBadge;
+  final Color? backgroundColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = AcoPalette(dark);
+    return ColoredBox(
+      color:
+          backgroundColor ??
+          (dark ? const Color(0xFF000000) : palette.background),
+      child: AcoSafeArea(
+        top: false,
+        left: false,
+        right: false,
+        maintainBottomViewPadding: true,
+        child: SizedBox(
+          height: 58,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var index = 0; index < _navLabels.length; index++)
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    selected: selected == index,
+                    label: appText(context, _navLabels[index]),
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => onSelected(index),
+                      child: SizedBox.expand(
+                        child: _FigmaNavItem(
+                          index: index,
+                          selected: selected == index,
+                          palette: palette,
+                          showBadge: showSocialBadge && index == 4,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FigmaNavItem extends StatefulWidget {
+  const _FigmaNavItem({
+    required this.index,
+    required this.selected,
+    required this.palette,
+    this.showBadge = false,
+  });
+
+  final int index;
+  final bool selected;
+  final AcoPalette palette;
+  final bool showBadge;
+
+  @override
+  State<_FigmaNavItem> createState() => _FigmaNavItemState();
+}
+
+class _OneShotNavGif extends StatefulWidget {
+  const _OneShotNavGif({required this.asset, required this.onCompleted});
+
+  final String asset;
+  final VoidCallback onCompleted;
+
+  @override
+  State<_OneShotNavGif> createState() => _OneShotNavGifState();
+}
+
+class _OneShotNavGifState extends State<_OneShotNavGif> {
+  ui.Codec? _codec;
+  ui.Image? _image;
+  final _decodedFrames = <ui.Image>[];
+  Timer? _frameTimer;
+  var _frameCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _play();
+  }
+
+  Future<void> _play() async {
+    try {
+      final data = await rootBundle.load(widget.asset);
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      if (!mounted) {
+        codec.dispose();
+        return;
+      }
+      _codec = codec;
+      await _showNextFrame();
+    } catch (_) {
+      if (mounted) widget.onCompleted();
+    }
+  }
+
+  Future<void> _showNextFrame() async {
+    final codec = _codec;
+    if (codec == null) return;
+    try {
+      final frame = await codec.getNextFrame();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      _decodedFrames.add(frame.image);
+      setState(() {
+        _image = frame.image;
+        _frameCount++;
+      });
+      _frameTimer = Timer(
+        frame.duration,
+        _frameCount == codec.frameCount ? widget.onCompleted : _showNextFrame,
+      );
+    } catch (_) {
+      if (mounted) widget.onCompleted();
+    }
+  }
+
+  @override
+  void dispose() {
+    _frameTimer?.cancel();
+    _codec?.dispose();
+    for (final frame in _decodedFrames) {
+      frame.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      RawImage(image: _image, fit: BoxFit.contain);
+}
+
+class _FigmaNavItemState extends State<_FigmaNavItem> {
+  bool _playingWalletTransition = false;
+  bool _playingExploreTransition = false;
+  bool _playingSquareTransition = false;
+  bool _playingSocialTransition = false;
+  bool _playingDexTransition = false;
+  @override
+  void didUpdateWidget(covariant _FigmaNavItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index == 0 && !oldWidget.selected && widget.selected) {
+      _playingWalletTransition = true;
+    } else if (widget.index == 0 && !widget.selected) {
+      _playingWalletTransition = false;
+    }
+    if (widget.index == 1 && !oldWidget.selected && widget.selected) {
+      _playingExploreTransition = true;
+    } else if (widget.index == 1 && !widget.selected) {
+      _playingExploreTransition = false;
+    }
+    if (widget.index == 3 && !oldWidget.selected && widget.selected) {
+      _playingSquareTransition = true;
+    } else if (widget.index == 3 && !widget.selected) {
+      _playingSquareTransition = false;
+    }
+    if (widget.index == 4 && !oldWidget.selected && widget.selected) {
+      _playingSocialTransition = true;
+    } else if (widget.index == 4 && !widget.selected) {
+      _playingSocialTransition = false;
+    }
+    if (widget.index == 2 && !oldWidget.selected && widget.selected) {
+      _playingDexTransition = true;
+    } else if (widget.index == 2 && !widget.selected) {
+      _playingDexTransition = false;
+    }
+  }
+
+  Widget _buildTransitionIcon({
+    required String transitionAsset,
+    required VoidCallback onCompleted,
+    double scale = 1,
+  }) => Center(
+    child: Transform.scale(
+      scale: scale,
+      child: _OneShotNavGif(asset: transitionAsset, onCompleted: onCompleted),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final index = widget.index;
+    final selected = widget.selected;
+    final palette = widget.palette;
+    final Color color;
+    if (selected) {
+      color = palette.dark ? _walletHeaderLime : palette.accentForeground;
+    } else {
+      color = palette.dark ? _walletNavInactive : palette.navInactive;
+    }
+    if (index == 2) {
+      return ExcludeSemantics(
+        child: _DexBottomNavIcon(
+          selected: selected,
+          playingTransition: _playingDexTransition,
+          onTransitionCompleted: () {
+            if (mounted) setState(() => _playingDexTransition = false);
+          },
+        ),
+      );
+    }
+    // Normal navigation icons share one visual scale. DEX returned above.
+    const iconSize = Size(30, 30);
+    final iconAsset = switch (index) {
+      0 =>
+        selected
+            ? 'assets/icons/wallet_nav_transition_end.png'
+            : 'assets/icons/wallet_nav_inactive.png',
+      1 =>
+        selected
+            ? 'assets/icons/explore_nav_transition_end.png'
+            : 'assets/icons/explore_nav_inactive.png',
+      3 =>
+        selected
+            ? 'assets/icons/square_nav_active.png'
+            : 'assets/icons/square_nav_inactive.png',
+      4 =>
+        selected
+            ? 'assets/icons/social_nav_transition_end.png'
+            : 'assets/icons/social_nav_inactive.png',
+      _ => null,
+    };
+    final icon = iconAsset == null
+        ? ColorFiltered(
+            colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+            child: Image.asset(_navAssets[index], fit: BoxFit.contain),
+          )
+        : Image.asset(iconAsset, fit: BoxFit.contain);
+    var displayedIcon = icon;
+    if (index == 0 && selected) {
+      displayedIcon = _playingWalletTransition
+          ? _buildTransitionIcon(
+              transitionAsset: 'assets/icons/wallet_nav_transition.gif',
+              scale: .8,
+              onCompleted: () {
+                if (mounted) setState(() => _playingWalletTransition = false);
+              },
+            )
+          : Transform.scale(scale: .8, child: icon);
+    } else if (index == 1 && selected && _playingExploreTransition) {
+      displayedIcon = _buildTransitionIcon(
+        transitionAsset: 'assets/icons/explore_nav_transition.gif',
+        onCompleted: () {
+          if (mounted) setState(() => _playingExploreTransition = false);
+        },
+      );
+    } else if (index == 3 && selected && _playingSquareTransition) {
+      displayedIcon = _buildTransitionIcon(
+        transitionAsset: 'assets/icons/square_nav_transition.gif',
+        scale: .88,
+        onCompleted: () {
+          if (mounted) setState(() => _playingSquareTransition = false);
+        },
+      );
+    } else if (index == 4 && selected && _playingSocialTransition) {
+      displayedIcon = _buildTransitionIcon(
+        transitionAsset: 'assets/icons/social_nav_transition.gif',
+        onCompleted: () {
+          if (mounted) setState(() => _playingSocialTransition = false);
+        },
+      );
+    }
+    return ExcludeSemantics(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // All icons share the same bottom edge, then the label follows
+          // immediately. This avoids SVG-specific offsets.
+          SizedBox(
+            height: 30,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Transform.translate(
+                    offset: const Offset(0, 4),
+                    child: SizedBox(
+                      width: iconSize.width,
+                      height: iconSize.height,
+                      child: displayedIcon,
+                    ),
+                  ),
+                ),
+                if (widget.showBadge)
+                  Positioned(
+                    right: 16,
+                    top: 0,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: _danger,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 13),
+          Text(
+            appText(context, _navLabels[index]),
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              height: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DexBottomNavIcon extends StatelessWidget {
+  const _DexBottomNavIcon({
+    required this.selected,
+    required this.playingTransition,
+    required this.onTransitionCompleted,
+  });
+
+  final bool selected;
+  final bool playingTransition;
+  final VoidCallback onTransitionCompleted;
+
+  @override
+  Widget build(BuildContext context) {
+    final asset = selected
+        ? 'assets/icons/dex_nav_transition_end.png'
+        : 'assets/icons/source_dex_inactive.png';
+    final icon = playingTransition
+        ? _OneShotNavGif(
+            asset: 'assets/icons/dex_nav_transition.gif',
+            onCompleted: onTransitionCompleted,
+          )
+        : Image.asset(asset, key: ValueKey(asset), fit: BoxFit.contain);
+    return Padding(
+      // DEX is a two-part mark (wordmark + triangle), not an icon with a label.
+      // Its visual bounds are intentionally taller and sit slightly higher than
+      // the four regular navigation destinations.
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        width: 40,
+        height: 38,
+        child: Transform.translate(
+          offset: const Offset(0, -16),
+          child: Transform.scale(scale: .90, child: icon),
+        ),
+      ),
+    );
+  }
+}
+
+class AcoTopActions extends StatelessWidget {
+  const AcoTopActions({required this.palette, required this.onOpen, super.key});
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _AcoDesignActionButton(
+        asset: 'assets/icons/source_scan_custom.png',
+        palette: palette,
+        label: '扫描二维码',
+        onPressed: () => onOpen(AcoScreen.scan),
+      ),
+      const SizedBox(width: 16),
+      _AcoDesignActionButton(
+        asset: 'assets/icons/source_person_custom.png',
+        palette: palette,
+        label: '账户',
+        onPressed: () => onOpen(AcoScreen.profile),
+      ),
+    ],
+  );
+}
+
+class _AcoDesignActionButton extends StatelessWidget {
+  const _AcoDesignActionButton({
+    required this.asset,
+    required this.palette,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String asset;
+  final AcoPalette palette;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onPressed,
+      child: ColorFiltered(
+        colorFilter: ColorFilter.mode(
+          palette.dark ? _white : palette.primaryText,
+          BlendMode.srcIn,
+        ),
+        child: Image.asset(
+          asset,
+          // Keep the original aspect ratio while using the icon itself as the
+          // compact action target.
+          width: 19,
+        ),
+      ),
+    ),
+  );
+}
+
+class AcoRootHeader extends StatelessWidget {
+  const AcoRootHeader({
+    required this.palette,
+    required this.onOpen,
+    this.title,
+    this.trailing,
+    this.onLeadingPressed,
+    this.leadingButtonOffset = Offset.zero,
+    super.key,
+  });
+
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+  final String? title;
+  final Widget? trailing;
+  final VoidCallback? onLeadingPressed;
+  final Offset leadingButtonOffset;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 46,
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        if (onLeadingPressed != null)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Transform.translate(
+              offset: leadingButtonOffset,
+              child: AcoIconButton(
+                icon: CupertinoIcons.back,
+                palette: palette,
+                label: '返回',
+                onPressed: onLeadingPressed!,
+              ),
+            ),
+          ),
+        if (title != null)
+          Text(
+            title!,
+            style: TextStyle(
+              color: palette.primaryText,
+              fontSize: AcoTypography.title,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: trailing ?? AcoTopActions(palette: palette, onOpen: onOpen),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _TokenMark extends StatelessWidget {
+  const _TokenMark();
+
+  @override
+  Widget build(BuildContext context) => Transform.rotate(
+    angle: 0.785398,
+    child: Container(
+      width: 24,
+      height: 24,
+      decoration: BoxDecoration(
+        color: const Color(0xFF969DBE),
+        borderRadius: BorderRadius.circular(2),
+      ),
+    ),
+  );
+}
+
+class _NetworkGlyph extends StatelessWidget {
+  const _NetworkGlyph({required this.color});
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => SvgPicture.asset(
+    'assets/icons/lucide/network.svg',
+    width: 24,
+    height: 24,
+    colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+  );
+}
+
+class AcoSurface extends StatelessWidget {
+  const AcoSurface({
+    required this.palette,
+    required this.child,
+    this.padding = const EdgeInsets.all(16),
+    this.radius = 18,
+    this.border = false,
+    this.cardBorder,
+    this.backgroundColor,
+    this.minHeight,
+    super.key,
+  });
+  final AcoPalette palette;
+  final Widget child;
+  final EdgeInsets padding;
+  final double radius;
+  final bool border;
+  final shad.ShadBorder? cardBorder;
+  final Color? backgroundColor;
+  final double? minHeight;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    constraints: minHeight == null
+        ? null
+        : BoxConstraints(minHeight: minHeight!),
+    decoration: BoxDecoration(
+      border: border ? Border.all(color: palette.border) : null,
+      borderRadius: BorderRadius.circular(radius),
+    ),
+    child: shad.ShadCard(
+      padding: padding,
+      radius: BorderRadius.circular(radius),
+      border: cardBorder,
+      backgroundColor: backgroundColor ?? palette.surface,
+      child: child,
+    ),
+  );
+}
+
+class AcoLimeButton extends StatelessWidget {
+  const AcoLimeButton({
+    required this.label,
+    required this.onPressed,
+    this.icon,
+    this.compact = false,
+    this.height,
+    this.fontSize = AcoTypography.bodySmall,
+    this.backgroundColor = _lime,
+    this.foregroundColor = _black,
+    this.fontWeight = FontWeight.w700,
+    super.key,
+  });
+  final String label;
+  final VoidCallback onPressed;
+  final IconData? icon;
+  final bool compact;
+  final double? height;
+  final double fontSize;
+  final Color backgroundColor;
+  final Color foregroundColor;
+  final FontWeight fontWeight;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: height ?? (compact ? 36 : 42),
+    child: shad.ShadButton(
+      backgroundColor: backgroundColor,
+      foregroundColor: foregroundColor,
+      padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16),
+      onPressed: onPressed,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: foregroundColor, size: 17),
+            const SizedBox(width: 5),
+          ],
+          Text(
+            label,
+            style: TextStyle(fontSize: fontSize, fontWeight: fontWeight),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+enum AcoSearchVariant { standard, squareComposer }
+
+class AcoSearch extends StatelessWidget {
+  const AcoSearch({
+    required this.palette,
+    required this.hint,
+    this.onSubmit,
+    this.action,
+    this.height = 42,
+    this.hintFontSize = 18,
+    this.submitIcon = CupertinoIcons.arrow_right,
+    this.variant = AcoSearchVariant.standard,
+    this.showSubmit = false,
+    this.textController,
+    this.onTextSubmitted,
+    this.keyboardType,
+    this.textInputAction,
+    super.key,
+  });
+  final AcoPalette palette;
+  final String hint;
+  final VoidCallback? onSubmit;
+  final Widget? action;
+  final double height;
+  final double hintFontSize;
+  final IconData submitIcon;
+  final AcoSearchVariant variant;
+  final bool showSubmit;
+  final TextEditingController? textController;
+  final ValueChanged<String>? onTextSubmitted;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSquareComposer = variant == AcoSearchVariant.squareComposer;
+    final submitWidth = isSquareComposer ? 48.0 : height;
+    final borderColor = _borderColor();
+    var hintColor = palette.mutedText;
+    if (palette.dark) {
+      hintColor = isSquareComposer
+          ? const Color(0xFFF2F2F2)
+          : const Color(0xFF888888);
+    }
+    final submitChild = _buildSubmitChild(isSquareComposer);
+
+    return Container(
+      height: height,
+      clipBehavior: isSquareComposer ? Clip.antiAlias : Clip.none,
+      decoration: BoxDecoration(
+        color: palette.background,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(height / 2),
+      ),
+      child: Row(
+        children: [
+          SizedBox(width: isSquareComposer ? 14 : 18),
+          if (isSquareComposer)
+            SizedBox(
+              width: 20,
+              height: 16,
+              child: Image.asset(
+                'assets/icons/square_search.png',
+                filterQuality: FilterQuality.high,
+              ),
+            )
+          else
+            Image.asset(
+              'assets/icons/search_input.png',
+              width: 20,
+              filterQuality: FilterQuality.high,
+            ),
+          SizedBox(width: isSquareComposer ? 8 : 12),
+          Expanded(
+            child: Transform.translate(
+              offset: Offset(0, isSquareComposer ? 1 : 0),
+              child: textController == null
+                  ? Text(
+                      hint,
+                      style: TextStyle(
+                        color: hintColor,
+                        fontSize: isSquareComposer
+                            ? AcoTypography.caption
+                            : hintFontSize,
+                      ),
+                    )
+                  : CupertinoTextField(
+                      controller: textController,
+                      keyboardType: keyboardType,
+                      textInputAction: textInputAction,
+                      onSubmitted: onTextSubmitted,
+                      placeholder: hint,
+                      cursorColor: palette.accent,
+                      textAlignVertical: TextAlignVertical.center,
+                      style: TextStyle(
+                        color: hintColor,
+                        fontSize: isSquareComposer
+                            ? AcoTypography.caption
+                            : hintFontSize,
+                      ),
+                      placeholderStyle: TextStyle(
+                        color: hintColor,
+                        fontSize: isSquareComposer
+                            ? AcoTypography.caption
+                            : hintFontSize,
+                      ),
+                      decoration: null,
+                      padding: EdgeInsets.zero,
+                      maxLines: 1,
+                    ),
+            ),
+          ),
+          ?action,
+          if (onSubmit != null || showSubmit)
+            CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size(submitWidth, height),
+              onPressed: onSubmit,
+              child: Container(
+                key: isSquareComposer
+                    ? const Key('square-search-submit')
+                    : null,
+                width: submitWidth,
+                height: height,
+                decoration: BoxDecoration(
+                  color: isSquareComposer ? const Color(0xFFD7D7D7) : _lime,
+                  borderRadius: BorderRadius.circular(height / 2),
+                ),
+                child: submitChild,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Color _borderColor() {
+    if (!palette.dark) return palette.border;
+    return const Color(0xFFD7D7D7);
+  }
+
+  Widget _buildSubmitChild(bool isSquareComposer) {
+    if (submitIcon != CupertinoIcons.add) {
+      return Icon(submitIcon, color: _black, size: height > 48 ? 30 : 24);
+    }
+
+    if (isSquareComposer) {
+      return Center(
+        child: SizedBox(
+          width: 14,
+          height: 14,
+          child: Image.asset(
+            'assets/icons/square_search_add.png',
+            filterQuality: FilterQuality.high,
+          ),
+        ),
+      );
+    }
+
+    final plusAsset = palette.dark
+        ? 'assets/icons/design_plus_dark.png'
+        : 'assets/icons/design_plus_light.png';
+    return Center(
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: Image.asset(plusAsset, filterQuality: FilterQuality.high),
+      ),
+    );
+  }
+}
+
+const _defaultAvatarAsset = 'assets/images/default_avatar.png';
+const _liveRoomHostAvatarAsset = 'assets/design_svg/source/images/img3.jpg';
+const _liveRoomListenerAvatarAsset = 'assets/design_svg/source/images/img5.jpg';
+
+class _AlphabetIndex extends StatelessWidget {
+  const _AlphabetIndex({required this.letters, required this.onLetterTap});
+
+  final List<String> letters;
+  final ValueChanged<String> onLetterTap;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final fittedFontSize = constraints.maxHeight / letters.length;
+      final fontSize = fittedFontSize < 14 ? fittedFontSize : 14.0;
+      final compact = letters.length * 24 <= constraints.maxHeight;
+      return Column(
+        mainAxisAlignment: compact
+            ? MainAxisAlignment.start
+            : MainAxisAlignment.spaceBetween,
+        children: [
+          for (final letter in letters)
+            Padding(
+              padding: EdgeInsets.only(bottom: compact ? 8 : 0),
+              child: GestureDetector(
+                onTap: () => onLetterTap(letter),
+                behavior: HitTestBehavior.opaque,
+                child: Text(
+                  letter,
+                  style: TextStyle(
+                    color: const Color(0xFF858585),
+                    fontSize: fontSize,
+                    height: 1,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    },
+  );
+}
+
+class AcoAvatar extends StatelessWidget {
+  const AcoAvatar({
+    this.large = false,
+    this.size,
+    this.assetPath = _defaultAvatarAsset,
+    this.imageUrl,
+    super.key,
+  });
+  final bool large;
+  final double? size;
+  final String assetPath;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolvedSize = size ?? (large ? 76.0 : 42.0);
+    final parsed = imageUrl == null || imageUrl!.isEmpty
+        ? null
+        : Uri.tryParse(imageUrl!);
+    final url = parsed?.hasScheme == true
+        ? imageUrl
+        : (parsed == null
+              ? null
+              : Uri.parse(
+                  const AppConfig().apiBaseUrl,
+                ).replace(path: parsed.path).toString());
+    final fallback = Image.asset(
+      assetPath,
+      width: resolvedSize,
+      height: resolvedSize,
+      fit: BoxFit.cover,
+      semanticLabel: '用户头像',
+    );
+    return ClipOval(
+      child: url == null
+          ? fallback
+          : AcoNetworkImage(
+              url: url,
+              width: resolvedSize,
+              height: resolvedSize,
+              memCacheWidth:
+                  (resolvedSize * MediaQuery.devicePixelRatioOf(context))
+                      .round(),
+              memCacheHeight:
+                  (resolvedSize * MediaQuery.devicePixelRatioOf(context))
+                      .round(),
+              fit: BoxFit.cover,
+              semanticLabel: '用户头像',
+              errorWidget: (context, url, error) => fallback,
+            ),
+    );
+  }
+}
+
+void _showNotice(BuildContext context, String title, String message) {
+  showCupertinoModalPopup<void>(
+    context: context,
+    builder: (sheetContext) {
+      const themeColor = _accentGreen;
+      return CupertinoActionSheet(
+        title: Text(
+          appText(context, title),
+          style: TextStyle(
+            fontSize: AcoTypography.body,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        message: Text(
+          appText(context, message),
+          style: TextStyle(fontSize: AcoTypography.caption),
+        ),
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: Text(
+              appText(context, '知道了'),
+              style: TextStyle(color: themeColor, fontSize: AcoTypography.body),
+            ),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: Text(
+            appText(context, '取消'),
+            style: TextStyle(color: themeColor, fontSize: AcoTypography.body),
+          ),
+        ),
+      );
+    },
+  );
+}
+
+void showAcoAlertNotice(BuildContext context, String title, String message) {
+  showCupertinoDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      final themeColor = CupertinoTheme.of(dialogContext).primaryColor;
+      return CupertinoAlertDialog(
+        title: Text(title, style: TextStyle(color: themeColor)),
+        content: Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(message, style: TextStyle(color: themeColor)),
+        ),
+        actions: [
+          CupertinoDialogAction(
+            isDefaultAction: true,
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text('知道了', style: TextStyle(color: themeColor)),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+void showCheckInSuccessDialog(BuildContext context) {
+  final palette = AcoPalette(
+    CupertinoTheme.brightnessOf(context) == Brightness.dark,
+  );
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: _black.withValues(alpha: .55),
+    pageBuilder: (dialogContext, _, _) => Center(
+      child: SizedBox(
+        width: 300,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+          decoration: BoxDecoration(
+            color: palette.surfaceRaised,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox.square(
+                dimension: 80,
+                child: ClipOval(
+                  child: Image.asset(
+                    'assets/images/check_in_success.png',
+                    fit: BoxFit.cover,
+                    semanticLabel: '签到成功',
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '签到成功',
+                style: TextStyle(
+                  color: palette.primaryText,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: 240,
+                height: 32,
+                child: CupertinoButton(
+                  padding: EdgeInsets.zero,
+                  borderRadius: BorderRadius.circular(16),
+                  color: _accentGreen,
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    '我知道了',
+                    style: TextStyle(
+                      color: _black,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}

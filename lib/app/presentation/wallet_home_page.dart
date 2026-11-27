@@ -1,0 +1,842 @@
+part of 'aco_app_shell.dart';
+
+class _WalletHome extends StatefulWidget {
+  const _WalletHome({
+    super.key,
+    required this.palette,
+    required this.onOpen,
+    required this.selectedChain,
+    required this.onSendTokenSelected,
+    required this.onAssetSelected,
+    required this.walletName,
+    this.onTotalBalanceChanged,
+    this.walletIdentity,
+    this.walletLoginFuture,
+  });
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+  final _WalletChain selectedChain;
+  final ValueChanged<TransferToken> onSendTokenSelected;
+  final ValueChanged<WalletBalance> onAssetSelected;
+  final String walletName;
+  final ValueChanged<double>? onTotalBalanceChanged;
+  final WalletIdentity? walletIdentity;
+  final Future<AccountProfile?>? walletLoginFuture;
+
+  @override
+  State<_WalletHome> createState() => _WalletHomeState();
+}
+
+class _WalletHomeState extends State<_WalletHome> {
+  late final WalletPortfolioService _portfolioService;
+  late final WalletValuationService _valuationService;
+  late final AccountTokenStore _tokenStore;
+  late final WalletMetadataStore _metadataStore;
+  late Future<List<WalletBalance>> _balancesFuture;
+  late Future<Map<String, double>> _assetValuesFuture;
+  late Future<double?> _totalBalanceFuture;
+  late List<WalletBalance> _initialBalances;
+  List<WalletBalance> _displayBalances = const [];
+  int _loadGeneration = 0;
+  int _totalBalanceGeneration = 0;
+  final Map<WalletNetwork, List<WalletBalance>> _balanceCache = {};
+  final LayerLink _walletActionsLink = LayerLink();
+  OverlayEntry? _walletActionsEntry;
+  int _selectedTab = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _portfolioService = WalletPortfolioService();
+    _valuationService = WalletValuationService();
+    _tokenStore = SecureAccountTokenStore();
+    _metadataStore = WalletMetadataStore();
+    _initialBalances = widget.walletIdentity == null
+        ? _placeholderBalances()
+        : _placeholderBalances().where((balance) => balance.isNative).toList();
+    _displayBalances = _initialBalances;
+    _balancesFuture = _loadAndCacheBalances(widget.selectedChain.network);
+    _assetValuesFuture = _loadAssetValues(_balancesFuture);
+    _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
+    _watchTotalBalance(_totalBalanceFuture);
+    unawaited(_prepareInitialBalances(widget.selectedChain.network));
+    unawaited(_streamBalances(widget.selectedChain.network, ++_loadGeneration));
+    _watchWalletLogin(widget.walletLoginFuture);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WalletHome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedChain.network != widget.selectedChain.network ||
+        oldWidget.walletIdentity != widget.walletIdentity) {
+      _reloadBalances();
+    }
+    if (oldWidget.walletLoginFuture != widget.walletLoginFuture) {
+      _watchWalletLogin(widget.walletLoginFuture);
+    }
+  }
+
+  void _watchWalletLogin(Future<AccountProfile?>? loginFuture) {
+    if (loginFuture == null) return;
+    unawaited(
+      loginFuture
+          .then<void>((_) {
+            if (mounted) _reloadBalances();
+          })
+          .catchError((_) {
+            if (mounted) _reloadBalances();
+          }),
+    );
+  }
+
+  Future<List<WalletBalance>> _loadBalances(WalletNetwork network) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return _placeholderBalances();
+    final tokens = await _tokenStore.read();
+    if (tokens == null) return _visiblePlaceholderBalancesAsync(network);
+    final customTokens = await _metadataStore.customTokens(identity);
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    final assets = _assetsFor(network, customTokens);
+    final results = <WalletBalance>[];
+    await for (final balance in _portfolioService.loadAssetBalances(
+      network: network,
+      identity: identity,
+      accessToken: tokens.accessToken,
+      assets: assets,
+    )) {
+      if (balance.isNative || !_isHidden(balance, hidden)) results.add(balance);
+    }
+    return results;
+  }
+
+  List<WalletAsset> _assetsFor(
+    WalletNetwork network,
+    List<CustomTokenDefinition> custom,
+  ) {
+    final chain = WalletChainRegistry.chains[network]!;
+    final assets = <WalletAsset>[
+      WalletAsset(
+        network: network,
+        symbol: chain.symbol,
+        name: chain.nativeAssetName,
+        decimals: chain.decimals,
+        isNative: true,
+      ),
+      if (chain.usdt != null)
+        WalletAsset(
+          network: network,
+          symbol: chain.usdt!.symbol,
+          name: chain.usdt!.name,
+          decimals: chain.usdt!.decimals,
+          isNative: false,
+          tokenAddress: chain.usdt!.address,
+        ),
+      if (chain.usdc != null)
+        WalletAsset(
+          network: network,
+          symbol: chain.usdc!.symbol,
+          name: chain.usdc!.name,
+          decimals: chain.usdc!.decimals,
+          isNative: false,
+          tokenAddress: chain.usdc!.address,
+        ),
+      if (network == WalletNetwork.tron) ...[
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.tronUsdt.symbol,
+          name: WalletChainRegistry.tronUsdt.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.tronUsdt.address,
+        ),
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.tronUsdc.symbol,
+          name: WalletChainRegistry.tronUsdc.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.tronUsdc.address,
+        ),
+      ],
+      if (network == WalletNetwork.solana) ...[
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.solanaUsdt.symbol,
+          name: WalletChainRegistry.solanaUsdt.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.solanaUsdt.address,
+        ),
+        WalletAsset(
+          network: network,
+          symbol: WalletChainRegistry.solanaUsdc.symbol,
+          name: WalletChainRegistry.solanaUsdc.name,
+          decimals: 6,
+          isNative: false,
+          tokenAddress: WalletChainRegistry.solanaUsdc.address,
+        ),
+      ],
+    ];
+    for (final token in custom.where((t) => t.network == network.name)) {
+      if (!assets.any(
+        (a) => a.tokenAddress?.toLowerCase() == token.address.toLowerCase(),
+      )) {
+        assets.add(
+          WalletAsset(
+            network: network,
+            symbol: token.symbol,
+            name: token.symbol,
+            decimals: token.decimals,
+            isNative: false,
+            tokenAddress: token.address,
+            resolveDecimals: true,
+          ),
+        );
+      }
+    }
+    return assets;
+  }
+
+  Future<void> _prepareInitialBalances(WalletNetwork network) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return;
+
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    _setInitialBalances(
+      network,
+      _placeholderBalances()
+          .where((balance) => balance.isNative || !_isHidden(balance, hidden))
+          .toList(),
+    );
+  }
+
+  bool _isHidden(WalletBalance balance, Set<String> hidden) =>
+      hidden.contains(balance.symbol) ||
+      (balance.tokenAddress != null &&
+          hidden.contains(balance.tokenAddress!.toLowerCase()));
+
+  WalletBalance _assetPlaceholder(WalletAsset asset, String address) =>
+      WalletBalance(
+        chain: widget.selectedChain.label,
+        symbol: asset.symbol,
+        assetName: asset.name,
+        isNative: asset.isNative,
+        address: address,
+        decimals: asset.decimals,
+        tokenAddress: asset.tokenAddress,
+        balance: BigInt.zero,
+      );
+
+  void _setInitialBalances(
+    WalletNetwork network,
+    List<WalletBalance> balances,
+  ) {
+    if (!mounted || widget.selectedChain.network != network) return;
+    setState(() {
+      _initialBalances = balances;
+    });
+  }
+
+  Future<List<WalletBalance>> _loadAndCacheBalances(
+    WalletNetwork network,
+  ) async {
+    try {
+      final balances = await _loadBalances(network);
+      _balanceCache[network] = balances;
+      return balances;
+    } catch (_) {
+      return _visiblePlaceholderBalancesAsync(network);
+    }
+  }
+
+  Future<List<WalletBalance>> _visiblePlaceholderBalancesAsync(
+    WalletNetwork network,
+  ) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return _placeholderBalances();
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    return _placeholderBalances()
+        .where((balance) => balance.isNative || !_isHidden(balance, hidden))
+        .toList();
+  }
+
+  List<WalletBalance> _placeholderBalances() {
+    final chain = widget.selectedChain;
+    final identity = widget.walletIdentity;
+    final decimals = switch (chain.network) {
+      WalletNetwork.tron => 6,
+      WalletNetwork.solana => 9,
+      _ => 18,
+    };
+    final native = WalletBalance(
+      chain: chain.label,
+      symbol: chain.nativeToken.symbol,
+      assetName: chain.nativeToken.title,
+      isNative: true,
+      address: identity?.address ?? '',
+      decimals: decimals,
+      balance: BigInt.zero,
+    );
+    return [
+      native,
+      WalletBalance(
+        chain: chain.label,
+        symbol: 'USDT',
+        assetName: 'Tether USD',
+        isNative: false,
+        address: identity?.address ?? '',
+        decimals:
+            WalletChainRegistry.chains[chain.network]?.usdt?.decimals ?? 6,
+        balance: BigInt.zero,
+      ),
+      WalletBalance(
+        chain: chain.label,
+        symbol: 'USDC',
+        assetName: 'USD Coin',
+        isNative: false,
+        address: identity?.address ?? '',
+        decimals:
+            WalletChainRegistry.chains[chain.network]?.usdc?.decimals ?? 6,
+        balance: BigInt.zero,
+      ),
+    ];
+  }
+
+  void _reloadBalances() {
+    final network = widget.selectedChain.network;
+    final balancesFuture = _loadAndCacheBalances(network);
+    final cachedBalances = _balanceCache[network];
+    setState(() {
+      _balancesFuture = balancesFuture;
+      _assetValuesFuture = _loadAssetValues(balancesFuture);
+      _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
+      _initialBalances =
+          cachedBalances ??
+          (widget.walletIdentity == null
+              ? _placeholderBalances()
+              : _placeholderBalances()
+                    .where((balance) => balance.isNative)
+                    .toList());
+      _displayBalances = _initialBalances;
+    });
+    _watchTotalBalance(_totalBalanceFuture);
+    unawaited(_prepareInitialBalances(network));
+    final generation = ++_loadGeneration;
+    unawaited(_streamBalances(network, generation));
+  }
+
+  Future<void> _streamBalances(WalletNetwork network, int generation) async {
+    final identity = widget.walletIdentity;
+    if (identity == null) return;
+    final tokens = await _tokenStore.read();
+    if (tokens == null) return;
+    final custom = await _metadataStore.customTokens(identity);
+    final hidden = await _metadataStore.hiddenTokenSymbols(
+      identity,
+      network.name,
+    );
+    final assets = _assetsFor(network, custom);
+    final placeholders = assets
+        .map((asset) => _assetPlaceholder(asset, identity.address))
+        .where((balance) => balance.isNative || !_isHidden(balance, hidden))
+        .toList();
+    if (mounted && generation == _loadGeneration) {
+      _setDisplayBalances(placeholders);
+    }
+    final byId = <String, WalletBalance>{};
+    await for (final balance in _portfolioService.loadAssetBalances(
+      network: network,
+      identity: identity,
+      accessToken: tokens.accessToken,
+      assets: assets,
+    )) {
+      if (generation != _loadGeneration ||
+          !mounted ||
+          widget.selectedChain.network != network) {
+        return;
+      }
+      if (!balance.isNative && _isHidden(balance, hidden)) {
+        continue;
+      }
+      byId[WalletAsset(
+            network: network,
+            symbol: balance.symbol,
+            name: balance.assetName,
+            decimals: balance.decimals,
+            isNative: balance.isNative,
+            tokenAddress: balance.tokenAddress,
+          ).id] =
+          balance;
+      final ordered = assets
+          .where(
+            (a) =>
+                a.isNative ||
+                !_isHidden(_assetPlaceholder(a, identity.address), hidden),
+          )
+          .map((a) => byId[a.id] ?? _assetPlaceholder(a, identity.address))
+          .toList();
+      _setDisplayBalances(ordered);
+    }
+  }
+
+  void _setDisplayBalances(List<WalletBalance> balances) {
+    if (!mounted) return;
+    final balancesFuture = Future<List<WalletBalance>>.value(balances);
+    setState(() {
+      _displayBalances = balances;
+      _balancesFuture = balancesFuture;
+      _assetValuesFuture = _loadAssetValues(balancesFuture);
+      _totalBalanceFuture = _loadTotalBalance(_assetValuesFuture);
+    });
+    _watchTotalBalance(_totalBalanceFuture);
+  }
+
+  void _watchTotalBalance(Future<double?> future) {
+    final generation = ++_totalBalanceGeneration;
+    unawaited(() async {
+      try {
+        final total = await future;
+        if (!mounted || generation != _totalBalanceGeneration) return;
+        widget.onTotalBalanceChanged?.call(total ?? 0);
+      } catch (_) {
+        // Keep the cached value unchanged when valuation is unavailable.
+      }
+    }());
+  }
+
+  Future<Map<String, double>> _loadAssetValues(
+    Future<List<WalletBalance>> balances,
+  ) async {
+    try {
+      return _valuationService.assetUsdValues(await balances);
+    } catch (_) {
+      return const <String, double>{};
+    }
+  }
+
+  Future<double?> _loadTotalBalance(Future<Map<String, double>> values) async {
+    try {
+      final loaded = await values;
+      if (loaded.isEmpty) return null;
+      return loaded.values.fold<double>(0, (total, value) => total + value);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _showSendTokenPicker() async {
+    final token = await showCupertinoModalPopup<TransferToken>(
+      context: context,
+      builder: (_) => _SendTokenPicker(
+        palette: widget.palette,
+        tokens: _transferTokensForChain(widget.selectedChain),
+      ),
+    );
+    if (token != null && mounted) widget.onSendTokenSelected(token);
+  }
+
+  void _dismissWalletActions() {
+    _walletActionsEntry?.remove();
+    _walletActionsEntry = null;
+  }
+
+  @override
+  void dispose() {
+    _dismissWalletActions();
+    _portfolioService.close();
+    _valuationService.dispose();
+    super.dispose();
+  }
+
+  void _showWalletActions() {
+    if (_walletActionsEntry != null) {
+      _dismissWalletActions();
+      return;
+    }
+
+    _walletActionsEntry = OverlayEntry(
+      builder: (overlayContext) => Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onTap: _dismissWalletActions,
+            ),
+          ),
+          CompositedTransformFollower(
+            link: _walletActionsLink,
+            targetAnchor: Alignment.bottomRight,
+            followerAnchor: Alignment.topRight,
+            offset: const Offset(0, -7),
+            child: Semantics(
+              container: true,
+              label: appText(context, '钱包操作菜单'),
+              child: Container(
+                width: 154,
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: widget.palette.surfaceRaised,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: widget.palette.border),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x66000000), blurRadius: 18),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _WalletMenuItem(
+                      icon: CupertinoIcons.refresh,
+                      label: appText(context, '刷新列表'),
+                      palette: widget.palette,
+                      onPressed: () {
+                        _dismissWalletActions();
+                        _reloadBalances();
+                      },
+                    ),
+                    _WalletMenuItem(
+                      icon: CupertinoIcons.add,
+                      label: appText(context, '添加代币'),
+                      palette: widget.palette,
+                      onPressed: () {
+                        _dismissWalletActions();
+                        widget.onOpen(AcoScreen.addTokenV2);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context, rootOverlay: true).insert(_walletActionsEntry!);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // The wallet artboard intentionally uses light action cards on black.
+    final isDark = widget.palette.dark;
+    final actionSurface = isDark
+        ? _walletActionSurface
+        : const Color(0xFFEAEAEA);
+    final actionForeground = _walletActionForeground;
+    const actionRadius = 29.0;
+    const actionButtonHeight = 50.0;
+    const primaryActionBorderWidth = 8.0;
+    const secondaryActionBorderWidth = 8.0;
+    final primaryActionBackground = isDark
+        ? _accentGreen
+        : const Color(0xFF0B0B0B);
+    final primaryActionForeground = isDark
+        ? _walletActionForeground
+        : _accentGreen;
+    final primaryActionBorderColor = isDark
+        ? const Color(0xFF6D9800)
+        : const Color(0xFF3A3A3A);
+    final secondaryActionBorderColor = isDark
+        ? const Color(0xFF9E9E9E)
+        : const Color(0xFFF5F5F5);
+    final networkLabel = widget.selectedChain.displayLabel;
+    // Wallet dimensions are fixed logical pixels. Flex layouts below
+    // provide adaptation without scaling an entire artboard at runtime.
+    final totalBalanceTextStyle = TextStyle(
+      color: widget.palette.primaryText,
+      fontSize: 40,
+      fontWeight: FontWeight.w600,
+    );
+    return ColoredBox(
+      color: widget.palette.dark
+          ? const Color(0xFF000000)
+          : widget.palette.background,
+      child: Column(
+        children: [
+          AcoRootHeader(palette: widget.palette, onOpen: widget.onOpen),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(
+                  height: 44,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Semantics(
+                          button: true,
+                          label: appText(context, '切换钱包'),
+                          child: CupertinoButton(
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            onPressed: () =>
+                                widget.onOpen(AcoScreen.walletSwitcher),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                SizedBox(width: 10.9),
+                                SizedBox(
+                                  width: _walletHeaderWalletIconWidth,
+                                  child: Image.asset(
+                                    'assets/icons/wallet_selector.png',
+                                    fit: BoxFit.contain,
+                                    color: widget.palette.dark
+                                        ? null
+                                        : widget.palette.primaryText,
+                                    colorBlendMode: BlendMode.srcIn,
+                                  ),
+                                ),
+                                SizedBox(width: 16),
+                                Flexible(
+                                  child: Transform.translate(
+                                    offset: const Offset(0, 3),
+                                    child: Text(
+                                      widget.walletName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isDark
+                                            ? _walletHeaderMuted
+                                            : widget.palette.primaryText,
+                                        fontSize: 17.5,
+                                        fontWeight: FontWeight.w400,
+                                        height: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(width: 8),
+                                SizedBox(
+                                  width: _walletHeaderWalletArrowWidth,
+                                  child: Image.asset(
+                                    'assets/icons/wallet_selector_chevron.png',
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SizedBox(width: 12),
+                      Semantics(
+                        button: true,
+                        label: appText(context, '切换网络'),
+                        child: GestureDetector(
+                          key: const Key('wallet-network-selector'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => widget.onOpen(AcoScreen.walletChains),
+                          child: Transform.translate(
+                            offset: const Offset(0, 4),
+                            child: SizedBox(
+                              width: _walletHeaderNetworkWidth,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Container(
+                                    width: 11,
+                                    height: 11,
+                                    decoration: const BoxDecoration(
+                                      color: _walletHeaderLime,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  SizedBox(width: 6.52),
+                                  Flexible(
+                                    child: Text(
+                                      networkLabel,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: _walletHeaderMuted,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Transform.translate(
+                  offset: const Offset(6, 0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text('\$', style: totalBalanceTextStyle),
+                      SizedBox(width: 21.45),
+                      FutureBuilder<double?>(
+                        future: _totalBalanceFuture,
+                        builder: (context, snapshot) => Text(
+                          (snapshot.data ?? 0).toStringAsFixed(2),
+                          style: totalBalanceTextStyle,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: 15),
+                Padding(
+                  padding: EdgeInsets.zero,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _OutlineButton(
+                          label: appText(context, '发送资产'),
+                          palette: widget.palette,
+                          height: actionButtonHeight,
+                          fontSize: 15,
+                          backgroundColor: primaryActionBackground,
+                          foregroundColor: primaryActionForeground,
+                          radius: actionRadius,
+                          borderColor: primaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : primaryActionBorderColor,
+                          borderWidth: primaryActionBorderWidth,
+                          fontWeight: FontWeight.w500,
+                          onPressed: _showSendTokenPicker,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _OutlineButton(
+                          label: appText(context, '接收资产'),
+                          icon: null,
+                          palette: widget.palette,
+                          height: actionButtonHeight,
+                          fontSize: 15,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: actionRadius,
+                          borderColor: secondaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : secondaryActionBorderColor,
+                          borderWidth: secondaryActionBorderWidth,
+                          fontWeight: FontWeight.w500,
+                          onPressed: () => widget.onOpen(AcoScreen.receive),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Padding(
+                  padding: EdgeInsets.zero,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _OutlineButton(
+                          label: appText(context, '闪兑&跨链'),
+                          icon: CupertinoIcons.bolt_fill,
+                          palette: widget.palette,
+                          height: actionButtonHeight,
+                          fontSize: 15,
+                          leadingImageAsset:
+                              'assets/icons/wallet_swap_action.png',
+                          iconSize: 14.5,
+                          iconGap: 12,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: actionRadius,
+                          borderColor: secondaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : secondaryActionBorderColor,
+                          borderWidth: secondaryActionBorderWidth,
+                          fontWeight: FontWeight.w500,
+                          onPressed: () => widget.onOpen(AcoScreen.dexToken),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: _OutlineButton(
+                          label: appText(context, '扫码'),
+                          icon: CupertinoIcons.qrcode_viewfinder,
+                          palette: widget.palette,
+                          height: actionButtonHeight,
+                          fontSize: 15,
+                          leadingAsset: 'assets/icons/source_scan.svg',
+                          iconSize: 13.5,
+                          iconGap: 12,
+                          backgroundColor: actionSurface,
+                          foregroundColor: actionForeground,
+                          radius: actionRadius,
+                          borderColor: secondaryActionBorderColor,
+                          outerBackgroundColor: isDark
+                              ? null
+                              : secondaryActionBorderColor,
+                          borderWidth: secondaryActionBorderWidth,
+                          fontWeight: FontWeight.w500,
+                          onPressed: () => widget.onOpen(AcoScreen.scan),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 47, right: 16),
+            child: _WalletTabs(
+              palette: widget.palette,
+              selected: _selectedTab,
+              onChanged: (index) => setState(() => _selectedTab = index),
+              addButtonLink: _walletActionsLink,
+              onAddToken: _showWalletActions,
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<Map<String, double>>(
+              future: _assetValuesFuture,
+              builder: (context, snapshot) {
+                final values = snapshot.data ?? const <String, double>{};
+                return ListView.builder(
+                  padding: EdgeInsets.fromLTRB(16, 5, 16, 15),
+                  itemCount: _displayBalances.length,
+                  itemBuilder: (context, index) {
+                    final balance = _displayBalances[index];
+                    final rawAmount = balance.balance ?? BigInt.zero;
+                    final amount = rawAmount == BigInt.zero
+                        ? '0.00'
+                        : formatChainAmount(
+                            rawAmount,
+                            decimals: balance.decimals,
+                          );
+                    final value = (values[balance.id] ?? 0).toStringAsFixed(2);
+                    return _WalletAssetRow(
+                      palette: widget.palette,
+                      symbol: balance.symbol,
+                      title: balance.assetName,
+                      amount: amount,
+                      value: '≈$value USD',
+                      onTap: () => widget.onAssetSelected(balance),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

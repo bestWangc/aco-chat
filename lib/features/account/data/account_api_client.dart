@@ -350,6 +350,19 @@ class AccountApiClient {
         .toList(growable: false);
   }
 
+  Future<void> updateFriendRemark({
+    required String accountID,
+    required String remark,
+    required String token,
+  }) async {
+    final response = await _httpClient.post(
+      _uri('friends/${Uri.encodeComponent(accountID)}/remark'),
+      headers: _authorizedHeaders(token),
+      body: jsonEncode({'remark': remark}),
+    );
+    _body(response);
+  }
+
   Future<List<FriendContact>> listFriendRequests({
     required String token,
   }) async {
@@ -694,12 +707,32 @@ class AccountApiClient {
   Future<SquarePost> createPost({
     required String content,
     required List<Uint8List> images,
+    Uint8List? video,
+    Uint8List? videoThumbnail,
+    String videoFilename = 'post-video.mp4',
+    int videoDurationSeconds = 0,
     required String token,
   }) async {
     final request = http.MultipartRequest('POST', _uri('posts'))
       ..headers['x-app-version'] = AppConfig.appVersion
       ..headers['authorization'] = 'Bearer $token'
       ..fields['content'] = content;
+    if (video != null) {
+      request
+        ..fields['video_duration_seconds'] = '$videoDurationSeconds'
+        ..files.add(
+          http.MultipartFile.fromBytes('video', video, filename: videoFilename),
+        );
+      if (videoThumbnail != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'video_thumbnail',
+            videoThumbnail,
+            filename: 'post-video-thumbnail.jpg',
+          ),
+        );
+      }
+    }
     for (var index = 0; index < images.length; index++) {
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -711,6 +744,10 @@ class AccountApiClient {
     }
     final response = await _httpClient.send(request);
     return SquarePost.fromJson(_body(await _readResponse(response)));
+  }
+
+  Future<void> deletePost({required int postID, required String token}) async {
+    await _postWithoutBody('posts/$postID/delete', token);
   }
 
   Future<PostLikeResult> likePost({
@@ -852,6 +889,7 @@ class AccountApiClient {
   Future<LiveSession> createLive({
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     required String access,
     required String token,
     String? joinPassword,
@@ -860,6 +898,7 @@ class AccountApiClient {
     final body = _livePayload(
       title: title,
       coverUrl: coverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
@@ -876,6 +915,7 @@ class AccountApiClient {
     required int liveId,
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     required String access,
     required String token,
     String? joinPassword,
@@ -884,6 +924,7 @@ class AccountApiClient {
     final body = _livePayload(
       title: title,
       coverUrl: coverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
@@ -894,6 +935,14 @@ class AccountApiClient {
       body: jsonEncode(body),
     );
     return LiveSession.fromJson(_body(response));
+  }
+
+  Future<void> deleteLive({required int liveId, required String token}) async {
+    final response = await _httpClient.post(
+      _uri('lives/$liveId/delete'),
+      headers: _authorizedHeaders(token),
+    );
+    if (response.statusCode != 204) _body(response);
   }
 
   Future<List<LiveMessage>> listLiveMessages({
@@ -956,6 +1005,26 @@ class AccountApiClient {
     );
     return LiveKitJoinInfo.fromJson(_body(response));
   }
+
+  Future<Map<String, dynamic>> getAliyunLiveStreamUrls({
+    required int liveId,
+    required String token,
+  }) async {
+    final response = await _httpClient.get(
+      _uri('lives/$liveId/aliyun-stream'),
+      headers: _authorizedHeaders(token),
+    );
+    return Map<String, dynamic>.from(_body(response) as Map);
+  }
+
+  Future<void> setAliyunLiveScreenShareActive({
+    required int liveId,
+    required String token,
+    required bool active,
+  }) => _postWithoutBody(
+    'lives/$liveId/aliyun-stream/${active ? 'start' : 'stop'}',
+    token,
+  );
 
   Future<VoiceCallInfo> startVoiceCall({
     required String peerAccountId,
@@ -1260,6 +1329,7 @@ class AccountApiClient {
   Map<String, Object?> _livePayload({
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     required String access,
     String? joinPassword,
     DateTime? scheduledAt,
@@ -1267,6 +1337,7 @@ class AccountApiClient {
     final body = <String, Object?>{
       'title': title,
       'cover_url': coverUrl,
+      'background_id': backgroundId,
       'access': access,
     };
     if (joinPassword != null) body['join_password'] = joinPassword;

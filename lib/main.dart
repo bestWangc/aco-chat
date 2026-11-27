@@ -8,7 +8,7 @@ import 'package:aco_chat/features/account/data/account_api_client.dart';
 import 'package:aco_chat/features/account/data/account_session.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/chat/data/openim_chat_repository.dart';
-import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/app/presentation/aco_app_shell.dart';
 import 'package:aco_chat/features/live/domain/meeting_link.dart';
 import 'package:aco_chat/shared/widgets/aco_page_header.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
@@ -17,6 +17,7 @@ import 'package:aco_chat/services/wallet_security.dart';
 import 'package:aco_chat/services/android_chat_background_service.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_openim_sdk/flutter_openim_sdk.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:shadcn_ui/shadcn_ui.dart' as shad;
@@ -83,6 +84,7 @@ class WalletAccountAuthentication {
 
   static OpenIMToken? _cachedOpenIMToken;
   static Future<void>? _openIMConnectFuture;
+  static bool _openIMReconnectPending = false;
 
   /// Restores the server account for [walletAddress] without showing a login UI.
   /// A network failure leaves the local wallet usable and is retried next launch.
@@ -90,7 +92,8 @@ class WalletAccountAuthentication {
     try {
       return await _signInSilently(walletAddress);
     } on Object catch (error) {
-      if (AppConfig.relayApiBaseUrl.isNotEmpty &&
+      if (!AppConfig.hasExplicitApiBaseUrlOverride &&
+          AppConfig.relayApiBaseUrl.isNotEmpty &&
           !AppConfig.isUsingRelayApiRoute &&
           WalletAccountAuthentication._isNetworkError(error)) {
         AppConfig.useRelayApiRoute();
@@ -126,6 +129,7 @@ class WalletAccountAuthentication {
     OpenIMChatRepository.reconnectHandler = () async {
       // A kicked/invalid session must obtain a fresh token; reusing the
       // cached token would create a reconnect loop.
+      _openIMReconnectPending = true;
       _cachedOpenIMToken = null;
       await _connectOpenIM(userId);
     };
@@ -196,6 +200,18 @@ class WalletAccountAuthentication {
       );
       debugPrint('[OpenIM] sdk init success user=$userId');
       debugPrint('[OpenIM] login start user=$userId');
+      if (_openIMReconnectPending) {
+        _openIMReconnectPending = false;
+        try {
+          // The native SDK may still hold the kicked session while the new
+          // token is being fetched. End that session before logging in again
+          // so the two login states cannot race and kick each other.
+          await OpenIM.iMManager.logout();
+          debugPrint('[OpenIM] previous session closed before reconnect');
+        } catch (error) {
+          debugPrint('[OpenIM] previous session cleanup skipped: $error');
+        }
+      }
       await chat.login(userId: userId, userSig: token.token);
       debugPrint(
         '[OpenIM] login success user=$userId '
@@ -485,7 +501,8 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
       // The primary hostname may be unavailable in a user's network even
       // though the relay is reachable. Keep the first-wallet flow consistent
       // with silent login by retrying network failures through the relay.
-      if (AppConfig.relayApiBaseUrl.isNotEmpty &&
+      if (!AppConfig.hasExplicitApiBaseUrlOverride &&
+          AppConfig.relayApiBaseUrl.isNotEmpty &&
           !AppConfig.isUsingRelayApiRoute &&
           WalletAccountAuthentication._isNetworkError(error)) {
         AppConfig.useRelayApiRoute();
@@ -614,7 +631,7 @@ class _AcoAppState extends State<AcoApp> with WidgetsBindingObserver {
             ),
           ),
           home: _walletConfigured
-              ? AcoDesignShell(
+              ? AcoAppShell(
                   language: _language,
                   onLanguageChanged: _setLanguage,
                   themeNotifier: _isDark,

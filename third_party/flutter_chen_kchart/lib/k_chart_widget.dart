@@ -8,7 +8,7 @@ import 'package:flutter_chen_kchart/chart_translations.dart';
 import 'package:flutter_chen_kchart/extension/map_ext.dart';
 import 'package:flutter_chen_kchart/k_chart.dart';
 
-enum MainState { MA, BOLL, NONE }
+enum MainState { MA, BOLL, NONE, EMA }
 
 enum SecondaryState { MACD, KDJ, RSI, WR, CCI, NONE }
 

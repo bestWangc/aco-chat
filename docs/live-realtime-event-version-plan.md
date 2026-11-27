@@ -288,8 +288,8 @@ type liveEventVersions struct {
 
 - `lib/features/live/domain/live_realtime_event.dart`
 - `lib/features/account/domain/account_models.dart`
-- `lib/features/design/presentation/live_room_page.dart`
-- `lib/features/design/presentation/live_room_livekit.dart`
+- `lib/app/presentation/live_room_page.dart`
+- `lib/app/presentation/live_room_livekit.dart`
 
 删除：
 

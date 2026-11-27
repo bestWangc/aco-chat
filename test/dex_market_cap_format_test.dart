@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/app/presentation/aco_app_shell.dart';
 
 void main() {
   test('formats dex market cap and volume with compact currency units', () {

@@ -1,0 +1,2577 @@
+// ignore_for_file: experimental_member_use
+
+part of 'aco_app_shell.dart';
+
+class _LiveStreamPage extends StatelessWidget {
+  const _LiveStreamPage({required this.palette, required this.onOpen});
+  final AcoPalette palette;
+  final ValueChanged<AcoScreen> onOpen;
+  @override
+  Widget build(BuildContext context) => _DetailScaffold(
+    palette: palette,
+    title: '正在进行',
+    right: AcoTopActions(palette: palette, onOpen: onOpen),
+    child: _LiveListMessage(palette: palette, message: '请前往广场查看实时会议列表。'),
+  );
+}
+
+enum LiveRoomExitReason { kicked }
+
+const _liveCheckInDiagnosticsStorageKey = 'live_check_in_diagnostics_v1';
+const _maxLiveCheckInDiagnosticEntries = 500;
+
+Future<Uint8List> _encodeImageAsPng(
+  Uint8List bytes, {
+  int? targetWidth,
+  int? targetHeight,
+}) async {
+  final codec = await ui.instantiateImageCodec(
+    bytes,
+    targetWidth: targetWidth,
+    targetHeight: targetHeight,
+  );
+  try {
+    final frame = await codec.getNextFrame();
+    try {
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) throw StateError('无法生成图片 PNG');
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    } finally {
+      frame.image.dispose();
+    }
+  } finally {
+    codec.dispose();
+  }
+}
+
+bool _isLiveHostRole(String? role) => role == 'host';
+
+bool _canManageLiveMicrophones(String? role) =>
+    role == 'host' || role == 'cohost';
+
+int _parseLiveMessageIdentity(Object? payloadIdentity, String? metadata) {
+  if (payloadIdentity is num) return payloadIdentity.toInt();
+  final parsedPayloadIdentity = int.tryParse('$payloadIdentity');
+  if (parsedPayloadIdentity != null) return parsedPayloadIdentity;
+  return int.tryParse((metadata ?? '').split(':').first) ?? 0;
+}
+
+int _parseLiveMessageStaffIdentity(
+  Object? payloadStaffIdentity,
+  String? metadata,
+) {
+  if (payloadStaffIdentity is num) return payloadStaffIdentity.toInt();
+  final parsedPayloadStaffIdentity = int.tryParse('$payloadStaffIdentity');
+  if (parsedPayloadStaffIdentity != null) return parsedPayloadStaffIdentity;
+  final parts = (metadata ?? '').split(':');
+  return parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+}
+
+class _VoiceRoomPage extends StatefulWidget {
+  const _VoiceRoomPage({
+    required this.palette,
+    this.live,
+    this.joinPassword,
+    this.initialRoom,
+    this.onMinimizeRequested,
+  });
+  final AcoPalette palette;
+  final LiveSession? live;
+  final String? joinPassword;
+  final LiveRoom? initialRoom;
+  final VoidCallback? onMinimizeRequested;
+
+  @override
+  State<_VoiceRoomPage> createState() => _VoiceRoomPageState();
+}
+
+class _VoiceRoomPageState extends State<_VoiceRoomPage>
+    with WidgetsBindingObserver {
+  static const _liveAudioBackgroundChannel = MethodChannel(
+    'aco/live-audio-background',
+  );
+  static const _liveAudioRouteChannel = MethodChannel('aco/live-audio-route');
+  static const _communicationAudioSession = AudioSessionOptions.communication(
+    apple: AppleAudioSessionConfiguration(
+      category: AppleAudioCategory.playAndRecord,
+      categoryOptions: {
+        AppleAudioCategoryOption.allowBluetooth,
+        AppleAudioCategoryOption.allowBluetoothA2DP,
+        AppleAudioCategoryOption.allowAirPlay,
+        AppleAudioCategoryOption.defaultToSpeaker,
+      },
+      mode: AppleAudioMode.videoChat,
+    ),
+  );
+  static const _iosAudioUnitRecoveryDelay = Duration(milliseconds: 1200);
+  static const _liveKitReentryCooldown = Duration(seconds: 5);
+  static const _liveKitFallbackUrl = 'wss://api.aco.chat';
+  static const _chatImageType = 'image';
+  static const _maxChatImageBytes = 200 * 1024 * 1024;
+  static const _maxChatImageUrlLength = 400;
+  static const _maxChatImageNameLength = 120;
+  static final Map<int, DateTime> _liveKitLeftAtByLiveID = <int, DateTime>{};
+  static const _voiceRoomAudioCaptureOptions = AudioCaptureOptions(
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    highPassFilter: false,
+    voiceIsolation: true,
+    typingNoiseDetection: true,
+    // Keep the WebRTC capture and its echo-cancellation reference alive while
+    // muted. Recreating the microphone track on every unmute makes the audio
+    // processor re-converge and can briefly reintroduce feedback.
+    stopAudioCaptureOnMute: false,
+  );
+  static Future<void>? _liveKitInitialization;
+
+  bool get _supportsBackgroundAudio =>
+      defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  bool _muted = false;
+  bool _handRaised = false;
+  bool _danmakuVisible = true;
+  bool _emojiPickerVisible = false;
+  bool _sending = false;
+  bool _sendingImage = false;
+  bool _transferringHost = false;
+  bool _hostTransferred = false;
+  bool _roomLoading = false;
+  bool _leaving = false;
+  bool _allowPop = false;
+  bool _isInPictureInPicture = false;
+  bool _closingRoom = false;
+  bool _handRaiseNoticeVisible = false;
+  bool _networkReconnecting = false;
+  bool _reentryCoolingDown = false;
+  bool _checkingIn = false;
+  int? _realtimeParticipantCount;
+  // A concurrent realtime snapshot can lag behind a successful check-in.
+  DateTime? _locallyConfirmedCheckInDeadline;
+  DateTime? _realtimeCheckInDeadline;
+  int? _realtimeCheckInCount;
+  int _roomLoadSequence = 0;
+  int _realtimeMutationGeneration = 0;
+  final Map<String, int> _latestRealtimeEventVersions = <String, int>{};
+  int _scrollToLatestSignal = 0;
+  int _reentryCooldownSeconds = 0;
+  LiveRoom? _room;
+  late final LiveChatBuffer _chatBuffer;
+  final LiveChatRateLimiter _chatRateLimiter = LiveChatRateLimiter();
+  final Set<int> _knownParticipantIds = <int>{};
+  late final LiveRealtimeClient _realtimeClient;
+  Timer? _handRaiseNoticeTimer;
+  Timer? _checkInTimer;
+  Timer? _hostHeartbeatTimer;
+  Timer? _aliyunStreamPollTimer;
+  Timer? _aliyunStreamHeartbeatTimer;
+  Timer? _aliyunPlaybackRetryTimer;
+  Timer? _roomSnapshotCalibrationTimer;
+  Timer? _checkInDiagnosticPersistTimer;
+  bool _roomSnapshotCalibrationInFlight = false;
+  bool _screenBroadcastStarting = false;
+  bool _screenBroadcasting = false;
+  bool _shareMembersExpanded = false;
+  bool _aliyunPlaybackLoading = false;
+  int _aliyunPlaybackRetryCount = 0;
+  FlutterAliplayer? _aliyunLivePlayer;
+  String? _aliyunLivePlayUrl;
+  bool _aliyunPlayerViewAttached = false;
+  bool _aliyunVideoRendered = false;
+  bool _aliyunFrameSnapshotRequested = false;
+  final AliyunScreenBroadcast _aliyunScreenBroadcast = AliyunScreenBroadcast();
+  final List<String> _checkInDiagnosticEntries = <String>[];
+  late final Future<void> _checkInDiagnosticsReady;
+  String? _lastCheckInButtonState;
+  int _realtimeMessageCount = 0;
+  Room? _liveKitRoom;
+  EventsListener<RoomEvent>? _liveKitEventListener;
+  bool _liveKitConnecting = false;
+  bool _liveKitReconnecting = false;
+  bool _liveKitReconnectStopped = false;
+  final Set<String> _liveKitSpeakingParticipantIds = <String>{};
+  bool? _liveKitCanPublish;
+  bool _liveKitPublishReady = false;
+  String? _liveKitRole;
+  int _liveKitIdentity = 0;
+  int _liveKitStaffIdentity = 0;
+  bool _microphoneUpdating = false;
+  bool _liveKitMicrophoneOperationInFlight = false;
+  bool _liveKitPermissionReconnectInFlight = false;
+  LiveRoom? _pendingLiveKitPermissionRoom;
+  bool _liveKitPermissionSyncRunning = false;
+  bool _skipNextRealtimeSnapshot = false;
+  bool _speakerInviteDialogVisible = false;
+  LocalAudioTrack? _listenerAudioWarmupTrack;
+  bool? _localMuteOverride;
+  late final AccountApiClient _apiClient;
+  late final AccountSession _accountSession;
+  final TextEditingController _messageController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInDiagnosticsReady = _loadSavedCheckInDiagnostics();
+    _recordCheckInDiagnostic('room_open');
+    _chatBuffer = LiveChatBuffer(
+      onChanged: () {
+        if (mounted) setState(() {});
+      },
+    );
+    _realtimeClient = LiveRealtimeClient(
+      onEvent: _handleRealtimeEvent,
+      onConnectionError: (reason) =>
+          _recordCheckInDiagnostic('websocket_error reason=$reason'),
+      onConnected: () {
+        _recordCheckInDiagnostic('websocket_connected');
+        if (mounted && !_leaving) {
+          // One authoritative snapshot per successful WebSocket connection,
+          // including reconnects. This callback is separate from the
+          // reconnecting-state callback so the initial connection is not
+          // accidentally reconciled twice.
+          if (!_skipNextRealtimeSnapshot) {
+            unawaited(_loadRoom(silent: true));
+          }
+          _skipNextRealtimeSnapshot = false;
+          _scheduleRoomSnapshotCalibration();
+        }
+      },
+      onReconnectingChanged: (reconnecting) {
+        if (reconnecting != _networkReconnecting) {
+          _recordCheckInDiagnostic('websocket_reconnecting=$reconnecting');
+        }
+        if (mounted) {
+          setState(() {
+            _networkReconnecting = reconnecting;
+            if (reconnecting) _realtimeParticipantCount = null;
+            if (reconnecting) {
+              _roomSnapshotCalibrationTimer?.cancel();
+              _roomSnapshotCalibrationTimer = null;
+            }
+          });
+        }
+      },
+      onReconnectStopped: () {
+        _recordCheckInDiagnostic('websocket_reconnect_stopped');
+        if (mounted) _showNotice(context, '弹幕连接中断', '已停止自动重试，请重新进入会议。');
+      },
+    );
+    WidgetsBinding.instance.addObserver(this);
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _pictureInPictureChannel.setMethodCallHandler((call) async {
+        if (call.method != 'changed' || !mounted) return;
+        final arguments = call.arguments;
+        final inPictureInPicture = arguments is Map
+            ? arguments['isInPictureInPictureMode'] == true
+            : false;
+        if (inPictureInPicture != _isInPictureInPicture) {
+          setState(() => _isInPictureInPicture = inPictureInPicture);
+        }
+      });
+    }
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      unawaited(_setPictureInPictureEnabled(true));
+    }
+    _refreshLiveRoomWakelock();
+    _apiClient = AccountApiClient();
+    _accountSession = AccountSession(_apiClient);
+    _skipNextRealtimeSnapshot = widget.initialRoom != null;
+    if (widget.live != null) {
+      unawaited(_initializeRoom());
+    }
+  }
+
+  Future<void> _initializeRoom() async {
+    final live = widget.live;
+    if (live == null) return;
+    if (mounted) setState(() => _roomLoading = true);
+    await _waitForLiveKitReentryCooldown(live.id);
+    if (!mounted || _leaving) return;
+    final initialRoom = widget.initialRoom;
+    if (initialRoom != null) {
+      _applyRoomSnapshot(initialRoom);
+      if (mounted) setState(() => _roomLoading = false);
+    } else {
+      // Direct room navigation has no preloaded snapshot, so load it before
+      // requesting the LiveKit token.
+      await _loadRoom(resetRole: true);
+    }
+    await _connectLiveKit();
+    _aliyunStreamPollTimer?.cancel();
+    _aliyunStreamPollTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => unawaited(_refreshAliyunPlayback()),
+    );
+    unawaited(_refreshAliyunPlayback());
+    // The auxiliary state stream is started in the background; chat itself is
+    // handled by LiveKit data.
+    unawaited(_connectRealtime(refreshRoom: false));
+  }
+
+  Future<void> _loadRoom({bool silent = false, bool resetRole = false}) async {
+    final live = widget.live;
+    if (live == null) return;
+    final requestSequence = ++_roomLoadSequence;
+    final requestGeneration = _realtimeMutationGeneration;
+    if (!silent && mounted) setState(() => _roomLoading = true);
+    try {
+      final room = await _accountSession.liveRoom(
+        live.id,
+        joinPassword: widget.joinPassword,
+        resetRole: resetRole,
+      );
+      _recordCheckInDiagnostic(
+        'room_snapshot_received source=api role=${room.viewerRole} '
+        '${_checkInDiagnosticSummary(room.checkIn)}',
+      );
+      debugPrint(
+        'Live room snapshot: source=api live=${live.id} '
+        'role=${room.viewerRole} hostMuted=${room.host.muted} '
+        'viewerMuted=${room.viewerMuted} resetRole=$resetRole',
+      );
+      if (requestSequence == _roomLoadSequence &&
+          requestGeneration == _realtimeMutationGeneration) {
+        _applyRoomSnapshot(room);
+      }
+    } on AccountApiException catch (error) {
+      _recordCheckInDiagnostic(
+        'room_snapshot_failed source=api status=${error.statusCode}',
+      );
+      if (requestSequence == _roomLoadSequence && !silent && mounted) {
+        _showNotice(context, '无法进入会议', error.localizedMessage);
+      }
+    } catch (error) {
+      _recordCheckInDiagnostic(
+        'room_snapshot_failed source=api error=${error.runtimeType}',
+      );
+      if (requestSequence == _roomLoadSequence && !silent && mounted) {
+        _showNotice(context, '无法进入会议', '请检查网络后重试。');
+      }
+    } finally {
+      if (requestSequence == _roomLoadSequence && !silent && mounted) {
+        setState(() => _roomLoading = false);
+      }
+    }
+  }
+
+  void _ensureHostHeartbeat(LiveRoom room) {
+    if (!_isLiveHostRole(room.viewerRole)) {
+      _hostHeartbeatTimer?.cancel();
+      _hostHeartbeatTimer = null;
+      return;
+    }
+    if (_hostHeartbeatTimer != null) return;
+    _hostHeartbeatTimer = Timer.periodic(
+      const Duration(seconds: 200),
+      (_) => unawaited(_sendHostHeartbeat()),
+    );
+    unawaited(_sendHostHeartbeat());
+  }
+
+  Future<void> _sendHostHeartbeat() async {
+    final live = widget.live;
+    if (live == null || _leaving) return;
+    try {
+      await _accountSession.keepLiveAlive(live.id);
+    } catch (error) {
+      // Heartbeat failures are transient and must not end the live locally.
+      debugPrint('Live heartbeat failed: $error');
+    }
+  }
+
+  void _refreshLiveRoomWakelock() {
+    if (_leaving) return;
+    // The OS can release a wakelock while the live room is active, so
+    // reassert it whenever the page becomes active or rebuilds.
+    unawaited(_setLiveRoomWakelock(true));
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshLiveRoomWakelock();
+    if (state == AppLifecycleState.paused) {
+      _hostHeartbeatTimer?.cancel();
+      _hostHeartbeatTimer = null;
+      _roomSnapshotCalibrationTimer?.cancel();
+      _roomSnapshotCalibrationTimer = null;
+      return;
+    }
+    if (state != AppLifecycleState.resumed) return;
+
+    final room = _room;
+    if (!_isLiveHostRole(room?.viewerRole)) return;
+    _ensureHostHeartbeat(room!);
+    unawaited(_sendHostHeartbeat());
+    _scheduleRoomSnapshotCalibration();
+  }
+
+  void _scheduleRoomSnapshotCalibration() {
+    _roomSnapshotCalibrationTimer?.cancel();
+    if (!mounted || _leaving || _networkReconnecting) return;
+    final jitter = math.Random().nextInt(61);
+    _roomSnapshotCalibrationTimer = Timer(
+      Duration(minutes: 5, seconds: jitter),
+      () async {
+        _roomSnapshotCalibrationTimer = null;
+        if (!mounted ||
+            _leaving ||
+            _networkReconnecting ||
+            _roomSnapshotCalibrationInFlight) {
+          return;
+        }
+        _roomSnapshotCalibrationInFlight = true;
+        try {
+          await _loadRoom(silent: true);
+        } finally {
+          _roomSnapshotCalibrationInFlight = false;
+          _scheduleRoomSnapshotCalibration();
+        }
+      },
+    );
+  }
+
+  Future<void> _connectRealtime({bool refreshRoom = false}) async {
+    final live = widget.live;
+    if (live == null || !mounted || _leaving) return;
+    if (refreshRoom) await _loadRoom(silent: true);
+    _recordCheckInDiagnostic('websocket_connect_requested');
+    await _realtimeClient.connect(
+      uri: _liveWebsocketUri(live.id),
+      ticketLoader: () => _accountSession.liveWebsocketTicket(live.id),
+    );
+  }
+
+  Uri _liveWebsocketUri(int liveId) {
+    final apiBase = Uri.parse(const AppConfig().apiBaseUrl);
+    final path = apiBase.path.replaceFirst(
+      RegExp(r'/api/v1/?$'),
+      '/api/v1/lives/$liveId/ws',
+    );
+    return apiBase.replace(
+      scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
+      path: path,
+    );
+  }
+
+  void _handleRealtimeEvent(dynamic rawEvent) {
+    final receivedAt = DateTime.now().toUtc();
+    final eventType = _realtimeEventType(rawEvent);
+    _realtimeMessageCount++;
+    _recordCheckInDiagnostic(
+      'websocket_message_received count=$_realtimeMessageCount type=$eventType',
+      at: receivedAt,
+    );
+    final event = LiveRealtimeEventParser.parse(rawEvent);
+    if (event == null) {
+      _recordCheckInDiagnostic(
+        'websocket_message_unparsed type=$eventType',
+        at: receivedAt,
+      );
+      return;
+    }
+    if (event is LiveCheckInEvent || event is LiveCheckInStartedEvent) {
+      _recordCheckInDiagnostic(
+        'check_in_event_parsed type=$eventType',
+        at: receivedAt,
+      );
+    }
+    final eventKey = _stateEventKey(event);
+    if (eventKey != null && event.eventVersion > 0) {
+      final previousVersion = _latestRealtimeEventVersions[eventKey];
+      if (previousVersion != null && event.eventVersion <= previousVersion) {
+        if (event is LiveCheckInEvent || event is LiveCheckInStartedEvent) {
+          _recordCheckInDiagnostic(
+            'check_in_event_ignored reason=stale_version '
+            'version=${event.eventVersion} previous=$previousVersion',
+            at: receivedAt,
+          );
+        }
+        return;
+      }
+      _latestRealtimeEventVersions[eventKey] = event.eventVersion;
+    }
+    if (eventKey != null) _realtimeMutationGeneration++;
+    if (_networkReconnecting && mounted) {
+      setState(() {
+        _networkReconnecting = false;
+      });
+    }
+    switch (event) {
+      case LiveRoomSnapshotEvent(:final room):
+        _applyRoomSnapshot(room);
+      case LiveAudioMuteEvent(:final muted):
+        _applyAudioMute(muted);
+      case LiveChatMuteEvent(:final muted):
+        _applyChatMute(muted);
+      case LiveParticipantCountEvent(:final count):
+        _applyParticipantCount(count);
+      case LiveParticipantJoinedEvent(:final userId):
+        _knownParticipantIds.add(userId);
+      case LiveParticipantLeftEvent(
+        :final userId,
+        :final speakers,
+        :final listeners,
+      ):
+        _knownParticipantIds.remove(userId);
+        _applySpeakerLists(speakers, listeners);
+      case LiveCheckInEvent(
+        :final deadline,
+        :final checkedInCount,
+        :final userId,
+      ):
+        _applyCheckInEvent(deadline, checkedInCount, userId);
+      case LiveCheckInStartedEvent(:final deadline):
+        _applyCheckInStarted(deadline);
+      case LiveRaisedHandCountEvent(:final count):
+        _applyRaisedHandCount(count);
+      case LiveRaisedHandRejectedEvent(:final userId):
+        if (_room?.viewerUserId == userId && mounted) {
+          setState(() => _handRaised = false);
+        }
+      case LiveParticipantMuteEvent(:final userId, :final muted):
+        _applyParticipantMute(userId, muted);
+      case LiveKickedEvent():
+        unawaited(_handleKicked());
+      case LiveEndedEvent():
+        _closeRoom(true);
+      case LiveHostAbsentEvent(:final absent):
+        _applyHostPresence(!absent);
+      case LiveSpeakerInviteEvent(:final invited):
+        if (invited) {
+          _showPendingSpeakerInvite();
+        }
+      case LiveSpeakerListsChangedEvent(
+        :final speakers,
+        :final listeners,
+        :final removed,
+      ):
+        _applySpeakerLists(speakers, listeners, removed: removed);
+      case LiveHostTransferredEvent(:final viewerRole, :final host):
+        _applyHostTransfer(viewerRole, host);
+      case LiveScreenShareChangedEvent(:final active):
+        if (active && mounted && _room?.viewerRole != 'host') {
+          showAcoAlertNotice(context, '屏幕共享', '主持人已开始屏幕共享。');
+        }
+    }
+  }
+
+  void _applySpeakerLists(
+    List<LiveParticipant> speakers,
+    List<LiveParticipant> listeners, {
+    bool removed = false,
+  }) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    final wasListener = room.viewerRole == 'listener';
+    final viewerId = room.viewerUserId;
+    final viewerIsSpeaker = speakers.any(
+      (participant) => participant.userId == viewerId,
+    );
+    final viewerIsListener = listeners.any(
+      (participant) => participant.userId == viewerId,
+    );
+    var viewerRole = room.viewerRole;
+    LiveParticipant? viewerParticipant;
+    if (viewerIsSpeaker) {
+      viewerParticipant = speakers.firstWhere(
+        (participant) => participant.userId == viewerId,
+      );
+      viewerRole = viewerParticipant.role;
+    } else if (viewerIsListener) {
+      viewerRole = 'listener';
+      viewerParticipant = listeners.firstWhere(
+        (participant) => participant.userId == viewerId,
+      );
+    } else if (removed && room.viewerRole == 'speaker') {
+      viewerRole = 'listener';
+    }
+    final viewerHandRaised = listeners.any(
+      (participant) => participant.userId == viewerId && participant.handRaised,
+    );
+    var viewerMuted = room.viewerMuted;
+    if (viewerParticipant != null) {
+      viewerMuted = viewerParticipant.muted;
+    } else if (removed && viewerRole == 'listener') {
+      viewerMuted = false;
+    }
+    setState(() {
+      _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        speakers: speakers,
+        listeners: listeners,
+        viewerRole: viewerRole,
+        canRaiseHand: viewerRole == 'listener',
+        // A speaker-removed event may carry only the preview listener list;
+        // when this user is omitted, the role transition still makes the
+        // previous speaker mute flag stale.
+        viewerMuted: viewerMuted,
+      );
+      _handRaised = viewerRole == 'listener' && viewerHandRaised;
+      if (wasListener &&
+          viewerRole == 'speaker' &&
+          _localMuteOverride == null) {
+        _muted = false;
+      }
+    });
+    unawaited(_syncLiveKitPublishPermission(_room!));
+  }
+
+  void _applyHostTransfer(String viewerRole, LiveParticipant? host) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    setState(() {
+      _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        host: host,
+        viewerRole: viewerRole,
+        canRaiseHand: viewerRole == 'listener',
+      );
+      if (viewerRole != 'listener') _handRaised = false;
+    });
+    _ensureHostHeartbeat(_room!);
+    _hostTransferred = viewerRole == 'host';
+  }
+
+  void _applyHostPresence(bool active) {
+    final room = _room;
+    if (room == null || !mounted || room.hostActive == active) return;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        hostActive: active,
+      ),
+    );
+  }
+
+  String? _stateEventKey(LiveRealtimeEvent event) {
+    if (event is LiveRoomSnapshotEvent) return null;
+    if (event.versionScope.isNotEmpty) return event.versionScope;
+    return switch (event) {
+      LiveRoomSnapshotEvent() => null,
+      LiveAudioMuteEvent() => 'audio_mute',
+      LiveChatMuteEvent() => 'chat_mute',
+      LiveParticipantCountEvent() => 'participant_count',
+      LiveCheckInEvent(:final checkInId) => 'check_in:$checkInId:result',
+      LiveCheckInStartedEvent(:final checkInId) =>
+        'check_in:$checkInId:started',
+      LiveRaisedHandCountEvent() => 'raised_hand_count',
+      LiveRaisedHandRejectedEvent(:final userId) =>
+        'raised_hand_rejected:$userId',
+      LiveParticipantMuteEvent(:final userId) => 'participant_mute:$userId',
+      LiveParticipantJoinedEvent() => 'participant_members',
+      LiveParticipantLeftEvent() => 'participant_members',
+      LiveKickedEvent() => 'kicked',
+      LiveEndedEvent() => 'room_lifecycle',
+      LiveSpeakerInviteEvent(:final userId) => 'speaker_invite:$userId',
+      LiveSpeakerListsChangedEvent() => 'speakers',
+      LiveHostTransferredEvent() => 'host_transfer',
+      LiveHostAbsentEvent() => 'host_presence',
+      LiveScreenShareChangedEvent() => 'screen_share',
+    };
+  }
+
+  void _showPendingSpeakerInvite() {
+    // The server already filters invite events to the target participant.
+    // Relying on the local role snapshot here can hide a valid invite while
+    // that snapshot is briefly stale during realtime updates.
+    if (!mounted || _speakerInviteDialogVisible) {
+      return;
+    }
+    _speakerInviteDialogVisible = true;
+    // The realtime callback can arrive while the UI is otherwise idle. A
+    // post-frame callback alone does not schedule a frame, so it may not run
+    // until the user taps or scrolls. Trigger a frame explicitly.
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_showSpeakerInviteDialog());
+    });
+  }
+
+  Future<void> _handleKicked() async {
+    if (_leaving || _closingRoom) return;
+    _leaving = true;
+    await _disconnectLiveKitForLeave();
+    _closeRoom(LiveRoomExitReason.kicked);
+  }
+
+  void _applyParticipantCount(int participantCount) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    // Presence events can arrive late or out of order during reconnects. Do
+    // not let an invalid server value render a negative audience count.
+    final safeParticipantCount = participantCount < 0 ? 0 : participantCount;
+    _realtimeParticipantCount = safeParticipantCount;
+    setState(() {
+      _room = LiveRoom(
+        live: room.live,
+        host: room.host,
+        hostActive: room.hostActive,
+        viewerUserId: room.viewerUserId,
+        viewerRole: room.viewerRole,
+        participantCount: safeParticipantCount,
+        speakers: room.speakers,
+        listeners: room.listeners,
+        raisedHandCount: room.raisedHandCount,
+        canRaiseHand: room.canRaiseHand,
+        viewerMuted: room.viewerMuted,
+        chatMuted: room.chatMuted,
+        audioMuted: room.audioMuted,
+        checkIn: room.checkIn,
+      );
+    });
+  }
+
+  void _applyCheckInEvent(DateTime deadline, int checkedInCount, int userId) {
+    final room = _room;
+    if (room == null || !mounted) {
+      _recordCheckInDiagnostic('check_in_result_ignored reason=no_room');
+      return;
+    }
+    final current = room.checkIn;
+    if (current == null || current.deadline != deadline) {
+      _recordCheckInDiagnostic(
+        'check_in_result_ignored reason=deadline_mismatch '
+        'active_deadline=${current?.deadline.toUtc().toIso8601String() ?? 'none'} '
+        'event_deadline=${deadline.toUtc().toIso8601String()}',
+      );
+      return;
+    }
+    _realtimeCheckInDeadline = deadline;
+    _realtimeCheckInCount = checkedInCount > (_realtimeCheckInCount ?? 0)
+        ? checkedInCount
+        : _realtimeCheckInCount;
+    final viewerChecked = current.viewerChecked || userId == room.viewerUserId;
+    setState(() {
+      _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: LiveCheckIn(
+          deadline: deadline,
+          checkedInCount: checkedInCount,
+          viewerChecked: viewerChecked,
+        ),
+      );
+    });
+  }
+
+  void _applyCheckInStarted(DateTime deadline) {
+    final room = _room;
+    if (room == null || !mounted) {
+      _recordCheckInDiagnostic('check_in_start_ignored reason=no_room');
+      return;
+    }
+    if (room.checkIn?.deadline == deadline) {
+      _recordCheckInDiagnostic(
+        'check_in_start_ignored reason=already_active '
+        'deadline=${deadline.toUtc().toIso8601String()}',
+      );
+      return;
+    }
+    _realtimeCheckInDeadline = deadline;
+    _realtimeCheckInCount = 0;
+    _recordCheckInDiagnostic(
+      'check_in_state_applied source=websocket '
+      'deadline=${deadline.toUtc().toIso8601String()}',
+    );
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: LiveCheckIn(
+          deadline: deadline,
+          checkedInCount: 0,
+          viewerChecked: false,
+        ),
+      ),
+    );
+  }
+
+  void _applyRaisedHandCount(int count) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    setState(
+      () => _room = _copyRoom(
+        room,
+        participantCount: room.participantCount,
+        checkIn: room.checkIn,
+        raisedHandCount: count,
+      ),
+    );
+  }
+
+  void _applyAudioMute(bool muted) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    final updatedRoom = LiveRoom(
+      live: room.live,
+      host: room.host,
+      hostActive: room.hostActive,
+      viewerUserId: room.viewerUserId,
+      viewerRole: room.viewerRole,
+      participantCount: room.participantCount,
+      // The room-level event only changes the global control state. Individual
+      // participant mute flags come from the next room snapshot; preserving
+      // them here avoids a late global event undoing an individual unmute.
+      speakers: room.speakers,
+      listeners: room.listeners,
+      raisedHandCount: room.raisedHandCount,
+      canRaiseHand: room.canRaiseHand,
+      viewerMuted: room.viewerMuted,
+      chatMuted: room.chatMuted,
+      audioMuted: muted,
+      checkIn: room.checkIn,
+    );
+    setState(() {
+      _room = updatedRoom;
+      _muted = updatedRoom.viewerMuted;
+    });
+    _localMuteOverride = null;
+    unawaited(_syncLiveKitPublishPermission(updatedRoom));
+    // The event carries only the room-level flag. Reload the snapshot to get
+    // authoritative per-participant mute states (including individual
+    // unmute overrides) instead of guessing them locally.
+    unawaited(_loadRoom(silent: true));
+  }
+
+  void _applyChatMute(bool muted) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    final updatedRoom = LiveRoom(
+      live: room.live,
+      host: room.host,
+      hostActive: room.hostActive,
+      viewerUserId: room.viewerUserId,
+      viewerRole: room.viewerRole,
+      participantCount: room.participantCount,
+      speakers: room.speakers,
+      listeners: room.listeners,
+      raisedHandCount: room.raisedHandCount,
+      canRaiseHand: room.canRaiseHand,
+      viewerMuted: room.viewerMuted,
+      chatMuted: muted,
+      audioMuted: room.audioMuted,
+      checkIn: room.checkIn,
+    );
+    setState(() => _room = updatedRoom);
+    unawaited(_syncLiveKitPublishPermission(updatedRoom));
+  }
+
+  void _applyRoomSnapshot(LiveRoom room) {
+    if (!mounted) return;
+    if (room.live.status == 'ended') {
+      _closeRoom(true);
+      return;
+    }
+    // A participant_count event is the authoritative live value. A snapshot
+    // may have been requested before that event arrived, so never let an
+    // older snapshot overwrite a newer realtime count.
+    final displayedParticipantCount =
+        _realtimeParticipantCount ?? room.participantCount;
+    final localCheckInDeadline = _locallyConfirmedCheckInDeadline;
+    final incomingCheckIn = room.checkIn;
+    var displayedCheckIn = incomingCheckIn;
+    final realtimeCount = _realtimeCheckInDeadline == incomingCheckIn?.deadline
+        ? _realtimeCheckInCount
+        : null;
+    if (incomingCheckIn != null &&
+        realtimeCount != null &&
+        realtimeCount > incomingCheckIn.checkedInCount) {
+      displayedCheckIn = LiveCheckIn(
+        deadline: incomingCheckIn.deadline,
+        checkedInCount: realtimeCount,
+        viewerChecked: incomingCheckIn.viewerChecked,
+      );
+    }
+    if (localCheckInDeadline != null &&
+        incomingCheckIn != null &&
+        incomingCheckIn.deadline == localCheckInDeadline &&
+        !incomingCheckIn.viewerChecked) {
+      displayedCheckIn = LiveCheckIn(
+        deadline: incomingCheckIn.deadline,
+        checkedInCount: realtimeCount ?? incomingCheckIn.checkedInCount,
+        viewerChecked: true,
+      );
+    } else if (localCheckInDeadline != null &&
+        incomingCheckIn != null &&
+        incomingCheckIn.deadline != localCheckInDeadline) {
+      _locallyConfirmedCheckInDeadline = null;
+    }
+    final displayedRoom = _copyRoom(
+      room,
+      participantCount: displayedParticipantCount,
+      checkIn: displayedCheckIn,
+    );
+    _recordCheckInDiagnostic(
+      'room_snapshot_applied role=${displayedRoom.viewerRole} '
+      '${_checkInDiagnosticSummary(displayedRoom.checkIn)}',
+    );
+    debugPrint(
+      'Live room snapshot: source=state live=${room.live.id} '
+      'role=${room.viewerRole} hostMuted=${room.host.muted} '
+      'viewerMuted=${room.viewerMuted} localMuted=$_muted',
+    );
+    final invitePending =
+        displayedRoom.viewerRole == 'listener' &&
+        displayedRoom.listeners.any(
+          (participant) =>
+              participant.userId == displayedRoom.viewerUserId &&
+              participant.speakerInvited,
+        );
+    if (invitePending && !_speakerInviteDialogVisible) {
+      _showPendingSpeakerInvite();
+    }
+    _checkInTimer?.cancel();
+    if (displayedRoom.checkIn != null) {
+      _checkInTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        if (displayedRoom.checkIn!.deadline.isBefore(DateTime.now())) {
+          _checkInTimer?.cancel();
+          final currentRoom = _room ?? displayedRoom;
+          setState(() {
+            _room = _copyRoom(
+              currentRoom,
+              participantCount: currentRoom.participantCount,
+              checkIn: null,
+            );
+          });
+          unawaited(_loadRoom(silent: true));
+          return;
+        }
+        setState(() {});
+      });
+    }
+    final participants = [
+      displayedRoom.host,
+      ...displayedRoom.speakers,
+      ...displayedRoom.listeners,
+    ];
+    final participantIds = participants.map(
+      (participant) => participant.userId,
+    );
+    _knownParticipantIds
+      ..clear()
+      ..addAll(participantIds);
+    final localMuteOverride = _localMuteOverride;
+    if (localMuteOverride != null && room.viewerMuted == localMuteOverride) {
+      _localMuteOverride = null;
+    }
+    // A room refresh triggered by another member's moderation action may race
+    // the mute broadcast. Never turn a locally muted host/speaker back on
+    // from that stale snapshot; only an explicit local unmute may do so.
+    final keepLocalMute =
+        _muted &&
+        _room?.viewerRole == displayedRoom.viewerRole &&
+        displayedRoom.viewerRole != 'listener';
+    // Active-speaker notifications are transport-level activity signals and
+    // can arrive after the server has persisted a mute action. Remove stale
+    // entries at the snapshot boundary; the widgets also re-check each
+    // participant's muted flag when rendering.
+    final mutedParticipantIds = <String>{
+      if (displayedRoom.host.muted) displayedRoom.host.userId.toString(),
+      ...displayedRoom.speakers
+          .where((participant) => participant.muted)
+          .map((participant) => participant.userId.toString()),
+    };
+    _liveKitSpeakingParticipantIds.removeAll(mutedParticipantIds);
+    setState(() {
+      _room = displayedRoom;
+      // A realtime snapshot can arrive before the mute request completes.
+      // Keep the user's latest local choice until the server echoes it back.
+      _muted = localMuteOverride ?? displayedRoom.viewerMuted || keepLocalMute;
+      if (displayedRoom.viewerRole != 'listener') _handRaised = false;
+      if (displayedRoom.chatMuted &&
+          !_isLiveHostRole(displayedRoom.viewerRole)) {
+        _emojiPickerVisible = false;
+      }
+    });
+    unawaited(_syncLiveKitPublishPermission(displayedRoom));
+    _ensureHostHeartbeat(displayedRoom);
+  }
+
+  LiveRoom _copyRoom(
+    LiveRoom room, {
+    required int participantCount,
+    required LiveCheckIn? checkIn,
+    int? raisedHandCount,
+    LiveParticipant? host,
+    List<LiveParticipant>? speakers,
+    List<LiveParticipant>? listeners,
+    bool? viewerMuted,
+    String? viewerRole,
+    bool? hostActive,
+    bool? canRaiseHand,
+  }) => LiveRoom(
+    live: room.live,
+    host: host ?? room.host,
+    hostActive: hostActive ?? room.hostActive,
+    viewerUserId: room.viewerUserId,
+    viewerRole: viewerRole ?? room.viewerRole,
+    participantCount: participantCount,
+    speakers: speakers ?? room.speakers,
+    listeners: listeners ?? room.listeners,
+    raisedHandCount: raisedHandCount ?? room.raisedHandCount,
+    canRaiseHand: canRaiseHand ?? room.canRaiseHand,
+    viewerMuted: viewerMuted ?? room.viewerMuted,
+    chatMuted: room.chatMuted,
+    audioMuted: room.audioMuted,
+    checkIn: checkIn,
+  );
+
+  void _applyParticipantMute(int userId, bool muted) {
+    final room = _room;
+    if (room == null || !mounted) return;
+    LiveParticipant update(LiveParticipant participant) =>
+        participant.userId == userId
+        ? LiveParticipant(
+            userId: participant.userId,
+            nickname: participant.nickname,
+            username: participant.username,
+            avatarUrl: participant.avatarUrl,
+            role: participant.role,
+            identity: participant.identity,
+            staffIdentity: participant.staffIdentity,
+            handRaised: participant.handRaised,
+            muted: muted,
+            speakerInvited: participant.speakerInvited,
+          )
+        : participant;
+    final isViewer = userId == room.viewerUserId;
+    final updatedRoom = _copyRoom(
+      room,
+      participantCount: room.participantCount,
+      checkIn: room.checkIn,
+      host: update(room.host),
+      speakers: room.speakers.map(update).toList(growable: false),
+      listeners: room.listeners.map(update).toList(growable: false),
+      viewerMuted: isViewer ? muted : null,
+    );
+    setState(() {
+      _room = updatedRoom;
+      if (isViewer) {
+        _muted = muted;
+        _localMuteOverride = null;
+      }
+    });
+    if (isViewer) {
+      unawaited(_syncLiveKitPublishPermission(updatedRoom));
+    }
+  }
+
+  Future<void> _raiseHand() async {
+    final live = widget.live;
+    if (live == null || _handRaised || _networkReconnecting) return;
+    try {
+      await _accountSession.raiseLiveHand(live.id);
+      if (!mounted) return;
+      setState(() => _handRaised = true);
+      _showHandRaiseNotice();
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '举手失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '举手失败', '请检查网络后重试。');
+    }
+  }
+
+  void _showHandRaiseNotice() {
+    _handRaiseNoticeTimer?.cancel();
+    setState(() => _handRaiseNoticeVisible = true);
+    _handRaiseNoticeTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _handRaiseNoticeVisible = false);
+    });
+  }
+
+  Future<void> _endLive() async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _stopScreenBroadcast();
+      // The host action sheet is popped immediately before this method is
+      // started. Wait until the room route is current before popping it, so a
+      // fast API response cannot pop the still-closing sheet instead.
+      while (mounted && !(ModalRoute.of(context)?.isCurrent ?? true)) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+      if (!mounted) return;
+      await _accountSession.endLive(live.id);
+      _closeRoom(true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '结束失败', error.message);
+    }
+  }
+
+  Future<void> _startScreenBroadcast() async {
+    final live = widget.live;
+    if (live == null || _screenBroadcastStarting || _screenBroadcasting) return;
+    debugPrint('Aliyun screen share: start requested live=${live.id}');
+    setState(() => _screenBroadcastStarting = true);
+    try {
+      final urls = await _accountSession.aliyunLiveStreamUrls(live.id);
+      final pushUrl = urls['push_url'] as String?;
+      debugPrint(
+        'Aliyun screen share: push URL received=${pushUrl?.isNotEmpty == true}',
+      );
+      if (pushUrl == null || pushUrl.isEmpty) {
+        throw StateError('API 未返回推流地址');
+      }
+      await _aliyunScreenBroadcast.start(
+        pushUrl,
+        requestIOSBroadcast: () =>
+            AliyunScreenBroadcast.requestIOSBroadcast(context),
+      );
+      try {
+        await _accountSession.setAliyunLiveScreenShareActive(
+          live.id,
+          active: true,
+        );
+      } on Object {
+        await _aliyunScreenBroadcast.stop();
+        rethrow;
+      }
+      _aliyunStreamHeartbeatTimer?.cancel();
+      _aliyunStreamHeartbeatTimer = Timer.periodic(
+        const Duration(minutes: 2),
+        (_) => unawaited(_renewAliyunScreenShare(live.id)),
+      );
+      if (mounted) setState(() => _screenBroadcasting = true);
+      unawaited(_refreshAliyunPlayback());
+    } on AccountApiException catch (error) {
+      debugPrint('Aliyun screen share API failed: $error');
+      if (mounted) _showNotice(context, '无法开始屏幕共享', error.localizedMessage);
+    } catch (error) {
+      debugPrint('Aliyun screen share failed: $error');
+      if (mounted) {
+        final errorText = '$error'.toLowerCase();
+        final isLicenseFailure =
+            errorText.contains('license') ||
+            errorText.contains('licence') ||
+            errorText.contains('license not verified');
+        _showNotice(
+          context,
+          '无法开始屏幕共享',
+          isLicenseFailure
+              ? '阿里云 License 校验失败，请重新安装包含正确 License 的版本。'
+              : error is StateError
+              ? error.message
+              : error is TimeoutException
+              ? '屏幕推流连接超时，请检查网络后重试。'
+              : error is UnsupportedError
+              ? error.message.toString()
+              : '请检查系统屏幕录制权限后重试。',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _screenBroadcastStarting = false);
+    }
+  }
+
+  Future<void> _stopScreenBroadcast() async {
+    if (!_screenBroadcasting && !_screenBroadcastStarting) return;
+    _aliyunStreamHeartbeatTimer?.cancel();
+    _aliyunStreamHeartbeatTimer = null;
+    final liveId = widget.live?.id;
+    try {
+      await _aliyunScreenBroadcast.stop();
+    } finally {
+      if (liveId != null) {
+        try {
+          await _accountSession.setAliyunLiveScreenShareActive(
+            liveId,
+            active: false,
+          );
+        } on Object catch (error) {
+          debugPrint('Aliyun screen share stop sync failed: $error');
+        }
+      }
+      if (mounted) {
+        setState(() => _screenBroadcasting = false);
+      }
+    }
+  }
+
+  Future<void> _renewAliyunScreenShare(int liveId) async {
+    try {
+      if (defaultTargetPlatform == TargetPlatform.iOS &&
+          !await AliyunScreenBroadcast.isIOSBroadcasting()) {
+        await _stopScreenBroadcast();
+        return;
+      }
+      await _accountSession.setAliyunLiveScreenShareActive(
+        liveId,
+        active: true,
+      );
+    } on Object catch (error) {
+      debugPrint('Aliyun screen share heartbeat failed: $error');
+    }
+  }
+
+  Future<void> _refreshAliyunPlayback() async {
+    final live = widget.live;
+    if (live == null || _leaving) return;
+    if (_screenBroadcasting || _isLiveHostRole(_room?.viewerRole)) {
+      await _setAliyunPlaybackUrl(null);
+      return;
+    }
+    if (_aliyunPlaybackLoading) return;
+    _aliyunPlaybackLoading = true;
+    try {
+      final urls = await _accountSession.aliyunLiveStreamUrls(live.id);
+      if (_screenBroadcasting || _isLiveHostRole(_room?.viewerRole)) {
+        await _setAliyunPlaybackUrl(null);
+        return;
+      }
+      final isPushing = urls['is_pushing'] == true;
+      final url = urls['play_url'] as String?;
+      if (kDebugMode && url != null && url.isNotEmpty) {
+        debugPrint('Aliyun debug play URL: $url');
+      }
+      final parsedUrl = url == null ? null : Uri.tryParse(url);
+      debugPrint(
+        'Aliyun playback API: isPushing=$isPushing '
+        'playUrlPresent=${url?.isNotEmpty == true} '
+        'host=${parsedUrl?.host} path=${parsedUrl?.path}',
+      );
+      if (!isPushing) {
+        await _setAliyunPlaybackUrl(null);
+        return;
+      }
+      final currentUrl = _aliyunLivePlayUrl;
+      final sameStream =
+          currentUrl != null &&
+          url != null &&
+          Uri.parse(currentUrl).replace(query: '').toString() ==
+              Uri.parse(url).replace(query: '').toString();
+      final currentAuthKey = currentUrl == null
+          ? null
+          : Uri.tryParse(currentUrl)?.queryParameters['auth_key'];
+      final currentExpiry = currentAuthKey == null
+          ? null
+          : int.tryParse(currentAuthKey.split('-').first);
+      final signatureNeedsRefresh =
+          currentExpiry == null ||
+          currentExpiry <
+              DateTime.now().millisecondsSinceEpoch ~/ 1000 + 10 * 60;
+      if (!mounted ||
+          url == null ||
+          url.isEmpty ||
+          (sameStream && !signatureNeedsRefresh)) {
+        return;
+      }
+      await _setAliyunPlaybackUrl(url);
+    } on AccountApiException catch (error) {
+      if (error.statusCode == 404 || error.statusCode == 503) {
+        _aliyunStreamPollTimer?.cancel();
+        _aliyunStreamPollTimer = null;
+      }
+    } on Object {
+      // The host may not have started screen sharing yet. The timer retries.
+    } finally {
+      _aliyunPlaybackLoading = false;
+    }
+  }
+
+  Future<void> _setAliyunPlaybackUrl(String? url) async {
+    if (!mounted || _aliyunLivePlayUrl == url) return;
+    _aliyunFrameSnapshotRequested = false;
+    _aliyunVideoRendered = false;
+    _aliyunPlaybackRetryTimer?.cancel();
+    _aliyunPlaybackRetryCount = 0;
+    _aliyunLivePlayUrl = url;
+    final player = _aliyunLivePlayer;
+    if (url == null) {
+      _aliyunPlayerViewAttached = false;
+      _shareMembersExpanded = false;
+      if (player != null) await player.stop();
+    } else if (_aliyunPlayerViewAttached) {
+      await _prepareAliyunPlayback(player!, url);
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onAliyunPlayerViewCreated(int viewId) {
+    unawaited(_initializeAliyunPlayer(viewId));
+  }
+
+  Future<void> _initializeAliyunPlayer(int viewId) async {
+    // The bundled certificate is issued for Aliyun's CN environment.
+    // Set this before creating any player so the native SDK validates the
+    // certificate against the matching root key.
+    await FlutterAliPlayerGlobalSettings.setGlobalEnvironment(1);
+    final player = _aliyunLivePlayer ??=
+        FlutterAliPlayerFactory.createAliPlayer();
+    player.setOnPrepared((_) async {
+      debugPrint('Aliyun player prepared');
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        try {
+          await player.setPictureInPictureEnableForIOS(true);
+        } on Object catch (error) {
+          debugPrint('Aliyun PiP could not be enabled: $error');
+        }
+      }
+      unawaited(player.play());
+    });
+    player.setOnRenderingStart((_) {
+      debugPrint('Aliyun player rendered first frame');
+      _aliyunVideoRendered = true;
+      _aliyunPlaybackRetryTimer?.cancel();
+      _aliyunPlaybackRetryCount = 0;
+      unawaited(_captureAliyunDecodedFrame(player));
+    });
+    player.setOnError((code, extra, message, _) {
+      debugPrint(
+        'Aliyun player error: code=$code extra=$extra message=$message',
+      );
+      // License failures are deterministic. Retrying only repeats the same
+      // authorization error until the app is restarted and obscures the
+      // actual configuration problem.
+      final errorText = '${message ?? ''} ${extra ?? ''}'.toLowerCase();
+      if (errorText.contains('license') ||
+          errorText.contains('licence') ||
+          errorText.contains('authorization failed')) {
+        _aliyunPlaybackRetryTimer?.cancel();
+        return;
+      }
+      _scheduleAliyunPlaybackRetry(player);
+    });
+    unawaited(_attachAliyunPlayerView(player, viewId));
+  }
+
+  Future<void> _startIOSPictureInPicture() async {
+    if (!_aliyunVideoRendered) {
+      if (mounted) {
+        _showNotice(context, '无法开启画中画', '当前没有可用的屏幕画面。');
+      }
+      return;
+    }
+    final player = _aliyunLivePlayer;
+    if (player == null) {
+      _showNotice(context, '无法开启画中画', '当前没有可用的屏幕画面。');
+      return;
+    }
+    try {
+      await player.startPictureInPictureForIOS();
+    } on Object catch (error) {
+      debugPrint('Aliyun iOS PiP start failed: $error');
+    }
+  }
+
+  Future<void> _captureAliyunDecodedFrame(FlutterAliplayer player) async {
+    if (!kDebugMode || _aliyunFrameSnapshotRequested) return;
+    _aliyunFrameSnapshotRequested = true;
+    try {
+      final directory = await getTemporaryDirectory();
+      final path =
+          '${directory.path}/aliyun-decoded-frame-${DateTime.now().millisecondsSinceEpoch}.png';
+      player.setOnSnapShot((snapshotPath, _) {
+        debugPrint('Aliyun decoded frame snapshot saved: $snapshotPath');
+      });
+      await player.snapshot(path);
+      debugPrint('Aliyun decoded frame snapshot requested: $path');
+    } on Object catch (error) {
+      debugPrint('Aliyun decoded frame snapshot failed: $error');
+    }
+  }
+
+  Future<void> _attachAliyunPlayerView(
+    FlutterAliplayer player,
+    int viewId,
+  ) async {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      // The Android plugin never completes the setPlayerView MethodChannel call.
+      unawaited(player.setPlayerView(viewId));
+    } else {
+      await player.setPlayerView(viewId);
+    }
+    _aliyunPlayerViewAttached = true;
+    final url = _aliyunLivePlayUrl;
+    if (url != null) await _prepareAliyunPlayback(player, url);
+  }
+
+  Future<void> _prepareAliyunPlayback(
+    FlutterAliplayer player,
+    String url,
+  ) async {
+    final parsedUrl = Uri.tryParse(url);
+    debugPrint(
+      'Aliyun player preparing: host=${parsedUrl?.host} path=${parsedUrl?.path}',
+    );
+    try {
+      await player.stop();
+      await player.setUrl(url);
+      await player.prepare();
+      debugPrint('Aliyun player prepare requested');
+    } on Object catch (error) {
+      debugPrint('Aliyun player prepare failed: $error');
+      rethrow;
+    }
+  }
+
+  void _scheduleAliyunPlaybackRetry(FlutterAliplayer player) {
+    final url = _aliyunLivePlayUrl;
+    if (url == null || _aliyunPlaybackRetryCount >= 3) return;
+    _aliyunPlaybackRetryTimer?.cancel();
+    final retry = ++_aliyunPlaybackRetryCount;
+    _aliyunPlaybackRetryTimer = Timer(Duration(seconds: retry * 4), () {
+      if (!mounted || !_aliyunPlayerViewAttached || _aliyunLivePlayUrl != url) {
+        return;
+      }
+      debugPrint('Aliyun player retry: attempt=$retry');
+      unawaited(_prepareAliyunPlayback(player, url));
+    });
+  }
+
+  Future<void> _confirmEndLive() async {
+    _dismissKeyboard();
+    final shouldEnd = await showAcoConfirmDialog(
+      context: context,
+      title: '结束会议',
+      message: '确定要结束这场会议吗？',
+      confirmLabel: '结束会议',
+      isDestructive: true,
+      isDefaultAction: false,
+      contentPadding: const EdgeInsets.only(top: 8),
+      cancelTextStyle: TextStyle(color: widget.palette.accentForeground),
+    );
+    if (!mounted) return;
+    _dismissKeyboard();
+    if (shouldEnd) {
+      await _endLive();
+    }
+  }
+
+  void _showMembers() {
+    final room = _room;
+    final live = widget.live;
+    if (room == null || live == null) return;
+    // Clear the room message field before presenting the member sheet. If it
+    // remains focused, dismissing the sheet restores that focus and reopens
+    // the keyboard underneath the sheet.
+    _dismissKeyboard();
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (_) => _LiveRoomMembersSheet(
+        palette: widget.palette,
+        initialTotal: room.participantCount,
+        canManageMicrophones: _canManageLiveMicrophones(room.viewerRole),
+        currentUserId: room.viewerUserId,
+        loadPage: (page, keyword) =>
+            _accountSession.liveMembers(live.id, page: page, keyword: keyword),
+        onMemberTap: _canManageLiveMicrophones(room.viewerRole)
+            ? _showMemberActions
+            : null,
+        audioMuted: room.audioMuted,
+        onToggleAudioMute: _canManageLiveMicrophones(room.viewerRole)
+            ? (muted) async {
+                await _setAudioMute(muted);
+                await _loadRoom(silent: true);
+              }
+            : null,
+        chatMuted: room.chatMuted,
+        onToggleChatMute: _isLiveHostRole(room.viewerRole)
+            ? (muted) async {
+                await _setChatMute(muted);
+                await _loadRoom(silent: true);
+              }
+            : null,
+      ),
+    );
+  }
+
+  Future<void> _showMemberActions(LiveParticipant member) async {
+    final live = widget.live;
+    if (live == null || member.role == 'host') return;
+    final viewerRole = _room?.viewerRole;
+    final isHost = _isLiveHostRole(viewerRole);
+    if (!_canManageLiveMicrophones(viewerRole)) return;
+    if (!isHost && member.role != 'speaker' && member.role != 'cohost') return;
+    final action = await showCupertinoModalPopup<_LiveMemberAction>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: Text(
+          member.nickname,
+          style: const TextStyle(fontSize: AcoTypography.bodySmall),
+        ),
+        actions: [
+          if (isHost && member.role == 'listener')
+            CupertinoActionSheetAction(
+              onPressed: () {
+                Navigator.of(sheetContext).pop();
+                unawaited(_inviteSpeakerImmediately(member));
+              },
+              child: const Text(
+                '邀请上麦',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+          if (member.role == 'speaker' || member.role == 'cohost')
+            CupertinoActionSheetAction(
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(_LiveMemberAction.toggleMute),
+              child: Text(
+                member.muted ? '开麦' : '关麦',
+                style: const TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+          if (isHost && member.role == 'speaker') ...[
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.removeSpeaker),
+              child: const Text(
+                '移至听众',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+          ],
+          if (isHost && (member.role == 'speaker' || member.role == 'cohost'))
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.transferHost),
+              child: const Text(
+                '转让主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+          if (isHost && member.role == 'cohost')
+            CupertinoActionSheetAction(
+              onPressed: () => Navigator.of(
+                sheetContext,
+              ).pop(_LiveMemberAction.removeCohost),
+              child: const Text(
+                '取消联席主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            )
+          else if (isHost)
+            CupertinoActionSheetAction(
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(_LiveMemberAction.setCohost),
+              child: const Text(
+                '设为联席主持人',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+          if (isHost)
+            CupertinoActionSheetAction(
+              isDestructiveAction: true,
+              onPressed: () =>
+                  Navigator.of(sheetContext).pop(_LiveMemberAction.kick),
+              child: const Text(
+                '移出会议',
+                style: TextStyle(fontSize: AcoTypography.bodySmall),
+              ),
+            ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(fontSize: AcoTypography.bodySmall),
+          ),
+        ),
+      ),
+    );
+    if (action == null) return;
+    if (!mounted) return;
+    if (action == _LiveMemberAction.kick && !await _confirmKickMember(member)) {
+      return;
+    }
+    try {
+      switch (action) {
+        case _LiveMemberAction.toggleMute:
+          await _accountSession.setLiveSpeakerMute(
+            live.id,
+            member.userId,
+            !member.muted,
+          );
+        case _LiveMemberAction.removeSpeaker:
+          await _accountSession.removeLiveSpeaker(live.id, member.userId);
+        case _LiveMemberAction.transferHost:
+          await _transferHost(member);
+        case _LiveMemberAction.setCohost:
+          await _accountSession.setLiveCohost(live.id, member.userId);
+        case _LiveMemberAction.removeCohost:
+          await _accountSession.removeLiveCohost(live.id, member.userId);
+        case _LiveMemberAction.kick:
+          await _accountSession.kickLiveMember(live.id, member.userId);
+      }
+      await _loadRoom(silent: true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '操作失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '操作失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _inviteSpeakerImmediately(LiveParticipant member) async {
+    final live = widget.live;
+    if (live == null || _leaving) return;
+    debugPrint(
+      'Live invite speaker: live=${live.id} target=${member.userId} '
+      'beforeHostMuted=${_room?.host.muted} localMuted=$_muted',
+    );
+    try {
+      await _accountSession.inviteLiveSpeaker(live.id, member.userId);
+      if (mounted) _showNotice(context, '邀请已发送', '等待对方确认上麦。');
+      await _loadRoom(silent: true);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '操作失败', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '操作失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _showSpeakerInviteDialog() async {
+    final live = widget.live;
+    if (live == null) return;
+    final accepted = await showAcoConfirmDialog(
+      context: context,
+      title: '主持人邀请你上麦',
+      message: '同意后将连接麦克风并成为发言人。',
+      cancelLabel: '拒绝',
+      confirmLabel: '同意',
+      contentPadding: const EdgeInsets.only(top: 8),
+    );
+    _speakerInviteDialogVisible = false;
+    if (!mounted) return;
+    try {
+      if (accepted) {
+        await _accountSession.acceptLiveSpeakerInvite(live.id);
+      } else {
+        await _accountSession.declineLiveSpeakerInvite(live.id);
+      }
+      await _loadRoom(silent: true);
+    } catch (_) {
+      if (mounted) _showNotice(context, '上麦失败', '请稍后重试。');
+    }
+  }
+
+  Future<bool> _confirmKickMember(LiveParticipant member) =>
+      showAcoConfirmDialog(
+        context: context,
+        title: '踢出成员',
+        message: '确定要将 ${member.nickname} 移出本场会议吗？',
+        confirmLabel: '踢出',
+        isDestructive: true,
+        isDefaultAction: false,
+        contentPadding: const EdgeInsets.only(top: 8),
+      );
+
+  Future<void> _setChatMute(bool muted) async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.setLiveChatMute(live.id, muted);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '设置失败', error.message);
+      rethrow;
+    } catch (_) {
+      if (mounted) _showNotice(context, '设置失败', '请检查网络后重试。');
+      rethrow;
+    }
+  }
+
+  void _showCheckInDurations() {
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoActionSheet(
+        title: const Text(
+          '发起签到',
+          style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+        ),
+        message: const Text(
+          '请选择签到时长，成员将在房间内看到签到提醒。',
+          style: TextStyle(fontSize: AcoTypography.bodySmall),
+        ),
+        actions: [2, 5, 10, 15, 30]
+            .map(
+              (minutes) => CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_startCheckIn(minutes * 60));
+                },
+                child: Text(
+                  '$minutes 分钟',
+                  style: const TextStyle(fontSize: AcoTypography.bodyEmphasis),
+                ),
+              ),
+            )
+            .toList(),
+        cancelButton: CupertinoActionSheetAction(
+          onPressed: () => Navigator.of(sheetContext).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(fontSize: AcoTypography.bodyEmphasis),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _startCheckIn(int durationSeconds) async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.startLiveCheckIn(live.id, durationSeconds);
+      if (mounted) {
+        showAcoAlertNotice(context, '签到已发起', '成员可在倒计时结束前完成签到。');
+      }
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '发起失败', error.message);
+    }
+  }
+
+  Future<void> _confirmCheckIn() async {
+    final live = widget.live;
+    if (live == null || _checkingIn || _room?.checkIn?.viewerChecked == true) {
+      return;
+    }
+    if (mounted) setState(() => _checkingIn = true);
+    try {
+      await _accountSession.confirmLiveCheckIn(live.id);
+      final room = _room;
+      final checkIn = room?.checkIn;
+      if (room != null && checkIn != null && mounted) {
+        _locallyConfirmedCheckInDeadline = checkIn.deadline;
+        setState(() {
+          _room = _copyRoom(
+            room,
+            participantCount: room.participantCount,
+            checkIn: LiveCheckIn(
+              deadline: checkIn.deadline,
+              checkedInCount: checkIn.checkedInCount,
+              viewerChecked: true,
+            ),
+          );
+        });
+      }
+      if (mounted) showCheckInSuccessDialog(context);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '签到失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '签到失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _checkingIn = false);
+    }
+  }
+
+  void _recordCheckInButtonState(
+    LiveRoom? room, {
+    required bool isHost,
+    String? hiddenReason,
+  }) {
+    final checkIn = room?.checkIn;
+    final deadline = checkIn?.deadline.toUtc().toIso8601String() ?? 'none';
+    final active = checkIn != null && checkIn.deadline.isAfter(DateTime.now());
+    final reason =
+        hiddenReason ??
+        (room == null
+            ? 'room_not_loaded'
+            : isHost
+            ? 'host_view'
+            : checkIn == null
+            ? 'no_active_check_in'
+            : !active
+            ? 'expired'
+            : checkIn.viewerChecked
+            ? 'already_checked_in'
+            : _checkingIn
+            ? 'confirmation_in_progress'
+            : 'visible');
+    final state = '$deadline|${room?.viewerRole ?? 'unknown'}|$reason';
+    if (_lastCheckInButtonState == state) return;
+    _lastCheckInButtonState = state;
+    _recordCheckInDiagnostic(
+      'check_in_button_state=$reason role=${room?.viewerRole ?? 'unknown'} '
+      'deadline=$deadline',
+    );
+  }
+
+  void _recordCheckInButtonDisplayed(DateTime deadline) {
+    _recordCheckInDiagnostic(
+      'check_in_button_first_frame '
+      'deadline=${deadline.toUtc().toIso8601String()}',
+    );
+  }
+
+  void _recordCheckInDiagnostic(String message, {DateTime? at}) {
+    final timestamp = (at ?? DateTime.now()).toUtc().toIso8601String();
+    final entry = '$timestamp live_id=${widget.live?.id ?? 'unknown'} $message';
+    _checkInDiagnosticEntries.add(entry);
+    if (_checkInDiagnosticEntries.length > _maxLiveCheckInDiagnosticEntries) {
+      _checkInDiagnosticEntries.removeRange(
+        0,
+        _checkInDiagnosticEntries.length - _maxLiveCheckInDiagnosticEntries,
+      );
+    }
+    _scheduleCheckInDiagnosticPersist();
+    debugPrint('[LiveCheckIn] $entry');
+  }
+
+  Future<void> _loadSavedCheckInDiagnostics() async {
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      final savedEntries =
+          preferences.getStringList(_liveCheckInDiagnosticsStorageKey) ??
+          const <String>[];
+      _checkInDiagnosticEntries.insertAll(0, savedEntries);
+      if (_checkInDiagnosticEntries.length > _maxLiveCheckInDiagnosticEntries) {
+        _checkInDiagnosticEntries.removeRange(
+          0,
+          _checkInDiagnosticEntries.length - _maxLiveCheckInDiagnosticEntries,
+        );
+      }
+    } catch (error) {
+      debugPrint(
+        '[LiveCheckIn] Load saved diagnostics failed: ${error.runtimeType}',
+      );
+    }
+  }
+
+  void _scheduleCheckInDiagnosticPersist() {
+    _checkInDiagnosticPersistTimer?.cancel();
+    _checkInDiagnosticPersistTimer = Timer(
+      const Duration(milliseconds: 500),
+      () {
+        _checkInDiagnosticPersistTimer = null;
+        unawaited(_persistCheckInDiagnostics());
+      },
+    );
+  }
+
+  Future<void> _persistCheckInDiagnostics() async {
+    await _checkInDiagnosticsReady;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setStringList(
+        _liveCheckInDiagnosticsStorageKey,
+        List<String>.of(_checkInDiagnosticEntries),
+      );
+    } catch (error) {
+      debugPrint('[LiveCheckIn] Save diagnostics failed: ${error.runtimeType}');
+    }
+  }
+
+  String _checkInDiagnosticSummary(LiveCheckIn? checkIn) => checkIn == null
+      ? 'check_in=none'
+      : 'check_in_deadline=${checkIn.deadline.toUtc().toIso8601String()} '
+            'viewer_checked=${checkIn.viewerChecked}';
+
+  String _realtimeEventType(Object? rawEvent) {
+    final payload = switch (rawEvent) {
+      String value => value,
+      List<int> value => utf8.decode(value, allowMalformed: true),
+      _ => null,
+    };
+    if (payload == null) return 'unknown';
+    try {
+      final decoded = jsonDecode(payload);
+      final type = decoded is Map<String, dynamic> ? decoded['type'] : null;
+      return type is String && RegExp(r'^[a-zA-Z0-9_.-]{1,64}$').hasMatch(type)
+          ? type
+          : 'unknown';
+    } catch (_) {
+      return 'invalid_json';
+    }
+  }
+
+  Future<void> _showRaisedHandRequests() async {
+    final room = _room;
+    final live = widget.live;
+    if (!_isLiveHostRole(room?.viewerRole) || live == null) return;
+    try {
+      final users = await _accountSession.raisedLiveHands(live.id);
+      if (!mounted) return;
+      if (users.isEmpty) {
+        // The list endpoint is authoritative for pending requests. Clear a
+        // stale realtime count so the host indicator cannot remain visible.
+        _applyRaisedHandCount(0);
+        return;
+      }
+      _showRaisedHandRequestsDialog(users);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '无法加载举手列表', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '无法加载举手列表', '请检查网络后重试。');
+    }
+  }
+
+  void _showRaisedHandRequestsDialog(List<LiveParticipant> users) {
+    showCupertinoDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final screenHeight = MediaQuery.sizeOf(context).height;
+        final dialogHeight = math.min(420.0, screenHeight * .62);
+        final listHeight = math.min(320.0, screenHeight * .5);
+        return Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: 320,
+              minHeight: dialogHeight,
+              maxHeight: dialogHeight,
+            ),
+            child: CupertinoPopupSurface(
+              child: _RaisedHandRequests(
+                palette: widget.palette,
+                users: users,
+                onClose: () => Navigator.of(dialogContext).pop(),
+                onApprove: (userId) {
+                  Navigator.of(dialogContext).pop();
+                  unawaited(_approveSpeaker(userId));
+                },
+                onReject: (userId) {
+                  Navigator.of(dialogContext).pop();
+                  unawaited(_rejectSpeakerRequest(userId));
+                },
+                onRejectAll: () {
+                  Navigator.of(dialogContext).pop();
+                  unawaited(_rejectAllSpeakerRequests());
+                },
+                height: listHeight,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showRoomActions() {
+    final room = _room;
+    final isHost = _isLiveHostRole(room?.viewerRole);
+    final live = widget.live;
+    showCupertinoModalPopup<void>(
+      context: context,
+      builder: (sheetContext) => CupertinoTheme(
+        data: CupertinoThemeData(
+          brightness: widget.palette.dark ? Brightness.dark : Brightness.light,
+          primaryColor: widget.palette.accent,
+        ),
+        child: CupertinoActionSheet(
+          actions: [
+            if (live != null)
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_shareLive(live));
+                },
+                child: _hostActionLabel('分享会议'),
+              ),
+            if (isHost &&
+                (defaultTargetPlatform == TargetPlatform.android ||
+                    defaultTargetPlatform == TargetPlatform.iOS))
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  if (_screenBroadcasting) {
+                    unawaited(_stopScreenBroadcast());
+                  } else {
+                    unawaited(_startScreenBroadcast());
+                  }
+                },
+                child: _hostActionLabel(
+                  _screenBroadcasting ? '停止屏幕共享' : '共享屏幕',
+                ),
+              ),
+            if (isHost && !_transferringHost)
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_showHostTransferCandidates());
+                },
+                child: _hostActionLabel('转让主持人'),
+              ),
+            if (isHost && !_checkInIsActive(room?.checkIn))
+              CupertinoActionSheetAction(
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  _showCheckInDurations();
+                },
+                child: _hostActionLabel('发起签到'),
+              ),
+            if (isHost)
+              CupertinoActionSheetAction(
+                isDestructiveAction: true,
+                onPressed: () {
+                  Navigator.of(sheetContext).pop();
+                  unawaited(_confirmEndLive());
+                },
+                child: _hostActionLabel('结束会议'),
+              ),
+          ],
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: _hostActionLabel('取消'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareLive(LiveSession live) async {
+    final time = live.scheduledAt?.toLocal();
+    final timeLine = time == null
+        ? ''
+        : '\n会议时间：${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    await SharePlus.instance.share(
+      ShareParams(
+        text:
+            '邀请你参加 Aco Chat 会议\n会议主题：${live.title}$timeLine\n会议号：${live.id}\n点击链接入会：${AppConfig.websiteUrl}/meeting/${live.id}',
+      ),
+    );
+  }
+
+  Widget _hostActionLabel(String label) =>
+      Text(label, style: const TextStyle(fontSize: AcoTypography.body));
+
+  Future<void> _showHostTransferCandidates() async {
+    final live = widget.live;
+    if (live == null || _transferringHost) return;
+
+    try {
+      final candidates = await _accountSession.liveHostTransferCandidates(
+        live.id,
+      );
+      if (!mounted) return;
+      if (candidates.isEmpty) {
+        _showNotice(context, '无法转让', '当前没有可接任的发言人。');
+        return;
+      }
+
+      final candidate = await showCupertinoModalPopup<LiveParticipant>(
+        context: context,
+        builder: (sheetContext) => CupertinoActionSheet(
+          title: const Text('选择新主持人'),
+          actions: candidates
+              .map(
+                (candidate) => CupertinoActionSheetAction(
+                  onPressed: () => Navigator.of(sheetContext).pop(candidate),
+                  child: Text(candidate.nickname),
+                ),
+              )
+              .toList(growable: false),
+          cancelButton: CupertinoActionSheetAction(
+            onPressed: () => Navigator.of(sheetContext).pop(),
+            child: const Text('取消'),
+          ),
+        ),
+      );
+      if (candidate != null && mounted) await _transferHost(candidate);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '无法加载候选人', error.localizedMessage);
+    } catch (_) {
+      if (mounted) _showNotice(context, '无法加载候选人', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _handleBack() async {
+    if (_room?.live.status == 'live' &&
+        _isLiveHostRole(_room?.viewerRole) &&
+        !_hostTransferred) {
+      await _confirmEndLive();
+      return;
+    }
+    if (_leaving) return;
+    _leaving = true;
+    await _stopScreenBroadcast();
+    await _disconnectLiveKitForLeave();
+    final live = widget.live;
+    if (live != null) {
+      try {
+        await _accountSession.leaveLive(live.id);
+      } catch (_) {
+        // The server can clean up stale presence if the connection is lost.
+      }
+    }
+    _closeRoom();
+  }
+
+  void _closeRoom([Object? result]) {
+    if (!mounted || _closingRoom) return;
+    _closingRoom = true;
+    unawaited(_disconnectLiveKitForLeave());
+    setState(() {
+      _allowPop = true;
+      _leaving = true;
+    });
+    Navigator.of(context).pop(result);
+  }
+
+  Future<void> _transferHost(LiveParticipant speaker) async {
+    final live = widget.live;
+    if (live == null || _transferringHost) return;
+    final shouldTransfer = await showAcoConfirmDialog(
+      context: context,
+      title: '转让主持人',
+      message: '确定将主持人转让给 ${speaker.nickname} 吗？转让后你会变为听众。',
+      confirmLabel: '确认转让',
+      isDefaultAction: false,
+      contentPadding: const EdgeInsets.only(top: 8),
+    );
+    if (!shouldTransfer || !mounted) return;
+    setState(() => _transferringHost = true);
+    try {
+      // Release the single Aliyun ingest before changing ownership. After the
+      // transfer the former host is a listener and cannot clear the stream's
+      // host-only active state on the server.
+      await _stopScreenBroadcast();
+      await _accountSession.transferLiveHost(live.id, speaker.userId);
+      // The room snapshot may briefly retain the old role. Record the
+      // successful transfer immediately so leaving cannot end the live.
+      _hostTransferred = true;
+      // The room-state broadcast changes this participant from host to
+      // listener. Keep the page open so the former host can continue watching.
+      await _loadRoom(silent: true);
+      if (mounted) _showNotice(context, '转让成功', '你已变为听众，仍可留在会议。');
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '转让失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '转让失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _transferringHost = false);
+    }
+  }
+
+  Future<void> _approveSpeaker(int userId) async {
+    await _updateSpeaker(
+      userId: userId,
+      action: _accountSession.approveLiveSpeaker,
+      failureTitle: '批准失败',
+    );
+  }
+
+  Future<void> _rejectSpeakerRequest(int userId) async {
+    await _updateSpeaker(
+      userId: userId,
+      action: _accountSession.removeLiveSpeaker,
+      failureTitle: '拒绝失败',
+    );
+  }
+
+  Future<void> _rejectAllSpeakerRequests() async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await _accountSession.rejectAllRaisedLiveHands(live.id);
+      // The count broadcast can be delayed or lost while the dialog is open.
+      // The successful mutation itself is enough to clear the host indicator.
+      _applyRaisedHandCount(0);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '拒绝失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '拒绝失败', '请检查网络后重试。');
+    }
+  }
+
+  Future<void> _updateSpeaker({
+    required int userId,
+    required Future<void> Function(int liveId, int userId) action,
+    required String failureTitle,
+  }) async {
+    final live = widget.live;
+    if (live == null) return;
+    try {
+      await action(live.id, userId);
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, failureTitle, error.message);
+    }
+  }
+
+  @override
+  void dispose() {
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      _pictureInPictureChannel.setMethodCallHandler(null);
+      unawaited(_setPictureInPictureEnabled(false));
+    }
+    unawaited(_setLiveRoomWakelock(false));
+    _checkInDiagnosticPersistTimer?.cancel();
+    unawaited(_persistCheckInDiagnostics());
+    _handRaiseNoticeTimer?.cancel();
+    _checkInTimer?.cancel();
+    _hostHeartbeatTimer?.cancel();
+    _aliyunStreamPollTimer?.cancel();
+    _aliyunStreamHeartbeatTimer?.cancel();
+    _aliyunPlaybackRetryTimer?.cancel();
+    unawaited(_aliyunScreenBroadcast.stop());
+    final aliyunPlayer = _aliyunLivePlayer;
+    if (aliyunPlayer != null) {
+      unawaited(aliyunPlayer.stop().then((_) => aliyunPlayer.release()));
+    }
+    _roomSnapshotCalibrationTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _chatBuffer.dispose();
+    unawaited(_realtimeClient.dispose());
+    unawaited(_disconnectLiveKitForLeave());
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      unawaited(AudioManager.instance.deactivateAudioSession());
+    }
+    _apiClient.close();
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  void _toggleEmojiPicker() =>
+      setState(() => _emojiPickerVisible = !_emojiPickerVisible);
+
+  void _handleLiveKitData(DataReceivedEvent event) {
+    if (event.topic != 'chat' || _room?.chatMuted == true) return;
+    try {
+      final payload = jsonDecode(utf8.decode(event.data));
+      if (payload is! Map<String, dynamic>) return;
+      final identity = _parseLiveMessageIdentity(
+        payload['identity'],
+        event.participant?.metadata,
+      );
+      final staffIdentity = _parseLiveMessageStaffIdentity(
+        payload['staff_identity'],
+        event.participant?.metadata,
+      );
+      final nickname = event.participant?.name.trim();
+      final senderName = nickname == null || nickname.isEmpty ? '成员' : nickname;
+      if (payload['type'] == _chatImageType) {
+        final imageUrl = payload['url'];
+        final previewImageUrl = payload['preview_url'];
+        final imageName = payload['name'];
+        if (imageUrl is! String ||
+            imageUrl.trim().isEmpty ||
+            imageUrl.length > _maxChatImageUrlLength ||
+            (previewImageUrl != null &&
+                (previewImageUrl is! String ||
+                    previewImageUrl.trim().isEmpty ||
+                    previewImageUrl.length > _maxChatImageUrlLength)) ||
+            (imageName is String &&
+                imageName.length > _maxChatImageNameLength)) {
+          return;
+        }
+        _appendChatMessage(
+          nickname: senderName,
+          text: '',
+          imageUrl: imageUrl,
+          previewImageUrl: previewImageUrl as String?,
+          imageName: imageName is String ? imageName : null,
+          identity: identity,
+          staffIdentity: staffIdentity,
+        );
+        return;
+      }
+      final text = payload['text'];
+      if (text is! String || text.trim().isEmpty || text.length > 300) return;
+      _appendChatMessage(
+        nickname: senderName,
+        text: text,
+        identity: identity,
+        staffIdentity: staffIdentity,
+      );
+    } catch (_) {
+      // Ignore malformed or non-chat data packets from other clients.
+    }
+  }
+
+  Future<void> _sendMessage() async {
+    final live = widget.live;
+    final text = _messageController.text.trim();
+    final isViewerChatMuted =
+        _room?.chatMuted == true && !_isLiveHostRole(_room?.viewerRole);
+    if (live == null ||
+        text.isEmpty ||
+        _sending ||
+        _networkReconnecting ||
+        isViewerChatMuted) {
+      return;
+    }
+    final payload = utf8.encode(
+      jsonEncode({
+        'text': text,
+        'identity': _liveKitIdentity,
+        'staff_identity': _liveKitStaffIdentity,
+      }),
+    );
+    if (!_checkMessageSendLimits(payload.length)) return;
+    setState(() => _sending = true);
+    try {
+      final room = _liveKitRoom;
+      if (room == null) {
+        throw StateError('LiveKit room is not connected');
+      }
+      final publishFuture = room.localParticipant?.publishData(
+        payload,
+        reliable: true,
+        topic: 'chat',
+      );
+      // Reliable publication may wait on mobile networks; update the local
+      // conversation immediately so sending does not feel blocked.
+      _appendChatMessage(
+        nickname: _localChatNickname,
+        text: text,
+        identity: _liveKitIdentity,
+        staffIdentity: _liveKitStaffIdentity,
+      );
+      if (mounted) {
+        setState(() {
+          _messageController.clear();
+          // Sending is an explicit request to return to the active conversation,
+          // even when the viewer was reading older messages.
+          _scrollToLatestSignal++;
+        });
+      }
+      await publishFuture;
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '发送失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '发送失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _pickAndSendImage() async {
+    final live = widget.live;
+    final isViewerChatMuted =
+        _room?.chatMuted == true && !_isLiveHostRole(_room?.viewerRole);
+    if (live == null ||
+        _sendingImage ||
+        _networkReconnecting ||
+        isViewerChatMuted) {
+      return;
+    }
+    try {
+      final image = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 2048,
+        maxHeight: 2048,
+      );
+      if (image == null) return;
+      final bytes = await image.readAsBytes();
+      if (bytes.length > _maxChatImageBytes) {
+        if (mounted) _showNotice(context, '图片过大', '请选择 200 MB 以内的图片。');
+        return;
+      }
+      if (!mounted) return;
+      setState(() => _sendingImage = true);
+      final uploaded = await _accountSession.uploadChatFile(
+        bytes: bytes,
+        filename: image.name,
+      );
+      String? previewUrl;
+      try {
+        final previewBytes = await _encodeImageAsPng(
+          bytes,
+          targetWidth: 480,
+          targetHeight: 480,
+        );
+        previewUrl = (await _accountSession.uploadChatFile(
+          bytes: previewBytes,
+          filename: '${uploaded.name}.preview.png',
+        )).url;
+      } catch (_) {
+        // Sending the original image should still work if its thumbnail fails.
+      }
+      final payload = utf8.encode(
+        jsonEncode({
+          'type': _chatImageType,
+          'url': uploaded.url,
+          'preview_url': ?previewUrl,
+          'name': uploaded.name,
+          'identity': _liveKitIdentity,
+          'staff_identity': _liveKitStaffIdentity,
+        }),
+      );
+      if (!_checkMessageSendLimits(payload.length)) return;
+      final room = _liveKitRoom;
+      if (room == null) throw StateError('LiveKit room is not connected');
+      final publishFuture = room.localParticipant?.publishData(
+        payload,
+        reliable: true,
+        topic: 'chat',
+      );
+      _appendChatMessage(
+        nickname: _localChatNickname,
+        text: '',
+        imageUrl: uploaded.url,
+        previewImageUrl: previewUrl,
+        imageName: uploaded.name,
+        identity: _liveKitIdentity,
+        staffIdentity: _liveKitStaffIdentity,
+      );
+      if (mounted) setState(() => _scrollToLatestSignal++);
+      await publishFuture;
+    } on AccountApiException catch (error) {
+      if (mounted) _showNotice(context, '图片发送失败', error.message);
+    } catch (_) {
+      if (mounted) _showNotice(context, '图片发送失败', '请检查网络后重试。');
+    } finally {
+      if (mounted) setState(() => _sendingImage = false);
+    }
+  }
+
+  bool _checkMessageSendLimits(int payloadBytes) {
+    switch (_chatRateLimiter.check(payloadBytes)) {
+      case LiveChatSendLimit.allowed:
+        return true;
+      case LiveChatSendLimit.payloadTooLarge:
+        _showNotice(context, '发送失败', '弹幕内容过长，请控制在 1024 字节以内。');
+        return false;
+      case LiveChatSendLimit.sentTooRecently:
+        _showNotice(context, '发送太快', '请稍后再发送。');
+        return false;
+      case LiveChatSendLimit.rateLimited:
+        _showNotice(context, '发送太快', '房间弹幕较多，请稍后再试。');
+        return false;
+    }
+  }
+
+  String get _localChatNickname {
+    final room = _room;
+    if (room != null) {
+      final participants = <LiveParticipant>[
+        room.host,
+        ...room.speakers,
+        ...room.listeners,
+      ];
+      for (final participant in participants) {
+        if (participant.userId == room.viewerUserId &&
+            participant.nickname.trim().isNotEmpty) {
+          return participant.nickname.trim();
+        }
+      }
+    }
+    final liveKitName = _liveKitRoom?.localParticipant?.name.trim();
+    if (liveKitName != null && liveKitName.isNotEmpty) return liveKitName;
+    return '成员';
+  }
+
+  void _appendChatMessage({
+    required String nickname,
+    required String text,
+    String? imageUrl,
+    String? previewImageUrl,
+    String? imageName,
+    int identity = 0,
+    int staffIdentity = 0,
+  }) {
+    final now = DateTime.now();
+    _chatBuffer.append(
+      LiveMessage(
+        id: -now.microsecondsSinceEpoch,
+        nickname: nickname,
+        text: text.trim(),
+        createdAt: now,
+        identity: identity,
+        staffIdentity: staffIdentity,
+        imageUrl: imageUrl,
+        previewImageUrl: previewImageUrl,
+        imageName: imageName,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    _refreshLiveRoomWakelock();
+    if (_isInPictureInPicture) return _buildPictureInPictureRoom(context);
+    return _buildRoom(context);
+  }
+
+  Widget _buildPictureInPictureRoom(BuildContext context) {
+    final title = widget.live?.title.trim();
+    final participantCount = _room?.participantCount ?? 0;
+    return ColoredBox(
+      color: const Color(0xFF111111),
+      child: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) => Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      CupertinoIcons.waveform,
+                      color: Color(0xFFA6FF00),
+                      size: 48,
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: constraints.maxWidth - 32,
+                      child: Text(
+                        title?.isNotEmpty == true ? title! : '语音房',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '$participantCount 人 · ${_muted ? '已静音' : '麦克风开启'}',
+                      style: const TextStyle(
+                        color: Color(0xFFB8B8B8),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> _setLiveRoomWakelock(bool enabled) async {
+  try {
+    if (enabled) {
+      await WakelockPlus.enable();
+    } else {
+      await WakelockPlus.disable();
+    }
+  } on PlatformException {
+    // Some targets (for example Flutter Web without a registered plugin)
+    // do not provide the wakelock platform channel.
+  } catch (_) {
+    // Failing to keep the screen awake must not interrupt the live room.
+  }
+}
+
+const _pictureInPictureChannel = MethodChannel(
+  'aco/live-room-picture-in-picture',
+);
+
+Future<void> _setPictureInPictureEnabled(bool enabled) async {
+  try {
+    await _pictureInPictureChannel.invokeMethod<void>('setEnabled', {
+      'enabled': enabled,
+    });
+  } on MissingPluginException {
+    // Native PiP is available only in the Android app.
+  } on PlatformException {
+    // Backgrounding the meeting must continue even if PiP cannot be enabled.
+  }
+}
+
+Future<void> _enterPictureInPicture() async {
+  try {
+    await _pictureInPictureChannel.invokeMethod<bool>('enter');
+  } on MissingPluginException {
+    // Native PiP is available only in the Android app.
+  } on PlatformException {
+    // Keep the meeting active if the system refuses PiP.
+  }
+}

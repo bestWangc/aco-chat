@@ -226,11 +226,22 @@ class AccountSession {
   Future<SquarePost> createPost({
     required String content,
     required List<Uint8List> images,
+    Uint8List? video,
+    Uint8List? videoThumbnail,
+    String videoFilename = 'post-video.mp4',
+    int videoDurationSeconds = 0,
   }) async => _apiClient.createPost(
     content: content,
     images: images,
+    video: video,
+    videoThumbnail: videoThumbnail,
+    videoFilename: videoFilename,
+    videoDurationSeconds: videoDurationSeconds,
     token: await _requireToken(),
   );
+
+  Future<void> deletePost(int postID) async =>
+      _apiClient.deletePost(postID: postID, token: await _requireToken());
 
   Future<PostLikeResult> likePost(int postID) async =>
       _apiClient.likePost(postID: postID, token: await _requireToken());
@@ -259,6 +270,15 @@ class AccountSession {
   Future<List<FriendContact>> listFriends() async {
     return _apiClient.listFriends(token: await _requireToken());
   }
+
+  Future<void> updateFriendRemark({
+    required String accountID,
+    required String remark,
+  }) async => _apiClient.updateFriendRemark(
+    accountID: accountID,
+    remark: remark,
+    token: await _requireToken(),
+  );
 
   Future<List<FriendContact>> listFriendRequests() async {
     return _apiClient.listFriendRequests(token: await _requireToken());
@@ -321,6 +341,7 @@ class AccountSession {
   Future<LiveSession> createLive({
     required String title,
     required Uint8List coverBytes,
+    String backgroundId = 'lb_1',
     required String access,
     String? joinPassword,
     DateTime? scheduledAt,
@@ -333,6 +354,7 @@ class AccountSession {
     return _apiClient.createLive(
       title: title,
       coverUrl: coverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
@@ -344,6 +366,7 @@ class AccountSession {
     required int liveId,
     required String title,
     required String coverUrl,
+    String backgroundId = 'lb_1',
     Uint8List? coverBytes,
     required String access,
     String? joinPassword,
@@ -357,12 +380,16 @@ class AccountSession {
       liveId: liveId,
       title: title,
       coverUrl: resolvedCoverUrl,
+      backgroundId: backgroundId,
       access: access,
       joinPassword: joinPassword,
       scheduledAt: scheduledAt,
       token: token,
     );
   }
+
+  Future<void> deleteLive(int liveId) async =>
+      _apiClient.deleteLive(liveId: liveId, token: await _requireToken());
 
   Future<List<LiveMessage>> listLiveMessages(int liveId, {int? after}) async =>
       _apiClient.listLiveMessages(
@@ -398,6 +425,21 @@ class AccountSession {
     liveId: liveId,
     joinPassword: joinPassword,
     token: await _requireToken(),
+  );
+
+  Future<Map<String, dynamic>> aliyunLiveStreamUrls(int liveId) async =>
+      _apiClient.getAliyunLiveStreamUrls(
+        liveId: liveId,
+        token: await _requireToken(),
+      );
+
+  Future<void> setAliyunLiveScreenShareActive(
+    int liveId, {
+    required bool active,
+  }) async => _apiClient.setAliyunLiveScreenShareActive(
+    liveId: liveId,
+    token: await _requireToken(),
+    active: active,
   );
 
   Future<VoiceCallInfo> startVoiceCall(String peerAccountId) async =>

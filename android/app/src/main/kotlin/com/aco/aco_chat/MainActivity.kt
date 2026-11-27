@@ -1,32 +1,74 @@
 package com.aco.aco_chat
 
 import android.Manifest
+import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.view.WindowManager
+import android.util.Rational
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import com.alivc.livepush.LivePushConfig
 
 class MainActivity : FlutterFragmentActivity() {
+    private var liveRoomPictureInPictureEnabled = false
+    private var pictureInPictureChannel: MethodChannel? = null
     private data class PendingStorageSave(
         val save: () -> Unit,
         val deny: () -> Unit,
     )
     private val pendingStorageSaves = mutableListOf<PendingStorageSave>()
     private var storagePermissionRequestInFlight = false
+    private var pendingScreenCaptureResult: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        pictureInPictureChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "aco/live-room-picture-in-picture",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "setEnabled" -> {
+                        liveRoomPictureInPictureEnabled = call.argument<Boolean>("enabled") ?: false
+                        result.success(null)
+                    }
+                    "enter" -> result.success(enterLiveRoomPictureInPicture())
+                    else -> result.notImplemented()
+                }
+            }
+        }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/aliyun-screen-capture")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "stop") {
+                    stopService(Intent(this, ScreenCaptureForegroundService::class.java))
+                    result.success(null)
+                    return@setMethodCallHandler
+                }
+                if (call.method != "request") {
+                    result.notImplemented()
+                    return@setMethodCallHandler
+                }
+                if (pendingScreenCaptureResult != null) {
+                    result.error("CAPTURE_IN_PROGRESS", "屏幕录制授权正在处理中", null)
+                    return@setMethodCallHandler
+                }
+                pendingScreenCaptureResult = result
+                val manager = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                startActivityForResult(manager.createScreenCaptureIntent(), SCREEN_CAPTURE_REQUEST)
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "aco/sensitive-screen")
             .setMethodCallHandler { call, result ->
                 if (call.method != "setEnabled") {
@@ -227,6 +269,57 @@ class MainActivity : FlutterFragmentActivity() {
             }
     }
 
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (liveRoomPictureInPictureEnabled && !isInPictureInPictureMode) {
+            enterLiveRoomPictureInPicture()
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode)
+        pictureInPictureChannel?.invokeMethod(
+            "changed",
+            mapOf("isInPictureInPictureMode" to isInPictureInPictureMode),
+        )
+    }
+
+    private fun enterLiveRoomPictureInPicture(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+            !packageManager.hasSystemFeature(PackageManager.FEATURE_PICTURE_IN_PICTURE)
+        ) {
+            return false
+        }
+        return try {
+            val params = PictureInPictureParams.Builder()
+                .setAspectRatio(Rational(9, 16))
+                .build()
+            enterPictureInPictureMode(params)
+        } catch (_: IllegalStateException) {
+            false
+        } catch (_: IllegalArgumentException) {
+            false
+        }
+    }
+
+    @Deprecated("Deprecated in Android, retained for the MediaProjection consent flow")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != SCREEN_CAPTURE_REQUEST) return
+        val result = pendingScreenCaptureResult ?: return
+        pendingScreenCaptureResult = null
+        if (resultCode == Activity.RESULT_OK && data != null) {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, ScreenCaptureForegroundService::class.java),
+            )
+            LivePushConfig.setMediaProjectionPermissionResultData(data)
+            result.success(true)
+        } else {
+            result.success(false)
+        }
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != LEGACY_STORAGE_PERMISSION_REQUEST) return
@@ -382,6 +475,7 @@ class MainActivity : FlutterFragmentActivity() {
 
     companion object {
         private const val LEGACY_STORAGE_PERMISSION_REQUEST = 4206
+        private const val SCREEN_CAPTURE_REQUEST = 4203
     }
 
     private fun hasBluetoothOutput(audioManager: AudioManager): Boolean =
@@ -439,4 +533,5 @@ class MainActivity : FlutterFragmentActivity() {
         BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> "not_enrolled"
         else -> "unavailable"
     }
+
 }

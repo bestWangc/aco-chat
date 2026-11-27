@@ -1,0 +1,4744 @@
+part of 'aco_app_shell.dart';
+
+Color _chatOutgoingBubbleColor(AcoPalette palette) =>
+    palette.dark ? const Color(0xFF28B561) : const Color(0xFF97EA68);
+
+Color _chatIncomingBubbleColor(AcoPalette palette) =>
+    palette.dark ? const Color(0xFF2C2C2C) : const Color(0xFFEFEFEF);
+
+class _ChatPage extends StatefulWidget {
+  const _ChatPage({
+    required this.palette,
+    required this.version,
+    this.ownAvatarUrl,
+    this.peerUserID,
+    this.groupID,
+    this.peerName,
+    this.conversationID,
+  });
+  final AcoPalette palette;
+  final int version;
+  final String? ownAvatarUrl;
+  final String? peerUserID;
+  final String? groupID;
+  final String? peerName;
+  final String? conversationID;
+
+  @override
+  State<_ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<_ChatPage> with RouteAware {
+  static const _chatImageMaxBytes = 200 * 1024 * 1024;
+  static const _messageTimeGap = Duration(hours: 1);
+
+  final _messageController = TextEditingController();
+  final _messageFocusNode = FocusNode();
+  final _chatScrollController = ScrollController();
+  var _emojiPickerVisible = false;
+  var _morePanelVisible = false;
+  var _voiceInputActive = false;
+  var _voiceRecording = false;
+  final _voiceRecorder = AudioRecorder();
+  Timer? _voiceRecordingTimer;
+  StreamSubscription<Amplitude>? _voiceAmplitudeSubscription;
+  var _voiceFinishing = false;
+  var _voiceLevel = 0.0;
+  String? _voiceRecordingPath;
+  DateTime? _voiceRecordingStartedAt;
+  final List<_ChatHistoryMessage> _chatHistory = <_ChatHistoryMessage>[];
+  final Map<String, Message> _messagesByClientMsgID = <String, Message>{};
+  final Map<String, String> _friendRemarksByUserID = <String, String>{};
+  final Set<String> _selectedMessageIDs = <String>{};
+  bool _selectingMessages = false;
+  bool _deletingMessages = false;
+  Future<void>? _loadFuture;
+  String? _error;
+  String? _resolvedConversationID;
+  String? _resolvedPeerName;
+  String? _resolvedPeerAvatar;
+  int _resolvedPeerIdentity = 0;
+  int _resolvedPeerStaffIdentity = 0;
+  bool _loadingOlder = false;
+  bool _historyEnd = false;
+  bool _markingMessagesAsRead = false;
+  bool _markMessagesAsReadDirty = false;
+  bool _chatAccessGranted = false;
+  bool _peerIsBlocked = false;
+  final Set<String> _revokedMessageIDs = <String>{};
+  bool _mentionVisible = false;
+  bool _mentionPickerOpen = false;
+  bool _mentionLoading = false;
+  bool _routeIsVisible = false;
+  PageRoute<dynamic>? _route;
+  int _mentionStart = -1;
+  String _previousComposerText = '';
+  List<GroupMembersInfo> _mentionMembers = const [];
+  final List<_GroupMention> _selectedMentions = <_GroupMention>[];
+
+  String? get _currentConversationID {
+    if (_resolvedConversationID?.isNotEmpty == true) {
+      return _resolvedConversationID;
+    }
+    if (widget.conversationID?.isNotEmpty == true) {
+      return widget.conversationID;
+    }
+    final groupID = widget.groupID;
+    if (groupID?.isNotEmpty == true) return 'sg_$groupID';
+    final userID = widget.peerUserID;
+    return userID?.isNotEmpty == true ? 'si_$userID' : null;
+  }
+
+  bool get _isGroup => widget.groupID?.isNotEmpty == true;
+
+  String? get _conversationTarget =>
+      _isGroup ? widget.groupID : widget.peerUserID;
+
+  List<Message> get _historyMessages {
+    final messages = _messagesByClientMsgID.values.toList();
+    messages.sort(_compareMessages);
+    return messages;
+  }
+
+  Message? get _oldestHistoryMessage {
+    Message? oldest;
+    for (final message in _messagesByClientMsgID.values) {
+      if (oldest == null || _compareMessages(message, oldest) < 0) {
+        oldest = message;
+      }
+    }
+    return oldest;
+  }
+
+  int _compareMessages(Message a, Message b) {
+    final aTime = a.sendTime ?? a.createTime ?? 0;
+    final bTime = b.sendTime ?? b.createTime ?? 0;
+    return aTime.compareTo(bTime);
+  }
+
+  bool _shouldShowMessageTime(int index) {
+    final timestamp = _chatHistory[index].timestamp;
+    if (timestamp == null || timestamp <= 0) return false;
+    if (index == 0) return true;
+    final previous = _chatHistory[index - 1].timestamp;
+    if (previous == null || previous <= 0) return true;
+    return (timestamp - previous).abs() >= _messageTimeGap.inMilliseconds;
+  }
+
+  String? _messageTimeLabel(int index) {
+    if (!_shouldShowMessageTime(index)) return null;
+    final timestamp = _chatHistory[index].timestamp;
+    if (timestamp == null || timestamp <= 0) return null;
+    final value = timestamp > 100000000000 ? timestamp : timestamp * 1000;
+    final date = DateTime.fromMillisecondsSinceEpoch(value).toLocal();
+    final now = DateTime.now();
+    String twoDigits(int number) => number.toString().padLeft(2, '0');
+    if (date.year == now.year &&
+        date.month == now.month &&
+        date.day == now.day) {
+      return '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+    }
+    return '${date.year}年${date.month}月${date.day}日 '
+        '${twoDigits(date.hour)}:${twoDigits(date.minute)}';
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFuture = _loadHistory();
+    if (_isGroup) unawaited(_loadFriendRemarks());
+    OpenIMChatRepository.conversationReady.addListener(_onReady);
+    OpenIMChatRepository.messageNotifier.addListener(_onMessage);
+    OpenIMChatRepository.revokedMessageNotifier.addListener(_onMessageRevoked);
+    _chatScrollController.addListener(_onChatScroll);
+    _messageController.addListener(_onComposerChanged);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is! PageRoute<dynamic> || identical(route, _route)) return;
+    final previousRoute = _route;
+    if (previousRoute != null) acoRouteObserver.unsubscribe(this);
+    _route = route;
+    acoRouteObserver.subscribe(this, route);
+  }
+
+  @override
+  void didPush() => _setRouteVisible(true);
+
+  @override
+  void didPopNext() {
+    _setRouteVisible(true);
+    unawaited(_markCurrentConversationAsRead());
+  }
+
+  @override
+  void didPushNext() => _setRouteVisible(false);
+
+  @override
+  void didPop() => _setRouteVisible(false);
+
+  void _setRouteVisible(bool visible) {
+    if (_routeIsVisible == visible) return;
+    _routeIsVisible = visible;
+  }
+
+  void _onChatScroll() {
+    if (_chatScrollController.hasClients &&
+        _chatScrollController.position.maxScrollExtent > 0 &&
+        _chatScrollController.position.pixels >=
+            _chatScrollController.position.maxScrollExtent - 40) {
+      unawaited(_loadOlderMessages());
+    }
+  }
+
+  void _onMessage() {
+    final message = OpenIMChatRepository.messageNotifier.value;
+    if (!mounted || message == null) return;
+    final mine = message.sendID == OpenIMChatRepository.currentUserID;
+    if (_isGroup) {
+      if (message.groupID != widget.groupID) return;
+    } else if (!_isMessageInCurrentConversation(message)) {
+      return;
+    }
+    if (_voiceCallInviteIDFromMessage(message) != null) return;
+    if (!_ChatHistoryMessage.isDisplayable(message)) return;
+    if (_routeIsVisible) {
+      OpenIMChatRepository.markIncomingMessageVisible(message);
+    }
+    _rememberMessage(message);
+    final added = _upsertDisplayedMessage(message, mine: mine);
+    unawaited(_markCurrentConversationAsRead());
+    if (added) _scrollToBottom();
+  }
+
+  void _onMessageRevoked() {
+    _applyRevokedMessage(OpenIMChatRepository.revokedMessageNotifier.value);
+  }
+
+  void _applyRevokedMessage(RevokedInfo? info) {
+    final id = info?.clientMsgID;
+    if (!mounted || id == null || id.isEmpty) return;
+    final source = _messagesByClientMsgID[id];
+    if (source == null ||
+        !_isMessageInCurrentConversation(source) ||
+        _revokedMessageIDs.contains(id)) {
+      return;
+    }
+    _revokedMessageIDs.add(id);
+    final index = _chatHistory.indexWhere((item) => item.clientMsgID == id);
+    if (index < 0) return;
+    final name = info?.revokerNickname?.trim().isNotEmpty == true
+        ? info!.revokerNickname!.trim()
+        : (source.senderNickname?.trim().isNotEmpty == true
+              ? source.senderNickname!.trim()
+              : (source.sendID == OpenIMChatRepository.currentUserID
+                    ? '你'
+                    : '对方'));
+    setState(() {
+      _chatHistory[index] = _ChatHistoryMessage.system(
+        '$name撤回了一条消息',
+        timestamp: source.sendTime ?? source.createTime,
+      );
+    });
+  }
+
+  bool _canRevoke(Message message) {
+    if (message.sendID != OpenIMChatRepository.currentUserID) return false;
+    final sentAt = message.sendTime ?? message.createTime;
+    if (sentAt == null || sentAt <= 0) return false;
+    final millis = sentAt < 100000000000 ? sentAt * 1000 : sentAt;
+    return DateTime.now().difference(
+          DateTime.fromMillisecondsSinceEpoch(millis),
+        ) <=
+        const Duration(minutes: 2);
+  }
+
+  Future<void> _showMessageActions(
+    _ChatHistoryMessage message,
+    Message? sourceMessage,
+    BuildContext anchorContext,
+  ) async {
+    if (sourceMessage == null || message.isSystem) return;
+    final canCopy = message.text.trim().isNotEmpty;
+    final canRevoke = _canRevoke(sourceMessage);
+    if (!canCopy && !canRevoke) return;
+    final anchorBox = anchorContext.findRenderObject() as RenderBox?;
+    final anchorOrigin = anchorBox?.localToGlobal(Offset.zero);
+    final anchorSize = anchorBox?.size ?? Size.zero;
+    final action = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '消息操作',
+      barrierColor: const Color(0x33000000),
+      transitionDuration: const Duration(milliseconds: 160),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final actionCount = (canCopy ? 1 : 0) + (canRevoke ? 1 : 0);
+            final panelWidth = actionCount * 68.0 + 12;
+            const panelHeight = 82.0;
+            final left =
+                ((anchorOrigin?.dx ?? 0) +
+                        anchorSize.width / 2 -
+                        panelWidth / 2)
+                    .clamp(8.0, constraints.maxWidth - panelWidth - 8.0);
+            final aboveTop =
+                (anchorOrigin?.dy ?? constraints.maxHeight / 2) -
+                panelHeight -
+                6;
+            final pointerOnTop = aboveTop < MediaQuery.paddingOf(context).top;
+            final top = pointerOnTop
+                ? (anchorOrigin?.dy ?? 0) + anchorSize.height + 6
+                : aboveTop;
+            return Stack(
+              children: [
+                Positioned(
+                  left: left,
+                  top: top.clamp(
+                    MediaQuery.paddingOf(context).top + 4,
+                    constraints.maxHeight - panelHeight - 4,
+                  ),
+                  child: _ChatMessageActionPopup(
+                    canCopy: canCopy,
+                    canRevoke: canRevoke,
+                    pointerOnTop: pointerOnTop,
+                    onSelected: (value) => Navigator.pop(context, value),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) =>
+          FadeTransition(opacity: animation, child: child),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: message.text));
+      return;
+    }
+    final id = sourceMessage.clientMsgID;
+    final target = _conversationTarget;
+    if (target == null ||
+        target.isEmpty ||
+        id == null ||
+        !_canRevoke(sourceMessage)) {
+      return;
+    }
+    try {
+      final conversation = await OpenIM.iMManager.conversationManager
+          .getOneConversation(
+            sourceID: target,
+            sessionType: _isGroup
+                ? ConversationType.superGroup
+                : ConversationType.single,
+          );
+      await OpenIM.iMManager.messageManager.revokeMessage(
+        conversationID: conversation.conversationID,
+        clientMsgID: id,
+      );
+      _applyRevokedMessage(
+        RevokedInfo(
+          clientMsgID: id,
+          revokerID: OpenIMChatRepository.currentUserID,
+          revokerNickname: '你',
+        ),
+      );
+    } catch (error) {
+      if (mounted) _showNotice(context, '撤回失败', '消息发送超过 2 分钟或网络异常，请稍后重试。');
+      debugPrint('[OpenIM] revoke message failed: $error');
+    }
+  }
+
+  void _rememberMessage(Message message) {
+    final clientMsgID = message.clientMsgID;
+    if (clientMsgID?.isNotEmpty != true) return;
+    _messagesByClientMsgID[clientMsgID!] = message;
+  }
+
+  List<Message> _rememberMessagesIfAbsent(Iterable<Message> messages) {
+    final added = <Message>[];
+    for (final message in messages) {
+      final clientMsgID = message.clientMsgID;
+      if (clientMsgID?.isNotEmpty != true) continue;
+      if (_messagesByClientMsgID.containsKey(clientMsgID)) continue;
+      _messagesByClientMsgID[clientMsgID!] = message;
+      added.add(message);
+    }
+    return added;
+  }
+
+  bool _upsertDisplayedMessage(
+    Message message, {
+    required bool mine,
+    Uint8List? imageBytes,
+    String? localFilePath,
+  }) {
+    final clientMsgID = message.clientMsgID;
+    if (clientMsgID?.isNotEmpty != true ||
+        !_ChatHistoryMessage.isDisplayable(message)) {
+      return false;
+    }
+    final index = _chatHistory.indexWhere(
+      (item) => item.clientMsgID == clientMsgID,
+    );
+    final existing = index < 0 ? null : _chatHistory[index];
+    final messageFromOpenIM = _ChatHistoryMessage.fromOpenIM(
+      message,
+      mine: mine,
+    );
+    final retainedImageBytes = imageBytes ?? existing?.imageBytes;
+    var historyMessage = messageFromOpenIM;
+    if (localFilePath != null && messageFromOpenIM.fileUrl != null) {
+      historyMessage = _ChatHistoryMessage.file(
+        mine: mine,
+        clientMsgID: clientMsgID,
+        timestamp: messageFromOpenIM.timestamp,
+        fileName: messageFromOpenIM.fileName ?? '文件',
+        fileUrl: messageFromOpenIM.fileUrl!,
+        fileSize: messageFromOpenIM.fileSize ?? 0,
+        filePath: localFilePath,
+      );
+    }
+    if (retainedImageBytes != null && message.pictureElem != null) {
+      historyMessage = _ChatHistoryMessage.image(
+        mine: mine,
+        clientMsgID: clientMsgID,
+        timestamp: messageFromOpenIM.timestamp,
+        imageBytes: retainedImageBytes,
+        imageUrl: messageFromOpenIM.imageUrl,
+        previewImageUrl: messageFromOpenIM.previewImageUrl,
+        shouldCacheThumbnail: messageFromOpenIM.shouldCacheThumbnail,
+      );
+    }
+    if (mine) unawaited(_retainSentMedia(historyMessage));
+    if (!mounted) return false;
+    setState(() {
+      if (index < 0) {
+        _chatHistory.add(historyMessage);
+      } else {
+        _chatHistory[index] = historyMessage;
+      }
+    });
+    return index < 0;
+  }
+
+  Future<void> _retainSentMedia(_ChatHistoryMessage message) async {
+    final accountID = OpenIMChatRepository.currentUserID;
+    if (accountID == null) return;
+    final attachments = [
+      (
+        url: message.previewImageUrl ?? message.imageUrl,
+        kind: 'image',
+        path: message.imagePath,
+        bytes: message.imageBytes,
+      ),
+      (
+        url: message.soundUrl,
+        kind: 'audio',
+        path: message.soundPath,
+        bytes: null,
+      ),
+      (
+        url: message.videoUrl,
+        kind: 'video',
+        path: message.videoPath,
+        bytes: null,
+      ),
+      (url: message.fileUrl, kind: 'file', path: message.filePath, bytes: null),
+    ];
+    for (final attachment in attachments) {
+      final url = attachment.url;
+      if (url == null || url.isEmpty) continue;
+      final source = attachment.path == null ? null : File(attachment.path!);
+      try {
+        if (attachment.bytes == null &&
+            (source == null || !await source.exists())) {
+          continue;
+        }
+        await _ChatMediaCache.load(
+          url,
+          kind: attachment.kind,
+          source: source,
+          bytes: attachment.bytes,
+          accountID: accountID,
+        );
+      } catch (error) {
+        debugPrint('[Chat] retain sent media failed: $error');
+      }
+    }
+  }
+
+  void _removeTrackedMessage(String? clientMsgID) {
+    if (clientMsgID?.isNotEmpty != true) return;
+    _messagesByClientMsgID.remove(clientMsgID);
+    if (!mounted) return;
+    setState(() {
+      _chatHistory.removeWhere((item) => item.clientMsgID == clientMsgID);
+      _selectedMessageIDs.remove(clientMsgID);
+    });
+  }
+
+  void _startSelectingMessages() {
+    _messageFocusNode.unfocus();
+    _hidePanels();
+    setState(() {
+      _selectingMessages = true;
+      _selectedMessageIDs.clear();
+    });
+  }
+
+  void _cancelSelectingMessages() {
+    if (_deletingMessages) return;
+    setState(() {
+      _selectingMessages = false;
+      _selectedMessageIDs.clear();
+    });
+  }
+
+  void _toggleMessageSelection(String clientMsgID) {
+    if (_deletingMessages) return;
+    setState(() {
+      if (!_selectedMessageIDs.remove(clientMsgID)) {
+        _selectedMessageIDs.add(clientMsgID);
+      }
+    });
+  }
+
+  Future<void> _deleteSelectedMessages() async {
+    final conversationID = _currentConversationID;
+    if (_deletingMessages ||
+        _selectedMessageIDs.isEmpty ||
+        conversationID == null ||
+        conversationID.isEmpty) {
+      return;
+    }
+    final ids = _selectedMessageIDs.toList();
+    setState(() => _deletingMessages = true);
+    try {
+      final confirmed = await showAcoConfirmDialog(
+        context: context,
+        title: '删除聊天记录',
+        message: '删除选中的 ${ids.length} 条消息？仅删除当前设备上的记录，此操作无法恢复。',
+        confirmLabel: '删除',
+        isDestructive: true,
+        isDefaultAction: false,
+      );
+      if (!confirmed || !mounted) return;
+      var failedCount = 0;
+      for (final id in ids) {
+        try {
+          await OpenIM.iMManager.messageManager.deleteMessageFromLocalStorage(
+            conversationID: conversationID,
+            clientMsgID: id,
+          );
+          _removeTrackedMessage(id);
+        } catch (error) {
+          failedCount++;
+          debugPrint('[OpenIM] delete message failed: $error');
+        }
+      }
+      OpenIMChatRepository.conversationRevision.value++;
+      if (!mounted) return;
+      if (failedCount == 0) {
+        setState(() => _selectingMessages = false);
+      } else {
+        _showNotice(context, '部分消息删除失败', '$failedCount 条消息未删除，请重试。');
+      }
+    } finally {
+      if (mounted) setState(() => _deletingMessages = false);
+    }
+  }
+
+  Future<void> _markCurrentConversationAsRead() async {
+    if (!_routeIsVisible) return;
+    final conversationID = _currentConversationID;
+    if (conversationID == null) return;
+    if (_markingMessagesAsRead) {
+      _markMessagesAsReadDirty = true;
+      return;
+    }
+
+    _markingMessagesAsRead = true;
+    do {
+      _markMessagesAsReadDirty = false;
+      try {
+        await OpenIM.iMManager.conversationManager
+            .markConversationMessageAsRead(conversationID: conversationID);
+        final pendingConversation = OpenIMChatRepository.pendingConversation;
+        if (pendingConversation?.conversationID == conversationID) {
+          pendingConversation?.unreadCount = 0;
+        }
+        OpenIMChatRepository.conversationRevision.value++;
+        await OpenIMChatRepository.refreshMessageUnreadStatus();
+      } catch (error) {
+        debugPrint('[OpenIM] mark read failed: $error');
+      }
+    } while (_markMessagesAsReadDirty);
+    _markingMessagesAsRead = false;
+  }
+
+  void _onReady() {
+    if (!mounted || !OpenIMChatRepository.conversationReady.value) return;
+    if (_error == '聊天服务正在连接，请稍候重试') {
+      setState(() {
+        _error = null;
+        _loadFuture = _loadHistory();
+      });
+    }
+  }
+
+  Future<bool> _loadPeerProfile(String userID) async {
+    final client = AccountApiClient();
+    try {
+      final friends = await AccountSession(client).listFriends();
+      final matches = friends.where((friend) => friend.accountId == userID);
+      if (matches.isEmpty) return false;
+      final friend = matches.first;
+      if (friend.remark.isNotEmpty) {
+        _resolvedPeerName = friend.remark;
+      } else if (friend.nickname.isNotEmpty) {
+        _resolvedPeerName = friend.nickname;
+      }
+      if (friend.avatarUrl.isNotEmpty) _resolvedPeerAvatar = friend.avatarUrl;
+      _resolvedPeerIdentity = friend.identity;
+      _resolvedPeerStaffIdentity = friend.staffIdentity;
+      return true;
+    } catch (error) {
+      debugPrint('[API] chat profile load failed: $error');
+      return false;
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _loadFriendRemarks() async {
+    final client = AccountApiClient();
+    try {
+      final friends = await AccountSession(client).listFriends();
+      if (!mounted) return;
+      setState(() {
+        _friendRemarksByUserID
+          ..clear()
+          ..addEntries(
+            friends
+                .where((friend) => friend.remark.isNotEmpty)
+                .map((friend) => MapEntry(friend.accountId, friend.remark)),
+          );
+      });
+    } catch (error) {
+      debugPrint('[API] chat friend remarks load failed: $error');
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<void> _openSenderProfile({
+    required String? userID,
+    required String? nickname,
+    required String? avatarUrl,
+  }) async {
+    final accountID = userID?.trim();
+    if (accountID == null || accountID.isEmpty) return;
+
+    final client = AccountApiClient();
+    var displayName = nickname?.trim() ?? '';
+    var resolvedAvatarUrl = avatarUrl?.trim() ?? '';
+    var remark = '';
+    var isFriend = false;
+    try {
+      final session = AccountSession(client);
+      final profile = await session.profileByAccountId(accountID);
+      final friends = await session.listFriends();
+      if (profile.nickname.trim().isNotEmpty) {
+        displayName = profile.nickname.trim();
+      }
+      if (profile.avatarUrl.trim().isNotEmpty) {
+        resolvedAvatarUrl = profile.avatarUrl.trim();
+      }
+      for (final friend in friends) {
+        if (friend.accountId != accountID || friend.status != 'accepted') {
+          continue;
+        }
+        isFriend = true;
+        remark = friend.remark;
+        if (friend.nickname.trim().isNotEmpty) {
+          displayName = friend.nickname.trim();
+        }
+        if (friend.avatarUrl.trim().isNotEmpty) {
+          resolvedAvatarUrl = friend.avatarUrl.trim();
+        }
+        break;
+      }
+    } catch (error) {
+      debugPrint('[API] sender profile load failed: $error');
+    } finally {
+      client.close();
+    }
+
+    if (!mounted) return;
+    if (displayName.isEmpty) displayName = accountID;
+    await Navigator.of(context).push(
+      CupertinoPageRoute<void>(
+        builder: (profileContext) => _ContactDetailPage(
+          palette: widget.palette,
+          name: displayName,
+          accountID: accountID,
+          remark: remark,
+          avatarUrl: resolvedAvatarUrl,
+          isFriend: isFriend,
+          onMessagePressed: (_) => Navigator.of(profileContext).pop(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _loadHistory() async {
+    final target = _conversationTarget;
+    if (target == null || target.isEmpty) return;
+    if (!OpenIMChatRepository.conversationReady.value) {
+      _error = '聊天服务正在连接，请稍候重试';
+      return;
+    }
+    try {
+      if (!_isGroup && !await _loadPeerProfile(target)) {
+        _chatAccessGranted = false;
+        _error = '你们已不是好友，无法查看聊天记录';
+        return;
+      }
+      _chatAccessGranted = true;
+      if (!_isGroup) await _loadPeerBlockedState(target);
+      if (mounted) setState(() {});
+      final conversation = await OpenIM.iMManager.conversationManager
+          .getOneConversation(
+            sourceID: target,
+            sessionType: _isGroup
+                ? ConversationType.superGroup
+                : ConversationType.single,
+          );
+      _resolvedConversationID = conversation.conversationID;
+      final targetMessage = _takeSearchTargetMessage();
+      final history = await _loadHistoryWindow(targetMessage);
+      _rememberMessagesIfAbsent(history.messages);
+      _historyEnd = history.isEnd;
+      await _markCurrentConversationAsRead();
+      if (!mounted) return;
+      setState(() {
+        _chatHistory
+          ..clear()
+          ..addAll(
+            _historyMessages
+                .where(_ChatHistoryMessage.isDisplayable)
+                .map(
+                  (m) => _ChatHistoryMessage.fromOpenIM(
+                    m,
+                    mine: m.sendID == OpenIMChatRepository.currentUserID,
+                  ),
+                ),
+          );
+        _error = null;
+      });
+      _focusSearchTarget(targetMessage);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _error = '聊天记录加载失败，点击重试');
+      debugPrint('[OpenIM] history load failed: $error');
+    }
+  }
+
+  Message? _takeSearchTargetMessage() {
+    final message = OpenIMChatRepository.pendingSearchMessage;
+    if (message == null) return null;
+    if (!_isMessageInCurrentConversation(message)) return null;
+    OpenIMChatRepository.pendingSearchMessage = null;
+    return message;
+  }
+
+  bool _isMessageInCurrentConversation(Message message) {
+    if (_isGroup) return message.groupID == widget.groupID;
+    return message.sendID == widget.peerUserID ||
+        message.recvID == widget.peerUserID;
+  }
+
+  void _focusSearchTarget(Message? targetMessage) {
+    final targetID = targetMessage?.clientMsgID;
+    if (targetID == null || targetID.isEmpty) return;
+    final target = _chatHistory
+        .where((message) => message.clientMsgID == targetID)
+        .firstOrNull;
+    if (target != null) _focusMessage(target);
+  }
+
+  Future<_ChatHistoryWindow> _loadHistoryWindow(Message? target) async {
+    final conversationID = _resolvedConversationID!;
+    if (target == null) {
+      final result = await OpenIM.iMManager.messageManager
+          .getAdvancedHistoryMessageList(
+            conversationID: conversationID,
+            count: 30,
+          );
+      final messages = result.messageList ?? const <Message>[];
+      return _ChatHistoryWindow(
+        messages: messages,
+        isEnd: result.isEnd ?? messages.length < 30,
+      );
+    }
+    final results = await Future.wait([
+      OpenIM.iMManager.messageManager.getAdvancedHistoryMessageList(
+        conversationID: conversationID,
+        startMsg: target,
+        count: 18,
+      ),
+      OpenIM.iMManager.messageManager.getAdvancedHistoryMessageListReverse(
+        conversationID: conversationID,
+        startMsg: target,
+        count: 18,
+      ),
+    ]);
+    final before = results[0];
+    final after = results[1];
+    final messagesByID = <String, Message>{};
+    for (final message in [
+      ...?before.messageList,
+      target,
+      ...?after.messageList,
+    ]) {
+      final id = message.clientMsgID;
+      if (id != null && id.isNotEmpty) messagesByID[id] = message;
+    }
+    return _ChatHistoryWindow(
+      messages: messagesByID.values.toList(growable: false),
+      isEnd: before.isEnd ?? false,
+    );
+  }
+
+  Future<void> _loadPeerBlockedState(String userID) async {
+    _peerIsBlocked = await _queryPeerBlockedState(userID);
+  }
+
+  Future<bool> _queryPeerBlockedState(
+    String userID, {
+    bool forceRefresh = false,
+  }) async {
+    final previousState = _peerIsBlocked;
+    try {
+      final blacklistedUserIDs = await OpenIMChatRepository.blacklistedUserIDs(
+        forceRefresh: forceRefresh,
+      );
+      return blacklistedUserIDs.contains(userID);
+    } catch (error) {
+      debugPrint('[OpenIM] blacklist status load failed: $error');
+      return previousState;
+    }
+  }
+
+  Future<bool> _refreshPeerBlockedState(String userID) async {
+    _peerIsBlocked = await _queryPeerBlockedState(userID, forceRefresh: true);
+    return _peerIsBlocked;
+  }
+
+  bool _isBlockedByPeerError(Object error) =>
+      (error is PlatformException && error.code == '1302') ||
+      error.toString().contains('1302') ||
+      error.toString().contains('BlockedByPeer');
+
+  void _appendFailedText(String text, {String? clientMsgID}) {
+    _removeTrackedMessage(clientMsgID);
+    if (!mounted) return;
+    setState(
+      () => _chatHistory.add(
+        _ChatHistoryMessage(text, mine: true, sendFailed: true),
+      ),
+    );
+    _peerIsBlocked = true;
+    _scrollToBottom(force: true, animate: false);
+  }
+
+  Future<void> _loadOlderMessages() async {
+    if (_loadingOlder || _historyEnd) return;
+    final oldestMessage = _oldestHistoryMessage;
+    if (oldestMessage == null) return;
+    final target = _conversationTarget;
+    final conversationID = _resolvedConversationID;
+    if (target == null || conversationID == null) return;
+    _loadingOlder = true;
+    final oldMaxExtent = _chatScrollController.hasClients
+        ? _chatScrollController.position.maxScrollExtent
+        : 0.0;
+    try {
+      final result = await OpenIM.iMManager.messageManager
+          .getAdvancedHistoryMessageList(
+            conversationID: conversationID,
+            startMsg: oldestMessage,
+            count: 30,
+          );
+      final older = result.messageList ?? const <Message>[];
+      if (older.isEmpty) {
+        _historyEnd = true;
+        return;
+      }
+      final addedMessages = _rememberMessagesIfAbsent(older)
+        ..sort(_compareMessages);
+      final olderHistory = addedMessages
+          .where(_ChatHistoryMessage.isDisplayable)
+          .map(
+            (message) => _ChatHistoryMessage.fromOpenIM(
+              message,
+              mine: message.sendID == OpenIMChatRepository.currentUserID,
+            ),
+          )
+          .toList(growable: false);
+      if (!mounted) return;
+      if (olderHistory.isNotEmpty) {
+        setState(() => _chatHistory.insertAll(0, olderHistory));
+      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_chatScrollController.hasClients) return;
+        final delta =
+            _chatScrollController.position.maxScrollExtent - oldMaxExtent;
+        if (delta > 0) {
+          _chatScrollController.jumpTo(
+            (_chatScrollController.position.pixels + delta).clamp(
+              0.0,
+              _chatScrollController.position.maxScrollExtent,
+            ),
+          );
+        }
+      });
+      _historyEnd = result.isEnd ?? older.length < 30;
+    } catch (error) {
+      debugPrint('[OpenIM] older messages load failed: $error');
+    } finally {
+      _loadingOlder = false;
+    }
+  }
+
+  Future<void> _sendText() async {
+    final text = _messageController.text.trim();
+    final target = _conversationTarget;
+    if (text.isEmpty || target == null || target.isEmpty) return;
+    if (!_isGroup) await _loadPeerBlockedState(target);
+    if (_peerIsBlocked) {
+      final shouldFollowNewMessage =
+          !_chatScrollController.hasClients ||
+          _chatScrollController.position.pixels <= 80;
+      _messageController.clear();
+      if (!mounted) return;
+      setState(
+        () => _chatHistory.add(
+          _ChatHistoryMessage(text, mine: true, sendFailed: true),
+        ),
+      );
+      _scrollToBottom(force: shouldFollowNewMessage, animate: false);
+      return;
+    }
+    if (!_chatAccessGranted) {
+      if (!mounted) return;
+      _showNotice(context, '无法发送', '请先确认你们仍是好友。');
+      return;
+    }
+    final shouldFollowNewMessage =
+        !_chatScrollController.hasClients ||
+        _chatScrollController.position.pixels <= 80;
+    if (!OpenIMChatRepository.conversationReady.value) {
+      if (!mounted) return;
+      _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
+      return;
+    }
+    final mentions = _mentionsIn(text);
+    _messageController.clear();
+    _selectedMentions.clear();
+    String? outgoingClientMsgID;
+    try {
+      final message = mentions.isEmpty
+          ? await OpenIM.iMManager.messageManager.createTextMessage(text: text)
+          : await OpenIM.iMManager.messageManager.createTextAtMessage(
+              text: text,
+              atUserIDList: mentions.map((mention) => mention.userID).toList(),
+              atUserInfoList: mentions
+                  .map(
+                    (mention) => AtUserInfo(
+                      atUserID: mention.userID,
+                      groupNickname: mention.name,
+                    ),
+                  )
+                  .toList(),
+            );
+      outgoingClientMsgID = message.clientMsgID;
+      _rememberMessage(message);
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
+        offlinePushInfo: OfflinePushInfo(title: '新消息', desc: text),
+      );
+      debugPrint(
+        '[OpenIM] message sent clientMsgID=${sent.clientMsgID} '
+        'serverMsgID=${sent.serverMsgID} status=${sent.status} '
+        'to=$target',
+      );
+      if (!mounted) return;
+      _rememberMessage(sent);
+      final added = _upsertDisplayedMessage(sent, mine: true);
+      // The composer/keyboard can resize the viewport in a later frame. Use
+      // a short scroll when the user was already following the conversation.
+      // When reading older messages, preserve their position like WeChat.
+      if (added) {
+        _scrollToBottom(force: shouldFollowNewMessage, animate: false);
+      }
+      if (shouldFollowNewMessage) {
+        // The keyboard inset animation can finish after the list's first
+        // layout. Re-check once it settles so the new bubble is not hidden.
+        Future<void>.delayed(const Duration(milliseconds: 240), () {
+          if (mounted) {
+            _scrollToBottom(force: true, animate: false);
+          }
+        });
+      }
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      final blockedByPeer = _isBlockedByPeerError(error);
+      if (blockedByPeer) await _refreshPeerBlockedState(target);
+      if (_peerIsBlocked || blockedByPeer) {
+        _appendFailedText(text, clientMsgID: outgoingClientMsgID);
+        return;
+      }
+      _removeTrackedMessage(outgoingClientMsgID);
+      if (!mounted) return;
+      _showNotice(context, '发送失败', '请稍后重试');
+      debugPrint('[OpenIM] send failed: $error');
+    }
+  }
+
+  Future<void> _clearCurrentConversationMessages() async {
+    final conversationID = _currentConversationID;
+    if (conversationID == null || conversationID.isEmpty) {
+      throw StateError('Conversation is unavailable');
+    }
+    await OpenIM.iMManager.conversationManager.markConversationMessageAsRead(
+      conversationID: conversationID,
+    );
+    await OpenIM.iMManager.conversationManager.clearConversationAndDeleteAllMsg(
+      conversationID: conversationID,
+    );
+    final pendingConversation = OpenIMChatRepository.pendingConversation;
+    if (pendingConversation?.conversationID == conversationID) {
+      pendingConversation?.unreadCount = 0;
+    }
+    OpenIMChatRepository.conversationRevision.value++;
+    await OpenIMChatRepository.refreshMessageUnreadStatus();
+    if (!mounted) return;
+    setState(() {
+      _messagesByClientMsgID.clear();
+      _chatHistory.clear();
+      _historyEnd = true;
+    });
+  }
+
+  @override
+  void dispose() {
+    acoRouteObserver.unsubscribe(this);
+    _setRouteVisible(false);
+    OpenIMChatRepository.conversationReady.removeListener(_onReady);
+    OpenIMChatRepository.messageNotifier.removeListener(_onMessage);
+    OpenIMChatRepository.revokedMessageNotifier.removeListener(
+      _onMessageRevoked,
+    );
+    _chatScrollController.removeListener(_onChatScroll);
+    _messageController.removeListener(_onComposerChanged);
+    _messageController.dispose();
+    _messageFocusNode.dispose();
+    _chatScrollController.dispose();
+    _voiceRecordingTimer?.cancel();
+    _voiceAmplitudeSubscription?.cancel();
+    _voiceRecorder.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom({bool force = false, bool animate = true}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      void applyScroll() {
+        if (!mounted || !_chatScrollController.hasClients) return;
+        final position = _chatScrollController.position;
+        if (!force && position.pixels > 80) {
+          return;
+        }
+        final target = 0.0;
+        if ((target - position.pixels).abs() < 1) return;
+        if (!animate) {
+          _chatScrollController.jumpTo(target);
+        } else {
+          _chatScrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+
+      applyScroll();
+    });
+  }
+
+  void _focusMessage(_ChatHistoryMessage message) {
+    if (!_chatHistory.contains(message)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_chatScrollController.hasClients) return;
+      final historyIndex = _chatHistory.indexOf(message);
+      if (historyIndex < 0) return;
+
+      final position = _chatScrollController.position;
+      if (_chatHistory.length > 1) {
+        final reversedIndex = _chatHistory.length - historyIndex - 1;
+        final estimatedOffset =
+            position.maxScrollExtent *
+            reversedIndex /
+            (_chatHistory.length - 1);
+        final target = estimatedOffset
+            .clamp(0.0, position.maxScrollExtent)
+            .toDouble();
+        if ((position.pixels - target).abs() >= 1) {
+          _chatScrollController.jumpTo(target);
+        }
+      }
+    });
+  }
+
+  Key? _messageKey(_ChatHistoryMessage message) {
+    final clientMsgID = message.clientMsgID;
+    return clientMsgID?.isNotEmpty == true ? ValueKey(clientMsgID) : null;
+  }
+
+  bool get _isPanelVisible => _emojiPickerVisible || _morePanelVisible;
+
+  String get _peerName {
+    final name = _resolvedPeerName ?? widget.peerName?.trim();
+    return name?.isNotEmpty == true ? name! : (_conversationTarget ?? '聊天');
+  }
+
+  String? _senderNameForMessage(
+    _ChatHistoryMessage message,
+    Message? sourceMessage,
+  ) {
+    if (!_isGroup || message.mine || sourceMessage == null) return null;
+    final remark = _friendRemarksByUserID[sourceMessage.sendID]?.trim();
+    if (remark?.isNotEmpty == true) return remark;
+    final nickname = sourceMessage.senderNickname?.trim();
+    return nickname?.isNotEmpty == true ? nickname : sourceMessage.sendID;
+  }
+
+  Future<void> _pickChatImage(ImageSource source, {XFile? selected}) async {
+    setState(() => _morePanelVisible = false);
+    File? pickedImage;
+    Uint8List? pickedImageBytes;
+    String? outgoingClientMsgID;
+    final target = _conversationTarget;
+    try {
+      final photo =
+          selected ??
+          await ImagePicker().pickImage(
+            source: source,
+            imageQuality: 70,
+            maxWidth: 1280,
+            maxHeight: 1280,
+          );
+      if (photo == null) return;
+      pickedImage = File(photo.path);
+      final photoSize = await photo.length();
+      if (photoSize > _chatImageMaxBytes) {
+        if (mounted) {
+          _showNotice(context, '图片过大', '请选择 200 MB 以内的图片。');
+        }
+        return;
+      }
+      final imageBytes = await photo.readAsBytes();
+      pickedImageBytes = imageBytes;
+      if (target == null || target.isEmpty) return;
+      if (!_isGroup) await _loadPeerBlockedState(target);
+      if (_peerIsBlocked) {
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.image(
+                mine: true,
+                imageBytes: pickedImageBytes,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
+      if (!_chatAccessGranted) {
+        if (mounted) _showNotice(context, '无法发送', '请先确认你们仍是好友。');
+        return;
+      }
+      if (!OpenIMChatRepository.conversationReady.value) {
+        if (!mounted) return;
+        _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
+        return;
+      }
+      final message = await OpenIM.iMManager.messageManager
+          .createImageMessageFromFullPath(imagePath: photo.path);
+      outgoingClientMsgID = message.clientMsgID;
+      _rememberMessage(message);
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
+        offlinePushInfo: OfflinePushInfo(title: '新消息', desc: '[图片]'),
+      );
+      if (!mounted) return;
+      _rememberMessage(sent);
+      final added = _upsertDisplayedMessage(
+        sent,
+        mine: true,
+        imageBytes: imageBytes,
+      );
+      if (added) _scrollToBottom(force: true, animate: false);
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      _removeTrackedMessage(outgoingClientMsgID);
+      final blockedByPeer = _isBlockedByPeerError(error);
+      if (blockedByPeer && target?.isNotEmpty == true) {
+        await _refreshPeerBlockedState(target!);
+      }
+      if (_peerIsBlocked || blockedByPeer) {
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.image(
+                mine: true,
+                imageBytes: pickedImageBytes,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _peerIsBlocked = true;
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
+      if (!mounted) return;
+      _showNotice(context, '图片发送失败', '请稍后重试。');
+      debugPrint('[OpenIM] image send failed: $error');
+    } finally {
+      await _deletePickedImage(pickedImage);
+    }
+  }
+
+  Future<void> _deletePickedImage(File? image) async {
+    if (image == null || !await image.exists()) return;
+    try {
+      await image.delete();
+    } catch (error) {
+      debugPrint('[Chat] picked image cleanup failed: $error');
+    }
+  }
+
+  Future<void> _pickChatVideo({XFile? selected}) async {
+    setState(() => _morePanelVisible = false);
+    final target = _conversationTarget;
+    File? videoFile;
+    File? snapshotFile;
+    String? outgoingClientMsgID;
+    var sentSuccessfully = false;
+    try {
+      final picked =
+          selected ??
+          await ImagePicker().pickVideo(
+            source: ImageSource.gallery,
+            maxDuration: const Duration(minutes: 5),
+          );
+      if (picked == null) return;
+      videoFile = File(picked.path);
+      final size = await picked.length();
+      if (size <= 0 || size > 200 * 1024 * 1024) {
+        if (mounted) _showNotice(context, '视频过大', '请选择 200 MB 以内的视频。');
+        return;
+      }
+      if (target == null || target.isEmpty) return;
+      if (!_isGroup) await _loadPeerBlockedState(target);
+      if (_peerIsBlocked) {
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.video(
+                mine: true,
+                videoPath: picked.path,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
+      if (!_chatAccessGranted) {
+        if (mounted) _showNotice(context, '无法发送', '请先确认你们仍是好友。');
+        return;
+      }
+      if (!OpenIMChatRepository.conversationReady.value) {
+        if (mounted) _showNotice(context, '连接未就绪', '聊天连接恢复后再发送。');
+        return;
+      }
+      final controller = VideoPlayerController.file(videoFile);
+      await controller.initialize();
+      final duration = controller.value.duration.inSeconds.clamp(1, 300);
+      await controller.dispose();
+      final snapshotPath = await video_thumbnail.VideoThumbnail.thumbnailFile(
+        video: picked.path,
+        imageFormat: video_thumbnail.ImageFormat.JPEG,
+        maxHeight: 640,
+        quality: 75,
+      );
+      if (snapshotPath == null || snapshotPath.isEmpty) {
+        if (mounted) _showNotice(context, '视频发送失败', '无法生成视频预览。');
+        return;
+      }
+      snapshotFile = File(snapshotPath);
+      final message = await OpenIM.iMManager.messageManager
+          .createVideoMessageFromFullPath(
+            videoPath: picked.path,
+            videoType: picked.mimeType ?? 'video/mp4',
+            duration: duration,
+            snapshotPath: snapshotPath,
+          );
+      outgoingClientMsgID = message.clientMsgID;
+      _rememberMessage(message);
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
+        offlinePushInfo: OfflinePushInfo(title: '新消息', desc: '[视频]'),
+      );
+      if (!mounted) return;
+      _rememberMessage(sent);
+      final added = _upsertDisplayedMessage(sent, mine: true);
+      if (added) _scrollToBottom(force: true, animate: false);
+      sentSuccessfully = true;
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      _removeTrackedMessage(outgoingClientMsgID);
+      if (mounted) _showNotice(context, '视频发送失败', '请稍后重试。');
+      debugPrint('[OpenIM] video send failed: $error');
+    } finally {
+      if (!sentSuccessfully) await _deletePickedImage(videoFile);
+      await _deletePickedImage(snapshotFile);
+    }
+  }
+
+  Future<void> _pickChatGalleryMedia() async {
+    final picked = await ImagePicker().pickMedia();
+    if (picked == null) return;
+    final mimeType = picked.mimeType?.toLowerCase();
+    final isVideo =
+        mimeType?.startsWith('video/') == true ||
+        RegExp(
+          r'\.(mp4|mov|m4v|avi|webm|mkv)$',
+          caseSensitive: false,
+        ).hasMatch(picked.path);
+    if (isVideo) {
+      await _pickChatVideo(selected: picked);
+    } else {
+      await _pickChatImage(ImageSource.gallery, selected: picked);
+    }
+  }
+
+  Future<void> _handleMorePanelSelection(String label) async {
+    if (label == '文件') {
+      await _pickChatFile();
+      return;
+    }
+    if (label == '照片') {
+      await _pickChatGalleryMedia();
+      return;
+    }
+    if (label == '拍摄') {
+      await _pickChatImage(ImageSource.camera);
+      return;
+    }
+    if (label == '语音通话') {
+      setState(() => _morePanelVisible = false);
+      if (!mounted) return;
+      if (_isGroup) {
+        _showNotice(context, '暂不支持', '群语音将在后续版本开放。');
+        return;
+      }
+      final userID = widget.peerUserID;
+      if (userID == null || userID.isEmpty || !_chatAccessGranted) {
+        _showNotice(context, '无法发起通话', '请先确认你们仍是好友。');
+        return;
+      }
+      final client = AccountApiClient();
+      try {
+        final call = await AccountSession(client).startVoiceCall(userID);
+        final invite = await OpenIM.iMManager.messageManager
+            .createCustomMessage(
+              data: jsonEncode({
+                'type': 'aco.voice_call.invite',
+                'call_id': call.callId,
+              }),
+              extension: 'aco.voice_call',
+              description: '语音通话邀请',
+            );
+        await OpenIM.iMManager.messageManager.sendMessage(
+          message: invite,
+          userID: userID,
+          offlinePushInfo: OfflinePushInfo(title: '语音通话', desc: '邀请你进行语音通话'),
+        );
+        if (!mounted) return;
+        await Navigator.of(context).push<void>(
+          _AcoPageRoute<void>(
+            builder: (_) => _VoiceCallPage(
+              name: _peerName,
+              avatarUrl: _resolvedPeerAvatar,
+              callID: call.callId,
+              peerUserID: userID,
+            ),
+          ),
+        );
+      } catch (error) {
+        if (mounted) _showNotice(context, '无法发起通话', '请检查网络后重试。');
+        debugPrint('[VoiceCall] start failed: $error');
+      } finally {
+        client.close();
+      }
+      return;
+    }
+    setState(() => _morePanelVisible = false);
+    _showNotice(context, label, '$label功能暂未开放。');
+  }
+
+  Future<void> _pickChatFile() async {
+    setState(() => _morePanelVisible = false);
+    final result = await FilePicker.pickFiles();
+    final picked = result.isEmpty ? null : result.first;
+    final target = _conversationTarget;
+    if (picked == null || target == null || target.isEmpty) return;
+    final bytes = await picked.readAsBytes();
+    if (bytes.length > 200 * 1024 * 1024) {
+      if (mounted) _showNotice(context, '文件过大', '请选择 200 MB 以内的文件。');
+      return;
+    }
+    if (!_chatAccessGranted || !OpenIMChatRepository.conversationReady.value) {
+      if (mounted) _showNotice(context, '无法发送', '聊天连接未就绪或你们已不是好友。');
+      return;
+    }
+    try {
+      final upload = await AccountSession(
+        AccountApiClient(),
+      ).uploadChatFile(bytes: bytes, filename: picked.name);
+      final message = await OpenIM.iMManager.messageManager.createCustomMessage(
+        data: jsonEncode({
+          'url': upload.url,
+          'name': upload.name,
+          'size': upload.size,
+        }),
+        extension: 'aco.chat.file',
+        description: upload.name,
+      );
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: _isGroup ? null : target,
+        groupID: _isGroup ? target : null,
+        offlinePushInfo: OfflinePushInfo(title: '文件', desc: upload.name),
+      );
+      if (!mounted) return;
+      _rememberMessage(sent);
+      _upsertDisplayedMessage(sent, mine: true, localFilePath: picked.path);
+      _scrollToBottom(force: true, animate: false);
+      OpenIMChatRepository.conversationRevision.value++;
+    } catch (error) {
+      if (mounted) _showNotice(context, '文件发送失败', '请稍后重试。');
+      debugPrint('[OpenIM] file send failed: $error');
+    }
+  }
+
+  void _hidePanels() {
+    if (!_isPanelVisible && !_mentionVisible) return;
+    setState(() {
+      _emojiPickerVisible = false;
+      _morePanelVisible = false;
+      _mentionVisible = false;
+    });
+  }
+
+  void _onComposerChanged() {
+    if (!_isGroup) return;
+    final text = _messageController.text;
+    final previousText = _previousComposerText;
+    _previousComposerText = text;
+    final selection = _messageController.selection;
+    final cursor = selection.extentOffset;
+    if (!selection.isValid || cursor < 0) return;
+    final textBeforeCursor = text.substring(0, cursor);
+    final atIndex = textBeforeCursor.lastIndexOf('@');
+    final isMentionStart =
+        atIndex >= 0 &&
+        (atIndex == 0 || _isMentionBoundary(textBeforeCursor[atIndex - 1]));
+    final query = isMentionStart ? textBeforeCursor.substring(atIndex + 1) : '';
+    final shouldShow = isMentionStart && !query.contains(RegExp(r'\s'));
+    final shouldOpenPicker =
+        shouldShow && _didInsertAt(previousText, text, cursor);
+    if (_mentionVisible != shouldShow ||
+        _mentionStart != (shouldShow ? atIndex : -1)) {
+      setState(() {
+        _mentionVisible = shouldShow;
+        _mentionStart = shouldShow ? atIndex : -1;
+      });
+    }
+    if (shouldOpenPicker) {
+      unawaited(_showMentionPicker());
+    }
+  }
+
+  bool _didInsertAt(String previousText, String text, int cursor) {
+    if (cursor <= 0 || text.length != previousText.length + 1) return false;
+    if (text[cursor - 1] != '@') return false;
+    return '${text.substring(0, cursor - 1)}${text.substring(cursor)}' ==
+        previousText;
+  }
+
+  bool _isMentionBoundary(String character) =>
+      RegExp(r'\s').hasMatch(character);
+
+  Future<void> _loadMentionMembers() async {
+    final groupID = widget.groupID;
+    if (_mentionLoading ||
+        _mentionMembers.isNotEmpty ||
+        groupID == null ||
+        groupID.isEmpty) {
+      return;
+    }
+    setState(() => _mentionLoading = true);
+    try {
+      final members = await OpenIM.iMManager.groupManager.getGroupMemberList(
+        groupID: groupID,
+        count: 500,
+      );
+      if (mounted) setState(() => _mentionMembers = members);
+    } catch (error) {
+      debugPrint('[OpenIM] load mention members failed: $error');
+    } finally {
+      if (mounted) setState(() => _mentionLoading = false);
+    }
+  }
+
+  Future<void> _showMentionPicker() async {
+    if (_mentionPickerOpen) return;
+    _mentionPickerOpen = true;
+    await _loadMentionMembers();
+    if (!mounted || !_mentionVisible) {
+      _mentionPickerOpen = false;
+      return;
+    }
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0x00000000),
+      barrierColor: const Color(0x99000000),
+      builder: (sheetContext) => SafeArea(
+        top: false,
+        child: _GroupMentionPanel(
+          palette: widget.palette,
+          height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+          members: _mentionMembers,
+          loading: _mentionLoading,
+          onSelected: (member) {
+            _insertMention(member);
+            Navigator.of(sheetContext).pop();
+          },
+          onDismiss: () => Navigator.of(sheetContext).pop(),
+        ),
+      ),
+    );
+    _mentionPickerOpen = false;
+    if (mounted) {
+      setState(() {
+        _mentionVisible = false;
+      });
+    }
+  }
+
+  String _mentionName(GroupMembersInfo member) {
+    final name = member.nickname?.trim() ?? '';
+    return name.isEmpty ? (member.userID ?? '成员') : name;
+  }
+
+  void _insertMention(GroupMembersInfo member) {
+    final userID = member.userID;
+    final selection = _messageController.selection;
+    if (userID == null ||
+        userID.isEmpty ||
+        _mentionStart < 0 ||
+        !selection.isValid) {
+      return;
+    }
+    final cursor = selection.extentOffset;
+    final token = '@${_mentionName(member)} ';
+    final text = _messageController.text;
+    _messageController.value = TextEditingValue(
+      text:
+          '${text.substring(0, _mentionStart)}$token${text.substring(cursor)}',
+      selection: TextSelection.collapsed(offset: _mentionStart + token.length),
+    );
+    _selectedMentions.removeWhere((mention) => mention.userID == userID);
+    _selectedMentions.add(
+      _GroupMention(userID: userID, name: _mentionName(member)),
+    );
+  }
+
+  void _mentionMessageSender({
+    required String? userID,
+    required String? nickname,
+  }) {
+    if (!_isGroup ||
+        userID == null ||
+        userID.isEmpty ||
+        userID == OpenIMChatRepository.currentUserID) {
+      return;
+    }
+    final selection = _messageController.selection;
+    final text = _messageController.text;
+    final cursor = selection.isValid
+        ? selection.extentOffset.clamp(0, text.length).toInt()
+        : text.length;
+    final name = nickname?.trim();
+    _insertMentionToken(
+      userID: userID,
+      name: name == null || name.isEmpty ? userID : name,
+      start: cursor,
+      end: cursor,
+    );
+    setState(() {
+      _voiceInputActive = false;
+      _emojiPickerVisible = false;
+      _morePanelVisible = false;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _messageFocusNode.requestFocus();
+    });
+  }
+
+  void _insertMentionToken({
+    required String userID,
+    required String name,
+    required int start,
+    required int end,
+  }) {
+    final token = '@$name ';
+    final text = _messageController.text;
+    _messageController.value = TextEditingValue(
+      text: '${text.substring(0, start)}$token${text.substring(end)}',
+      selection: TextSelection.collapsed(offset: start + token.length),
+    );
+    _selectedMentions.removeWhere((mention) => mention.userID == userID);
+    _selectedMentions.add(_GroupMention(userID: userID, name: name));
+  }
+
+  List<_GroupMention> _mentionsIn(String text) => _selectedMentions
+      .where((mention) => text.contains(mention.token))
+      .toList(growable: false);
+
+  void _toggleEmojiPicker() {
+    _dismissKeyboard();
+    setState(() {
+      _emojiPickerVisible = !_emojiPickerVisible;
+      _morePanelVisible = false;
+      _mentionVisible = false;
+    });
+  }
+
+  void _toggleMorePanel() {
+    _dismissKeyboard();
+    setState(() {
+      _morePanelVisible = !_morePanelVisible;
+      _emojiPickerVisible = false;
+      _mentionVisible = false;
+    });
+  }
+
+  void _toggleVoiceInput() {
+    _dismissKeyboard();
+    setState(() {
+      _voiceInputActive = !_voiceInputActive;
+      _emojiPickerVisible = false;
+      _morePanelVisible = false;
+    });
+  }
+
+  Future<void> _setVoiceRecording(_VoiceRecordingAction action) async {
+    switch (action) {
+      case _VoiceRecordingAction.start:
+        if (!await _voiceRecorder.hasPermission() || !mounted) return;
+        final directory = await getTemporaryDirectory();
+        final path =
+            '${directory.path}/aco_voice_${DateTime.now().microsecondsSinceEpoch}.m4a';
+        await _voiceRecorder.start(
+          const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
+          path: path,
+        );
+        await _voiceAmplitudeSubscription?.cancel();
+        _voiceAmplitudeSubscription = _voiceRecorder
+            .onAmplitudeChanged(const Duration(milliseconds: 80))
+            .listen((amplitude) {
+              if (!mounted || !_voiceRecording) return;
+              final level = ((amplitude.current + 58) / 48).clamp(0.0, 1.0);
+              if ((level - _voiceLevel).abs() >= .03) {
+                setState(() => _voiceLevel = level);
+              }
+            });
+        _voiceRecordingPath = path;
+        _voiceRecordingStartedAt = DateTime.now();
+        _voiceRecordingTimer?.cancel();
+        _voiceRecordingTimer = Timer(
+          const Duration(seconds: 60),
+          () => unawaited(_finishVoiceRecording(send: true)),
+        );
+        if (mounted) {
+          setState(() {
+            _voiceLevel = 0;
+            _voiceRecording = true;
+          });
+        }
+      case _VoiceRecordingAction.send:
+        await _finishVoiceRecording(send: true);
+      case _VoiceRecordingAction.cancel:
+        await _finishVoiceRecording(send: false);
+    }
+  }
+
+  Future<void> _finishVoiceRecording({required bool send}) async {
+    if (_voiceFinishing || (!_voiceRecording && _voiceRecordingPath == null)) {
+      return;
+    }
+    _voiceFinishing = true;
+    try {
+      final path = await _voiceRecorder.stop() ?? _voiceRecordingPath;
+      _voiceRecordingTimer?.cancel();
+      _voiceRecordingTimer = null;
+      await _voiceAmplitudeSubscription?.cancel();
+      _voiceAmplitudeSubscription = null;
+      final startedAt = _voiceRecordingStartedAt;
+      _voiceRecordingPath = null;
+      _voiceRecordingStartedAt = null;
+      if (mounted) {
+        setState(() {
+          _voiceLevel = 0;
+          _voiceRecording = false;
+        });
+      }
+      if (path == null) return;
+      final file = File(path);
+      if (!send || startedAt == null) {
+        if (await file.exists()) await file.delete();
+        return;
+      }
+      final target = _conversationTarget;
+      if (!_isGroup && target != null && target.isNotEmpty) {
+        await _loadPeerBlockedState(target);
+      }
+      if (_peerIsBlocked) {
+        final duration = DateTime.now()
+            .difference(startedAt)
+            .inSeconds
+            .clamp(1, 60);
+        if (mounted) {
+          setState(
+            () => _chatHistory.add(
+              _ChatHistoryMessage.sound(
+                mine: true,
+                soundPath: path,
+                soundDuration: duration,
+                sendFailed: true,
+              ),
+            ),
+          );
+          _scrollToBottom(force: true, animate: false);
+        }
+        return;
+      }
+      if (target == null ||
+          target.isEmpty ||
+          !_chatAccessGranted ||
+          !OpenIMChatRepository.conversationReady.value) {
+        if (await file.exists()) await file.delete();
+        if (mounted) _showNotice(context, '发送失败', '聊天连接未就绪。');
+        return;
+      }
+      var sentSuccessfully = false;
+      String? outgoingClientMsgID;
+      try {
+        final duration = DateTime.now()
+            .difference(startedAt)
+            .inSeconds
+            .clamp(1, 60);
+        final message = await OpenIM.iMManager.messageManager
+            .createSoundMessageFromFullPath(
+              soundPath: path,
+              duration: duration,
+            );
+        outgoingClientMsgID = message.clientMsgID;
+        _rememberMessage(message);
+        final sent = await OpenIM.iMManager.messageManager.sendMessage(
+          message: message,
+          userID: _isGroup ? null : target,
+          groupID: _isGroup ? target : null,
+          offlinePushInfo: OfflinePushInfo(title: '新语音消息', desc: '[语音]'),
+        );
+        if (!mounted) return;
+        _rememberMessage(sent);
+        final added = _upsertDisplayedMessage(sent, mine: true);
+        if (added) _scrollToBottom(force: true, animate: false);
+        OpenIMChatRepository.conversationRevision.value++;
+        sentSuccessfully = true;
+      } catch (error) {
+        _removeTrackedMessage(outgoingClientMsgID);
+        final blockedByPeer = _isBlockedByPeerError(error);
+        if (blockedByPeer) await _refreshPeerBlockedState(target);
+        if (_peerIsBlocked || blockedByPeer) {
+          final failedDuration = DateTime.now()
+              .difference(startedAt)
+              .inSeconds
+              .clamp(1, 60);
+          if (mounted) {
+            setState(
+              () => _chatHistory.add(
+                _ChatHistoryMessage.sound(
+                  mine: true,
+                  soundPath: path,
+                  soundDuration: failedDuration,
+                  sendFailed: true,
+                ),
+              ),
+            );
+            _peerIsBlocked = true;
+            _scrollToBottom(force: true, animate: false);
+          }
+          sentSuccessfully = true;
+          return;
+        }
+        if (mounted) _showNotice(context, '语音发送失败', '请稍后重试。');
+        debugPrint('[OpenIM] voice send failed: $error');
+      } finally {
+        if (!sentSuccessfully && await file.exists()) await file.delete();
+      }
+    } finally {
+      _voiceFinishing = false;
+    }
+  }
+
+  Widget _selectableMessage(_ChatHistoryMessage message, Widget child) {
+    if (!_selectingMessages) return child;
+    final id = message.clientMsgID;
+    final canSelect = id != null && id.isNotEmpty;
+    final selected = _selectedMessageIDs.contains(id);
+    return Semantics(
+      checked: selected,
+      enabled: canSelect && !_deletingMessages,
+      label: '选择消息',
+      child: GestureDetector(
+        key: ValueKey('select-message-$id'),
+        behavior: HitTestBehavior.opaque,
+        onTap: canSelect && !_deletingMessages
+            ? () => _toggleMessageSelection(id)
+            : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Row(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(
+                  selected
+                      ? CupertinoIcons.checkmark_circle_fill
+                      : CupertinoIcons.circle,
+                  size: 24,
+                  color: selected
+                      ? widget.palette.accentForeground
+                      : widget.palette.mutedText,
+                ),
+              ),
+              Expanded(child: IgnorePointer(child: child)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !_selectingMessages,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop && _selectingMessages) _cancelSelectingMessages();
+    },
+    child: _buildChatContent(context),
+  );
+
+  Widget _buildChatContent(BuildContext context) {
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    final compactBottomBar = _isPanelVisible || keyboardInset > 0;
+    return _DetailScaffold(
+      palette: widget.palette,
+      headerBackgroundColor: widget.palette.dark
+          ? widget.palette.background
+          : const Color(0xFFEFEFEF),
+      onBack: _selectingMessages ? _cancelSelectingMessages : null,
+      title: _selectingMessages ? '已选择 ${_selectedMessageIDs.length} 条' : null,
+      titleWidget: _selectingMessages
+          ? null
+          : _ChatHeaderTitle(
+              palette: widget.palette,
+              name: _peerName,
+              identity: _resolvedPeerIdentity,
+              staffIdentity: _resolvedPeerStaffIdentity,
+            ),
+      headerRightPadding: 4,
+      right: _selectingMessages
+          ? CupertinoButton(
+              onPressed: _deletingMessages ? null : _cancelSelectingMessages,
+              child: const Text('取消'),
+            )
+          : Semantics(
+              button: true,
+              label: '更多',
+              child: CupertinoButton(
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(51, 30),
+                onPressed: () async {
+                  final exitedGroup = await Navigator.of(context).push<bool>(
+                    _AcoPageRoute<bool>(
+                      builder: (_) => CupertinoPageScaffold(
+                        backgroundColor: widget.palette.background,
+                        child: AcoSafeArea(
+                          left: false,
+                          right: false,
+                          bottom: false,
+                          child: ColoredBox(
+                            color: widget.palette.background,
+                            child: SizedBox.expand(
+                              child: _ChatMoreSettingsPage(
+                                palette: widget.palette,
+                                peerName: _peerName,
+                                peerUserID: widget.peerUserID,
+                                groupID: widget.groupID,
+                                conversationID: _currentConversationID,
+                                onBlockChanged: (blocked) =>
+                                    _peerIsBlocked = blocked,
+                                messages: _chatHistory,
+                                onMessageTap: _focusMessage,
+                                onClearMessages:
+                                    _clearCurrentConversationMessages,
+                                onSelectMessages: _startSelectingMessages,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                  if (exitedGroup != true || !mounted) return;
+                  Navigator.of(this.context).pop();
+                },
+                child: Image.asset(
+                  widget.palette.dark
+                      ? 'assets/icons/chat_more_mark.png'
+                      : 'assets/icons/chat_more_mark_light.png',
+                  width: 28,
+                  height: 8,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ),
+      child: Stack(
+        children: [
+          AnimatedPadding(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(bottom: keyboardInset),
+            child: Column(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _hidePanels,
+                    child: FutureBuilder<void>(
+                      future: _loadFuture,
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                                ConnectionState.waiting &&
+                            _chatHistory.isEmpty) {
+                          return const Center(
+                            child: CupertinoActivityIndicator(),
+                          );
+                        }
+                        if (_error != null) {
+                          return Center(
+                            child: CupertinoButton(
+                              onPressed: () => setState(() {
+                                _error = null;
+                                _loadFuture = _loadHistory();
+                              }),
+                              child: Text(_error!),
+                            ),
+                          );
+                        }
+                        if (_chatHistory.isEmpty) {
+                          return const Center(child: Text('暂无消息'));
+                        }
+                        return ListView.separated(
+                          controller: _chatScrollController,
+                          reverse: true,
+                          // Reserve space so the latest bubble stays above the
+                          // composer at the bottom of the reversed list.
+                          padding: const EdgeInsets.fromLTRB(8, 20, 8, 28),
+                          itemCount: _chatHistory.length,
+                          separatorBuilder: (_, _) =>
+                              const SizedBox(height: 18),
+                          itemBuilder: (_, index) {
+                            final message =
+                                _chatHistory[_chatHistory.length - 1 - index];
+                            final sourceMessage = message.clientMsgID == null
+                                ? null
+                                : _messagesByClientMsgID[message.clientMsgID];
+                            final timeLabel = _messageTimeLabel(
+                              _chatHistory.length - 1 - index,
+                            );
+                            return KeyedSubtree(
+                              key: _messageKey(message),
+                              child: Column(
+                                children: [
+                                  if (timeLabel != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          timeLabel,
+                                          style: const TextStyle(
+                                            color: Color(0xFF8D8D8D),
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  if (message.isSystem)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 2,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          message.text,
+                                          style: TextStyle(
+                                            color: widget.palette.mutedText,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    _selectableMessage(
+                                      message,
+                                      _ChatMessage(
+                                        palette: widget.palette,
+                                        text: message.text,
+                                        imageBytes: message.imageBytes,
+                                        imagePath: message.imagePath,
+                                        imageUrl: message.imageUrl,
+                                        previewImageUrl:
+                                            message.previewImageUrl,
+                                        shouldCacheThumbnail:
+                                            message.shouldCacheThumbnail,
+                                        soundPath: message.soundPath,
+                                        soundUrl: message.soundUrl,
+                                        soundDuration: message.soundDuration,
+                                        videoPath: message.videoPath,
+                                        videoUrl: message.videoUrl,
+                                        videoSnapshotPath:
+                                            message.videoSnapshotPath,
+                                        videoSnapshotUrl:
+                                            message.videoSnapshotUrl,
+                                        videoDuration: message.videoDuration,
+                                        fileName: message.fileName,
+                                        fileUrl: message.fileUrl,
+                                        fileSize: message.fileSize,
+                                        filePath: message.filePath,
+                                        isVoiceCallRecord:
+                                            message.isVoiceCallRecord,
+                                        sendFailed: message.sendFailed,
+                                        mine: message.mine,
+                                        senderName: _senderNameForMessage(
+                                          message,
+                                          sourceMessage,
+                                        ),
+                                        avatarUrl: _isGroup
+                                            ? sourceMessage?.senderFaceUrl ??
+                                                  _resolvedPeerAvatar
+                                            : _resolvedPeerAvatar,
+                                        ownAvatarUrl: widget.ownAvatarUrl,
+                                        onAvatarLongPress: _isGroup
+                                            ? () => _mentionMessageSender(
+                                                userID: sourceMessage?.sendID,
+                                                nickname: sourceMessage
+                                                    ?.senderNickname,
+                                              )
+                                            : null,
+                                        onAvatarTap: !message.mine
+                                            ? () => _openSenderProfile(
+                                                userID:
+                                                    sourceMessage?.sendID ??
+                                                    widget.peerUserID,
+                                                nickname:
+                                                    sourceMessage
+                                                        ?.senderNickname ??
+                                                    _peerName,
+                                                avatarUrl: _isGroup
+                                                    ? sourceMessage
+                                                          ?.senderFaceUrl
+                                                    : _resolvedPeerAvatar,
+                                              )
+                                            : null,
+                                        onLongPress: _selectingMessages
+                                            ? null
+                                            : (bubbleContext) =>
+                                                  _showMessageActions(
+                                                    message,
+                                                    sourceMessage,
+                                                    bubbleContext,
+                                                  ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                if (_selectingMessages)
+                  AcoSafeArea(
+                    top: false,
+                    child: CupertinoButton(
+                      onPressed:
+                          _deletingMessages || _selectedMessageIDs.isEmpty
+                          ? null
+                          : _deleteSelectedMessages,
+                      child: _deletingMessages
+                          ? const CupertinoActivityIndicator()
+                          : Text(
+                              '删除（${_selectedMessageIDs.length}）',
+                              style: TextStyle(
+                                color: _selectedMessageIDs.isEmpty
+                                    ? widget.palette.mutedText
+                                    : CupertinoColors.destructiveRed,
+                              ),
+                            ),
+                    ),
+                  )
+                else
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: widget.palette.dark
+                          ? const Color(0xFF1E1D1B)
+                          : widget.palette.surface,
+                      border: Border(
+                        top: BorderSide(color: widget.palette.border),
+                      ),
+                    ),
+                    child: AcoSafeArea(
+                      top: false,
+                      bottom: !compactBottomBar,
+                      minimum: compactBottomBar
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.only(bottom: 20),
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                          8,
+                          5,
+                          8,
+                          compactBottomBar ? 5 : 8,
+                        ),
+                        child: _ChatComposer(
+                          palette: widget.palette,
+                          controller: _messageController,
+                          focusNode: _messageFocusNode,
+                          voiceInputActive: _voiceInputActive,
+                          onVoicePressed: _toggleVoiceInput,
+                          onRecordingChanged: _setVoiceRecording,
+                          onEmojiPressed: _toggleEmojiPicker,
+                          onMorePressed: _toggleMorePanel,
+                          onInputTapped: _hidePanels,
+                          onSubmit: _sendText,
+                        ),
+                      ),
+                    ),
+                  ),
+                if (_emojiPickerVisible)
+                  _AcoEmojiPicker(
+                    palette: widget.palette,
+                    controller: _messageController,
+                    onEmojiSelected: () =>
+                        setState(() => _emojiPickerVisible = false),
+                  ),
+                if (_morePanelVisible)
+                  _ChatMorePanel(
+                    palette: widget.palette,
+                    isGroup: _isGroup,
+                    onSelected: _handleMorePanelSelection,
+                  ),
+              ],
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 360),
+                reverseDuration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutQuart,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) => FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(
+                    scale: Tween<double>(begin: .9, end: 1).animate(animation),
+                    child: child,
+                  ),
+                ),
+                child: _voiceRecording
+                    ? _VoiceRecordingOverlay(
+                        key: ValueKey('voice-recording'),
+                        level: _voiceLevel,
+                      )
+                    : const SizedBox(key: ValueKey('voice-recording-idle')),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChatHistoryWindow {
+  const _ChatHistoryWindow({required this.messages, required this.isEnd});
+
+  final List<Message> messages;
+  final bool isEnd;
+}
+
+class _ChatHeaderTitle extends StatelessWidget {
+  const _ChatHeaderTitle({
+    required this.palette,
+    required this.name,
+    required this.identity,
+    required this.staffIdentity,
+  });
+
+  final AcoPalette palette;
+  final String name;
+  final int identity;
+  final int staffIdentity;
+
+  @override
+  Widget build(BuildContext context) {
+    final identityIconAsset = _identityNodeAsset(identity);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 220),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: palette.primaryText,
+                fontSize: AcoTypography.bodyEmphasis,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (identityIconAsset != null) ...[
+            const SizedBox(width: 5),
+            Image.asset(
+              identityIconAsset,
+              width: _shortBadgeWidth(identity),
+              fit: BoxFit.contain,
+            ),
+          ],
+          if (_staffBadgeAsset(staffIdentity) case final staffAsset?) ...[
+            const SizedBox(width: 3),
+            Image.asset(
+              staffAsset,
+              width: _shortBadgeWidth(staffIdentity),
+              fit: BoxFit.contain,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _VoiceRecordingOverlay extends StatelessWidget {
+  const _VoiceRecordingOverlay({super.key, required this.level});
+
+  final double level;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xB8000000),
+    child: Stack(
+      children: [
+        Align(
+          alignment: const Alignment(0, -.08),
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 160,
+                height: 78,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF28B561),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: _VoiceWaveform(level: level),
+              ),
+              Positioned(
+                bottom: -7,
+                child: Transform.rotate(
+                  angle: .785398,
+                  child: const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: ColoredBox(color: Color(0xFF28B561)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Align(
+          alignment: Alignment.bottomCenter,
+          child: Container(
+            height: 92,
+            width: double.infinity,
+            alignment: const Alignment(0, .45),
+            decoration: const BoxDecoration(
+              color: Color(0xFFE2E2E2),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.elliptical(240, 88),
+              ),
+            ),
+            child: const Text(
+              '松开 发送',
+              style: TextStyle(
+                color: Color(0xFF1C1C1C),
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: -28,
+          bottom: 132,
+          child: Container(
+            width: 196,
+            height: 76,
+            alignment: const Alignment(-.12, 0),
+            decoration: const BoxDecoration(
+              color: Color(0xFF666666),
+              borderRadius: BorderRadius.horizontal(
+                left: Radius.elliptical(76, 48),
+              ),
+            ),
+            child: const Text(
+              '取消',
+              style: TextStyle(
+                color: _white,
+                fontSize: 18,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _VoiceCallPage extends StatefulWidget {
+  const _VoiceCallPage({
+    required this.name,
+    required this.callID,
+    required this.peerUserID,
+    this.avatarUrl,
+    this.incoming = false,
+  });
+
+  final String name;
+  final String callID;
+  final String peerUserID;
+  final String? avatarUrl;
+  final bool incoming;
+
+  @override
+  State<_VoiceCallPage> createState() => _VoiceCallPageState();
+}
+
+class _VoiceCallPageState extends State<_VoiceCallPage> {
+  var _microphoneEnabled = true;
+  var _speakerEnabled = false;
+  var _connected = false;
+  var _connecting = false;
+  var _ending = false;
+  Duration _callDuration = Duration.zero;
+  Timer? _callTimer;
+  Timer? _statusTimer;
+  var _statusRefreshing = false;
+  Timer? _outgoingToneRestartTimer;
+  Room? _room;
+  final _callTonePlayer = AudioPlayer();
+  StreamSubscription<void>? _outgoingToneCompleteSubscription;
+  var _callToneStopped = false;
+  late final AccountApiClient _apiClient;
+  late final AccountSession _accountSession;
+
+  @override
+  void initState() {
+    super.initState();
+    _apiClient = AccountApiClient();
+    _accountSession = AccountSession(_apiClient);
+    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_refreshCallStatus());
+    });
+    unawaited(_startCallTone());
+  }
+
+  Future<void> _startCallTone() async {
+    _callToneStopped = false;
+    try {
+      if (widget.incoming) {
+        await _callTonePlayer.setReleaseMode(ReleaseMode.loop);
+        await _callTonePlayer.play(AssetSource('sounds/ringtone.wav'));
+        return;
+      }
+
+      await _callTonePlayer.setReleaseMode(ReleaseMode.stop);
+      await _outgoingToneCompleteSubscription?.cancel();
+      _outgoingToneCompleteSubscription = _callTonePlayer.onPlayerComplete
+          .listen((_) => _scheduleOutgoingToneReplay());
+      await _playOutgoingTone();
+    } catch (error) {
+      debugPrint('[VoiceCall] call tone playback failed: $error');
+    }
+  }
+
+  Future<void> _playOutgoingTone() async {
+    if (_callToneStopped) return;
+    try {
+      await _callTonePlayer.play(AssetSource('sounds/dial_tone.wav'));
+    } catch (error) {
+      debugPrint('[VoiceCall] outgoing call tone playback failed: $error');
+    }
+  }
+
+  void _scheduleOutgoingToneReplay() {
+    if (_callToneStopped) return;
+    _outgoingToneRestartTimer?.cancel();
+    _outgoingToneRestartTimer = Timer(const Duration(seconds: 3), () {
+      unawaited(_playOutgoingTone());
+    });
+  }
+
+  Future<void> _stopCallTone() async {
+    _callToneStopped = true;
+    _outgoingToneRestartTimer?.cancel();
+    _outgoingToneRestartTimer = null;
+    await _outgoingToneCompleteSubscription?.cancel();
+    _outgoingToneCompleteSubscription = null;
+    try {
+      await _callTonePlayer.stop();
+    } catch (error) {
+      debugPrint('[VoiceCall] call tone stop failed: $error');
+    }
+  }
+
+  void _setConnecting(bool value) {
+    _connecting = value;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _refreshCallStatus() async {
+    if (_connecting || _ending || _statusRefreshing) return;
+    _statusRefreshing = true;
+    try {
+      final call = await _accountSession.voiceCallStatus(widget.callID);
+      if (!mounted || _ending) return;
+      if (call.status == 'active' && !_connected) {
+        await _joinCall();
+      } else if (call.status == 'ended') {
+        await _closeAfterRemoteEnd();
+      }
+    } catch (error) {
+      debugPrint('[VoiceCall] status failed: $error');
+    } finally {
+      _statusRefreshing = false;
+    }
+  }
+
+  Future<void> _acceptCall() async {
+    if (_connecting || _ending) return;
+    _setConnecting(true);
+    await _stopCallTone();
+    try {
+      final call = await _accountSession.acceptVoiceCall(widget.callID);
+      await _connectLiveKit(call);
+    } catch (error) {
+      if (mounted) _showNotice(context, '无法接听', '请检查网络后重试。');
+      debugPrint('[VoiceCall] accept failed: $error');
+    } finally {
+      _setConnecting(false);
+    }
+  }
+
+  Future<void> _joinCall() async {
+    if (_connecting || _connected || _ending) return;
+    _setConnecting(true);
+    await _stopCallTone();
+    try {
+      final call = await _accountSession.joinVoiceCall(widget.callID);
+      await _connectLiveKit(call);
+    } catch (error) {
+      debugPrint('[VoiceCall] join failed: $error');
+    } finally {
+      _setConnecting(false);
+    }
+  }
+
+  Future<void> _connectLiveKit(VoiceCallInfo call) async {
+    if (!call.hasLiveKitCredentials) throw StateError('Missing LiveKit token');
+    await LiveKitClient.initialize();
+    final room = Room(
+      roomOptions: const RoomOptions(
+        defaultAudioOutputOptions: AudioOutputOptions(speakerOn: false),
+      ),
+    );
+    try {
+      await room.connect(call.url!, call.token!);
+      await AudioManager.instance.setSpeakerOutputPreferred(false);
+      await room.localParticipant?.setMicrophoneEnabled(_microphoneEnabled);
+    } catch (_) {
+      await room.disconnect();
+      rethrow;
+    }
+    if (!mounted) {
+      await room.disconnect();
+      return;
+    }
+    _room = room;
+    setState(() => _connected = true);
+    _callTimer?.cancel();
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _callDuration += const Duration(seconds: 1));
+    });
+  }
+
+  Future<void> _toggleMicrophone() async {
+    final nextEnabled = !_microphoneEnabled;
+    try {
+      await _room?.localParticipant?.setMicrophoneEnabled(nextEnabled);
+      if (mounted) setState(() => _microphoneEnabled = nextEnabled);
+    } catch (error) {
+      debugPrint('[VoiceCall] microphone toggle failed: $error');
+    }
+  }
+
+  Future<void> _toggleSpeaker() async {
+    final nextEnabled = !_speakerEnabled;
+    try {
+      await AudioManager.instance.setSpeakerOutputPreferred(nextEnabled);
+      if (mounted) setState(() => _speakerEnabled = nextEnabled);
+    } catch (error) {
+      debugPrint('[VoiceCall] speaker toggle failed: $error');
+    }
+  }
+
+  Future<void> _endAndClose() async {
+    if (_ending) return;
+    _ending = true;
+    _statusTimer?.cancel();
+    await _stopCallTone();
+    var ended = false;
+    try {
+      await _accountSession.endVoiceCall(widget.callID);
+      ended = true;
+    } catch (error) {
+      debugPrint('[VoiceCall] end failed: $error');
+    }
+    Message? record;
+    if (ended) record = await _sendCallRecord();
+    await _room?.disconnect();
+    _room = null;
+    if (mounted) Navigator.of(context).pop(record);
+  }
+
+  Future<Message?> _sendCallRecord() async {
+    final status = _callRecordStatus;
+    try {
+      final message = await OpenIM.iMManager.messageManager.createCustomMessage(
+        data: jsonEncode({
+          'type': 'aco.voice_call.ended',
+          'call_id': widget.callID,
+          'status': status,
+          'duration_seconds': _callDuration.inSeconds,
+        }),
+        extension: 'aco.voice_call',
+        description: '语音通话',
+      );
+      final sent = await OpenIM.iMManager.messageManager.sendMessage(
+        message: message,
+        userID: widget.peerUserID,
+        offlinePushInfo: OfflinePushInfo(title: '语音通话', desc: '语音通话记录'),
+      );
+      OpenIMChatRepository.publishLocalMessage(sent);
+      return sent;
+    } catch (error) {
+      debugPrint('[VoiceCall] call record send failed: $error');
+      return null;
+    }
+  }
+
+  String get _callRecordStatus {
+    if (_connected) return 'completed';
+    if (widget.incoming) return 'declined';
+    return 'cancelled';
+  }
+
+  Future<void> _closeAfterRemoteEnd() async {
+    if (_ending) return;
+    _ending = true;
+    _statusTimer?.cancel();
+    _callTimer?.cancel();
+    await _stopCallTone();
+    await _room?.disconnect();
+    _room = null;
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void dispose() {
+    _callTimer?.cancel();
+    _statusTimer?.cancel();
+    _callToneStopped = true;
+    _outgoingToneRestartTimer?.cancel();
+    unawaited(
+      _outgoingToneCompleteSubscription?.cancel() ?? Future<void>.value(),
+    );
+    unawaited(_callTonePlayer.dispose());
+    unawaited(_room?.disconnect() ?? Future<void>.value());
+    _apiClient.close();
+    super.dispose();
+  }
+
+  String get _statusLabel {
+    if (_connected) {
+      final minutes = _callDuration.inMinutes.toString().padLeft(2, '0');
+      final seconds = (_callDuration.inSeconds % 60).toString().padLeft(2, '0');
+      return '$minutes:$seconds';
+    }
+    if (_connecting) return '正在连接...';
+    if (widget.incoming) return '邀请你语音通话...';
+    return '等待对方接受邀请.';
+  }
+
+  double get _statusFontSize => _connected ? 20 : 18;
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: _black,
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        AcoSafeArea(
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+              _VoiceCallAvatar(avatarUrl: widget.avatarUrl),
+              const SizedBox(height: 22),
+              Text(
+                widget.name,
+                style: const TextStyle(
+                  color: _white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _statusLabel,
+                style: TextStyle(
+                  color: const Color(0xFFB8B8B8),
+                  fontSize: _statusFontSize,
+                ),
+              ),
+              const Spacer(flex: 3),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  if (widget.incoming && !_connected) ...[
+                    _VoiceCallControl(
+                      icon: CupertinoIcons.phone_down_fill,
+                      label: '拒绝',
+                      active: false,
+                      destructive: true,
+                      onPressed: _endAndClose,
+                    ),
+                    _VoiceCallControl(
+                      icon: CupertinoIcons.phone_fill,
+                      label: '接听',
+                      active: true,
+                      onPressed: _acceptCall,
+                    ),
+                  ] else ...[
+                    _VoiceCallControl(
+                      icon: _microphoneEnabled
+                          ? CupertinoIcons.mic_fill
+                          : CupertinoIcons.mic_slash_fill,
+                      label: _microphoneEnabled ? '麦克风已开' : '麦克风已关',
+                      active: _microphoneEnabled,
+                      onPressed: () => unawaited(_toggleMicrophone()),
+                    ),
+                    _VoiceCallControl(
+                      icon: CupertinoIcons.phone_down_fill,
+                      label: _connected ? '挂断' : '取消',
+                      active: false,
+                      destructive: true,
+                      onPressed: _endAndClose,
+                    ),
+                    _VoiceCallControl(
+                      icon: _speakerEnabled
+                          ? CupertinoIcons.speaker_3_fill
+                          : CupertinoIcons.speaker_slash_fill,
+                      label: _speakerEnabled ? '扬声器已开' : '扬声器已关',
+                      active: _speakerEnabled,
+                      onPressed: () => unawaited(_toggleSpeaker()),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 28),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _VoiceCallAvatar extends StatelessWidget {
+  const _VoiceCallAvatar({this.avatarUrl});
+
+  final String? avatarUrl;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 104,
+    height: 104,
+    child: ClipOval(
+      child: avatarUrl?.isNotEmpty == true
+          ? AcoNetworkImage(
+              url: avatarUrl!,
+              fit: BoxFit.cover,
+              errorWidget: (context, url, error) => _defaultAvatar(),
+            )
+          : _defaultAvatar(),
+    ),
+  );
+
+  Widget _defaultAvatar() => Image.asset(
+    _defaultAvatarAsset,
+    fit: BoxFit.cover,
+    semanticLabel: '默认头像',
+  );
+}
+
+class _VoiceCallControl extends StatelessWidget {
+  const _VoiceCallControl({
+    required this.icon,
+    required this.label,
+    required this.active,
+    required this.onPressed,
+    this.destructive = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final bool active;
+  final bool destructive;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: onPressed,
+        child: Container(
+          width: 70,
+          height: 70,
+          decoration: BoxDecoration(
+            color: destructive
+                ? const Color(0xFFE84D50)
+                : active
+                ? const Color(0xFFF4F4F4)
+                : const Color(0xFF111111).withValues(alpha: .8),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: destructive || !active ? _white : _black,
+            size: 28,
+          ),
+        ),
+      ),
+      const SizedBox(height: 10),
+      Text(label, style: const TextStyle(color: _white, fontSize: 16)),
+    ],
+  );
+}
+
+class _VoiceWaveform extends StatelessWidget {
+  const _VoiceWaveform({required this.level});
+
+  final double level;
+
+  @override
+  Widget build(BuildContext context) {
+    const baseHeights = <double>[
+      8,
+      11,
+      8,
+      13,
+      9,
+      12,
+      8,
+      11,
+      9,
+      22,
+      9,
+      11,
+      8,
+      12,
+      9,
+      13,
+      8,
+      11,
+      8,
+    ];
+    final multiplier = 1 + level * 1.7;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (final height in baseHeights)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 80),
+            curve: Curves.easeOut,
+            width: 3,
+            height: height * multiplier,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(
+              color: const Color(0xFF387B2B),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ComposerImageIcon extends StatelessWidget {
+  const _ComposerImageIcon({
+    required this.assetPath,
+    required this.onPressed,
+    this.size = 24,
+    this.color,
+  });
+
+  final String assetPath;
+  final VoidCallback onPressed;
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: EdgeInsets.zero,
+    minimumSize: Size(size, size),
+    onPressed: onPressed,
+    child: Image.asset(
+      assetPath,
+      width: size,
+      height: size,
+      color: color,
+      colorBlendMode: color == null ? null : BlendMode.srcIn,
+    ),
+  );
+}
+
+class _ComposerCupertinoIcon extends StatelessWidget {
+  const _ComposerCupertinoIcon({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: label,
+    child: CupertinoButton(
+      padding: EdgeInsets.zero,
+      minimumSize: const Size(24, 24),
+      onPressed: onPressed,
+      child: Icon(icon, color: color, size: 23),
+    ),
+  );
+}
+
+class _ChatMorePanel extends StatelessWidget {
+  const _ChatMorePanel({
+    required this.palette,
+    required this.isGroup,
+    required this.onSelected,
+  });
+
+  final AcoPalette palette;
+  final bool isGroup;
+  final Future<void> Function(String label) onSelected;
+
+  static const _items = [
+    (
+      label: '照片',
+      assetPath: 'assets/icons/chat_more_photo.png',
+      availableInGroup: true,
+    ),
+    (
+      label: '拍摄',
+      assetPath: 'assets/icons/chat_more_camera.png',
+      availableInGroup: true,
+    ),
+    (
+      label: '语音通话',
+      assetPath: 'assets/icons/chat_more_call.png',
+      availableInGroup: false,
+    ),
+    (
+      label: '转账',
+      assetPath: 'assets/icons/chat_more_transfer.png',
+      availableInGroup: false,
+    ),
+    (
+      label: '文件',
+      assetPath: 'assets/icons/chat_more_transfer.png',
+      availableInGroup: true,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final items = isGroup
+        ? _items.where((item) => item.availableInGroup).toList()
+        : _items;
+    final rowCount = (items.length + 3) ~/ 4;
+    return Container(
+      // Each tile is roughly 96 px tall at phone widths; reserve a full
+      // second row so the last entry is not clipped by the panel bounds.
+      height: rowCount == 1 ? 116 : 224,
+      decoration: BoxDecoration(
+        color: palette.dark ? const Color(0xFF1E1D1B) : palette.surface,
+        border: Border(top: BorderSide(color: palette.border, width: 0.25)),
+      ),
+      padding: const EdgeInsets.fromLTRB(24, 14, 24, 8),
+      child: GridView.builder(
+        physics: const NeverScrollableScrollPhysics(),
+        itemCount: items.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 4,
+          mainAxisSpacing: 2,
+          crossAxisSpacing: 16,
+          childAspectRatio: .77,
+        ),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return Semantics(
+            button: true,
+            label: item.label,
+            child: CupertinoButton(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: () => onSelected(item.label),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      color: palette.dark
+                          ? const Color(0xFF2C2C2C)
+                          : const Color(0xFFFFFFFF),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Center(
+                      child: item.label == '文件'
+                          ? Icon(
+                              CupertinoIcons.doc_fill,
+                              color: palette.mutedText,
+                              size: 28,
+                            )
+                          : SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: Image.asset(
+                                item.assetPath,
+                                fit: BoxFit.contain,
+                                color: palette.dark
+                                    ? null
+                                    : palette.primaryText,
+                                colorBlendMode: BlendMode.srcIn,
+                              ),
+                            ),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: palette.mutedText, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ChatMessageActionPopup extends StatelessWidget {
+  const _ChatMessageActionPopup({
+    required this.canCopy,
+    required this.canRevoke,
+    required this.pointerOnTop,
+    required this.onSelected,
+  });
+
+  final bool canCopy;
+  final bool canRevoke;
+  final bool pointerOnTop;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = <(String, IconData, String)>[
+      if (canCopy) ('copy', CupertinoIcons.doc, '复制'),
+      if (canRevoke) ('revoke', CupertinoIcons.arrow_uturn_left, '撤回'),
+    ];
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (pointerOnTop)
+          CustomPaint(
+            size: const Size(16, 8),
+            painter: _ChatActionPointerPainter(pointsUp: true),
+          ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFF4B4B4B),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var index = 0; index < actions.length; index++) ...[
+                  if (index > 0)
+                    const SizedBox(
+                      width: 1,
+                      height: 54,
+                      child: ColoredBox(color: Color(0x33777777)),
+                    ),
+                  _ChatMessageActionItem(
+                    icon: actions[index].$2,
+                    label: actions[index].$3,
+                    onPressed: () => onSelected(actions[index].$1),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        if (!pointerOnTop)
+          CustomPaint(
+            size: const Size(16, 8),
+            painter: _ChatActionPointerPainter(),
+          ),
+      ],
+    );
+  }
+}
+
+class _ChatMessageActionItem extends StatelessWidget {
+  const _ChatMessageActionItem({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => CupertinoButton(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+    minimumSize: const Size(58, 68),
+    onPressed: onPressed,
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: const Color(0xFFFFFFFF), size: 23),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12),
+        ),
+      ],
+    ),
+  );
+}
+
+class _ChatActionPointerPainter extends CustomPainter {
+  _ChatActionPointerPainter({this.pointsUp = false});
+
+  final bool pointsUp;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = Path()
+      ..moveTo(0, pointsUp ? size.height : 0)
+      ..lineTo(size.width / 2, pointsUp ? 0 : size.height)
+      ..lineTo(size.width, pointsUp ? size.height : 0)
+      ..close();
+    canvas.drawPath(path, Paint()..color = const Color(0xFF4B4B4B));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ChatActionPointerPainter oldDelegate) =>
+      pointsUp != oldDelegate.pointsUp;
+}
+
+class _ChatMessage extends StatelessWidget {
+  static const _maxImageExtent = 215.0;
+
+  const _ChatMessage({
+    required this.palette,
+    required this.text,
+    required this.imageBytes,
+    required this.imagePath,
+    required this.imageUrl,
+    required this.previewImageUrl,
+    required this.shouldCacheThumbnail,
+    required this.soundPath,
+    required this.soundUrl,
+    required this.soundDuration,
+    required this.videoPath,
+    required this.videoUrl,
+    required this.videoSnapshotPath,
+    required this.videoSnapshotUrl,
+    required this.videoDuration,
+    required this.fileName,
+    required this.fileUrl,
+    required this.fileSize,
+    required this.filePath,
+    required this.isVoiceCallRecord,
+    required this.sendFailed,
+    required this.mine,
+    this.senderName,
+    this.avatarUrl,
+    this.ownAvatarUrl,
+    this.onAvatarLongPress,
+    this.onAvatarTap,
+    this.onLongPress,
+  });
+
+  final AcoPalette palette;
+  final String text;
+  final Uint8List? imageBytes;
+  final String? imagePath;
+  final String? imageUrl;
+  final String? previewImageUrl;
+  final bool shouldCacheThumbnail;
+  final String? soundPath;
+  final String? soundUrl;
+  final int? soundDuration;
+  final String? videoPath;
+  final String? videoUrl;
+  final String? videoSnapshotPath;
+  final String? videoSnapshotUrl;
+  final int? videoDuration;
+  final String? fileName;
+  final String? fileUrl;
+  final int? fileSize;
+  final String? filePath;
+  final bool isVoiceCallRecord;
+  final bool sendFailed;
+  final bool mine;
+  final String? senderName;
+  final String? avatarUrl;
+  final String? ownAvatarUrl;
+  final VoidCallback? onAvatarLongPress;
+  final VoidCallback? onAvatarTap;
+  final ValueChanged<BuildContext>? onLongPress;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final maxBubbleWidth = (constraints.maxWidth - 46).clamp(0.0, 245.0);
+      return Align(
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (!mine) ...[
+              GestureDetector(
+                onTap: onAvatarTap,
+                onLongPress: onAvatarLongPress,
+                child: AcoAvatar(size: 40, imageUrl: avatarUrl),
+              ),
+              const SizedBox(width: 6),
+            ],
+            if (mine && sendFailed)
+              const Padding(
+                padding: EdgeInsets.only(right: 5),
+                child: Icon(
+                  CupertinoIcons.exclamationmark_circle_fill,
+                  color: Color(0xFFFF3B30),
+                  size: 19,
+                ),
+              ),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (senderName?.trim().isNotEmpty == true) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(left: 2, bottom: 4),
+                        child: Text(
+                          senderName!.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF8D8D8D),
+                            fontSize: 12,
+                            height: 1.15,
+                          ),
+                        ),
+                      ),
+                    ],
+                    Builder(
+                      builder: (bubbleContext) => GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onLongPress: onLongPress == null
+                            ? null
+                            : () => onLongPress!(bubbleContext),
+                        child: _copyableMessageBody(
+                          context,
+                          maxWidth: maxBubbleWidth,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (mine) ...[
+              const SizedBox(width: 6),
+              AcoAvatar(size: 40, imageUrl: ownAvatarUrl),
+            ],
+          ],
+        ),
+      );
+    },
+  );
+
+  Widget _messageBody(BuildContext context, {required double maxWidth}) {
+    final bytes = imageBytes;
+    if (bytes != null) {
+      final image = Image.memory(
+        bytes,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+      );
+      return _image(
+        context,
+        image,
+        maxWidth: maxWidth,
+        previewImage: image.image,
+        imageBytes: bytes,
+        imageUrl: previewImageUrl ?? imageUrl,
+      );
+    }
+
+    if (imageUrl != null) {
+      final previewUrl = previewImageUrl ?? imageUrl!;
+      return _image(
+        context,
+        _CachedChatThumbnail(
+          url: imageUrl!,
+          palette: palette,
+          kind: shouldCacheThumbnail ? 'thumbnail' : 'image',
+          originalUrl: previewUrl,
+        ),
+        maxWidth: maxWidth,
+        previewImage: CachedNetworkImageProvider(previewUrl),
+        imageUrl: previewUrl,
+      );
+    }
+
+    if (imagePath != null) return _ImageUnavailable(palette: palette);
+
+    if (soundPath != null || soundUrl != null) {
+      return _VoiceMessageBubble(
+        palette: palette,
+        path: soundPath,
+        url: soundUrl,
+        duration: soundDuration ?? 0,
+        mine: mine,
+      );
+    }
+
+    if (videoPath != null || videoUrl != null) {
+      return _ChatVideoBubble(
+        palette: palette,
+        videoPath: videoPath,
+        videoUrl: videoUrl,
+        snapshotPath: videoSnapshotPath,
+        snapshotUrl: videoSnapshotUrl,
+        duration: videoDuration ?? 0,
+        mine: mine,
+      );
+    }
+
+    if (fileUrl != null) {
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: _ChatFileBubble(
+          palette: palette,
+          name: fileName ?? '文件',
+          size: fileSize ?? 0,
+          mine: mine,
+          onOpen: () => _openChatFile(context),
+          onSave: () => _saveChatFile(context),
+        ),
+      );
+    }
+
+    if (isVoiceCallRecord) {
+      return _VoiceCallRecordBubble(palette: palette, text: text, mine: mine);
+    }
+
+    return _Bubble(
+      palette: palette,
+      text: text,
+      mine: mine,
+      enableSelection: false,
+    );
+  }
+
+  Future<void> _openChatFile(BuildContext context) async {
+    final url = fileUrl;
+    if (url == null || url.isEmpty) return;
+    try {
+      final file = await _ChatMediaCache.load(
+        _chatFileUrl(url),
+        kind: 'file',
+        source: mine && filePath != null ? File(filePath!) : null,
+      );
+      if (!context.mounted) return;
+      final extension = (fileName ?? '').split('.').last.toLowerCase();
+      if (const {
+        'mp4',
+        'mov',
+        'm4v',
+        'avi',
+        'webm',
+        'mkv',
+      }.contains(extension)) {
+        await Navigator.of(context).push<void>(
+          CupertinoPageRoute<void>(
+            builder: (_) => _ChatVideoPlayerPage(
+              videoPath: file.path,
+              useLocalFile: true,
+              fileName: fileName ?? 'video.mp4',
+            ),
+          ),
+        );
+      } else {
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(file.path, name: fileName)]),
+        );
+      }
+    } catch (_) {
+      if (context.mounted) _showNotice(context, '文件打开失败', '请稍后重试。');
+    }
+  }
+
+  Future<void> _saveChatFile(BuildContext context) async {
+    final url = fileUrl;
+    if (url == null || url.isEmpty) return;
+    try {
+      final localPath = filePath;
+      File? localFile;
+      if (mine && localPath != null && localPath.isNotEmpty) {
+        final candidate = File(localPath);
+        if (await candidate.exists()) localFile = candidate;
+      }
+      final file = await _ChatMediaCache.load(
+        _chatFileUrl(url),
+        kind: 'file',
+        source: localFile,
+      );
+      final mimeType = switch ((fileName ?? '').split('.').last.toLowerCase()) {
+        'pdf' => 'application/pdf',
+        'mp4' => 'video/mp4',
+        'mov' => 'video/quicktime',
+        'png' => 'image/png',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'txt' => 'text/plain',
+        _ => 'application/octet-stream',
+      };
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path, name: fileName, mimeType: mimeType)],
+          ),
+        );
+      } else {
+        await const MethodChannel('aco/downloads').invokeMethod<void>(
+          'saveFile',
+          {
+            'path': file.path,
+            'filename': fileName ?? 'attachment',
+            'mimeType': mimeType,
+          },
+        );
+        if (context.mounted) _showNotice(context, '保存成功', '文件已保存到下载目录。');
+      }
+    } on PlatformException catch (error) {
+      debugPrint('[ChatFileSave] ${error.code}: ${error.message}');
+      if (context.mounted) _showNotice(context, '保存失败', '请稍后重试。');
+    } catch (error) {
+      debugPrint('[ChatFileSave] $error');
+      if (context.mounted) _showNotice(context, '保存失败', '请检查文件地址和网络后重试。');
+    }
+  }
+
+  String _chatFileUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return url;
+    final apiUri = Uri.parse(const AppConfig().apiBaseUrl);
+    final resolved = uri.hasScheme ? uri : apiUri.resolveUri(uri);
+    return resolved.scheme == 'http' && AppConfig.isOpenIMHost(resolved.host)
+        ? resolved.replace(scheme: 'https').toString()
+        : resolved.toString();
+  }
+
+  Widget _copyableMessageBody(
+    BuildContext context, {
+    required double maxWidth,
+  }) {
+    final body = _messageBody(context, maxWidth: maxWidth);
+    if (text.isEmpty) return body;
+    return Semantics(button: true, hint: '长按选择并复制消息', child: body);
+  }
+
+  Widget _image(
+    BuildContext context,
+    Widget thumbnail, {
+    required double maxWidth,
+    required ImageProvider previewImage,
+    Uint8List? imageBytes,
+    String? imageUrl,
+  }) => Semantics(
+    button: true,
+    label: '查看原图',
+    child: GestureDetector(
+      onTap: () => Navigator.of(context).push<void>(
+        CupertinoPageRoute<void>(
+          builder: (_) => _ChatImagePreview(
+            image: previewImage,
+            imageBytes: imageBytes,
+            imageUrl: imageUrl,
+            persistLocally: true,
+          ),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(5),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: math.min(maxWidth, _maxImageExtent),
+            maxHeight: _maxImageExtent,
+          ),
+          child: thumbnail,
+        ),
+      ),
+    ),
+  );
+}
+
+class _ChatFileBubble extends StatelessWidget {
+  const _ChatFileBubble({
+    required this.palette,
+    required this.name,
+    required this.size,
+    required this.mine,
+    required this.onOpen,
+    required this.onSave,
+  });
+
+  final AcoPalette palette;
+  final String name;
+  final int size;
+  final bool mine;
+  final VoidCallback onOpen;
+  final VoidCallback onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = mine ? _black : palette.primaryText;
+    final secondary = mine ? const Color(0xFF5E5E5E) : palette.mutedText;
+    final incomingBackground = _chatIncomingBubbleColor(palette);
+    final background = mine
+        ? _chatOutgoingBubbleColor(palette)
+        : incomingBackground;
+    final icon = name.toLowerCase().endsWith('.pdf')
+        ? CupertinoIcons.doc_text_fill
+        : CupertinoIcons.doc_fill;
+    return Semantics(
+      button: true,
+      hint: '预览 $name',
+      child: GestureDetector(
+        onTap: onOpen,
+        child: CustomPaint(
+          painter: mine
+              ? _MineBubblePainter(color: background)
+              : _OtherBubblePainter(color: background),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              mine ? 12 : 18,
+              10,
+              mine ? 10 : 12,
+              10,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: foreground, size: 30),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        style: TextStyle(color: foreground, fontSize: 15),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _sizeLabel(size),
+                        style: TextStyle(color: secondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                CupertinoButton(
+                  padding: const EdgeInsets.all(6),
+                  minimumSize: const Size(34, 34),
+                  onPressed: onSave,
+                  child: Icon(
+                    CupertinoIcons.arrow_down_to_line,
+                    color: foreground,
+                    size: 19,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _sizeLabel(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+}
+
+class _VoiceCallRecordBubble extends StatelessWidget {
+  const _VoiceCallRecordBubble({
+    required this.palette,
+    required this.text,
+    required this.mine,
+  });
+
+  final AcoPalette palette;
+  final String text;
+  final bool mine;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = mine ? _black : palette.primaryText;
+    final incomingBackground = _chatIncomingBubbleColor(palette);
+    final background = mine
+        ? _chatOutgoingBubbleColor(palette)
+        : incomingBackground;
+    return CustomPaint(
+      painter: mine
+          ? _MineBubblePainter(color: background)
+          : _OtherBubblePainter(color: background),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(mine ? 12 : 18, 8, mine ? 18 : 12, 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 24,
+              height: 18,
+              child: Image.asset(
+                'assets/icons/chat_voice_call_record.png',
+                fit: BoxFit.contain,
+                color: foreground,
+                colorBlendMode: BlendMode.srcIn,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(text, style: TextStyle(color: foreground, fontSize: 16)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatVideoBubble extends StatelessWidget {
+  const _ChatVideoBubble({
+    required this.palette,
+    required this.videoPath,
+    required this.videoUrl,
+    required this.snapshotPath,
+    required this.snapshotUrl,
+    required this.duration,
+    required this.mine,
+  });
+
+  final AcoPalette palette;
+  final String? videoPath;
+  final String? videoUrl;
+  final String? snapshotPath;
+  final String? snapshotUrl;
+  final int duration;
+  final bool mine;
+
+  String _playbackUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null ||
+        uri.scheme != 'http' ||
+        !AppConfig.isOpenIMHost(uri.host)) {
+      return url;
+    }
+    return uri.replace(scheme: 'https').toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final localSnapshot = snapshotPath?.isNotEmpty == true
+        ? File(snapshotPath!)
+        : null;
+    final networkSnapshot = snapshotUrl?.isNotEmpty == true
+        ? _playbackUrl(snapshotUrl!)
+        : null;
+    final hasLocalSnapshot = localSnapshot?.existsSync() == true;
+    final hasNetwork = networkSnapshot != null;
+    final incomingBackground = _chatIncomingBubbleColor(palette);
+    return Semantics(
+      button: true,
+      label: '播放视频消息，$duration秒',
+      child: GestureDetector(
+        onTap: () => Navigator.of(context).push<void>(
+          CupertinoPageRoute<void>(
+            builder: (_) => _ChatVideoPlayerPage(
+              videoPath: videoPath,
+              videoUrl: videoUrl == null ? null : _playbackUrl(videoUrl!),
+              useLocalFile: mine,
+              fileName: 'video.mp4',
+            ),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: Container(
+            width: 215,
+            height: 150,
+            color: mine
+                ? _chatOutgoingBubbleColor(palette)
+                : incomingBackground,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (hasNetwork)
+                  _CachedChatThumbnail(url: networkSnapshot, palette: palette)
+                else if (hasLocalSnapshot)
+                  Image.file(localSnapshot!, fit: BoxFit.cover)
+                else
+                  _VideoUnavailable(palette: palette),
+                const Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Color(0xB3000000),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(
+                        CupertinoIcons.play_fill,
+                        color: Color(0xFFFFFFFF),
+                        size: 25,
+                      ),
+                    ),
+                  ),
+                ),
+                if (duration > 0)
+                  Positioned(
+                    right: 7,
+                    bottom: 6,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: const Color(0xB3000000),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          _formatDuration(duration),
+                          style: const TextStyle(
+                            color: Color(0xFFFFFFFF),
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatDuration(int seconds) {
+    final minutes = seconds ~/ 60;
+    final remainder = seconds % 60;
+    return '$minutes:${remainder.toString().padLeft(2, '0')}';
+  }
+}
+
+class _VideoUnavailable extends StatelessWidget {
+  const _VideoUnavailable({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: Icon(
+      CupertinoIcons.videocam_fill,
+      color: palette.mutedText,
+      size: 42,
+    ),
+  );
+}
+
+class _ChatVideoPlayerPage extends StatefulWidget {
+  const _ChatVideoPlayerPage({
+    this.videoPath,
+    this.videoUrl,
+    this.useLocalFile = false,
+    this.fileName = 'video.mp4',
+  });
+
+  final String? videoPath;
+  final String? videoUrl;
+  final bool useLocalFile;
+  final String fileName;
+
+  @override
+  State<_ChatVideoPlayerPage> createState() => _ChatVideoPlayerPageState();
+}
+
+class _ChatVideoPlayerPageState extends State<_ChatVideoPlayerPage> {
+  VideoPlayerController? _controller;
+  Object? _error;
+  var _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      final path = widget.videoPath;
+      final url = widget.videoUrl;
+      final localFile =
+          widget.useLocalFile &&
+              path != null &&
+              path.isNotEmpty &&
+              await File(path).exists()
+          ? File(path)
+          : null;
+      final file = url?.isNotEmpty == true
+          ? await _ChatMediaCache.load(url!, kind: 'video', source: localFile)
+          : localFile;
+      final controller = file == null ? null : VideoPlayerController.file(file);
+      if (controller == null) throw StateError('视频地址无效');
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      setState(() => _controller = controller);
+      await controller.play();
+      if (mounted) setState(() {});
+    } catch (error) {
+      final url = widget.videoUrl;
+      final uri = url == null ? null : Uri.tryParse(url);
+      debugPrint(
+        '[ChatVideo] playback failed: $error; remote=${uri?.host}${uri?.path}',
+      );
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveVideo() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final path = widget.videoPath;
+      File? localFile;
+      if (widget.useLocalFile && path != null && path.isNotEmpty) {
+        final candidate = File(path);
+        if (await candidate.exists()) localFile = candidate;
+      }
+      final url = widget.videoUrl;
+      final file =
+          localFile ??
+          (url?.isNotEmpty == true
+              ? await _ChatMediaCache.load(url!, kind: 'video')
+              : throw StateError('视频地址无效'));
+      await const MethodChannel('aco/downloads').invokeMethod<void>(
+        'saveVideo',
+        {'path': file.path, 'filename': widget.fileName},
+      );
+      if (mounted) _showNotice(context, '保存成功', '视频已保存到相册。');
+    } on PlatformException catch (error) {
+      debugPrint('[ChatVideoSave] ${error.code}: ${error.message}');
+      if (mounted) {
+        final message = error.code == 'PERMISSION_DENIED'
+            ? '请在系统设置中允许 Aco Chat 添加视频到相册。'
+            : '保存视频失败，请稍后重试。';
+        _showNotice(context, '保存失败', message);
+      }
+    } catch (error) {
+      debugPrint('[ChatVideoSave] $error');
+      if (mounted) _showNotice(context, '保存失败', '请检查视频地址和网络后重试。');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: const Color(0xFF000000),
+    navigationBar: CupertinoNavigationBar(
+      backgroundColor: const Color(0xCC000000),
+      leading: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: () => Navigator.of(context).pop(),
+        child: const Icon(CupertinoIcons.xmark, color: Color(0xFFFFFFFF)),
+      ),
+      middle: const Text('视频', style: TextStyle(color: Color(0xFFFFFFFF))),
+      trailing: CupertinoButton(
+        padding: EdgeInsets.zero,
+        onPressed: _saving ? null : _saveVideo,
+        child: _saving
+            ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
+            : const Icon(
+                CupertinoIcons.arrow_down_to_line,
+                color: Color(0xFFFFFFFF),
+              ),
+      ),
+    ),
+    child: AcoSafeArea(
+      child: Center(
+        child: _error != null
+            ? const Text('视频播放失败', style: TextStyle(color: Color(0xFFFFFFFF)))
+            : _controller == null
+            ? const CupertinoActivityIndicator(color: Color(0xFFFFFFFF))
+            : GestureDetector(
+                onTap: () => setState(() {
+                  final controller = _controller!;
+                  controller.value.isPlaying
+                      ? controller.pause()
+                      : controller.play();
+                }),
+                child: AspectRatio(
+                  aspectRatio: _controller!.value.aspectRatio,
+                  child: VideoPlayer(_controller!),
+                ),
+              ),
+      ),
+    ),
+  );
+}
+
+class _ChatImagePreview extends StatefulWidget {
+  const _ChatImagePreview({
+    required this.image,
+    this.imageBytes,
+    this.imageUrl,
+    this.persistLocally = false,
+  });
+
+  final bool persistLocally;
+  final ImageProvider image;
+  final Uint8List? imageBytes;
+  final String? imageUrl;
+
+  @override
+  State<_ChatImagePreview> createState() => _ChatImagePreviewState();
+}
+
+class _ChatImagePreviewState extends State<_ChatImagePreview> {
+  bool _saving = false;
+
+  Future<File>? _storedImage;
+
+  @override
+  void initState() {
+    super.initState();
+    final url = widget.imageUrl;
+    if (widget.persistLocally && url != null && url.isNotEmpty) {
+      _storedImage = _ChatMediaCache.load(
+        url,
+        kind: 'image',
+        bytes: widget.imageBytes,
+      );
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      Uint8List? bytes = widget.imageBytes;
+      final url = widget.imageUrl;
+      if (url != null && url.isNotEmpty) {
+        try {
+          if (_storedImage != null) {
+            bytes = await (await _storedImage!).readAsBytes();
+          } else {
+            final response = await http.get(Uri.parse(url));
+            if (response.statusCode != 200) throw Exception('下载失败');
+            bytes = response.bodyBytes;
+          }
+        } catch (_) {
+          if (bytes == null) rethrow;
+        }
+      }
+      if (bytes == null || bytes.isEmpty) throw Exception('图片内容为空');
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        bytes = await _encodeImageAsPng(bytes);
+      }
+      await const MethodChannel(
+        'aco/downloads',
+      ).invokeMethod<void>('saveImage', {'bytes': bytes});
+      if (mounted) _showNotice(context, '保存成功', '图片已保存到相册。');
+    } on PlatformException catch (error) {
+      debugPrint('[ChatImageSave] ${error.code}: ${error.message}');
+      if (mounted) {
+        final message = error.code == 'PERMISSION_DENIED'
+            ? '请在系统设置中允许 Aco Chat 添加照片到相册。'
+            : '保存到相册失败，请稍后重试。';
+        _showNotice(context, '保存失败', message);
+      }
+    } catch (error) {
+      debugPrint('[ChatImageSave] $error');
+      if (mounted) _showNotice(context, '保存失败', '请检查网络或相册权限后重试。');
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => CupertinoPageScaffold(
+    backgroundColor: const Color(0xFF000000),
+    child: AcoSafeArea(
+      child: Stack(
+        children: [
+          Center(
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 4,
+              child: _storedImage == null
+                  ? Image(image: widget.image, fit: BoxFit.contain)
+                  : FutureBuilder<File>(
+                      future: _storedImage,
+                      builder: (context, snapshot) {
+                        final file = snapshot.data;
+                        if (file != null) {
+                          return Image.file(file, fit: BoxFit.contain);
+                        }
+                        if (snapshot.hasError) {
+                          return const Text(
+                            '图片暂时无法打开',
+                            style: TextStyle(color: _white),
+                          );
+                        }
+                        return const CupertinoActivityIndicator();
+                      },
+                    ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: CupertinoButton(
+              padding: const EdgeInsets.all(10),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Icon(
+                CupertinoIcons.xmark,
+                color: Color(0xFFFFFFFF),
+                size: 22,
+              ),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            right: 8,
+            child: CupertinoButton(
+              onPressed: _saving ? null : _save,
+              child: _saving
+                  ? const CupertinoActivityIndicator()
+                  : const Text('保存图片'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _VoiceMessageBubble extends StatefulWidget {
+  const _VoiceMessageBubble({
+    required this.palette,
+    required this.path,
+    required this.url,
+    required this.duration,
+    required this.mine,
+  });
+
+  final AcoPalette palette;
+  final String? path;
+  final String? url;
+  final int duration;
+  final bool mine;
+
+  @override
+  State<_VoiceMessageBubble> createState() => _VoiceMessageBubbleState();
+}
+
+class _VoiceMessageBubbleState extends State<_VoiceMessageBubble> {
+  final _player = AudioPlayer();
+  StreamSubscription<void>? _completeSubscription;
+  Timer? _playbackAnimationTimer;
+  bool _playing = false;
+  int _playbackAnimationFrame = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _completeSubscription = _player.onPlayerComplete.listen((_) {
+      _stopPlaybackAnimation();
+      if (mounted) {
+        setState(() {
+          _playing = false;
+          _playbackAnimationFrame = 0;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _completeSubscription?.cancel();
+    _stopPlaybackAnimation();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    try {
+      if (_playing) {
+        await _player.pause();
+        _stopPlaybackAnimation();
+        if (mounted) {
+          setState(() {
+            _playing = false;
+            _playbackAnimationFrame = 0;
+          });
+        }
+        return;
+      }
+      final source = await _source();
+      if (source == null) return;
+      await _player.play(source);
+      _stopPlaybackAnimation();
+      _playbackAnimationTimer = Timer.periodic(
+        const Duration(milliseconds: 280),
+        (_) {
+          if (!mounted || !_playing) return;
+          setState(
+            () => _playbackAnimationFrame = (_playbackAnimationFrame + 1) % 3,
+          );
+        },
+      );
+      if (mounted) {
+        setState(() {
+          _playing = true;
+          _playbackAnimationFrame = 0;
+        });
+      }
+    } catch (error) {
+      debugPrint('[OpenIM] voice playback failed: $error');
+    }
+  }
+
+  void _stopPlaybackAnimation() {
+    _playbackAnimationTimer?.cancel();
+    _playbackAnimationTimer = null;
+  }
+
+  Future<Source?> _source() async {
+    final path = widget.path;
+    if (path?.isNotEmpty == true) {
+      final exists = await File(path!).exists();
+      if (exists) {
+        final url = widget.url;
+        final file = url?.isNotEmpty == true
+            ? await _ChatMediaCache.load(
+                url!,
+                kind: 'audio',
+                source: File(path),
+              )
+            : File(path);
+        return DeviceFileSource(file.path);
+      }
+    }
+
+    final url = widget.url;
+    if (url != null && url.isNotEmpty) {
+      final file = await _ChatMediaCache.load(url, kind: 'audio');
+      return DeviceFileSource(file.path);
+    }
+    return null;
+  }
+
+  Widget _voiceIcon(Color foreground) {
+    final frame = _playing ? _playbackAnimationFrame : 2;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Image.asset(
+          'assets/icons/chat_voice_play_0.png',
+          width: 5,
+          height: 7,
+          fit: BoxFit.contain,
+          color: foreground,
+          colorBlendMode: BlendMode.srcIn,
+        ),
+        if (frame >= 1)
+          Transform.translate(
+            offset: const Offset(-1, 0),
+            child: Image.asset(
+              'assets/icons/chat_voice_play_1.png',
+              height: 13,
+              fit: BoxFit.contain,
+              color: foreground,
+              colorBlendMode: BlendMode.srcIn,
+            ),
+          ),
+        if (frame >= 2)
+          Transform.translate(
+            offset: const Offset(-2, 0),
+            child: Image.asset(
+              'assets/icons/chat_voice_play_2.png',
+              height: 17,
+              fit: BoxFit.contain,
+              color: foreground,
+              colorBlendMode: BlendMode.srcIn,
+            ),
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = widget.mine ? _black : widget.palette.primaryText;
+    final incomingBackground = _chatIncomingBubbleColor(widget.palette);
+    final background = widget.mine
+        ? _chatOutgoingBubbleColor(widget.palette)
+        : incomingBackground;
+    return Semantics(
+      button: true,
+      label: '播放语音消息，${widget.duration}秒',
+      child: GestureDetector(
+        onTap: _toggle,
+        child: CustomPaint(
+          painter: widget.mine
+              ? _MineBubblePainter(color: background)
+              : _OtherBubblePainter(color: background),
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              widget.mine ? 12 : 18,
+              8,
+              widget.mine ? 18 : 12,
+              8,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (widget.mine) ...[
+                  Text(
+                    '${widget.duration}"',
+                    style: TextStyle(color: foreground, fontSize: 16),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Transform.flip(
+                  flipX: widget.mine,
+                  child: SizedBox(
+                    width: 20,
+                    height: 18,
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: _voiceIcon(foreground),
+                    ),
+                  ),
+                ),
+                if (!widget.mine) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    '${widget.duration}"',
+                    style: TextStyle(color: foreground, fontSize: 16),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GroupMention {
+  const _GroupMention({required this.userID, required this.name});
+
+  final String userID;
+  final String name;
+
+  String get token => '@$name ';
+}
+
+class _GroupMentionPanel extends StatefulWidget {
+  const _GroupMentionPanel({
+    required this.palette,
+    required this.height,
+    required this.members,
+    required this.loading,
+    required this.onSelected,
+    required this.onDismiss,
+  });
+
+  final AcoPalette palette;
+  final double height;
+  final List<GroupMembersInfo> members;
+  final bool loading;
+  final ValueChanged<GroupMembersInfo> onSelected;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_GroupMentionPanel> createState() => _GroupMentionPanelState();
+}
+
+class _GroupMentionPanelState extends State<_GroupMentionPanel> {
+  static const _identityRequestBatchSize = 8;
+  static final _alphabetInitial = RegExp(r'[A-Z]');
+
+  final _searchController = TextEditingController();
+  final Map<String, GlobalKey> _sectionKeys = <String, GlobalKey>{};
+  final Map<String, int> _identityByUserID = <String, int>{};
+  final Map<String, int> _staffIdentityByUserID = <String, int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadMemberIdentities());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadMemberIdentities() async {
+    final members = widget.members
+        .where((member) => member.userID?.isNotEmpty == true)
+        .toList(growable: false);
+    if (members.isEmpty) return;
+    final client = AccountApiClient();
+    final session = AccountSession(client);
+    try {
+      for (
+        var start = 0;
+        start < members.length;
+        start += _identityRequestBatchSize
+      ) {
+        final profiles = await Future.wait(
+          members.skip(start).take(_identityRequestBatchSize).map((
+            member,
+          ) async {
+            final userID = member.userID!;
+            try {
+              return MapEntry(userID, await session.profileByAccountId(userID));
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+        if (!mounted) return;
+        setState(() {
+          for (final entry
+              in profiles.whereType<MapEntry<String, AccountProfile>>()) {
+            if (entry.value.identity > 0) {
+              _identityByUserID[entry.key] = entry.value.identity;
+            }
+            if (entry.value.staffIdentity > 0) {
+              _staffIdentityByUserID[entry.key] = entry.value.staffIdentity;
+            }
+          }
+        });
+      }
+    } finally {
+      client.close();
+    }
+  }
+
+  String _memberName(GroupMembersInfo member) {
+    final name = member.nickname?.trim() ?? '';
+    return name.isEmpty ? (member.userID ?? '成员') : name;
+  }
+
+  String _sectionFor(GroupMembersInfo member) {
+    final source = _memberName(member).trim();
+    if (source.isEmpty) return '#';
+    final pinyin = PinyinHelper.getShortPinyin(source).trim();
+    if (pinyin.isEmpty) return '#';
+    final first = pinyin[0].toUpperCase();
+    return _alphabetInitial.hasMatch(first) ? first : '#';
+  }
+
+  int _sectionRank(String section) =>
+      section == '#' ? 26 : section.codeUnitAt(0) - 65;
+
+  List<GroupMembersInfo> get _filteredMembers {
+    final query = _searchController.text.trim().toLowerCase();
+    final currentUserID = OpenIMChatRepository.currentUserID;
+    final members = widget.members.where((member) {
+      final userID = member.userID;
+      if (userID == null || userID.isEmpty || userID == currentUserID) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      return _memberName(member).toLowerCase().contains(query) ||
+          userID.toLowerCase().contains(query);
+    }).toList();
+    members.sort((a, b) {
+      final section = _sectionRank(
+        _sectionFor(a),
+      ).compareTo(_sectionRank(_sectionFor(b)));
+      return section != 0 ? section : _memberName(a).compareTo(_memberName(b));
+    });
+    return members;
+  }
+
+  void _jumpToSection(String section) {
+    final context = _sectionKeys[section]?.currentContext;
+    if (context == null) return;
+    Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOut,
+      alignment: 0,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final members = _filteredMembers;
+    final grouped = <String, List<GroupMembersInfo>>{};
+    for (final member in members) {
+      grouped
+          .putIfAbsent(_sectionFor(member), () => <GroupMembersInfo>[])
+          .add(member);
+    }
+    final sections = grouped.keys.toList()
+      ..sort((a, b) => _sectionRank(a).compareTo(_sectionRank(b)));
+    final isSearchEmpty = _searchController.text.isEmpty;
+    return Container(
+      height: widget.height,
+      decoration: BoxDecoration(
+        color: widget.palette.dark
+            ? const Color(0xFF2B2B2B)
+            : widget.palette.background,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        border: Border(top: BorderSide(color: widget.palette.border)),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            width: double.infinity,
+            height: 64,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Text(
+                  '选择提醒的人',
+                  style: TextStyle(
+                    color: widget.palette.primaryText,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Positioned(
+                  left: 12,
+                  child: CupertinoButton(
+                    minimumSize: const Size(28, 0),
+                    padding: EdgeInsets.zero,
+                    onPressed: widget.onDismiss,
+                    child: Image.asset(
+                      'assets/images/mention_picker_dismiss.png',
+                      width: 28,
+                      fit: BoxFit.contain,
+                      semanticLabel: '收起成员选择',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: widget.palette.dark
+                    ? const Color(0xFF232323)
+                    : widget.palette.inputSurface,
+                borderRadius: BorderRadius.all(Radius.circular(24)),
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CupertinoTextField(
+                      controller: _searchController,
+                      onChanged: (_) => setState(() {}),
+                      placeholder: isSearchEmpty
+                          ? ''
+                          : appText(context, '搜索成员'),
+                      placeholderStyle: TextStyle(
+                        color: widget.palette.mutedText,
+                        fontSize: 16,
+                      ),
+                      prefix: isSearchEmpty
+                          ? null
+                          : Padding(
+                              padding: const EdgeInsets.only(left: 14),
+                              child: Image.asset(
+                                'assets/icons/square_search.png',
+                                width: 22,
+                                height: 18,
+                                color: widget.palette.mutedText,
+                                filterQuality: FilterQuality.high,
+                              ),
+                            ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      style: TextStyle(
+                        color: widget.palette.primaryText,
+                        fontSize: 16,
+                      ),
+                      decoration: const BoxDecoration(),
+                    ),
+                    if (isSearchEmpty)
+                      IgnorePointer(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Image.asset(
+                              'assets/icons/square_search.png',
+                              width: 22,
+                              height: 18,
+                              color: widget.palette.mutedText,
+                              filterQuality: FilterQuality.high,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              '搜索成员',
+                              style: TextStyle(
+                                color: widget.palette.mutedText,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: widget.loading
+                ? const Center(child: CupertinoActivityIndicator())
+                : members.isEmpty
+                ? Center(
+                    child: Text(
+                      '未找到群成员',
+                      style: TextStyle(color: widget.palette.mutedText),
+                    ),
+                  )
+                : Stack(
+                    children: [
+                      ListView.builder(
+                        padding: const EdgeInsets.only(bottom: 12, right: 34),
+                        itemCount: sections.length,
+                        itemBuilder: (_, sectionIndex) {
+                          final section = sections[sectionIndex];
+                          final sectionMembers = grouped[section]!;
+                          return Column(
+                            key: _sectionKeys.putIfAbsent(
+                              section,
+                              () => GlobalKey(),
+                            ),
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  24,
+                                  12,
+                                  16,
+                                  6,
+                                ),
+                                child: Text(
+                                  section,
+                                  style: const TextStyle(
+                                    color: Color(0xFFD0D0D0),
+                                    fontSize: 18,
+                                  ),
+                                ),
+                              ),
+                              for (final member in sectionMembers)
+                                _memberRow(member),
+                            ],
+                          );
+                        },
+                      ),
+                      Positioned(
+                        top: 6,
+                        right: 7,
+                        bottom: 6,
+                        child: _AlphabetIndex(
+                          letters: sections,
+                          onLetterTap: _jumpToSection,
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memberRow(GroupMembersInfo member) {
+    final identity = _identityByUserID[member.userID] ?? 0;
+    final staffIdentity = _staffIdentityByUserID[member.userID] ?? 0;
+    final identityAsset = _identityBadgeAsset(identity);
+    final staffAsset = _staffLongBadgeAsset(staffIdentity);
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+      onPressed: () => widget.onSelected(member),
+      child: Row(
+        children: [
+          AcoAvatar(size: 44, imageUrl: member.faceURL ?? ''),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    _memberName(member),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: widget.palette.primaryText,
+                      fontSize: 17,
+                    ),
+                  ),
+                ),
+                if (identityAsset != null || staffAsset != null)
+                  const SizedBox(width: 8),
+                if (identityAsset != null)
+                  Image.asset(
+                    identityAsset,
+                    width: _longBadgeWidth(identity) * 1.15,
+                    fit: BoxFit.contain,
+                  ),
+                if (identityAsset != null && staffAsset != null)
+                  const SizedBox(width: 4),
+                if (staffAsset != null)
+                  Image.asset(
+                    staffAsset,
+                    width: _longBadgeWidth(staffIdentity) * 1.15,
+                    fit: BoxFit.contain,
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImageUnavailable extends StatelessWidget {
+  const _ImageUnavailable({required this.palette});
+
+  final AcoPalette palette;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: palette.dark ? const Color(0xFF2C2C2C) : palette.surfaceRaised,
+    child: SizedBox(
+      width: 180,
+      height: 180,
+      child: Center(
+        child: Icon(CupertinoIcons.photo, color: palette.mutedText),
+      ),
+    ),
+  );
+}
+
+class _ComingSoonPage extends StatelessWidget {
+  const _ComingSoonPage();
+
+  @override
+  Widget build(BuildContext context) => Center(
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 220),
+            child: Image.asset(
+              'assets/images/coming_soon_mark.gif',
+              fit: BoxFit.contain,
+              semanticLabel: 'Aco 标志',
+            ),
+          ),
+          const SizedBox(height: 28),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 210),
+            child: Image.asset(
+              'assets/images/coming_soon_wordmark.png',
+              fit: BoxFit.contain,
+              semanticLabel: 'Coming Soon',
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}

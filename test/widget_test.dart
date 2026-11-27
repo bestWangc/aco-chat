@@ -15,7 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:aco_chat/core/theme/aco_typography.dart';
 import 'package:aco_chat/features/account/domain/account_models.dart';
 import 'package:aco_chat/features/account/data/account_token_store.dart';
-import 'package:aco_chat/features/design/presentation/aco_design_shell.dart';
+import 'package:aco_chat/app/presentation/aco_app_shell.dart';
 import 'package:aco_chat/main.dart';
 import 'package:aco_chat/services/wallet_identity.dart';
 import 'package:aco_chat/services/wallet_metadata_store.dart';
@@ -1774,9 +1774,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('发布动态'), findsOneWidget);
-    expect(find.text('照片'), findsOneWidget);
+    expect(find.byType(CupertinoSlidingSegmentedControl), findsNothing);
     expect(find.text('0/9'), findsOneWidget);
-    expect(find.text('添加照片'), findsOneWidget);
+    expect(find.text('添加照片或视频'), findsOneWidget);
+    await tester.tap(find.text('添加照片或视频'));
+    await tester.pumpAndSettle();
+    expect(find.text('照片'), findsOneWidget);
+    expect(find.text('视频'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('选择视频（最长 5 分钟，200 MB 以内）'), findsNothing);
   });
 
   testWidgets('refreshes the live list after a newly created room closes', (

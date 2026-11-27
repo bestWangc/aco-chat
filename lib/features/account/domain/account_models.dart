@@ -73,6 +73,7 @@ class FriendContact {
     required this.nickname,
     required this.avatarUrl,
     required this.status,
+    this.remark = '',
     this.initial = '#',
     this.identity = 0,
     this.staffIdentity = 0,
@@ -82,6 +83,7 @@ class FriendContact {
   final String nickname;
   final String avatarUrl;
   final String status;
+  final String remark;
   final String initial;
   final int identity;
   final int staffIdentity;
@@ -91,6 +93,7 @@ class FriendContact {
     nickname: (json['nickname'] as String?)?.trim() ?? '',
     avatarUrl: (json['avatar_url'] as String?) ?? '',
     status: (json['status'] as String?) ?? 'accepted',
+    remark: (json['remark'] as String?)?.trim() ?? '',
     initial: (json['initial'] as String?) ?? '#',
     identity: (json['identity'] as num?)?.toInt() ?? 0,
     staffIdentity: (json['staff_identity'] as num?)?.toInt() ?? 0,
@@ -237,11 +240,15 @@ class SquarePost {
     required this.staffIdentity,
     required this.imageUrls,
     required this.thumbnailUrls,
+    this.videoUrl,
+    this.videoThumbnailUrl,
+    this.videoDurationSeconds = 0,
     required this.replyCount,
     required this.likeCount,
     required this.liked,
     required this.following,
     required this.createdAt,
+    this.isMine = false,
   });
 
   final int id;
@@ -253,11 +260,15 @@ class SquarePost {
   final int staffIdentity;
   final List<String> imageUrls;
   final List<String> thumbnailUrls;
+  final String? videoUrl;
+  final String? videoThumbnailUrl;
+  final int videoDurationSeconds;
   final int replyCount;
   final int likeCount;
   final bool liked;
   final bool following;
   final DateTime createdAt;
+  final bool isMine;
 
   SquarePost copyWith({
     int? replyCount,
@@ -274,11 +285,15 @@ class SquarePost {
     staffIdentity: staffIdentity,
     imageUrls: imageUrls,
     thumbnailUrls: thumbnailUrls,
+    videoUrl: videoUrl,
+    videoThumbnailUrl: videoThumbnailUrl,
+    videoDurationSeconds: videoDurationSeconds,
     replyCount: replyCount ?? this.replyCount,
     likeCount: likeCount ?? this.likeCount,
     liked: liked ?? this.liked,
     following: following ?? this.following,
     createdAt: createdAt,
+    isMine: isMine,
   );
 
   factory SquarePost.fromJson(Map<String, dynamic> json) {
@@ -296,11 +311,16 @@ class SquarePost {
       thumbnailUrls: (json['image_thumbnails'] as List<dynamic>? ?? images)
           .whereType<String>()
           .toList(growable: false),
+      videoUrl: json['video_url'] as String?,
+      videoThumbnailUrl: json['video_thumbnail_url'] as String?,
+      videoDurationSeconds:
+          (json['video_duration_seconds'] as num?)?.toInt() ?? 0,
       replyCount: (json['reply_count'] as num?)?.toInt() ?? 0,
       likeCount: (json['like_count'] as num?)?.toInt() ?? 0,
       liked: json['liked'] as bool? ?? false,
       following: json['following'] as bool? ?? false,
       createdAt: DateTime.parse(json['created_at'] as String),
+      isMine: json['is_mine'] as bool? ?? false,
     );
   }
 }
@@ -385,6 +405,7 @@ class LiveSession {
     required this.id,
     required this.title,
     required this.coverUrl,
+    this.backgroundId = 'lb_1',
     this.hostAvatarUrl = '',
     required this.access,
     required this.status,
@@ -400,6 +421,7 @@ class LiveSession {
   final int id;
   final String title;
   final String coverUrl;
+  final String backgroundId;
   final String hostAvatarUrl;
   final String access;
   final String status;
@@ -415,6 +437,7 @@ class LiveSession {
     id: _jsonInt(json['id']),
     title: json['title'] as String,
     coverUrl: json['cover_url'] as String,
+    backgroundId: json['background_id'] as String? ?? 'lb_1',
     hostAvatarUrl: json['host_avatar_url'] as String? ?? '',
     hostNickname: json['host_nickname'] as String? ?? '',
     hostIdentity: (json['host_identity'] as num?)?.toInt() ?? 0,

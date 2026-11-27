@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+  package="com.alivc.livepush">
+    <application
+        android:name="${applicationName}">
+
+    </application>
+
+    <meta-data
+        android:name="flutterEmbedding"
+        android:value="2" />
+</manifest>

@@ -19,6 +19,10 @@ final class OpenIMChatRepository implements ChatRepository {
       ValueNotifier<int>(0);
   static final ValueNotifier<Message?> messageNotifier =
       ValueNotifier<Message?>(null);
+  static final ValueNotifier<RevokedInfo?> _revokedMessageNotifier =
+      ValueNotifier<RevokedInfo?>(null);
+  static ValueNotifier<RevokedInfo?> get revokedMessageNotifier =>
+      _revokedMessageNotifier;
   static final ValueNotifier<bool> messageUnreadNotifier = ValueNotifier<bool>(
     false,
   );
@@ -329,6 +333,7 @@ final class OpenIMChatRepository implements ChatRepository {
         OnAdvancedMsgListener(
           onRecvNewMessage: _handleIncomingMessage,
           onRecvOfflineNewMessage: _handleIncomingMessage,
+          onNewRecvMessageRevoked: _handleMessageRevoked,
         ),
       );
     } catch (error) {
@@ -450,6 +455,11 @@ final class OpenIMChatRepository implements ChatRepository {
         ),
       );
     }
+  }
+
+  static void _handleMessageRevoked(RevokedInfo info) {
+    revokedMessageNotifier.value = info;
+    conversationRevision.value++;
   }
 
   static String? _messageConversationID(Message message) {

@@ -18,6 +18,7 @@ class AdsModule {
   static final instance = AdsModule._();
   static final _httpClient = http.Client();
   static final _secureRandom = Random.secure();
+  static const _disabled = bool.fromEnvironment('ACO_SKIP_ADS');
   static Future<String>? _applicationId;
   static const _configCacheDuration = Duration(minutes: 1);
   static const _methodChannel = MethodChannel('flutter_ads_plugin/method');
@@ -35,6 +36,7 @@ class AdsModule {
   String? _activeAd;
 
   Future<void> prepare(String dappId) async {
+    if (_disabled) return;
     try {
       await _prepare(dappId);
     } on Object {
@@ -57,6 +59,7 @@ class AdsModule {
     _DappAdType type, {
     String? walletAddress,
   }) async {
+    if (_disabled) return _failure('ads_disabled');
     if (!Platform.isAndroid && !Platform.isIOS) {
       return _failure('unsupported_platform');
     }
