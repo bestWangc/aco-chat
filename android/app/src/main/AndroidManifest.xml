@@ -81,6 +81,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="aco.chat" android:pathPrefix="/meeting/" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="aco-chat" android:host="meeting" />
+            </intent-filter>
         </activity>
         <service
             android:name=".LiveAudioForegroundService"
