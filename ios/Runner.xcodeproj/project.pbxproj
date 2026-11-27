@@ -739,8 +739,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.meimeidacios.app.AcoScreenBroadcast;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				CURRENT_PROJECT_VERSION = 64;
-				MARKETING_VERSION = 1.0.62;
+				CURRENT_PROJECT_VERSION = 65;
+				MARKETING_VERSION = 1.0.63;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SKIP_INSTALL = YES;
@@ -770,8 +770,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.meimeidacios.app.AcoScreenBroadcast;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				CURRENT_PROJECT_VERSION = 64;
-				MARKETING_VERSION = 1.0.62;
+				CURRENT_PROJECT_VERSION = 65;
+				MARKETING_VERSION = 1.0.63;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SKIP_INSTALL = YES;
@@ -962,8 +962,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.meimeidacios.app.AcoScreenBroadcast;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				CURRENT_PROJECT_VERSION = 64;
-				MARKETING_VERSION = 1.0.62;
+				CURRENT_PROJECT_VERSION = 65;
+				MARKETING_VERSION = 1.0.63;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SKIP_INSTALL = YES;
