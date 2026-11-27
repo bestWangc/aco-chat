@@ -1066,7 +1066,9 @@ class _AliyunShareMemberTile extends StatelessWidget {
   Widget _statusBadge() {
     final badgeSize = _avatarSize * .4;
     if (speaking) return _SpeakingBadge(size: badgeSize);
-    final showMuted = isHost ? muted : participant.role != 'speaker' || muted;
+    final canSpeak =
+        participant.role == 'speaker' || participant.role == 'cohost';
+    final showMuted = isHost ? muted : !canSpeak || muted;
     if (showMuted) return _MutedMicrophoneBadge(size: badgeSize);
     return _LiveMicrophoneBadge(size: badgeSize);
   }
