@@ -1382,12 +1382,7 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     FlutterAliplayer player,
     int viewId,
   ) async {
-    if (defaultTargetPlatform == TargetPlatform.android) {
-      // The Android plugin never completes the setPlayerView MethodChannel call.
-      unawaited(player.setPlayerView(viewId));
-    } else {
-      await player.setPlayerView(viewId);
-    }
+    await player.setPlayerView(viewId);
     _aliyunPlayerViewAttached = true;
     final url = _aliyunLivePlayUrl;
     if (url != null) await _prepareAliyunPlayback(player, url);

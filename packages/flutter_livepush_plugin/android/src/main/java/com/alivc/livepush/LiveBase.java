@@ -7,6 +7,8 @@ import com.alivc.live.pusher.AlivcLiveBaseListener;
 import com.alivc.live.pusher.AlivcLivePushConstants;
 import com.alivc.live.pusher.AlivcLivePushInstance;
 import com.alivc.live.pusher.AlivcLivePushLogLevel;
+import com.aliyun.aio.aio_env.AlivcEnv;
+import com.aliyun.common.AlivcBase;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -49,19 +51,22 @@ public class LiveBase {
                 // Load the application metadata before registering. Without
                 // this call the pusher can report "License not verified" even
                 // when the manifest key and certificate are packaged.
+                // This certificate is issued for Aliyun's CN environment.
+                AlivcBase.getEnvironmentManager().setGlobalEnvironment(AlivcEnv.GlobalEnv.ENV_CN);
                 AlivcLivePushInstance.loadInstance(mContext);
                 AlivcLiveBase.registerSDK();
                 result.success(null);
                 break;
             case "setListener":
+            case "setObserver":
                 AlivcLiveBase.setListener(new AlivcLiveBaseListener() {
                     @Override
                     public void onLicenceCheck(AlivcLivePushConstants.AlivcLiveLicenseCheckResultCode alivcLiveLicenseCheckResultCode, String s) {
+                        Map<String, Object> result = new HashMap<>();
+                        result.put("method", "onLicenceCheck");
+                        result.put("result", alivcLiveLicenseCheckResultCode.getValue() + "");
+                        result.put("reason", s);
                         if (mEvents != null) {
-                            Map<String, Object> result = new HashMap<>();
-                            result.put("method", "onLicenceCheck");
-                            result.put("result", alivcLiveLicenseCheckResultCode.getValue() + "");
-                            result.put("reason", s);
                             mEvents.success(result);
                         }
                     }

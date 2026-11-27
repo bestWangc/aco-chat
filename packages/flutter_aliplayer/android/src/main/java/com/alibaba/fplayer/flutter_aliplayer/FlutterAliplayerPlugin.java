@@ -391,6 +391,13 @@ public class FlutterAliplayerPlugin extends PlatformViewFactory implements Flutt
 
                 if (null != flutterAliPlayerView && null != mPlayer) {
                     flutterAliPlayerView.setPlayer(mPlayer.getAliPlayer());
+                    result.success(null);
+                } else {
+                    result.error(
+                            "PLAYER_VIEW_NOT_FOUND",
+                            "Aliyun player or render view is not ready",
+                            null
+                    );
                 }
             }
             break;

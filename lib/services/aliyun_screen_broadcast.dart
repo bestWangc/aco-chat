@@ -144,41 +144,22 @@ class AliyunScreenBroadcast {
 
   static Future<void> _registerSdk() async {
     debugPrint('Aliyun screen push: registering SDK');
-    final licenseChecked = Completer<void>();
-    var licenseResult = AlivcLiveLicenseCheckResultCode.uninitialized;
-    var licenseReason = '';
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      debugPrint('Aliyun screen push: setting SDK license listener');
-      await AlivcLiveBase.setListener(
-        AlivcLiveBaseListener(
-          onLicenceCheck: (result, reason) {
-            debugPrint(
-              'Aliyun screen push license: result=$result reason=$reason',
-            );
-            licenseResult = result;
-            licenseReason = reason;
-            if (!licenseChecked.isCompleted) licenseChecked.complete();
-          },
-        ),
-      );
-      debugPrint('Aliyun screen push: SDK license listener ready');
-    }
+    debugPrint('Aliyun screen push: setting SDK license listener');
+    await AlivcLiveBase.setListener(
+      AlivcLiveBaseListener(
+        onLicenceCheck: (result, reason) {
+          debugPrint(
+            'Aliyun screen push license: result=$result reason=$reason',
+          );
+        },
+      ),
+    );
+    debugPrint('Aliyun screen push: SDK license listener ready');
     debugPrint('Aliyun screen push: calling registerSDK');
     final registered = await AlivcLiveBase.registerSDK();
     debugPrint('Aliyun screen push: SDK registration result=$registered');
-    // Android's plugin completes registerSDK with null; iOS returns a bool.
-    // Only an explicit false is a registration failure.
     if (registered == false) {
-      throw StateError('阿里云直播 SDK 注册失败，请检查 iOS License 配置。');
-    }
-    if (defaultTargetPlatform != TargetPlatform.iOS) return;
-    try {
-      await licenseChecked.future.timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      throw StateError('等待阿里云 iOS License 校验超时，请检查 SDK 注册和证书配置。');
-    }
-    if (licenseResult != AlivcLiveLicenseCheckResultCode.success) {
-      throw StateError('iOS License 校验失败：$licenseReason');
+      throw StateError('阿里云直播 SDK 注册失败，请检查 License 配置。');
     }
   }
 

@@ -93,6 +93,7 @@ public class LivePushPlugin extends PlatformViewFactory implements FlutterPlugin
         switch (call.method) {
             case "getSdkVersion":
             case "setListener":
+            case "setObserver":
             case "setLogLevel":
             case "setConsoleEnable":
             case "setLogPath":
