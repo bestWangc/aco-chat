@@ -311,10 +311,10 @@
 				97C146EC1CF9000F007C117D /* Resources */,
 				E5B1369172A64DE0B3C1A001 /* Copy Aliyun License */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
+				EC38BF1C0189C998D351371F /* Embed App Extensions */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
 				627FBB549EDB97200E25D5FB /* [CP] Copy Pods Resources */,
 				ABBEC322DD6E2E8052B0F10A /* [CP] Embed Pods Frameworks */,
-				EC38BF1C0189C998D351371F /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
@@ -739,6 +739,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.meimeidacios.app.AcoScreenBroadcast;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				CURRENT_PROJECT_VERSION = 64;
+				MARKETING_VERSION = 1.0.62;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SKIP_INSTALL = YES;
@@ -768,6 +770,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.meimeidacios.app.AcoScreenBroadcast;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				CURRENT_PROJECT_VERSION = 64;
+				MARKETING_VERSION = 1.0.62;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SKIP_INSTALL = YES;
@@ -958,6 +962,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.meimeidacios.app.AcoScreenBroadcast;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				CURRENT_PROJECT_VERSION = 64;
+				MARKETING_VERSION = 1.0.62;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SKIP_INSTALL = YES;

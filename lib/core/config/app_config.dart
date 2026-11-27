@@ -7,7 +7,7 @@ class AppConfig {
   static const _apiBaseUrlOverride = String.fromEnvironment('ACO_API_BASE_URL');
   static const appVersion = String.fromEnvironment(
     'ACO_APP_VERSION',
-    defaultValue: '1.0.61',
+    defaultValue: '1.0.62',
   );
 
   static const cloudflareApiBaseUrl = String.fromEnvironment(

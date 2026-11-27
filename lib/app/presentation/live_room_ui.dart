@@ -157,7 +157,10 @@ extension _VoiceRoomUi on _VoiceRoomPageState {
                 y: 0,
                 width: constraints.maxWidth,
                 height: constraints.maxHeight,
-                aliPlayerViewType: AliPlayerViewTypeForAndroid.surfaceview,
+                // TextureView composes correctly with Flutter's overlay layer.
+                // SurfaceView can remain black on some Android devices when
+                // the danmaku and meeting controls are stacked above it.
+                aliPlayerViewType: AliPlayerViewTypeForAndroid.textureview,
               ),
             ),
             if (_danmakuVisible)

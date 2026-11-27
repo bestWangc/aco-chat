@@ -1147,10 +1147,17 @@ class _VoiceRoomPageState extends State<_VoiceRoomPage>
     } catch (error) {
       debugPrint('Aliyun screen share failed: $error');
       if (mounted) {
+        final errorText = '$error'.toLowerCase();
+        final isLicenseFailure =
+            errorText.contains('license') ||
+            errorText.contains('licence') ||
+            errorText.contains('license not verified');
         _showNotice(
           context,
           '无法开始屏幕共享',
-          error is StateError
+          isLicenseFailure
+              ? '阿里云 License 校验失败，请重新安装包含正确 License 的版本。'
+              : error is StateError
               ? error.message
               : error is TimeoutException
               ? '屏幕推流连接超时，请检查网络后重试。'
