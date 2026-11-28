@@ -803,6 +803,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   bool _loadingTradeActivities = false;
   List<DexSwapRecord> _myTradeActivities = const [];
   bool _loadingMyTradeActivities = false;
+  bool _hasLoadedMyTradeActivities = false;
   WalletIdentity? _resolvedWalletIdentity;
   double? _realtimePrice;
   DexKlineRealtimeClient? _realtimeClient;
@@ -820,7 +821,8 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     unawaited(_loadCandlesThenConnect(_selectedRange));
     _loadDexScreenerTokenInfo();
     unawaited(_loadTradeActivities());
-    unawaited(_loadMyTradeActivities());
+    // The activity tab does not render wallet-only records. Defer this
+    // request until the user opens the holdings tab.
   }
 
   @override
@@ -831,6 +833,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   }
 
   Future<void> _loadTradeActivities() async {
+    final startedAt = DateTime.now();
     if (mounted) setState(() => _loadingTradeActivities = true);
     final tokens = await SecureAccountTokenStore().read();
     if (tokens == null) {
@@ -857,6 +860,10 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
           .map(_tradeActivityFromRow)
           .toList(growable: false);
       if (mounted) setState(() => _tradeActivities = records);
+      debugPrint(
+        '[DexDetail] trade activity loaded count=${records.length} '
+        'duration=${DateTime.now().difference(startedAt).inMilliseconds}ms',
+      );
     } catch (error) {
       debugPrint('[DexDetail] trade activity load failed error=$error');
     } finally {
@@ -866,18 +873,25 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
   }
 
   Future<void> _refreshDetail() async {
-    await Future.wait([
-      _loadTradeActivities(),
-      _loadDexScreenerTokenInfo(),
-      _loadMyTradeActivities(),
-    ]);
+    // Pull-to-refresh belongs to the visible tab. Do not hold the indicator
+    // open for chart metadata or a hidden tab's wallet query.
+    if (_selectedDetailTab == 0) {
+      await _loadTradeActivities();
+    } else {
+      await _loadMyTradeActivities();
+    }
   }
 
   Future<void> _loadMyTradeActivities() async {
     final identity = await _resolveWalletIdentity();
     final tokens = await SecureAccountTokenStore().read();
     if (identity == null || tokens == null) {
-      if (mounted) setState(() => _myTradeActivities = const []);
+      if (mounted) {
+        setState(() {
+          _myTradeActivities = const [];
+          _hasLoadedMyTradeActivities = true;
+        });
+      }
       return;
     }
     if (mounted) setState(() => _loadingMyTradeActivities = true);
@@ -893,6 +907,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
           _myTradeActivities = rows
               .map(_tradeActivityFromRow)
               .toList(growable: false);
+          _hasLoadedMyTradeActivities = true;
         });
       }
     } catch (error) {
@@ -936,6 +951,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
       toAddress: toAddress,
       status: '${row['status'] ?? 'pending'}',
       side: side,
+      walletAddress: '${row['wallet'] ?? ''}',
       createdAt:
           DateTime.tryParse('${row['timestamp'] ?? ''}') ?? DateTime.now(),
       nickname: '${row['nickname'] ?? '匿名用户'}',
@@ -955,7 +971,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     try {
       final updates = await client.subscribe(
         widget.token,
-        interval: _klineInterval(range),
+        interval: _klineInterval(range, history: false),
       );
       if (!mounted || _realtimeClient != client) {
         await client.close();
@@ -1057,7 +1073,7 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     try {
       final candles = await client.klineHistory(
         widget.token,
-        interval: _klineInterval(range),
+        interval: _klineInterval(range, history: true),
       );
       final orderedCandles = [...candles]
         ..sort((left, right) => left.timestamp.compareTo(right.timestamp));
@@ -1232,15 +1248,18 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
     );
   }
 
-  String _klineInterval(String range) => switch (range) {
-    '5分' => '5m',
-    '15分' => '15m',
-    '1小时' => '1h',
-    '4小时' => '4h',
-    '12小时' => '12h',
-    '1天' => '1d',
-    _ => '5m',
-  };
+  String _klineInterval(String range, {required bool history}) {
+    if (range == '1天' && history) return '24h';
+    return switch (range) {
+      '5分' => '5m',
+      '15分' => '15m',
+      '1小时' => '1h',
+      '4小时' => '4h',
+      '12小时' => '12h',
+      '1天' => '1d',
+      _ => '5m',
+    };
+  }
 
   Duration _klineDuration(String range) => switch (range) {
     '5分' => const Duration(minutes: 5),
@@ -1477,8 +1496,14 @@ class _DexTokenDetailPageState extends State<_DexTokenDetailPage> {
                           _DexTokenDetailTabs(
                             palette: palette,
                             selected: _selectedDetailTab,
-                            onChanged: (index) =>
-                                setState(() => _selectedDetailTab = index),
+                            onChanged: (index) {
+                              setState(() => _selectedDetailTab = index);
+                              if (index == 1 &&
+                                  !_hasLoadedMyTradeActivities &&
+                                  !_loadingMyTradeActivities) {
+                                unawaited(_loadMyTradeActivities());
+                              }
+                            },
                           ),
                           const SizedBox(height: 20),
                         ],
@@ -1784,7 +1809,11 @@ class _DexTradeActivityCard extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        record.nickname.isEmpty ? '匿名用户' : record.nickname,
+                        record.side == 'buy'
+                            ? _tradeWalletSuffix(record.walletAddress)
+                            : (record.nickname.isEmpty
+                                  ? '匿名用户'
+                                  : record.nickname),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -2907,6 +2936,14 @@ Widget _dexLetterTokenIcon(String symbol, double size) {
 String _shortDexAddress(String address) {
   if (address.length <= 10) return address;
   return '${address.substring(0, 6)}..${address.substring(address.length - 4)}';
+}
+
+String _tradeWalletSuffix(String address) {
+  final normalized = address.trim();
+  if (normalized.isEmpty) return '匿名用户';
+  return normalized.length <= 6
+      ? normalized
+      : normalized.substring(normalized.length - 6);
 }
 
 String? _dexTokenAge(DateTime? createdAt) {
