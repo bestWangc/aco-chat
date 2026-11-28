@@ -39,6 +39,7 @@ class _WalletHomeState extends State<_WalletHome> {
   List<WalletBalance> _displayBalances = const [];
   int _loadGeneration = 0;
   int _totalBalanceGeneration = 0;
+  bool? _balanceHidden;
   final Map<WalletNetwork, List<WalletBalance>> _balanceCache = {};
   final LayerLink _walletActionsLink = LayerLink();
   OverlayEntry? _walletActionsEntry;
@@ -47,6 +48,7 @@ class _WalletHomeState extends State<_WalletHome> {
   @override
   void initState() {
     super.initState();
+    unawaited(_loadBalanceVisibility());
     _portfolioService = WalletPortfolioService();
     _valuationService = WalletValuationService();
     _tokenStore = SecureAccountTokenStore();
@@ -62,6 +64,24 @@ class _WalletHomeState extends State<_WalletHome> {
     unawaited(_prepareInitialBalances(widget.selectedChain.network));
     unawaited(_streamBalances(widget.selectedChain.network, ++_loadGeneration));
     _watchWalletLogin(widget.walletLoginFuture);
+  }
+
+  static const _balanceVisibilityKey = 'wallet.balanceHidden';
+
+  Future<void> _loadBalanceVisibility() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(
+      () =>
+          _balanceHidden = preferences.getBool(_balanceVisibilityKey) ?? false,
+    );
+  }
+
+  Future<void> _toggleBalanceVisibility() async {
+    final hidden = !(_balanceHidden ?? true);
+    setState(() => _balanceHidden = hidden);
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_balanceVisibilityKey, hidden);
   }
 
   @override
@@ -525,6 +545,7 @@ class _WalletHomeState extends State<_WalletHome> {
 
   @override
   Widget build(BuildContext context) {
+    final balanceHidden = _balanceHidden ?? true;
     // The wallet artboard intentionally uses light action cards on black.
     final isDark = widget.palette.dark;
     final actionSurface = isDark
@@ -675,16 +696,38 @@ class _WalletHomeState extends State<_WalletHome> {
                 Transform.translate(
                   offset: const Offset(6, 0),
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Text('\$', style: totalBalanceTextStyle),
                       SizedBox(width: 21.45),
                       FutureBuilder<double?>(
                         future: _totalBalanceFuture,
                         builder: (context, snapshot) => Text(
-                          (snapshot.data ?? 0).toStringAsFixed(2),
+                          balanceHidden
+                              ? '******'
+                              : (snapshot.data ?? 0).toStringAsFixed(2),
                           style: totalBalanceTextStyle,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Semantics(
+                        button: true,
+                        label: appText(
+                          context,
+                          balanceHidden ? '显示余额' : '隐藏余额',
+                        ),
+                        child: CupertinoButton(
+                          key: const Key('wallet-toggle-balance-visibility'),
+                          padding: EdgeInsets.zero,
+                          minimumSize: const Size(36, 40),
+                          onPressed: _toggleBalanceVisibility,
+                          child: Icon(
+                            balanceHidden
+                                ? CupertinoIcons.eye_slash
+                                : CupertinoIcons.eye,
+                            size: 20,
+                            color: widget.palette.mutedText,
+                          ),
                         ),
                       ),
                     ],
@@ -826,8 +869,8 @@ class _WalletHomeState extends State<_WalletHome> {
                       palette: widget.palette,
                       symbol: balance.symbol,
                       title: balance.assetName,
-                      amount: amount,
-                      value: '≈$value USD',
+                      amount: balanceHidden ? '****' : amount,
+                      value: balanceHidden ? '≈**** USD' : '≈$value USD',
                       onTap: () => widget.onAssetSelected(balance),
                     );
                   },
